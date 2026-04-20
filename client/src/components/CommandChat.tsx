@@ -9,7 +9,7 @@
  * Composer has full parity with the job-thread composer:
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
@@ -821,6 +821,970 @@ function HotLeadsTray({
   );
 }
 
+// ── MessageList (memoized) ───────────────────────────────────────────────────
+// Extracted so that typing in the composer (setComposer) does NOT re-render
+// the 500-message list. None of these props change on keystroke.
+
+type MessageListProps = {
+  channelMsgs: LeadMsg[];
+  channelLoading: boolean;
+  callerName: string;
+  reactionsByMsgId: Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>;
+  commandSeenByMap: Record<number, string[]>;
+  senderPhotoMap: Record<string, string | null>;
+  unreadTagIds: number[];
+  highlightedCmdMsgId: number | null;
+  cmdMsgRefMap: React.MutableRefObject<Map<number, HTMLDivElement>>;
+  msgsContainerRef: React.RefObject<HTMLDivElement | null>;
+  threadScrollRef: React.RefObject<HTMLDivElement | null>;
+  threadBottomRef: React.RefObject<HTMLDivElement | null>;
+  toggleReactionMutation: { mutate: (args: { messageId: number; emoji: string }) => void };
+  claimLeadMutation: ClaimMutation;
+  scrollToCmdMsg: (id: number) => void;
+  openChatConvert: (msgId: number, msgBody: string) => void;
+  setReplyTo: (v: { id: number; body: string; author: string } | null) => void;
+  setLightboxUrl: (url: string | null) => void;
+  setFirstMsgDetails: (v: string) => void;
+  setFirstMsgResult: (v: string) => void;
+  setFirstMsgCopied: (v: boolean) => void;
+  setFirstMsgOpen: (v: boolean) => void;
+  setResolveIssueMessageId: (v: number | null) => void;
+  setResolveIssueTitle: (v: string) => void;
+  setResolveIssueNote: (v: string) => void;
+  setResolveIssueNoteText: (v: string) => void;
+  setResolveIssueOpen: (v: boolean) => void;
+};
+
+const MessageList = memo(function MessageList({
+  channelMsgs,
+  channelLoading,
+  callerName,
+  reactionsByMsgId,
+  commandSeenByMap,
+  senderPhotoMap,
+  unreadTagIds,
+  highlightedCmdMsgId,
+  cmdMsgRefMap,
+  msgsContainerRef,
+  threadScrollRef,
+  threadBottomRef,
+  toggleReactionMutation,
+  claimLeadMutation,
+  scrollToCmdMsg,
+  openChatConvert,
+  setReplyTo,
+  setLightboxUrl,
+  setFirstMsgDetails,
+  setFirstMsgResult,
+  setFirstMsgCopied,
+  setFirstMsgOpen,
+  setResolveIssueMessageId,
+  setResolveIssueTitle,
+  setResolveIssueNote,
+  setResolveIssueNoteText,
+  setResolveIssueOpen,
+}: MessageListProps) {
+  return (
+    <>
+        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
+            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
+          </div>
+          <div ref={msgsContainerRef} className="space-y-4" style={{ paddingBottom: '8px' }}>
+            {channelLoading ? (
+              <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
+            ) : channelMsgs.length === 0 ? (
+              <p className="text-sm text-slate-400 text-center py-8">No messages yet. Start the conversation.</p>
+            ) : (
+              channelMsgs.map((msg) => {
+                const isMine = msg.from === callerName;
+                const isAlert = msg.role === "alert" || msg.role === "system";
+                const isReview = msg.quickAction === "review_confirmed";
+                const isCallSummary = msg.quickAction === "call_summary";
+                // Parse mediaUrl — may be a JSON array of URLs or a single URL
+                let mediaUrls: string[] = [];
+                if (msg.mediaUrl && !isCallSummary) {
+                  try { mediaUrls = JSON.parse(msg.mediaUrl); } catch { mediaUrls = [msg.mediaUrl]; }
+                }
+
+                // ── Review card (warm gold) ──────────────────────────────────────
+                if (isReview) {
+                  const lines = msg.body.split("\n").filter(Boolean);
+                  const mainLine = lines[0] ?? "";
+                  const dateLine = lines[1] ?? "";
+                  const cleanMain = mainLine.replace(/\*\*/g, "").replace(/^⭐\s*/, "");
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-100 shadow-sm">
+                        {/* Header band */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border-b border-amber-100">
+                          <span className="text-sm">⭐</span>
+                          <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Review Received</span>
+                          <span className="ml-auto text-[10px] text-amber-400">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-medium text-slate-800 leading-snug">{cleanMain}</p>
+                          {dateLine && (
+                            <p className="text-xs text-slate-400 mt-1">{dateLine.replace(/^📅\s*/, "📅 ")}</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Call summary card (cool blue) ────────────────────────────────
+                if (isCallSummary) {
+                  const recordingMatch = msg.body.match(/\[Recording\]\((https?:\/\/[^)]+)\)/);
+                  const recordingUrl = msg.mediaUrl || (recordingMatch ? recordingMatch[1] : null);
+                  const cleanBody = msg.body.replace(/\n?🎙️\s*\[Recording\]\([^)]+\)/, "").trim();
+                  const bodyLines = cleanBody.split("\n").filter(Boolean);
+                  const headLine = bodyLines[0]?.replace(/\*\*/g, "").replace(/^📱\s*/, "") ?? "";
+                  const summaryLines = bodyLines.slice(1).map(l => l.replace(/^📋\s*/, ""));
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                        {/* Header band */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
+                          <span className="text-sm">📞</span>
+                          <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">AI Call Summary</span>
+                          <span className="ml-auto text-[10px] text-slate-500">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Headline row */}
+                        <div className="px-3 pt-2.5 pb-1.5 bg-slate-50 border-b border-slate-100">
+                          <p className="text-sm font-medium text-slate-700">{headLine}</p>
+                        </div>
+                        {/* Summary */}
+                        <div className="px-3 py-2.5 bg-white">
+                          {summaryLines.map((line, i) => (
+                            <p key={i} className="text-sm text-slate-600 leading-relaxed">{line}</p>
+                          ))}
+                          {recordingUrl && (
+                            <div className="mt-2.5">
+                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
+                              <audio
+                                controls
+                                src={recordingUrl}
+                                className="w-full h-8 rounded-lg"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── New Lead card (emerald/green) ─────────────────────────────────
+                if (msg.quickAction === "new_lead") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const leadName = (meta.leadName as string) ?? msg.from;
+                  const leadPhone = (meta.leadPhone as string) ?? "";
+                  const serviceType = (meta.serviceType as string) ?? "";
+                  const size = (meta.size as string) ?? "";
+                  const price = (meta.price as number | string) ?? "";
+                  const extrasRaw = meta.extras ?? [];
+                  const extras: string[] = Array.isArray(extrasRaw)
+                    ? (extrasRaw as string[])
+                    : typeof extrasRaw === "string"
+                      ? (() => { try { const p = JSON.parse(extrasRaw); return Array.isArray(p) ? p : [extrasRaw]; } catch { return extrasRaw ? [extrasRaw] : []; } })()
+                      : [];
+                  const utmSource = (meta.utmSource as string | null) ?? null;
+                  const sessionId = (meta.sessionId as number | null) ?? null;
+                  const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();
+                  const claimedBy = (meta.claimedBy as string | null) ?? null;
+                  const claimedAt = (meta.claimedAt as number | null) ?? null;
+
+                  const isThumbSms = utmSource === "thumbtack-sms";
+                  // Build written-out headline
+                  const sourceLabel = utmSource
+                    ? utmSource.toLowerCase() === "widget" || utmSource.toLowerCase() === "widget form"
+                      ? "Widget Form"
+                      : utmSource.toLowerCase() === "google"
+                        ? "Google"
+                        : utmSource.toLowerCase() === "yelp"
+                          ? "Yelp"
+                          : utmSource
+                    : null;
+                  const headlineParts: string[] = [];
+                  if (size) headlineParts.push(size);
+                  if (serviceType) headlineParts.push(serviceType);
+                  const headline = sourceLabel
+                    ? `New Lead Alert: ${sourceLabel}`
+                    : headlineParts.length > 0
+                      ? headlineParts.join(" / ")
+                      : "New Lead";
+                  const detailLine = headlineParts.length > 0 ? headlineParts.join(" / ") : "";
+                  const subParts = [
+                    price ? `Quoted at $${price}` : null,
+                    claimedBy ? `Claimed by ${claimedBy}` : "no one has claimed yet",
+                  ].filter(Boolean);
+                  return (
+                    <div key={msg.id} className="w-full">
+                      <div className={cn(
+                        "w-full rounded-2xl px-5 py-4",
+                        isThumbSms ? "bg-sky-50" : "bg-[#f0fdf4]"
+                      )}>
+                        {/* Top row: name + time inline */}
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs text-slate-500">{leadName}</span>
+                          {leadPhone && <span className="text-xs text-slate-400">· {leadPhone}</span>}
+                          <div className="flex-1" />
+                          <span className="text-xs text-slate-400 shrink-0">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Headline: written-out, bold, full width */}
+                        <p className="text-lg font-bold text-slate-900 leading-snug mb-1 w-full">
+                          {headline}
+                        </p>
+                        {/* Detail line: size / service if source-based headline */}
+                        {sourceLabel && detailLine && (
+                          <p className="text-sm text-slate-600 mb-1">{detailLine}</p>
+                        )}
+                        {/* Subtext: price + claim status */}
+                        <p className="text-sm text-slate-500 mb-3">{subParts.join(" · ")}</p>
+                        {/* Action icons row */}
+                        <div className="flex items-center gap-3">
+                          {leadPhone && (
+                            <a
+                              href={`openphone://call?to=${leadPhone}`}
+                              title={`Call ${leadName}`}
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/80 hover:bg-white text-slate-600 hover:text-slate-900 transition-colors shrink-0 shadow-sm"
+                            >
+                              <Phone className="h-4 w-4" />
+                            </a>
+                          )}
+                          {sessionId && (
+                            <a
+                              href={`/admin/leads?session=${sessionId}&tab=sms`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open SMS conversation"
+                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 hover:text-emerald-900 transition-colors shrink-0 shadow-sm"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                            </a>
+                          )}
+                          <button
+                            title="Generate first outreach message for this lead"
+                            onClick={() => {
+                              const parts: string[] = [];
+                              if (leadName)    parts.push(`Name: ${leadName}`);
+                              if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
+                              if (serviceType) parts.push(`Service: ${serviceType}`);
+                              if (size)        parts.push(`Home size: ${size}`);
+                              if (price)       parts.push(`Estimated price: $${price}`);
+                              if (extras.length > 0) parts.push(`Extras: ${extras.join(", ")}`);
+                              setFirstMsgDetails(parts.join("\n"));
+                              setFirstMsgResult("");
+                              setFirstMsgCopied(false);
+                              setFirstMsgOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors shrink-0 shadow-sm"
+                          >
+                            <Wand2 className="h-4 w-4" />
+                          </button>
+                          <div className="flex-1" />
+                          {claimedBy ? (
+                            <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                              <UserCheck className="h-3.5 w-3.5" />
+                              <span>Claimed by {claimedBy}</span>
+                              {claimedAt && (
+                                <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <Button
+                              size="sm"
+                              className="h-8 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-4"
+                              disabled={claimLeadMutation.isPending}
+                              onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
+                            >
+                              {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── General Issue card (red) ─────────────────────────────────────
+                if (msg.quickAction === "general_issue") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const issTitle = (meta.issueTitle as string) ?? msg.body;
+                  const issNote = (meta.issueNote as string | null) ?? null;
+                  const jobTitle = (meta.jobTitle as string | null) ?? null;
+                  const isResolved = !!(meta.resolvedAt);
+                  return (
+                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
+                      <div className={cn("max-w-[72%] rounded-xl overflow-hidden border shadow-sm", isResolved ? "border-slate-200 opacity-60" : "border-red-200")}>
+                        <div className={cn("flex items-center gap-1.5 px-3 py-1.5", isResolved ? "bg-slate-400" : "bg-red-600")}>
+                          <TriangleAlert className="h-3 w-3 text-red-100" />
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">{isResolved ? "Issue (Resolved)" : "Issue Raised"}</span>
+                          {jobTitle && <span className="ml-1.5 text-[10px] bg-red-700 text-red-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
+                          <span className="ml-auto text-[10px] text-red-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-semibold text-slate-900">{issTitle}</p>
+                          {issNote && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{issNote}</p>}
+                          <div className="flex items-center justify-between mt-2">
+                            <p className="text-[10px] text-slate-400">Raised by {msg.from}</p>
+                            {!isResolved && (
+                              <button
+                                onClick={() => {
+                                  setResolveIssueMessageId(msg.id);
+                                  setResolveIssueTitle(issTitle);
+                                  setResolveIssueNote(issNote ?? "");
+                                  setResolveIssueNoteText("");
+                                  setResolveIssueOpen(true);
+                                }}
+                                className="text-[10px] font-semibold text-green-600 hover:text-green-800 flex items-center gap-0.5"
+                              >
+                                <CheckCheck className="h-3 w-3" /> Resolve
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Reminder card (sky blue) ─────────────────────────────────────
+                if (msg.quickAction === "reminder") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const remBody = (meta.reminderBody as string) ?? msg.body;
+                  const setBy = (meta.setBy as string) ?? msg.from;
+                  return (
+                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-sky-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600">
+                          <Bell className="h-3 w-3 text-sky-100" />
+                          <span className="text-[10px] font-semibold text-sky-100 uppercase tracking-widest">Reminder</span>
+                          <span className="ml-auto text-[10px] text-sky-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-medium text-slate-800">{remBody}</p>
+                          <p className="text-[10px] text-slate-400 mt-1.5">Set by {setBy}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Announce Booking card (celebratory) ──────────────────────────
+                if (msg.quickAction === "announce_booking") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const personName = (meta.personName as string) ?? "";
+                  const amount = (meta.amount as string | null) ?? null;
+                  const note = (meta.note as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-violet-200 shadow-md" style={{ background: "linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 50%, #ede9fe 100%)" }}>
+                        {/* Confetti header with burst animation */}
+                        <div className="relative flex items-center gap-2 px-4 py-2 overflow-hidden" style={{ background: "linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)" }}>
+                          {/* Glitter confetti particles — burst outward then fade */}
+                          {[...Array(18)].map((_, i) => {
+                            const angle = (i / 18) * 360;
+                            const dist = 30 + (i % 3) * 20;
+                            const tx = Math.cos((angle * Math.PI) / 180) * dist;
+                            const ty = Math.sin((angle * Math.PI) / 180) * dist;
+                            const colors = ["#fbbf24","#34d399","#f472b6","#60a5fa","#fb923c","#a3e635","#fff","#e879f9"];
+                            const size = 3 + (i % 4);
+                            return (
+                              <span
+                                key={i}
+                                className="absolute rounded-full pointer-events-none"
+                                style={{
+                                  width: `${size}px`,
+                                  height: `${size}px`,
+                                  background: colors[i % colors.length],
+                                  left: "50%",
+                                  top: "50%",
+                                  transform: "translate(-50%,-50%)",
+                                  animation: `confetti-burst-${i % 3} ${0.6 + (i % 3) * 0.2}s ease-out ${(i * 0.04)}s both`,
+                                  "--tx": `${tx}px`,
+                                  "--ty": `${ty}px`,
+                                } as React.CSSProperties}
+                              />
+                            );
+                          })}
+                          <PartyPopper className="h-4 w-4 text-white relative z-10" />
+                          <span className="text-[10px] font-bold text-white uppercase tracking-widest relative z-10">🎉 New Booking!</span>
+                          <span className="ml-auto text-[10px] text-purple-200 relative z-10">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-400 to-pink-400 flex items-center justify-center text-white font-bold text-base shrink-0">
+                              {(msg.from ?? "?").charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="text-base font-bold text-slate-900">Congrats to {msg.from}!</p>
+                              {amount && <p className="text-sm font-semibold text-violet-700 mt-0.5">{amount}</p>}
+                              {personName && <p className="text-xs text-slate-500 mt-0.5">Client: {personName}</p>}
+                            </div>
+                          </div>
+                          {note && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{note}</p>}
+                          <p className="text-[10px] text-slate-400 mt-2">Announced by {msg.from}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── New Application (Hiring) card ─────────────────────────────────
+                if (msg.quickAction === "new_application") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const appName = (meta.applicantName as string) ?? "New Applicant";
+                  const appPhone = (meta.applicantPhone as string | null) ?? null;
+                  const appPosition = (meta.position as string | null) ?? null;
+                  const appPhoto = (meta.photoUrl as string | null) ?? null;
+                  const candidateId = (meta.candidateId as number | null) ?? null;
+                  const initials = appName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-200 shadow-sm">
+                        {/* Header */}
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-700">
+                          <UserPlus className="h-3 w-3 text-amber-200" />
+                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">New Application</span>
+                          <span className="ml-auto text-[10px] text-amber-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-3 py-2.5 bg-white">
+                          <div className="flex items-center gap-3">
+                            {/* Photo or initials avatar */}
+                            {appPhoto ? (
+                              <img src={appPhoto} alt={appName} className="h-10 w-10 rounded-full object-cover shrink-0 border border-amber-100" />
+                            ) : (
+                              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                {initials}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-base font-bold text-slate-900 leading-tight">{appName}</p>
+                              {appPhone && <p className="text-xs text-slate-400 mt-0.5">{appPhone}</p>}
+                              {appPosition && <p className="text-xs text-amber-700 font-medium mt-0.5">{appPosition}</p>}
+                            </div>
+                          </div>
+                          {/* Action row */}
+                          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
+                            <a
+                              href="/admin/hiring"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-full transition-colors"
+                            >
+                              <Briefcase className="h-3.5 w-3.5" />
+                              View in Hiring
+                            </a>
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Away Status card ──────────────────────────────────────────────
+                if (msg.quickAction?.startsWith("away_status:")) {
+                  const statusKey = msg.quickAction.split(":")[1];
+                  const STATUS_MAP: Record<string, { label: string; sub: string; emoji: string; accent: string; bg: string; border: string; headerBg: string }> = {
+                    away_sec: { label: "Away for a sec",  sub: "Quick break",         emoji: "☕", accent: "#92400e", bg: "#fffbeb", border: "#fde68a", headerBg: "linear-gradient(90deg,#f59e0b,#fbbf24)" },
+                    lunch:    { label: "Lunch break",     sub: "Quick munch",         emoji: "🍔", accent: "#065f46", bg: "#ecfdf5", border: "#a7f3d0", headerBg: "linear-gradient(90deg,#10b981,#34d399)" },
+                    back15:   { label: "Back in 15",      sub: "Short defined break", emoji: "⏰", accent: "#3730a3", bg: "#eef2ff", border: "#c7d2fe", headerBg: "linear-gradient(90deg,#6366f1,#818cf8)" },
+                    eod:      { label: "Signing off",     sub: "End of day",          emoji: "🌙", accent: "#0c4a6e", bg: "#f0f9ff", border: "#bae6fd", headerBg: "linear-gradient(90deg,#0ea5e9,#38bdf8)" },
+                  };
+                  const s = STATUS_MAP[statusKey] ?? { label: msg.body, sub: "", emoji: "💬", accent: "#334155", bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155" };
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-2xl overflow-hidden shadow-md" style={{ border: `1px solid ${s.border}`, background: s.bg }}>
+                        {/* Coloured header strip */}
+                        <div className="flex items-center gap-2 px-4 py-2" style={{ background: s.headerBg }}>
+                          <span className="text-lg leading-none">{s.emoji}</span>
+                          <span className="text-[11px] font-bold text-white uppercase tracking-widest">{s.label}</span>
+                          <span className="ml-auto text-[10px] text-white/70">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-4 py-3 flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
+                            style={{ background: s.headerBg }}>
+                            {(msg.from ?? "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold" style={{ color: s.accent }}>{msg.from}</p>
+                            <p className="text-xs text-slate-500">{s.sub}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Issue Resolved card (green) ───────────────────────────────────
+                if (msg.quickAction === "issue_resolved") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const issTitle = (meta.issueTitle as string) ?? "Issue";
+                  const issNote = (meta.issueNote as string | null) ?? null;
+                  const jobTitle = (meta.jobTitle as string | null) ?? null;
+                  const resNote = (meta.resolutionNote as string | null) ?? null;
+                  const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
+                  return (
+                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
+                          <CheckCheck className="h-3 w-3 text-emerald-100" />
+                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">✅ Issue Resolved</span>
+                          {jobTitle && <span className="ml-1.5 text-[10px] bg-emerald-700 text-emerald-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
+                          <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          {/* Original issue context */}
+                          <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-1.5 mb-2">
+                            <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-0.5">Original Issue</p>
+                            <p className="text-xs text-slate-700 font-medium">{issTitle}</p>
+                            {issNote && <p className="text-xs text-slate-500 mt-0.5">{issNote}</p>}
+                          </div>
+                          {/* Resolution note */}
+                          {resNote && (
+                            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 mb-2">
+                              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-0.5">Resolution</p>
+                              <p className="text-xs text-slate-700">{resNote}</p>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-slate-400">Resolved by {resolvedBy}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Follow-up Created card (violet) ─────────────────────────────
+                if (msg.quickAction === "follow_up_created") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const fuName = (meta.name as string) ?? msg.body;
+                  const fuType = (meta.type as string) ?? "";
+                  const fuOwner = (meta.owner as string) ?? msg.from;
+                  const fuPriority = (meta.priority as string) ?? "Normal";
+                  const fuNextStep = (meta.nextStep as string) ?? "";
+                  const fuDueLabel = (meta.dueLabel as string) ?? "";
+                  const fuNote = (meta.internalNote as string | null) ?? null;
+                  const priorityColor: Record<string, string> = {
+                    High: "text-red-600 bg-red-50 border-red-200",
+                    Normal: "text-amber-600 bg-amber-50 border-amber-200",
+                    Low: "text-slate-500 bg-slate-50 border-slate-200",
+                  };
+                  const pClass = priorityColor[fuPriority] ?? priorityColor["Normal"];
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-violet-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600">
+                          <ClipboardList className="h-3 w-3 text-violet-100" />
+                          <span className="text-[10px] font-semibold text-violet-100 uppercase tracking-widest">Follow-up Created</span>
+                          {fuType && <span className="ml-1.5 text-[10px] bg-violet-700 text-violet-200 rounded-full px-2 py-0.5">{fuType}</span>}
+                          <span className="ml-auto text-[10px] text-violet-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <p className="text-sm font-semibold text-slate-900">{fuName}</p>
+                          {fuNextStep && <p className="text-xs text-slate-600 mt-0.5">{fuNextStep}</p>}
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {fuDueLabel && (
+                              <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                                <Clock className="h-3 w-3" /> {fuDueLabel}
+                              </span>
+                            )}
+                            <span className={`text-[10px] font-medium border rounded-full px-2 py-0.5 ${pClass}`}>{fuPriority}</span>
+                          </div>
+                          {fuNote && <p className="text-xs text-slate-400 mt-1.5 italic">{fuNote}</p>}
+                          <p className="text-[10px] text-slate-400 mt-2">Assigned to {fuOwner}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Call Started card ────────────────────────────────────────────────────────
+                if (msg.quickAction === "call_started") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const agentName = (meta.agentName as string) ?? msg.from;
+                  const direction = (meta.direction as string) ?? "incoming";
+                  const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
+                  const callerLabel = (meta.callerLabel as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 shadow-sm">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </span>
+                        <PhoneCall className="h-3 w-3 text-emerald-600 shrink-0" />
+                        <span className="text-xs font-medium text-emerald-800">
+                          {agentName} {dirLabel === "outbound" ? "called" : "answered"}{callerLabel ? <> <span className="font-semibold">{callerLabel}</span></> : ""}
+                        </span>
+                        <span className="text-[10px] text-emerald-400">{fmtMsgTime(msg.createdAt)}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Call Ended card ──────────────────────────────────────────────────────────
+                if (msg.quickAction === "call_ended") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const agentName = (meta.agentName as string) ?? msg.from;
+                  const durationLabel = (meta.durationLabel as string | null) ?? null;
+                  const direction = (meta.direction as string) ?? "incoming";
+                  const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
+                  // callerLabel not stored in call_ended metadata; look up from call_started if needed
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1">
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 shadow-sm">
+                        <PhoneOff className="h-3 w-3 text-slate-400 shrink-0" />
+                        <span className="text-xs text-slate-600">
+                          {agentName} ended {dirLabel} call{durationLabel ? <> &middot; <span className="font-medium">{durationLabel}</span></> : ""}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Call Debrief card ────────────────────────────────────────────────────
+                if (msg.quickAction === "call_debrief") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const grade = (meta.grade as string | null) ?? null;
+                  const wentWell = (meta.wentWell as string | null) ?? null;
+                  const improve = (meta.improve as string | null) ?? null;
+                  const nextLine = (meta.nextLine as string | null) ?? null;
+                  const recordingUrl = (meta.recordingUrl as string | null) ?? null;
+                  const callerName = (meta.callerName as string | null) ?? null;
+                  const callerPhone = (meta.callerPhone as string | null) ?? null;
+                  const gradeColors: Record<string, string> = {
+                    A: "bg-green-100 text-green-700 border-green-300",
+                    B: "bg-blue-100 text-blue-700 border-blue-300",
+                    C: "bg-amber-100 text-amber-700 border-amber-300",
+                    D: "bg-orange-100 text-orange-700 border-orange-300",
+                    F: "bg-red-100 text-red-700 border-red-300",
+                  };
+                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
+                  return (
+                    <div key={msg.id} className="flex justify-center my-2 px-4">
+                      <div className="w-full max-w-sm rounded-[20px] border border-purple-200 bg-purple-50 shadow-sm p-4">
+                        {/* Header */}
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200">
+                              <Phone className="h-3 w-3 text-purple-600" />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+                              {(callerName || callerPhone) && (
+                                <p className="text-xs font-medium text-purple-900 mt-0.5">{callerName ?? callerPhone}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {grade && (
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 text-xs font-bold ${gradeColor}`}>
+                                {grade}
+                              </span>
+                            )}
+                            <span className="text-[10px] text-purple-400">{fmtMsgTime(msg.createdAt)}</span>
+                          </div>
+                        </div>
+                        {/* Audio player */}
+                        {recordingUrl && (
+                          <div className="mb-3">
+                            <audio
+                              controls
+                              src={recordingUrl}
+                              className="w-full h-8 rounded-xl"
+                              style={{ accentColor: "#7c3aed" }}
+                            />
+                          </div>
+                        )}
+                        <div className="border-t border-purple-200/70 mb-3" />
+                        {/* Went well */}
+                        {wentWell && (
+                          <div className="mb-2">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-green-500 text-xs">✔</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
+                            </div>
+                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{wentWell}</p>
+                          </div>
+                        )}
+                        <div className="border-t border-purple-200/50 mb-2" />
+                        {/* Improve */}
+                        {improve && (
+                          <div className="mb-3">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-amber-500 text-xs">▲</span>
+                              <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
+                            </div>
+                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{improve}</p>
+                          </div>
+                        )}
+                        {/* Next line */}
+                        {nextLine && (
+                          <div className="rounded-2xl bg-white border border-purple-200 px-3 py-2">
+                            <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
+                            <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Stale ETA alert card (amber) ──────────────────────────────────
+                if (msg.quickAction === "stale_eta") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const cleanerName = (meta.cleanerName as string) ?? msg.from ?? "Team";
+                  const customerName = (meta.customerName as string | null) ?? null;
+                  const etaStr = (meta.etaStr as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500">
+                          <TriangleAlert className="h-3 w-3 text-amber-100" />
+                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">ETA Passed</span>
+                          <span className="ml-auto text-[10px] text-amber-200">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-amber-50">
+                          <p className="text-sm font-semibold text-slate-900">{cleanerName} — still on the way</p>
+                          {customerName && <p className="text-xs text-slate-500 mt-0.5">For {customerName}</p>}
+                          {etaStr && <p className="text-xs text-amber-700 mt-0.5">ETA was {etaStr}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Skip cleaner_status cards — rendered in sidebar instead
+                if (msg.quickAction === "cleaner_status") return null;
+                // ── Default bubble ─────────────────────────────────────────────────────
+                {
+                  const msgReactions = reactionsByMsgId[msg.id] ?? [];
+                  const reactionGroups = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
+                    if (!acc[r.emoji]) acc[r.emoji] = [];
+                    acc[r.emoji].push(r.callerName);
+                    return acc;
+                  }, {});
+                  const authorInitial = (msg.from ?? "?")[0].toUpperCase();
+                  const authorColor = senderHex(msg.from ?? "");
+                  const authorPhoto = senderPhotoMap[msg.from ?? ""] ?? null;
+                  const isTaggedMsg = unreadTagIds.includes(msg.id);
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className={cn(
+                        "w-full group transition-colors duration-300",
+                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
+                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : ""
+                      )}
+                    >
+                      {/* Bubble + hover actions */}
+                      <div className={"relative flex items-start w-full" + (isMine && !isAlert ? " justify-end" : "")}>
+                        <div className={"rounded-2xl px-5 py-4 " + (isAlert ? "w-full bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900")}>
+                          {/* Top row: sender label + role + time */}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={cn(
+                              "text-xs",
+                              isAlert ? "text-slate-400 font-normal" : isMine ? "text-slate-400 font-semibold" : "font-semibold"
+                            )} style={{ color: isAlert || isMine ? undefined : authorColor }}>
+                              {isAlert
+                                ? `${msg.from}${msg.role && msg.role !== "alert" ? " · " + (msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch") : ""}`
+                                : isMine ? "You" : msg.from
+                              }
+                              {!isAlert && !isMine && (
+                                <span className="font-normal text-slate-400 ml-1">
+                                  · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
+                                </span>
+                              )}
+                            </span>
+                            <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
+                              {fmtMsgTime(msg.createdAt)}
+                            </span>
+                          </div>
+                          {/* WhatsApp-style quoted block with vivid sender accent */}
+                          {msg.replyToId && msg.replyToBody && (
+                            <button
+                              type="button"
+                              onClick={() => msg.replyToId && scrollToCmdMsg(msg.replyToId)}
+                              className={cn(
+                                "mb-2.5 rounded-lg overflow-hidden flex w-full text-left cursor-pointer hover:brightness-95 transition-all",
+                                isMine ? "bg-slate-700" : "bg-slate-100"
+                              )}
+                            >
+                              <div className="w-1 shrink-0 rounded-l-lg" style={{ backgroundColor: senderHex(msg.replyToAuthor ?? "") }} />
+                              <div className="px-2.5 py-2 min-w-0">
+                                <p className="text-xs font-semibold mb-0.5 truncate" style={{ color: senderHex(msg.replyToAuthor ?? "") }}>{msg.replyToAuthor ?? "Unknown"}</p>
+                                <p className={cn("text-xs line-clamp-2 leading-snug break-words", isMine ? "text-slate-300" : "text-slate-500")}>{msg.replyToBody}</p>
+                              </div>
+                            </button>
+                          )}
+                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
+                            {(() => {
+                              // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
+                              const tokens: React.ReactNode[] = [];
+                              // Combined regex: markdown links OR bare URLs (not already inside a markdown link)
+                              const combinedRe = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/[^\s<>"'\]\)]+)/g;
+                              const boldRe = /\*\*([^*]+)\*\*/g;
+                              let lastIdx = 0;
+                              let match: RegExpExecArray | null;
+                              const renderBold = (text: string, keyPrefix: string) => {
+                                const parts: React.ReactNode[] = [];
+                                let bi = 0, bLast = 0;
+                                let bm: RegExpExecArray | null;
+                                boldRe.lastIndex = 0;
+                                while ((bm = boldRe.exec(text)) !== null) {
+                                  if (bm.index > bLast) parts.push(<span key={`${keyPrefix}-t${bi++}`}>{text.slice(bLast, bm.index)}</span>);
+                                  parts.push(<strong key={`${keyPrefix}-b${bi++}`}>{bm[1]}</strong>);
+                                  bLast = bm.index + bm[0].length;
+                                }
+                                if (bLast < text.length) parts.push(<span key={`${keyPrefix}-t${bi}`}>{text.slice(bLast)}</span>);
+                                return parts;
+                              };
+                              combinedRe.lastIndex = 0;
+                              while ((match = combinedRe.exec(msg.body)) !== null) {
+                                if (match.index > lastIdx) tokens.push(...renderBold(msg.body.slice(lastIdx, match.index), `pre-${match.index}`));
+                                if (match[1] !== undefined) {
+                                  // Markdown [text](url)
+                                  tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">{match[1]}</a>);
+                                } else {
+                                  // Bare URL — strip trailing punctuation that's likely not part of the URL
+                                  const rawUrl = match[3].replace(/[.,!?;:]+$/, "");
+                                  tokens.push(<a key={`url-${match.index}`} href={rawUrl} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300 break-all">{rawUrl}</a>);
+                                }
+                                lastIdx = match.index + match[0].length;
+                              }
+                              if (lastIdx < msg.body.length) tokens.push(...renderBold(msg.body.slice(lastIdx), `tail`));
+                              return tokens;
+                            })()}
+                          </p>
+                          {mediaUrls.length > 0 && (
+                            <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
+                              {mediaUrls.map((url, idx) => (
+                                <button
+                                  key={idx}
+                                  type="button"
+                                  onClick={() => setLightboxUrl(url)}
+                                  className="focus:outline-none"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={`attachment-${idx}`}
+                                    className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
+                                    style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
+                                  />
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {!isAlert && (
+                            <div className="flex items-center justify-end gap-1 mt-1.5">
+                              <p className="text-[10px] text-slate-400">
+                                {fmtMsgTime(msg.createdAt)}
+                              </p>
+                              {/* WhatsApp-style read receipt — only on my own messages */}
+                              {isMine && (() => {
+                                const seenBy = commandSeenByMap[msg.id] ?? [];
+                                return (
+                                  <span
+                                    title={seenBy.length > 0 ? `Seen by ${seenBy.join(", ")}` : "Sent"}
+                                    className="inline-flex items-center shrink-0"
+                                  >
+                                    {seenBy.length > 0 ? (
+                                      <svg width="18" height="11" viewBox="0 0 18 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Seen">
+                                        <path d="M1 5.5L4.5 9L10 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                        <path d="M5 5.5L8.5 9L14 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    ) : (
+                                      <svg width="12" height="11" viewBox="0 0 12 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sent">
+                                        <path d="M1 5.5L4.5 9L11 2" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    )}
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
+                          {/* Reaction pills */}
+                          {Object.keys(reactionGroups).length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {Object.entries(reactionGroups).map(([emoji, names]) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => toggleReactionMutation.mutate({ messageId: msg.id, emoji })}
+                                  title={names.join(", ")}
+                                  className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 transition"
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="text-slate-600 font-medium">{names.length}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* WhatsApp-style hover actions: Reply + quick-react strip */}
+                        <div
+                          className={cn(
+                            "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
+                            isMine ? "order-first mr-1.5" : "ml-1.5"
+                          )}
+                        >
+                          {!isAlert && (
+                            <button
+                              onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
+                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            >
+                              <ChevronDown className="h-3 w-3" />
+                              <span>Reply</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openChatConvert(msg.id, msg.body)}
+                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
+                          >
+                            <AlertTriangle className="h-3 w-3" />
+                            <span>Create Issue</span>
+                          </button>
+                          {!isAlert && (
+                            <div className="flex gap-0.5">
+                              {["👍", "❤️", "✅", "🔥"].map(e => (
+                                <button
+                                  key={e}
+                                  type="button"
+                                  onClick={() => toggleReactionMutation.mutate({ messageId: msg.id, emoji: e })}
+                                  className="w-7 h-7 rounded-full flex items-center justify-center text-sm bg-slate-100 hover:bg-slate-200 transition"
+                                >
+                                  {e}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+              })
+            )}
+             <div ref={threadBottomRef} />
+          </div>
+        </div>
+    </>
+  );
+});
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 // Module-level variable: persists across CommandChat unmount/remount cycles
@@ -1089,7 +2053,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
   const chatPrefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
   const chatConvertMutation = trpc.opsChat.convertChatMessageToIssue.useMutation();
-  async function openChatConvert(msgId: number, msgBody: string) {
+  const openChatConvert = useCallback(async (msgId: number, msgBody: string) => {
     setChatConvertModal({ msgId, commentId: msgId, commentBody: msgBody, title: "", severity: "Medium", team: "", customer: "", loading: true, submitting: false });
     try {
       const prefill = await chatPrefillMutation.mutateAsync({ commentBody: msgBody });
@@ -1097,7 +2061,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     } catch {
       setChatConvertModal(prev => prev ? { ...prev, loading: false } : null);
     }
-  }
+  }, [chatPrefillMutation]); // chatPrefillMutation ref is stable from trpc
   async function submitChatConvert() {
     if (!chatConvertModal || chatConvertModal.submitting) return;
     setChatConvertModal(prev => prev ? { ...prev, submitting: true } : null);
@@ -1166,13 +2130,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     if (target) scrollToCmdMsg(target.id);
   }
 
-  function scrollToCmdMsg(id: number) {
+  const scrollToCmdMsg = useCallback((id: number) => {
     const el = cmdMsgRefMap.current.get(id);
     if (!el) return;
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     setHighlightedCmdMsgId(id);
     setTimeout(() => setHighlightedCmdMsgId(null), 1800);
-  }
+  }, []); // cmdMsgRefMap is a ref (stable), setHighlightedCmdMsgId is a setter (stable)
 
   // ── Inline issue note editing (right panel auto-raised issues) ──────────────
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
@@ -2613,901 +3577,35 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               New message from {cmdNewMsgToast.from}
             </button>
           )}
-        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
-            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
-          </div>
-          <div ref={msgsContainerRef} className="space-y-4" style={{ paddingBottom: '8px' }}>
-            {channelLoading ? (
-              <p className="text-sm text-slate-400 text-center py-8">Loading…</p>
-            ) : channelMsgs.length === 0 ? (
-              <p className="text-sm text-slate-400 text-center py-8">No messages yet. Start the conversation.</p>
-            ) : (
-              channelMsgs.map((msg) => {
-                const isMine = msg.from === callerName;
-                const isAlert = msg.role === "alert" || msg.role === "system";
-                const isReview = msg.quickAction === "review_confirmed";
-                const isCallSummary = msg.quickAction === "call_summary";
-                // Parse mediaUrl — may be a JSON array of URLs or a single URL
-                let mediaUrls: string[] = [];
-                if (msg.mediaUrl && !isCallSummary) {
-                  try { mediaUrls = JSON.parse(msg.mediaUrl); } catch { mediaUrls = [msg.mediaUrl]; }
-                }
-
-                // ── Review card (warm gold) ──────────────────────────────────────
-                if (isReview) {
-                  const lines = msg.body.split("\n").filter(Boolean);
-                  const mainLine = lines[0] ?? "";
-                  const dateLine = lines[1] ?? "";
-                  const cleanMain = mainLine.replace(/\*\*/g, "").replace(/^⭐\s*/, "");
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-100 shadow-sm">
-                        {/* Header band */}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border-b border-amber-100">
-                          <span className="text-sm">⭐</span>
-                          <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Review Received</span>
-                          <span className="ml-auto text-[10px] text-amber-400">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Body */}
-                        <div className="px-3 py-2.5 bg-white">
-                          <p className="text-sm font-medium text-slate-800 leading-snug">{cleanMain}</p>
-                          {dateLine && (
-                            <p className="text-xs text-slate-400 mt-1">{dateLine.replace(/^📅\s*/, "📅 ")}</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // ── Call summary card (cool blue) ────────────────────────────────
-                if (isCallSummary) {
-                  const recordingMatch = msg.body.match(/\[Recording\]\((https?:\/\/[^)]+)\)/);
-                  const recordingUrl = msg.mediaUrl || (recordingMatch ? recordingMatch[1] : null);
-                  const cleanBody = msg.body.replace(/\n?🎙️\s*\[Recording\]\([^)]+\)/, "").trim();
-                  const bodyLines = cleanBody.split("\n").filter(Boolean);
-                  const headLine = bodyLines[0]?.replace(/\*\*/g, "").replace(/^📱\s*/, "") ?? "";
-                  const summaryLines = bodyLines.slice(1).map(l => l.replace(/^📋\s*/, ""));
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                        {/* Header band */}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
-                          <span className="text-sm">📞</span>
-                          <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">AI Call Summary</span>
-                          <span className="ml-auto text-[10px] text-slate-500">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Headline row */}
-                        <div className="px-3 pt-2.5 pb-1.5 bg-slate-50 border-b border-slate-100">
-                          <p className="text-sm font-medium text-slate-700">{headLine}</p>
-                        </div>
-                        {/* Summary */}
-                        <div className="px-3 py-2.5 bg-white">
-                          {summaryLines.map((line, i) => (
-                            <p key={i} className="text-sm text-slate-600 leading-relaxed">{line}</p>
-                          ))}
-                          {recordingUrl && (
-                            <div className="mt-2.5">
-                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
-                              <audio
-                                controls
-                                src={recordingUrl}
-                                className="w-full h-8 rounded-lg"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // ── New Lead card (emerald/green) ─────────────────────────────────
-                if (msg.quickAction === "new_lead") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const leadName = (meta.leadName as string) ?? msg.from;
-                  const leadPhone = (meta.leadPhone as string) ?? "";
-                  const serviceType = (meta.serviceType as string) ?? "";
-                  const size = (meta.size as string) ?? "";
-                  const price = (meta.price as number | string) ?? "";
-                  const extrasRaw = meta.extras ?? [];
-                  const extras: string[] = Array.isArray(extrasRaw)
-                    ? (extrasRaw as string[])
-                    : typeof extrasRaw === "string"
-                      ? (() => { try { const p = JSON.parse(extrasRaw); return Array.isArray(p) ? p : [extrasRaw]; } catch { return extrasRaw ? [extrasRaw] : []; } })()
-                      : [];
-                  const utmSource = (meta.utmSource as string | null) ?? null;
-                  const sessionId = (meta.sessionId as number | null) ?? null;
-                  const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();
-                  const claimedBy = (meta.claimedBy as string | null) ?? null;
-                  const claimedAt = (meta.claimedAt as number | null) ?? null;
-
-                  const isThumbSms = utmSource === "thumbtack-sms";
-                  // Build written-out headline
-                  const sourceLabel = utmSource
-                    ? utmSource.toLowerCase() === "widget" || utmSource.toLowerCase() === "widget form"
-                      ? "Widget Form"
-                      : utmSource.toLowerCase() === "google"
-                        ? "Google"
-                        : utmSource.toLowerCase() === "yelp"
-                          ? "Yelp"
-                          : utmSource
-                    : null;
-                  const headlineParts: string[] = [];
-                  if (size) headlineParts.push(size);
-                  if (serviceType) headlineParts.push(serviceType);
-                  const headline = sourceLabel
-                    ? `New Lead Alert: ${sourceLabel}`
-                    : headlineParts.length > 0
-                      ? headlineParts.join(" / ")
-                      : "New Lead";
-                  const detailLine = headlineParts.length > 0 ? headlineParts.join(" / ") : "";
-                  const subParts = [
-                    price ? `Quoted at $${price}` : null,
-                    claimedBy ? `Claimed by ${claimedBy}` : "no one has claimed yet",
-                  ].filter(Boolean);
-                  return (
-                    <div key={msg.id} className="w-full">
-                      <div className={cn(
-                        "w-full rounded-2xl px-5 py-4",
-                        isThumbSms ? "bg-sky-50" : "bg-[#f0fdf4]"
-                      )}>
-                        {/* Top row: name + time inline */}
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs text-slate-500">{leadName}</span>
-                          {leadPhone && <span className="text-xs text-slate-400">· {leadPhone}</span>}
-                          <div className="flex-1" />
-                          <span className="text-xs text-slate-400 shrink-0">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Headline: written-out, bold, full width */}
-                        <p className="text-lg font-bold text-slate-900 leading-snug mb-1 w-full">
-                          {headline}
-                        </p>
-                        {/* Detail line: size / service if source-based headline */}
-                        {sourceLabel && detailLine && (
-                          <p className="text-sm text-slate-600 mb-1">{detailLine}</p>
-                        )}
-                        {/* Subtext: price + claim status */}
-                        <p className="text-sm text-slate-500 mb-3">{subParts.join(" · ")}</p>
-                        {/* Action icons row */}
-                        <div className="flex items-center gap-3">
-                          {leadPhone && (
-                            <a
-                              href={`openphone://call?to=${leadPhone}`}
-                              title={`Call ${leadName}`}
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-white/80 hover:bg-white text-slate-600 hover:text-slate-900 transition-colors shrink-0 shadow-sm"
-                            >
-                              <Phone className="h-4 w-4" />
-                            </a>
-                          )}
-                          {sessionId && (
-                            <a
-                              href={`/admin/leads?session=${sessionId}&tab=sms`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open SMS conversation"
-                              className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700 hover:text-emerald-900 transition-colors shrink-0 shadow-sm"
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                            </a>
-                          )}
-                          <button
-                            title="Generate first outreach message for this lead"
-                            onClick={() => {
-                              const parts: string[] = [];
-                              if (leadName)    parts.push(`Name: ${leadName}`);
-                              if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
-                              if (serviceType) parts.push(`Service: ${serviceType}`);
-                              if (size)        parts.push(`Home size: ${size}`);
-                              if (price)       parts.push(`Estimated price: $${price}`);
-                              if (extras.length > 0) parts.push(`Extras: ${extras.join(", ")}`);
-                              setFirstMsgDetails(parts.join("\n"));
-                              setFirstMsgResult("");
-                              setFirstMsgCopied(false);
-                              setFirstMsgOpen(true);
-                            }}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full bg-violet-100 hover:bg-violet-200 text-violet-700 hover:text-violet-900 transition-colors shrink-0 shadow-sm"
-                          >
-                            <Wand2 className="h-4 w-4" />
-                          </button>
-                          <div className="flex-1" />
-                          {claimedBy ? (
-                            <div className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-                              <UserCheck className="h-3.5 w-3.5" />
-                              <span>Claimed by {claimedBy}</span>
-                              {claimedAt && (
-                                <span className="text-slate-400 font-normal ml-1">at {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}</span>
-                              )}
-                            </div>
-                          ) : (
-                            <Button
-                              size="sm"
-                              className="h-8 text-xs bg-emerald-700 hover:bg-emerald-800 text-white rounded-full px-4"
-                              disabled={claimLeadMutation.isPending}
-                              onClick={() => claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined })}
-                            >
-                              {claimLeadMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Claim"}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // ── General Issue card (red) ─────────────────────────────────────
-                if (msg.quickAction === "general_issue") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const issTitle = (meta.issueTitle as string) ?? msg.body;
-                  const issNote = (meta.issueNote as string | null) ?? null;
-                  const jobTitle = (meta.jobTitle as string | null) ?? null;
-                  const isResolved = !!(meta.resolvedAt);
-                  return (
-                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-                      <div className={cn("max-w-[72%] rounded-xl overflow-hidden border shadow-sm", isResolved ? "border-slate-200 opacity-60" : "border-red-200")}>
-                        <div className={cn("flex items-center gap-1.5 px-3 py-1.5", isResolved ? "bg-slate-400" : "bg-red-600")}>
-                          <TriangleAlert className="h-3 w-3 text-red-100" />
-                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">{isResolved ? "Issue (Resolved)" : "Issue Raised"}</span>
-                          {jobTitle && <span className="ml-1.5 text-[10px] bg-red-700 text-red-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
-                          <span className="ml-auto text-[10px] text-red-300">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        <div className="px-3 py-2.5 bg-white">
-                          <p className="text-sm font-semibold text-slate-900">{issTitle}</p>
-                          {issNote && <p className="text-xs text-slate-500 mt-1 leading-relaxed">{issNote}</p>}
-                          <div className="flex items-center justify-between mt-2">
-                            <p className="text-[10px] text-slate-400">Raised by {msg.from}</p>
-                            {!isResolved && (
-                              <button
-                                onClick={() => {
-                                  setResolveIssueMessageId(msg.id);
-                                  setResolveIssueTitle(issTitle);
-                                  setResolveIssueNote(issNote ?? "");
-                                  setResolveIssueNoteText("");
-                                  setResolveIssueOpen(true);
-                                }}
-                                className="text-[10px] font-semibold text-green-600 hover:text-green-800 flex items-center gap-0.5"
-                              >
-                                <CheckCheck className="h-3 w-3" /> Resolve
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // ── Reminder card (sky blue) ─────────────────────────────────────
-                if (msg.quickAction === "reminder") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const remBody = (meta.reminderBody as string) ?? msg.body;
-                  const setBy = (meta.setBy as string) ?? msg.from;
-                  return (
-                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-sky-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600">
-                          <Bell className="h-3 w-3 text-sky-100" />
-                          <span className="text-[10px] font-semibold text-sky-100 uppercase tracking-widest">Reminder</span>
-                          <span className="ml-auto text-[10px] text-sky-300">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        <div className="px-3 py-2.5 bg-white">
-                          <p className="text-sm font-medium text-slate-800">{remBody}</p>
-                          <p className="text-[10px] text-slate-400 mt-1.5">Set by {setBy}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // ── Announce Booking card (celebratory) ──────────────────────────
-                if (msg.quickAction === "announce_booking") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const personName = (meta.personName as string) ?? "";
-                  const amount = (meta.amount as string | null) ?? null;
-                  const note = (meta.note as string | null) ?? null;
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-violet-200 shadow-md" style={{ background: "linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 50%, #ede9fe 100%)" }}>
-                        {/* Confetti header with burst animation */}
-                        <div className="relative flex items-center gap-2 px-4 py-2 overflow-hidden" style={{ background: "linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)" }}>
-                          {/* Glitter confetti particles — burst outward then fade */}
-                          {[...Array(18)].map((_, i) => {
-                            const angle = (i / 18) * 360;
-                            const dist = 30 + (i % 3) * 20;
-                            const tx = Math.cos((angle * Math.PI) / 180) * dist;
-                            const ty = Math.sin((angle * Math.PI) / 180) * dist;
-                            const colors = ["#fbbf24","#34d399","#f472b6","#60a5fa","#fb923c","#a3e635","#fff","#e879f9"];
-                            const size = 3 + (i % 4);
-                            return (
-                              <span
-                                key={i}
-                                className="absolute rounded-full pointer-events-none"
-                                style={{
-                                  width: `${size}px`,
-                                  height: `${size}px`,
-                                  background: colors[i % colors.length],
-                                  left: "50%",
-                                  top: "50%",
-                                  transform: "translate(-50%,-50%)",
-                                  animation: `confetti-burst-${i % 3} ${0.6 + (i % 3) * 0.2}s ease-out ${(i * 0.04)}s both`,
-                                  "--tx": `${tx}px`,
-                                  "--ty": `${ty}px`,
-                                } as React.CSSProperties}
-                              />
-                            );
-                          })}
-                          <PartyPopper className="h-4 w-4 text-white relative z-10" />
-                          <span className="text-[10px] font-bold text-white uppercase tracking-widest relative z-10">🎉 New Booking!</span>
-                          <span className="ml-auto text-[10px] text-purple-200 relative z-10">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Body */}
-                        <div className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-400 to-pink-400 flex items-center justify-center text-white font-bold text-base shrink-0">
-                              {(msg.from ?? "?").charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="text-base font-bold text-slate-900">Congrats to {msg.from}!</p>
-                              {amount && <p className="text-sm font-semibold text-violet-700 mt-0.5">{amount}</p>}
-                              {personName && <p className="text-xs text-slate-500 mt-0.5">Client: {personName}</p>}
-                            </div>
-                          </div>
-                          {note && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{note}</p>}
-                          <p className="text-[10px] text-slate-400 mt-2">Announced by {msg.from}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── New Application (Hiring) card ─────────────────────────────────
-                if (msg.quickAction === "new_application") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const appName = (meta.applicantName as string) ?? "New Applicant";
-                  const appPhone = (meta.applicantPhone as string | null) ?? null;
-                  const appPosition = (meta.position as string | null) ?? null;
-                  const appPhoto = (meta.photoUrl as string | null) ?? null;
-                  const candidateId = (meta.candidateId as number | null) ?? null;
-                  const initials = appName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-200 shadow-sm">
-                        {/* Header */}
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-700">
-                          <UserPlus className="h-3 w-3 text-amber-200" />
-                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">New Application</span>
-                          <span className="ml-auto text-[10px] text-amber-300">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Body */}
-                        <div className="px-3 py-2.5 bg-white">
-                          <div className="flex items-center gap-3">
-                            {/* Photo or initials avatar */}
-                            {appPhoto ? (
-                              <img src={appPhoto} alt={appName} className="h-10 w-10 rounded-full object-cover shrink-0 border border-amber-100" />
-                            ) : (
-                              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                                {initials}
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <p className="text-base font-bold text-slate-900 leading-tight">{appName}</p>
-                              {appPhone && <p className="text-xs text-slate-400 mt-0.5">{appPhone}</p>}
-                              {appPosition && <p className="text-xs text-amber-700 font-medium mt-0.5">{appPosition}</p>}
-                            </div>
-                          </div>
-                          {/* Action row */}
-                          <div className="flex items-center gap-2 mt-3 pt-2 border-t border-slate-100">
-                            <a
-                              href="/admin/hiring"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-full transition-colors"
-                            >
-                              <Briefcase className="h-3.5 w-3.5" />
-                              View in Hiring
-                            </a>
-
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-
-                // ── Away Status card ──────────────────────────────────────────────
-                if (msg.quickAction?.startsWith("away_status:")) {
-                  const statusKey = msg.quickAction.split(":")[1];
-                  const STATUS_MAP: Record<string, { label: string; sub: string; emoji: string; accent: string; bg: string; border: string; headerBg: string }> = {
-                    away_sec: { label: "Away for a sec",  sub: "Quick break",         emoji: "☕", accent: "#92400e", bg: "#fffbeb", border: "#fde68a", headerBg: "linear-gradient(90deg,#f59e0b,#fbbf24)" },
-                    lunch:    { label: "Lunch break",     sub: "Quick munch",         emoji: "🍔", accent: "#065f46", bg: "#ecfdf5", border: "#a7f3d0", headerBg: "linear-gradient(90deg,#10b981,#34d399)" },
-                    back15:   { label: "Back in 15",      sub: "Short defined break", emoji: "⏰", accent: "#3730a3", bg: "#eef2ff", border: "#c7d2fe", headerBg: "linear-gradient(90deg,#6366f1,#818cf8)" },
-                    eod:      { label: "Signing off",     sub: "End of day",          emoji: "🌙", accent: "#0c4a6e", bg: "#f0f9ff", border: "#bae6fd", headerBg: "linear-gradient(90deg,#0ea5e9,#38bdf8)" },
-                  };
-                  const s = STATUS_MAP[statusKey] ?? { label: msg.body, sub: "", emoji: "💬", accent: "#334155", bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155" };
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-2xl overflow-hidden shadow-md" style={{ border: `1px solid ${s.border}`, background: s.bg }}>
-                        {/* Coloured header strip */}
-                        <div className="flex items-center gap-2 px-4 py-2" style={{ background: s.headerBg }}>
-                          <span className="text-lg leading-none">{s.emoji}</span>
-                          <span className="text-[11px] font-bold text-white uppercase tracking-widest">{s.label}</span>
-                          <span className="ml-auto text-[10px] text-white/70">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Body */}
-                        <div className="px-4 py-3 flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
-                            style={{ background: s.headerBg }}>
-                            {(msg.from ?? "?").charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold" style={{ color: s.accent }}>{msg.from}</p>
-                            <p className="text-xs text-slate-500">{s.sub}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Issue Resolved card (green) ───────────────────────────────────
-                if (msg.quickAction === "issue_resolved") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const issTitle = (meta.issueTitle as string) ?? "Issue";
-                  const issNote = (meta.issueNote as string | null) ?? null;
-                  const jobTitle = (meta.jobTitle as string | null) ?? null;
-                  const resNote = (meta.resolutionNote as string | null) ?? null;
-                  const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
-                  return (
-                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
-                          <CheckCheck className="h-3 w-3 text-emerald-100" />
-                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">✅ Issue Resolved</span>
-                          {jobTitle && <span className="ml-1.5 text-[10px] bg-emerald-700 text-emerald-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
-                          <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        <div className="px-3 py-2.5 bg-white">
-                          {/* Original issue context */}
-                          <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-1.5 mb-2">
-                            <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-0.5">Original Issue</p>
-                            <p className="text-xs text-slate-700 font-medium">{issTitle}</p>
-                            {issNote && <p className="text-xs text-slate-500 mt-0.5">{issNote}</p>}
-                          </div>
-                          {/* Resolution note */}
-                          {resNote && (
-                            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 mb-2">
-                              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-0.5">Resolution</p>
-                              <p className="text-xs text-slate-700">{resNote}</p>
-                            </div>
-                          )}
-                          <p className="text-[10px] text-slate-400">Resolved by {resolvedBy}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Follow-up Created card (violet) ─────────────────────────────
-                if (msg.quickAction === "follow_up_created") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const fuName = (meta.name as string) ?? msg.body;
-                  const fuType = (meta.type as string) ?? "";
-                  const fuOwner = (meta.owner as string) ?? msg.from;
-                  const fuPriority = (meta.priority as string) ?? "Normal";
-                  const fuNextStep = (meta.nextStep as string) ?? "";
-                  const fuDueLabel = (meta.dueLabel as string) ?? "";
-                  const fuNote = (meta.internalNote as string | null) ?? null;
-                  const priorityColor: Record<string, string> = {
-                    High: "text-red-600 bg-red-50 border-red-200",
-                    Normal: "text-amber-600 bg-amber-50 border-amber-200",
-                    Low: "text-slate-500 bg-slate-50 border-slate-200",
-                  };
-                  const pClass = priorityColor[fuPriority] ?? priorityColor["Normal"];
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-violet-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600">
-                          <ClipboardList className="h-3 w-3 text-violet-100" />
-                          <span className="text-[10px] font-semibold text-violet-100 uppercase tracking-widest">Follow-up Created</span>
-                          {fuType && <span className="ml-1.5 text-[10px] bg-violet-700 text-violet-200 rounded-full px-2 py-0.5">{fuType}</span>}
-                          <span className="ml-auto text-[10px] text-violet-300">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        <div className="px-3 py-2.5 bg-white">
-                          <p className="text-sm font-semibold text-slate-900">{fuName}</p>
-                          {fuNextStep && <p className="text-xs text-slate-600 mt-0.5">{fuNextStep}</p>}
-                          <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {fuDueLabel && (
-                              <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                                <Clock className="h-3 w-3" /> {fuDueLabel}
-                              </span>
-                            )}
-                            <span className={`text-[10px] font-medium border rounded-full px-2 py-0.5 ${pClass}`}>{fuPriority}</span>
-                          </div>
-                          {fuNote && <p className="text-xs text-slate-400 mt-1.5 italic">{fuNote}</p>}
-                          <p className="text-[10px] text-slate-400 mt-2">Assigned to {fuOwner}</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Call Started card ────────────────────────────────────────────────────────
-                if (msg.quickAction === "call_started") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const agentName = (meta.agentName as string) ?? msg.from;
-                  const direction = (meta.direction as string) ?? "incoming";
-                  const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
-                  const callerLabel = (meta.callerLabel as string | null) ?? null;
-                  return (
-                    <div key={msg.id} className="flex justify-center my-1">
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 shadow-sm">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                        </span>
-                        <PhoneCall className="h-3 w-3 text-emerald-600 shrink-0" />
-                        <span className="text-xs font-medium text-emerald-800">
-                          {agentName} {dirLabel === "outbound" ? "called" : "answered"}{callerLabel ? <> <span className="font-semibold">{callerLabel}</span></> : ""}
-                        </span>
-                        <span className="text-[10px] text-emerald-400">{fmtMsgTime(msg.createdAt)}</span>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Call Ended card ──────────────────────────────────────────────────────────
-                if (msg.quickAction === "call_ended") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const agentName = (meta.agentName as string) ?? msg.from;
-                  const durationLabel = (meta.durationLabel as string | null) ?? null;
-                  const direction = (meta.direction as string) ?? "incoming";
-                  const dirLabel = direction === "outgoing" ? "outbound" : "inbound";
-                  // callerLabel not stored in call_ended metadata; look up from call_started if needed
-                  return (
-                    <div key={msg.id} className="flex justify-center my-1">
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 bg-slate-50 shadow-sm">
-                        <PhoneOff className="h-3 w-3 text-slate-400 shrink-0" />
-                        <span className="text-xs text-slate-600">
-                          {agentName} ended {dirLabel} call{durationLabel ? <> &middot; <span className="font-medium">{durationLabel}</span></> : ""}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Call Debrief card ────────────────────────────────────────────────────
-                if (msg.quickAction === "call_debrief") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const grade = (meta.grade as string | null) ?? null;
-                  const wentWell = (meta.wentWell as string | null) ?? null;
-                  const improve = (meta.improve as string | null) ?? null;
-                  const nextLine = (meta.nextLine as string | null) ?? null;
-                  const recordingUrl = (meta.recordingUrl as string | null) ?? null;
-                  const callerName = (meta.callerName as string | null) ?? null;
-                  const callerPhone = (meta.callerPhone as string | null) ?? null;
-                  const gradeColors: Record<string, string> = {
-                    A: "bg-green-100 text-green-700 border-green-300",
-                    B: "bg-blue-100 text-blue-700 border-blue-300",
-                    C: "bg-amber-100 text-amber-700 border-amber-300",
-                    D: "bg-orange-100 text-orange-700 border-orange-300",
-                    F: "bg-red-100 text-red-700 border-red-300",
-                  };
-                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
-                  return (
-                    <div key={msg.id} className="flex justify-center my-2 px-4">
-                      <div className="w-full max-w-sm rounded-[20px] border border-purple-200 bg-purple-50 shadow-sm p-4">
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200">
-                              <Phone className="h-3 w-3 text-purple-600" />
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
-                              {(callerName || callerPhone) && (
-                                <p className="text-xs font-medium text-purple-900 mt-0.5">{callerName ?? callerPhone}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {grade && (
-                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 text-xs font-bold ${gradeColor}`}>
-                                {grade}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-purple-400">{fmtMsgTime(msg.createdAt)}</span>
-                          </div>
-                        </div>
-                        {/* Audio player */}
-                        {recordingUrl && (
-                          <div className="mb-3">
-                            <audio
-                              controls
-                              src={recordingUrl}
-                              className="w-full h-8 rounded-xl"
-                              style={{ accentColor: "#7c3aed" }}
-                            />
-                          </div>
-                        )}
-                        <div className="border-t border-purple-200/70 mb-3" />
-                        {/* Went well */}
-                        {wentWell && (
-                          <div className="mb-2">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-green-500 text-xs">✔</span>
-                              <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
-                            </div>
-                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{wentWell}</p>
-                          </div>
-                        )}
-                        <div className="border-t border-purple-200/50 mb-2" />
-                        {/* Improve */}
-                        {improve && (
-                          <div className="mb-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-amber-500 text-xs">▲</span>
-                              <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
-                            </div>
-                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{improve}</p>
-                          </div>
-                        )}
-                        {/* Next line */}
-                        {nextLine && (
-                          <div className="rounded-2xl bg-white border border-purple-200 px-3 py-2">
-                            <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
-                            <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Stale ETA alert card (amber) ──────────────────────────────────
-                if (msg.quickAction === "stale_eta") {
-                  let meta: Record<string, unknown> = {};
-                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
-                  const cleanerName = (meta.cleanerName as string) ?? msg.from ?? "Team";
-                  const customerName = (meta.customerName as string | null) ?? null;
-                  const etaStr = (meta.etaStr as string | null) ?? null;
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-300 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500">
-                          <TriangleAlert className="h-3 w-3 text-amber-100" />
-                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">ETA Passed</span>
-                          <span className="ml-auto text-[10px] text-amber-200">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        <div className="px-3 py-2.5 bg-amber-50">
-                          <p className="text-sm font-semibold text-slate-900">{cleanerName} — still on the way</p>
-                          {customerName && <p className="text-xs text-slate-500 mt-0.5">For {customerName}</p>}
-                          {etaStr && <p className="text-xs text-amber-700 mt-0.5">ETA was {etaStr}</p>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-                // ── Skip cleaner_status cards — rendered in sidebar instead
-                if (msg.quickAction === "cleaner_status") return null;
-                // ── Default bubble ─────────────────────────────────────────────────────
-                {
-                  const msgReactions = reactionsByMsgId[msg.id] ?? [];
-                  const reactionGroups = msgReactions.reduce<Record<string, string[]>>((acc, r) => {
-                    if (!acc[r.emoji]) acc[r.emoji] = [];
-                    acc[r.emoji].push(r.callerName);
-                    return acc;
-                  }, {});
-                  const authorInitial = (msg.from ?? "?")[0].toUpperCase();
-                  const authorColor = senderHex(msg.from ?? "");
-                  const authorPhoto = senderPhotoMap[msg.from ?? ""] ?? null;
-                  const isTaggedMsg = unreadTagIds.includes(msg.id);
-                  return (
-                    <div
-                      key={msg.id}
-                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
-                      className={cn(
-                        "w-full group transition-colors duration-300",
-                        highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
-                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : ""
-                      )}
-                    >
-                      {/* Bubble + hover actions */}
-                      <div className={"relative flex items-start w-full" + (isMine && !isAlert ? " justify-end" : "")}>
-                        <div className={"rounded-2xl px-5 py-4 " + (isAlert ? "w-full bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto bg-[#0f172a] text-white" : "w-full bg-[#f1f5f9] text-slate-900")}>
-                          {/* Top row: sender label + role + time */}
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={cn(
-                              "text-xs",
-                              isAlert ? "text-slate-400 font-normal" : isMine ? "text-slate-400 font-semibold" : "font-semibold"
-                            )} style={{ color: isAlert || isMine ? undefined : authorColor }}>
-                              {isAlert
-                                ? `${msg.from}${msg.role && msg.role !== "alert" ? " · " + (msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch") : ""}`
-                                : isMine ? "You" : msg.from
-                              }
-                              {!isAlert && !isMine && (
-                                <span className="font-normal text-slate-400 ml-1">
-                                  · {msg.role === "alert" ? "Alert" : msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch"}
-                                </span>
-                              )}
-                            </span>
-                            <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
-                              {fmtMsgTime(msg.createdAt)}
-                            </span>
-                          </div>
-                          {/* WhatsApp-style quoted block with vivid sender accent */}
-                          {msg.replyToId && msg.replyToBody && (
-                            <button
-                              type="button"
-                              onClick={() => msg.replyToId && scrollToCmdMsg(msg.replyToId)}
-                              className={cn(
-                                "mb-2.5 rounded-lg overflow-hidden flex w-full text-left cursor-pointer hover:brightness-95 transition-all",
-                                isMine ? "bg-slate-700" : "bg-slate-100"
-                              )}
-                            >
-                              <div className="w-1 shrink-0 rounded-l-lg" style={{ backgroundColor: senderHex(msg.replyToAuthor ?? "") }} />
-                              <div className="px-2.5 py-2 min-w-0">
-                                <p className="text-xs font-semibold mb-0.5 truncate" style={{ color: senderHex(msg.replyToAuthor ?? "") }}>{msg.replyToAuthor ?? "Unknown"}</p>
-                                <p className={cn("text-xs line-clamp-2 leading-snug break-words", isMine ? "text-slate-300" : "text-slate-500")}>{msg.replyToBody}</p>
-                              </div>
-                            </button>
-                          )}
-                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
-                            {(() => {
-                              // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
-                              const tokens: React.ReactNode[] = [];
-                              // Combined regex: markdown links OR bare URLs (not already inside a markdown link)
-                              const combinedRe = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/[^\s<>"'\]\)]+)/g;
-                              const boldRe = /\*\*([^*]+)\*\*/g;
-                              let lastIdx = 0;
-                              let match: RegExpExecArray | null;
-                              const renderBold = (text: string, keyPrefix: string) => {
-                                const parts: React.ReactNode[] = [];
-                                let bi = 0, bLast = 0;
-                                let bm: RegExpExecArray | null;
-                                boldRe.lastIndex = 0;
-                                while ((bm = boldRe.exec(text)) !== null) {
-                                  if (bm.index > bLast) parts.push(<span key={`${keyPrefix}-t${bi++}`}>{text.slice(bLast, bm.index)}</span>);
-                                  parts.push(<strong key={`${keyPrefix}-b${bi++}`}>{bm[1]}</strong>);
-                                  bLast = bm.index + bm[0].length;
-                                }
-                                if (bLast < text.length) parts.push(<span key={`${keyPrefix}-t${bi}`}>{text.slice(bLast)}</span>);
-                                return parts;
-                              };
-                              combinedRe.lastIndex = 0;
-                              while ((match = combinedRe.exec(msg.body)) !== null) {
-                                if (match.index > lastIdx) tokens.push(...renderBold(msg.body.slice(lastIdx, match.index), `pre-${match.index}`));
-                                if (match[1] !== undefined) {
-                                  // Markdown [text](url)
-                                  tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">{match[1]}</a>);
-                                } else {
-                                  // Bare URL — strip trailing punctuation that's likely not part of the URL
-                                  const rawUrl = match[3].replace(/[.,!?;:]+$/, "");
-                                  tokens.push(<a key={`url-${match.index}`} href={rawUrl} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300 break-all">{rawUrl}</a>);
-                                }
-                                lastIdx = match.index + match[0].length;
-                              }
-                              if (lastIdx < msg.body.length) tokens.push(...renderBold(msg.body.slice(lastIdx), `tail`));
-                              return tokens;
-                            })()}
-                          </p>
-                          {mediaUrls.length > 0 && (
-                            <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
-                              {mediaUrls.map((url, idx) => (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  onClick={() => setLightboxUrl(url)}
-                                  className="focus:outline-none"
-                                >
-                                  <img
-                                    src={url}
-                                    alt={`attachment-${idx}`}
-                                    className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
-                                    style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                          {!isAlert && (
-                            <div className="flex items-center justify-end gap-1 mt-1.5">
-                              <p className="text-[10px] text-slate-400">
-                                {fmtMsgTime(msg.createdAt)}
-                              </p>
-                              {/* WhatsApp-style read receipt — only on my own messages */}
-                              {isMine && (() => {
-                                const seenBy = commandSeenByMap[msg.id] ?? [];
-                                return (
-                                  <span
-                                    title={seenBy.length > 0 ? `Seen by ${seenBy.join(", ")}` : "Sent"}
-                                    className="inline-flex items-center shrink-0"
-                                  >
-                                    {seenBy.length > 0 ? (
-                                      <svg width="18" height="11" viewBox="0 0 18 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Seen">
-                                        <path d="M1 5.5L4.5 9L10 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                                        <path d="M5 5.5L8.5 9L14 2" stroke="#53bdeb" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                                      </svg>
-                                    ) : (
-                                      <svg width="12" height="11" viewBox="0 0 12 11" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Sent">
-                                        <path d="M1 5.5L4.5 9L11 2" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                                      </svg>
-                                    )}
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                          )}
-                          {/* Reaction pills */}
-                          {Object.keys(reactionGroups).length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {Object.entries(reactionGroups).map(([emoji, names]) => (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() => toggleReactionMutation.mutate({ messageId: msg.id, emoji })}
-                                  title={names.join(", ")}
-                                  className="flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs bg-slate-100 hover:bg-slate-200 border border-slate-200 transition"
-                                >
-                                  <span>{emoji}</span>
-                                  <span className="text-slate-600 font-medium">{names.length}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        {/* WhatsApp-style hover actions: Reply + quick-react strip */}
-                        <div
-                          className={cn(
-                            "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
-                            isMine ? "order-first mr-1.5" : "ml-1.5"
-                          )}
-                        >
-                          {!isAlert && (
-                            <button
-                              onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
-                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            >
-                              <ChevronDown className="h-3 w-3" />
-                              <span>Reply</span>
-                            </button>
-                          )}
-                          <button
-                            onClick={() => openChatConvert(msg.id, msg.body)}
-                            className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
-                          >
-                            <AlertTriangle className="h-3 w-3" />
-                            <span>Create Issue</span>
-                          </button>
-                          {!isAlert && (
-                            <div className="flex gap-0.5">
-                              {["👍", "❤️", "✅", "🔥"].map(e => (
-                                <button
-                                  key={e}
-                                  type="button"
-                                  onClick={() => toggleReactionMutation.mutate({ messageId: msg.id, emoji: e })}
-                                  className="w-7 h-7 rounded-full flex items-center justify-center text-sm bg-slate-100 hover:bg-slate-200 transition"
-                                >
-                                  {e}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
-              })
-            )}
-             <div ref={threadBottomRef} />
-          </div>
-        </div>
+        <MessageList
+          channelMsgs={channelMsgs}
+          channelLoading={channelLoading}
+          callerName={callerName}
+          reactionsByMsgId={reactionsByMsgId}
+          commandSeenByMap={commandSeenByMap}
+          senderPhotoMap={senderPhotoMap}
+          unreadTagIds={unreadTagIds}
+          highlightedCmdMsgId={highlightedCmdMsgId}
+          cmdMsgRefMap={cmdMsgRefMap}
+          msgsContainerRef={msgsContainerRef}
+          threadScrollRef={threadScrollRef}
+          threadBottomRef={threadBottomRef}
+          toggleReactionMutation={toggleReactionMutation}
+          claimLeadMutation={claimLeadMutation}
+          scrollToCmdMsg={scrollToCmdMsg}
+          openChatConvert={openChatConvert}
+          setReplyTo={setReplyTo}
+          setLightboxUrl={setLightboxUrl}
+          setFirstMsgDetails={setFirstMsgDetails}
+          setFirstMsgResult={setFirstMsgResult}
+          setFirstMsgCopied={setFirstMsgCopied}
+          setFirstMsgOpen={setFirstMsgOpen}
+          setResolveIssueMessageId={setResolveIssueMessageId}
+          setResolveIssueTitle={setResolveIssueTitle}
+          setResolveIssueNote={setResolveIssueNote}
+          setResolveIssueNoteText={setResolveIssueNoteText}
+          setResolveIssueOpen={setResolveIssueOpen}
+        />
         </div>{/* end relative wrapper */}
         {chatConvertModal && (
           <ConvertToIssueModal
