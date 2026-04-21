@@ -36,7 +36,6 @@ const ACTIVE_STAGES = [
   // Flow C stages
   "FLOWC_ADDON",
   "FLOWC_DATE",
-  "FLOWC_NOTES",
   "FLOWC_QUOTE_SENT",
 ];
 

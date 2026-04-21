@@ -1192,3 +1192,4 @@
 - [x] Fix: INTERVIEW_LINK_SENT sessions stealing priority over newer active lead sessions in webhook session routing (root cause of Flow C sessions going DONE ~74s after creation)
 - [x] Fix: Add FLOWC_ADDON/FLOWC_DATE/FLOWC_NOTES/FLOWC_QUOTE_SENT to submitQuote ACTIVE_LEAD_STAGES so re-submissions properly supersede them
 - [x] Test: 8 new vitest tests for webhook session priority logic (all passing)
+- [x] Remove FLOWC_NOTES step from Flow C (confirm → add-ons → date → quote link)

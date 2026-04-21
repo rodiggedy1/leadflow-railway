@@ -37,7 +37,7 @@ import { buildJadeLockIn, processLeadReply as processLeadReplyV1 } from "../conv
 import { getTemplate } from "../messageTemplateRouter";
 
 // Flow C stages — handled by conversationEngine.ts (processLeadReplyV1) not the LLM engine
-const FLOW_C_STAGES = new Set(["WIDGET_SIZING", "FLOWC_ADDON", "FLOWC_DATE", "FLOWC_NOTES", "FLOWC_QUOTE_SENT"]);
+const FLOW_C_STAGES = new Set(["WIDGET_SIZING", "FLOWC_ADDON", "FLOWC_DATE", "FLOWC_QUOTE_SENT"]);
 
 // ─── Fallback replies (if LLM fails entirely) ─────────────────────────────────
 
@@ -65,7 +65,7 @@ export async function processLeadReplyV2(
   // ── Flow C bypass: delegate to conversationEngine for all Flow C stages ──────
   // The LLM-first engine doesn't know about Flow C's 5-step enriched quote flow.
   // conversationEngine.ts has the full Flow C state machine (WIDGET_SIZING →
-  // FLOWC_ADDON → FLOWC_DATE → FLOWC_NOTES → FLOWC_QUOTE_SENT → ADDRESS).
+  // FLOWC_ADDON → FLOWC_DATE → FLOWC_QUOTE_SENT → ADDRESS).
   if (context.smsFlow === "C" && FLOW_C_STAGES.has(context.stage)) {
     console.log(`[Engine] Flow C bypass: delegating stage=${context.stage} to conversationEngine`);
     return processLeadReplyV1(leadReply, context);
