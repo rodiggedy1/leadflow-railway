@@ -1003,12 +1003,26 @@ Respond ONLY with JSON: { "intent": "addons_provided" | "none" | "question" | "u
     }
 
     const extrasToStore = aiResult.intent === "none" ? [] : aiResult.extractedAddons;
-    const dateFallback = `Almost there! 📅 What date works best for you? Drop a date (or a couple options) and I'll check availability right away as well! 😊⚡`;
-    const dateReply = await getFlowTemplate("flowC_sms3", dateFallback, {});
+    // After add-ons, ask pets/notes (flowC_sms3) — then date (flowC_sms4) — then quote link (flowC_sms5)
+    const notesFallback3 = `Got it ${firstName}! 🐾🏡 Last quick thing before your quote — anything we should know before we arrive? (Pets, areas to focus on, preferred time of day, etc.)\n\nOr just say "all good" and we're almost there!`;
+    const notesReply3 = await getFlowTemplate("flowC_sms3", notesFallback3, { "{firstName}": firstName });
     return {
-      reply: dateReply,
-      nextStage: "FLOWC_DATE",
+      reply: notesReply3,
+      nextStage: "FLOWC_NOTES",
       extractedData: { extras: extrasToStore },
+    };
+  }
+
+  // FLOWC_NOTES: Lead replied with pets/notes or "all good" — now ask for preferred date
+  if (stage === "FLOWC_NOTES") {
+    const firstName = context.leadName?.split(" ")[0] ?? "there";
+    // Store the notes reply, then ask for date
+    const dateFallback4 = `Great! 📅 What date works best for you? Drop a date or a couple of options and I'll confirm availability and send the quote as well! ⚡`;
+    const dateReply4 = await getFlowTemplate("flowC_sms4", dateFallback4, { "{firstName}": firstName });
+    return {
+      reply: dateReply4,
+      nextStage: "FLOWC_DATE",
+      extractedData: { specialNotes: leadReply.trim() },
     };
   }
 
@@ -1067,32 +1081,23 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
       return { reply: `${answerResp.reply}\n\nWhat date works best for you? 📅`, nextStage: "FLOWC_DATE" };
     }
 
-    // If no date given, re-ask
+    // If no date given, re-ask using the date template
     if (aiResult.intent === "no_date") {
+      const dateFallback4 = `Great! 📅 What date works best for you? Drop a date or a couple of options and I'll confirm availability and send the quote as well! ⚡`;
+      const reAskDate = await getFlowTemplate("flowC_sms4", dateFallback4, { "{firstName}": firstName });
       return {
-        reply: `No worries ${firstName}! Just drop a date or two that work for you and I'll check availability right away 📅`,
+        reply: reAskDate,
         nextStage: "FLOWC_DATE",
       };
     }
 
-    const notesFallback = `🎉 Last thing — is there anything specific we should know before we arrive? (Pets, areas to focus on, preferred time of day, etc.)\n\nOr just say "all good" and we'll give you the final quote! 🐾🏡`;
-    const notesReply = await getFlowTemplate("flowC_sms4", notesFallback, {});
-    return {
-      reply: notesReply,
-      nextStage: "FLOWC_NOTES",
-      extractedData: { preferredDates: aiResult.extractedDate ?? leadReply.trim() },
-    };
-  }
-
-  // FLOWC_NOTES: Lead replied with notes or "all good" — generate quote link and send SMS 5
-  if (stage === "FLOWC_NOTES") {
-    const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+    // Date provided — now send quote link (flowC_sms5)
     const quoteLinkFallback = `Hi ${firstName}! Here's your custom quote from Maids in Black — put together just for you based on everything you shared 🖤✨\n\n👉 {quoteLink}\n\nTake a look and if it all looks good, you can book directly through the link or just tell me "Looks good" and I can lock it in by text as well. Excited to work with you. 😊`;
     const quoteReply = await getFlowTemplate("flowC_sms5", quoteLinkFallback, { "{firstName}": firstName });
     return {
       reply: quoteReply,
       nextStage: "FLOWC_QUOTE_SENT",
-      extractedData: { specialNotes: leadReply.trim() },
+      extractedData: { preferredDates: aiResult.extractedDate ?? leadReply.trim() },
     };
   }
 
