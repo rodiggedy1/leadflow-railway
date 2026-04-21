@@ -678,9 +678,9 @@ async function handleWidgetSizingReply(
       reply = await buildAvailabilityMessage(context.extras);
       nextStage = "AVAILABILITY";
     } else if (flowVariant === "C") {
-      // Flow C (Jade enriched): send add-on question after sizing
-      const addonFallback = `Perfect, thanks for confirming ${firstName}! 🙌\nJust a couple quick things so we can tailor your quote — do you need any of these add-ons?\n\n✨ Inside oven\n🪟 Interior windows\n🧺 Laundry (wash + fold)\n🍽️ Inside fridge\n🛏️ Inside cabinets\n🧹 Deep clean\n📦 Move in / Move out\n\nJust reply with anything that applies, or say "none" and we'll keep it standard! 😊`;
-      reply = await getFlowTemplate("flowC_sms2", addonFallback, { "{firstName}": firstName });
+      // Widget Flow C: after sizing, send widget-specific add-ons question (widgetFlowC_sms2)
+      const addonFallback = `Perfect, thanks for confirming ${firstName}! 🙌\nJust a couple quick things so we can tailor your quote — do you need any of these add-ons?\n\n✨ Inside oven\n🪟 Interior windows\n🧻 Laundry (wash + fold)\n🍽️ Inside fridge\n🛏️ Inside cabinets\n🧹 Deep clean\n📦 Move in / Move out\n\nJust reply with anything that applies, or say "none" and we'll keep it standard! 😊`;
+      reply = await getFlowTemplate("widgetFlowC_sms2", addonFallback, { "{firstName}": firstName });
       nextStage = "FLOWC_ADDON";
     } else {
       // Flow B (Jade): send price reveal with day offer using DB template (supports {recurringprice})
@@ -1003,9 +1003,11 @@ Respond ONLY with JSON: { "intent": "addons_provided" | "none" | "question" | "u
     }
 
     const extrasToStore = aiResult.intent === "none" ? [] : aiResult.extractedAddons;
-    // After add-ons, ask for preferred date (flowC_sms3) — then quote link (flowC_sms5)
+    // After add-ons, ask for preferred date
+    // Widget Flow C uses widgetFlowC_sms3; form Flow C uses flowC_sms3
+    const isWidget = context.leadSource === "widget";
     const dateFallback3 = `Great! 📅 What date works best for you? Drop a date or a couple of options and I'll confirm availability and send the quote as well! ⚡`;
-    const dateReply3 = await getFlowTemplate("flowC_sms3", dateFallback3, { "{firstName}": firstName });
+    const dateReply3 = await getFlowTemplate(isWidget ? "widgetFlowC_sms3" : "flowC_sms3", dateFallback3, { "{firstName}": firstName });
     return {
       reply: dateReply3,
       nextStage: "FLOWC_DATE",
@@ -1070,17 +1072,20 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
 
     // If no date given, re-ask using the date template
     if (aiResult.intent === "no_date") {
+      const isWidgetReask = context.leadSource === "widget";
       const dateFallback3 = `Great! 📅 What date works best for you? Drop a date or a couple of options and I'll confirm availability and send the quote as well! ⚡`;
-      const reAskDate = await getFlowTemplate("flowC_sms3", dateFallback3, { "{firstName}": firstName });
+      const reAskDate = await getFlowTemplate(isWidgetReask ? "widgetFlowC_sms3" : "flowC_sms3", dateFallback3, { "{firstName}": firstName });
       return {
         reply: reAskDate,
         nextStage: "FLOWC_DATE",
       };
     }
 
-    // Date provided — now send quote link (flowC_sms4)
-    const quoteLinkFallback = `Hi ${firstName}! Here's your custom quote from Maids in Black — put together just for you based on everything you shared 🖤✨\n\n👉 {quoteLink}\n\nTake a look and if it all looks good, you can book directly through the link or just tell me "Looks good" and I can lock it in by text as well. Excited to work with you. 😊`;
-    const quoteReply = await getFlowTemplate("flowC_sms4", quoteLinkFallback, { "{firstName}": firstName });
+    // Date provided — now send quote link
+    // Widget Flow C uses widgetFlowC_sms4; form Flow C uses flowC_sms4
+    const isWidgetQuote = context.leadSource === "widget";
+    const quoteLinkFallback = `Here's your custom quote, ${firstName}! 🖤✨\n👉 {quoteLink}\nEverything's in there based on what you shared. Click the link to review and book your spot — takes about 60 seconds!\nYou can also just have me confirm it here as well. Just say "confirm".\nIf you have any questions I'll be here, I'll hang around to make sure you're good. Can't wait to get your home sparkling! 😊`;
+    const quoteReply = await getFlowTemplate(isWidgetQuote ? "widgetFlowC_sms4" : "flowC_sms4", quoteLinkFallback, { "{firstName}": firstName });
     return {
       reply: quoteReply,
       nextStage: "FLOWC_QUOTE_SENT",

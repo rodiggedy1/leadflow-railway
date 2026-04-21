@@ -326,7 +326,7 @@ const WIDGET_FLOW_OPTIONS = [
     value: "C",
     label: "Flow C — Jade (Enriched Quote)",
     icon: <Sparkles className="w-4 h-4" />,
-    description: "5-step flow: confirm sizing → collect add-ons → preferred date → special notes → send personalized quote link. No price in SMS.",
+    description: "Widget leads get Jade. Asks for bedrooms/bathrooms first, then collects add-ons and preferred date before sending a personalized quote link. No price in SMS.",
     color: "green",
   },
   {
@@ -400,15 +400,15 @@ const FLOW_A_CONVO: ConvoItem[] = [
   { type: 'bot', label: 'SMS 6', templateKey: 'flowA_sms6' },
 ];
 
-// Flow C: 4-step enriched quote flow
+// Widget Flow C: starts with sizing question (like Flow B), then enriched quote flow
 const WIDGET_FLOW_C_CONVO: ConvoItem[] = [
-  { type: 'bot', label: 'SMS 1', templateKey: 'flowC_sms1' },
-  { type: 'lead', text: 'Yes, 3 bed / 2 bath!' },
-  { type: 'bot', label: 'SMS 2', templateKey: 'flowC_sms2' },
+  { type: 'bot', label: 'SMS 1 — Sizing', templateKey: 'widgetFlowC_sms1' },
+  { type: 'lead', text: '3 bed / 2 bath' },
+  { type: 'bot', label: 'SMS 2 — Add-ons', templateKey: 'widgetFlowC_sms2' },
   { type: 'lead', text: 'Inside oven and inside fridge please' },
-  { type: 'bot', label: 'SMS 3 — Date', templateKey: 'flowC_sms3' },
+  { type: 'bot', label: 'SMS 3 — Date', templateKey: 'widgetFlowC_sms3' },
   { type: 'lead', text: 'Thursday or Friday works for me' },
-  { type: 'bot', label: 'SMS 4 — Quote Link', templateKey: 'flowC_sms4' },
+  { type: 'bot', label: 'SMS 4 — Quote Link', templateKey: 'widgetFlowC_sms4' },
 ];
 
 // Widget: starts with persona-specific sizing SMS, then continues with shared flow scripts

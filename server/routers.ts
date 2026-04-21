@@ -4976,9 +4976,10 @@ async function processWidgetLeadInBackground(input: {
       { "{firstName}": firstName }
     );
   } else if (flowVariant === "C") {
+    // Widget Flow C: starts with sizing question (no bedrooms/bathrooms yet from widget)
     sizingMsg = await getFlowTemplate(
-      "flowC_sms1",
-      `Hey ${firstName}! \uD83D\uDC4B This is Jade from Maids in Black \u2014 you just reached out on our site and I wanted to personally follow up! \uD83D\uDE0A\n\nWe'd love to get your home sparkling clean. Quick question to get you the right quote \u2014 just to confirm you have a {bedrooms} / {bathrooms} home \uD83C\uDFE0 correct?`,
+      "widgetFlowC_sms1",
+      `Hey ${firstName}! Jade here from Maids in Black \uD83D\uDE0A To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`,
       { "{firstName}": firstName }
     );
   } else {

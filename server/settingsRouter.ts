@@ -113,12 +113,12 @@ const DEFAULT_SETTINGS = [
     description: "Sent when the lead says to call in a few minutes. Use {firstName} for the lead's first name.",
     fieldType: "textarea",
   },
-  // ── Widget SMS Flow Selector ──────────────────────────────────────────────
+  // ── Widget SMS Flow Selector ────────────────────────────────────────────
   {
     key: "widgetSmsFlow",
     value: "B",
     label: "Widget SMS Conversation Flow",
-    description: "Flow A (Madison): asks for bedrooms/bathrooms, then sends price upfront with Madison's photo. Flow B (Jade): asks for bedrooms/bathrooms, then greets and asks for day before revealing price. Split: randomly assigns A or B to each widget lead.",
+    description: "Flow A (Madison): asks for bedrooms/bathrooms, then sends price upfront with Madison's photo. Flow B (Jade): asks for bedrooms/bathrooms, then greets and asks for day before revealing price. Flow C (Jade Enriched): asks for bedrooms/bathrooms, then collects add-ons and preferred date before sending a personalized quote link. Split: randomly assigns A or B to each widget lead.",
     fieldType: "select",
   },
   // ── Widget Flow B (Jade) SMS Templates ───────────────────────────────────
@@ -127,6 +127,35 @@ const DEFAULT_SETTINGS = [
     value: "Hey {firstName}! Jade here from Maids in Black 😊 To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)",
     label: "Widget Flow B — SMS 1: Sizing Question (Jade)",
     description: "Sent immediately after the widget lead submits their name and phone. Asks for home size. Use {firstName} for the lead's first name.",
+    fieldType: "textarea",
+  },
+  // ── Widget Flow C (Jade Enriched) SMS Templates ──────────────────────────
+  {
+    key: "widgetFlowC_sms1",
+    value: "Hey {firstName}! Jade here from Maids in Black 😊 To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)",
+    label: "Widget Flow C — SMS 1: Sizing Question (Jade)",
+    description: "Sent immediately after the widget lead submits their name and phone. Asks for home size before the enriched quote flow. Use {firstName} for the lead's first name.",
+    fieldType: "textarea",
+  },
+  {
+    key: "widgetFlowC_sms2",
+    value: "Perfect, thanks for confirming {firstName}! 🙌 Just a couple quick things so we can tailor your quote — do you need any of these add-ons?\n\n✨ Inside oven\n🪟 Interior windows\n🧻 Laundry (wash + fold)\n🍽️ Inside fridge\n🛏️ Inside cabinets\n🧹 Deep clean\n📦 Move in / Move out\n\nJust reply with anything that applies, or say \"none\" and we'll keep it standard! 😊",
+    label: "Widget Flow C — SMS 2: Add-ons Question",
+    description: "Sent after lead confirms home size. Lists available add-ons. Use {firstName} for the lead's first name.",
+    fieldType: "textarea",
+  },
+  {
+    key: "widgetFlowC_sms3",
+    value: "Great! 📅 What date works best for you? Drop a date or a couple of options and I'll confirm availability and send the quote as well! ⚡",
+    label: "Widget Flow C — SMS 3: Date Question",
+    description: "Sent after lead replies with add-ons (or none). Asks for preferred date(s). Use {firstName} for the lead's first name.",
+    fieldType: "textarea",
+  },
+  {
+    key: "widgetFlowC_sms4",
+    value: "Here's your custom quote, {firstName}! 🖤✨\n👉 {quoteLink}\nEverything's in there based on what you shared. Click the link to review and book your spot — takes about 60 seconds!\nYou can also just have me confirm it here as well. Just say \"confirm\".\nIf you have any questions I'll be here, I'll hang around to make sure you're good. Can't wait to get your home sparkling! 😊",
+    label: "Widget Flow C — SMS 4: Quote Link",
+    description: "Sent after lead provides preferred date. Contains the personalized quote link. Use {firstName} and {quoteLink}.",
     fieldType: "textarea",
   },
   // ── Widget Flow A (Madison) SMS Templates ────────────────────────────────
