@@ -660,12 +660,50 @@ async function handleWidgetSizingReply(
   leadReply: string,
   context: ConversationContext
 ): Promise<StageResult> {
-  // Input is already normalized to English by processLeadReply — use regex extractor directly
-  // If the session already has room counts (form leads), treat a confirmation reply as a sizing confirmation
+  // First try regex extraction for explicit room counts (e.g. "3 bed / 2 bath")
   const extracted = extractRoomInfo(leadReply);
-  const isConfirmation = /^(yes|yeah|yep|correct|right|yup|sure|ok|okay|that'?s? right|confirmed?)/i.test(leadReply.trim());
-  const bedrooms = extracted.bedrooms ?? (isConfirmation ? context.bedrooms ?? null : null);
-  const bathrooms = extracted.bathrooms ?? (isConfirmation ? context.bathrooms ?? null : null);
+  let bedrooms = extracted.bedrooms ?? null;
+  let bathrooms = extracted.bathrooms ?? null;
+
+  // If regex didn't find room counts AND the session already has room counts (form Flow C),
+  // use LLM to determine if the lead is confirming the pre-known size
+  if ((!bedrooms || !bathrooms) && (context.bedrooms || context.bathrooms)) {
+    let isConfirmation = false;
+    try {
+      const resp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are determining if a customer SMS reply is a confirmation (yes/correct/that's right/etc.) or something else (a new size, a question, off-topic).
+Respond ONLY with JSON: { "intent": "confirm" | "new_size" | "question" | "other" }`,
+          },
+          { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "sizing_intent",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: { intent: { type: "string" } },
+              required: ["intent"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const parsed = JSON.parse(resp.choices[0].message.content as string);
+      isConfirmation = parsed.intent === "confirm";
+    } catch {
+      // LLM failed — fall back to a broad regex so we don't break the flow
+      isConfirmation = /\b(yes|yeah|yep|correct|right|yup|sure|ok|okay|confirmed?|that.?s right|absolutely|exactly|affirmative)/i.test(leadReply);
+    }
+    if (isConfirmation) {
+      bedrooms = bedrooms ?? context.bedrooms ?? null;
+      bathrooms = bathrooms ?? context.bathrooms ?? null;
+    }
+  }
 
   if (bedrooms && bathrooms) {
     const price = lookupPrice(bedrooms, bathrooms);
