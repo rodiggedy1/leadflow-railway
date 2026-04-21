@@ -661,7 +661,11 @@ async function handleWidgetSizingReply(
   context: ConversationContext
 ): Promise<StageResult> {
   // Input is already normalized to English by processLeadReply — use regex extractor directly
-  const { bedrooms, bathrooms } = extractRoomInfo(leadReply);
+  // If the session already has room counts (form leads), treat a confirmation reply as a sizing confirmation
+  const extracted = extractRoomInfo(leadReply);
+  const isConfirmation = /^(yes|yeah|yep|correct|right|yup|sure|ok|okay|that'?s? right|confirmed?)/i.test(leadReply.trim());
+  const bedrooms = extracted.bedrooms ?? (isConfirmation ? context.bedrooms ?? null : null);
+  const bathrooms = extracted.bathrooms ?? (isConfirmation ? context.bathrooms ?? null : null);
 
   if (bedrooms && bathrooms) {
     const price = lookupPrice(bedrooms, bathrooms);
@@ -938,32 +942,67 @@ async function _processLeadReplyCore(
 
   // ── FLOW C STAGES ─────────────────────────────────────────────────────────────
 
-  // FLOWC_ADDON: Lead replied with add-ons (or "none") — store extras, ask for preferred date
+  // FLOWC_ADDON: Lead replied with add-ons (or "none") — use AI to parse intent, answer questions, then advance
   if (stage === "FLOWC_ADDON") {
-    const lower = leadReply.toLowerCase();
-    // Parse add-on keywords from the reply
-    const addonMap: Record<string, string> = {
-      oven: "inside_oven",
-      window: "interior_windows",
-      windows: "interior_windows",
-      laundry: "laundry",
-      fridge: "inside_fridge",
-      cabinet: "inside_cabinets",
-      cabinets: "inside_cabinets",
-      "deep clean": "deep_clean",
-      deep: "deep_clean",
-      "move in": "move_in_out",
-      "move out": "move_in_out",
-      "move-in": "move_in_out",
-      "move-out": "move_in_out",
-    };
-    const parsedExtras: string[] = [];
-    for (const [keyword, key] of Object.entries(addonMap)) {
-      if (lower.includes(keyword)) parsedExtras.push(key);
+    const firstName = context.leadName?.split(" ")[0] ?? "there";
+    // Use AI to parse the reply
+    let aiResult: { intent: string; extractedAddons: string[]; question: string | null; confidence: string };
+    try {
+      const resp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are parsing an SMS reply from a home cleaning lead. They were asked which add-on services they want.
+Available add-ons: inside_oven, interior_windows, laundry, inside_fridge, inside_cabinets, deep_clean, move_in_out.
+Extract which add-ons they mentioned. If they said none/no/standard, return empty array.
+If they asked a question about an add-on, capture it in the question field.
+Respond ONLY with JSON: { "intent": "addons_provided" | "none" | "question" | "unclear", "extractedAddons": string[], "question": string | null, "confidence": "high" | "low" }`,
+          },
+          { role: "user", content: `Lead reply: "${leadReply}"` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "parse_addon_reply",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                intent: { type: "string" },
+                extractedAddons: { type: "array", items: { type: "string" } },
+                question: { type: ["string", "null"] },
+                confidence: { type: "string", enum: ["high", "low"] },
+              },
+              required: ["intent", "extractedAddons", "question", "confidence"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      aiResult = JSON.parse(resp.choices[0].message.content as string);
+    } catch {
+      // Fallback: treat as none
+      aiResult = { intent: "none", extractedAddons: [], question: null, confidence: "low" };
     }
-    const isNone = /\b(none|no|standard|nothing|nope|n\/a|no add|no extra)\b/.test(lower);
-    const extrasToStore = isNone ? [] : parsedExtras;
 
+    // If they asked a question, answer it with AI then re-ask the add-on question
+    if (aiResult.intent === "question" && aiResult.question) {
+      const answerResp = await handleOffScriptReply({
+        stage: "FLOWC_ADDON",
+        leadName: context.leadName,
+        quotedPrice: context.quotedPrice,
+        serviceType: context.serviceType,
+        selectedSlot: null,
+        messageHistory: context.messageHistory,
+        leadReply,
+        extrasContext: null,
+      });
+      const addonFallback = `Just reply with any add-ons you'd like, or say "none" to keep it standard! 😊`;
+      const reAsk = await getFlowTemplate("flowC_sms2_reask", addonFallback, { "{firstName}": firstName });
+      return { reply: `${answerResp.reply}\n\n${reAsk}`, nextStage: "FLOWC_ADDON" };
+    }
+
+    const extrasToStore = aiResult.intent === "none" ? [] : aiResult.extractedAddons;
     const dateFallback = `Almost there! 📅 What date works best for you? Drop a date (or a couple options) and I'll check availability right away as well! 😊⚡`;
     const dateReply = await getFlowTemplate("flowC_sms3", dateFallback, {});
     return {
@@ -973,15 +1012,75 @@ async function _processLeadReplyCore(
     };
   }
 
-  // FLOWC_DATE: Lead replied with preferred date(s) — store dates, ask for special notes
+  // FLOWC_DATE: Lead replied with preferred date(s) — use AI to validate, handle questions, re-ask if no date given
   if (stage === "FLOWC_DATE") {
-    // Store whatever the lead said as preferredDates (raw text)
+    const firstName = context.leadName?.split(" ")[0] ?? "there";
+    let aiResult: { intent: string; extractedDate: string | null; question: string | null; confidence: string };
+    try {
+      const resp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are parsing an SMS reply from a home cleaning lead. They were asked what date(s) work best for them.
+Extract the date or date range they mentioned. If they asked a question instead, capture it.
+If they gave no date info at all, set intent to "no_date".
+Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "unclear", "extractedDate": string | null, "question": string | null, "confidence": "high" | "low" }`,
+          },
+          { role: "user", content: `Lead reply: "${leadReply}"` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "parse_date_reply",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                intent: { type: "string" },
+                extractedDate: { type: ["string", "null"] },
+                question: { type: ["string", "null"] },
+                confidence: { type: "string", enum: ["high", "low"] },
+              },
+              required: ["intent", "extractedDate", "question", "confidence"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      aiResult = JSON.parse(resp.choices[0].message.content as string);
+    } catch {
+      aiResult = { intent: "date_provided", extractedDate: leadReply.trim(), question: null, confidence: "low" };
+    }
+
+    // If they asked a question, answer it then re-ask for the date
+    if (aiResult.intent === "question" && aiResult.question) {
+      const answerResp = await handleOffScriptReply({
+        stage: "FLOWC_DATE",
+        leadName: context.leadName,
+        quotedPrice: context.quotedPrice,
+        serviceType: context.serviceType,
+        selectedSlot: null,
+        messageHistory: context.messageHistory,
+        leadReply,
+        extrasContext: null,
+      });
+      return { reply: `${answerResp.reply}\n\nWhat date works best for you? 📅`, nextStage: "FLOWC_DATE" };
+    }
+
+    // If no date given, re-ask
+    if (aiResult.intent === "no_date") {
+      return {
+        reply: `No worries ${firstName}! Just drop a date or two that work for you and I'll check availability right away 📅`,
+        nextStage: "FLOWC_DATE",
+      };
+    }
+
     const notesFallback = `🎉 Last thing — is there anything specific we should know before we arrive? (Pets, areas to focus on, preferred time of day, etc.)\n\nOr just say "all good" and we'll give you the final quote! 🐾🏡`;
     const notesReply = await getFlowTemplate("flowC_sms4", notesFallback, {});
     return {
       reply: notesReply,
       nextStage: "FLOWC_NOTES",
-      extractedData: { preferredDates: leadReply.trim() },
+      extractedData: { preferredDates: aiResult.extractedDate ?? leadReply.trim() },
     };
   }
 
