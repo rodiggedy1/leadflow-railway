@@ -27,10 +27,16 @@ export interface QuoteLinkResult {
 }
 
 /**
- * Creates a personalized quote page in the quote app and returns its public URL.
- * Returns null if the quote app is unavailable or misconfigured — callers should
- * fall back to the plain-text price SMS in that case.
+ * Parse a bedroom/bathroom value that may be a number or a string like "2 Bedrooms" / "1 Bathroom".
+ * Returns the integer count, defaulting to 1 if parsing fails.
  */
+function parseRoomCount(value: string | number): number {
+  if (typeof value === "number") return value || 1;
+  // Extract the first integer from strings like "2 Bedrooms", "1 Bathroom", "Studio"
+  const match = String(value).match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 1;
+}
+
 export async function createQuoteLink(params: QuoteLinkParams): Promise<QuoteLinkResult | null> {
   const { quoteAppUrl, quoteAppSecret } = ENV;
 
@@ -49,8 +55,8 @@ export async function createQuoteLink(params: QuoteLinkParams): Promise<QuoteLin
       body: JSON.stringify({
         customerName: params.customerName,
         customerPhone: params.customerPhone,
-        bedrooms: Number(params.bedrooms) || 0,
-        bathrooms: Number(params.bathrooms) || 0,
+        bedrooms: parseRoomCount(params.bedrooms),
+        bathrooms: parseRoomCount(params.bathrooms),
         serviceType: params.serviceType ?? "Standard Cleaning",
         frequency: params.frequency ?? "One-time",
         price: Number(params.price) || 0,

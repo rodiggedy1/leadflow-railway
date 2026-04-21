@@ -842,14 +842,18 @@ export function registerWebhookRoutes(app: Express) {
           const resolvedPreferredDates = result.extractedData?.preferredDates ?? (session as any).preferredDates ?? undefined;
           const resolvedSpecialNotes   = result.extractedData?.specialNotes   ?? (session as any).specialNotes   ?? undefined;
           const resolvedExtras         = result.extractedData?.extras         ?? (session.extras ? JSON.parse(session.extras) : undefined);
-          // Build a richer conversation summary for Flow C
+          // Build a structured conversation summary — use explicit fields only, never raw user messages
+          // (raw messages like "yes", "All good", "April 25" confuse the quote app's AI summary generator)
           const userMessages = history.filter(m => m.role === "user").map(m => m.content);
           const conversationSummary = isFlowC
             ? [
-                resolvedPreferredDates ? `Preferred dates: ${resolvedPreferredDates}` : null,
-                resolvedSpecialNotes && resolvedSpecialNotes.toLowerCase() !== "all good" ? `Notes: ${resolvedSpecialNotes}` : null,
-                ...userMessages.slice(-5),
-              ].filter(Boolean).join(" | ")
+                `Service: ${resolvedService}`,
+                `Home: ${resolvedBedrooms} / ${resolvedBathrooms}`,
+                resolvedPreferredDates ? `Preferred date: ${resolvedPreferredDates}` : null,
+                resolvedExtras && resolvedExtras.length > 0 ? `Add-ons: ${resolvedExtras.join(", ")}` : null,
+                resolvedSpecialNotes && resolvedSpecialNotes.toLowerCase() !== "all good" && resolvedSpecialNotes.trim().length > 0
+                  ? `Special notes: ${resolvedSpecialNotes}` : null,
+              ].filter(Boolean).join(". ")
             : userMessages.slice(-3).join(" ");
           const quoteResult = await createQuoteLink({
             customerName:        session.leadName ?? "Customer",
