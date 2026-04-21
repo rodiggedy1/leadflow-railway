@@ -93,8 +93,9 @@ export async function buildJadePriceReveal(params: {
   price: string;
   extras?: string[] | null;
   day: string; // the specific day the lead mentioned
+  quoteLink?: string; // optional personalized quote page URL
 }): Promise<string> {
-  const { firstName, bedrooms, bathrooms, price, extras, day } = params;
+  const { firstName, bedrooms, bathrooms, price, extras, day, quoteLink } = params;
   const normalizedFirstName = toTitleCase(firstName);
   const resolvedExtras = extras && extras.length > 0 ? resolveExtras(extras) : [];
   const extrasTotal = resolvedExtras.reduce((sum, e) => sum + e.price, 0);
@@ -135,6 +136,9 @@ export async function buildJadePriceReveal(params: {
       "${recurringprice}": `$${recurringPriceForTemplate}`,
       "{day}": day,
       "{extrasLine}": extrasLine,
+      // {quoteLink} — replaced with the personalized quote page URL if available,
+      // otherwise removed so the template reads cleanly without a broken placeholder.
+      "{quoteLink}": quoteLink ?? "",
     }
   );
   return template;

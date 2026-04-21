@@ -826,8 +826,17 @@ export function registerWebhookRoutes(app: Express) {
             conversationSummary: history.filter(m => m.role === "user").slice(-3).map(m => m.content).join(" "),
           });
           if (quoteResult?.url) {
-            finalReplyContent = `${result.reply}\n\nView your custom quote here: ${quoteResult.url}`;
-            console.log(`[QuoteLink] Appended quote URL to SLOT_CHOICE reply for ${fromPhone}: ${quoteResult.url}`);
+            if (finalReplyContent.includes("{quoteLink}")) {
+              // Template has {quoteLink} placeholder — substitute it in place
+              finalReplyContent = finalReplyContent.replace(/\{quoteLink\}/g, quoteResult.url);
+            } else {
+              // No placeholder — append as postscript (legacy fallback)
+              finalReplyContent = `${result.reply}\n\nView your custom quote here: ${quoteResult.url}`;
+            }
+            console.log(`[QuoteLink] Injected quote URL for ${fromPhone}: ${quoteResult.url}`);
+          } else {
+            // No quote URL — strip any leftover {quoteLink} placeholder so it doesn't appear in the SMS
+            finalReplyContent = finalReplyContent.replace(/\{quoteLink\}/g, "").trim();
           }
         } catch (err) {
           console.error("[QuoteLink] Failed to generate quote link — sending plain price SMS:", err);

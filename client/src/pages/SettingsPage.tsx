@@ -998,7 +998,7 @@ export default function SettingsPage() {
                   title="Flow B — Jade SMS Scripts"
                   description={
                     <>
-                      Edit the messages sent in each step of the Jade flow. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code> — they are replaced automatically.
+                      Edit the messages sent in each step of the Jade flow. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{recurringprice}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code> — they are replaced automatically. Use <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code> in SMS 2 to insert the personalized quote page URL.
                     </>
                   }
                   icon={<Sparkles className="w-4 h-4 text-[#E8735A]" />}
@@ -1076,7 +1076,7 @@ export default function SettingsPage() {
                   title="Widget Flow B — Jade Scripts (after sizing)"
                   description={
                     <>
-                      After the lead replies with their home size, the Jade widget flow uses these same scripts as the form Jade flow. Edits here also update the Form SMS tab. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>.
+                      After the lead replies with their home size, the Jade widget flow uses these same scripts as the form Jade flow. Edits here also update the Form SMS tab. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{price}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{recurringprice}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{day}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code>.
                     </>
                   }
                   icon={<Sparkles className="w-4 h-4 text-[#E8735A]" />}
