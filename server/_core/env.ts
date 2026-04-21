@@ -18,4 +18,6 @@ export const ENV = {
   vapiWebhookUrl: process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi",
   mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? "",
   zapierWebhookSecret: process.env.ZAPIER_WEBHOOK_SECRET ?? "",
+  quoteAppSecret: process.env.QUOTE_APP_SECRET ?? "",
+  quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://maidsquotes-b55s3sg4.manus.space",
 };

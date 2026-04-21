@@ -25,6 +25,7 @@ import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
+import { createQuoteLink } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -802,10 +803,41 @@ export function registerWebhookRoutes(app: Express) {
         })
         .where(eq(conversationSessions.id, session.id));
 
+      // If transitioning to SLOT_CHOICE (price reveal), generate a custom quote page
+      // and append the link to the SMS so the lead can view their personalized quote.
+      let finalReplyContent = result.reply;
+      if (result.nextStage === "SLOT_CHOICE" && session.stage !== "SLOT_CHOICE") {
+        try {
+          const resolvedBedrooms  = engineData?.bedrooms  ?? session.bedrooms  ?? "1";
+          const resolvedBathrooms = engineData?.bathrooms ?? session.bathrooms ?? "1";
+          const resolvedPrice     = engineData?.quotedPrice ?? session.quotedPrice ?? "0";
+          const resolvedService   = engineData?.serviceType ?? session.serviceType ?? "Standard Cleaning";
+          const resolvedSlots     = dynamicSlots.map(s => s.label);
+          const quoteResult = await createQuoteLink({
+            customerName:        session.leadName ?? "Customer",
+            customerPhone:       fromPhone,
+            bedrooms:            resolvedBedrooms,
+            bathrooms:           resolvedBathrooms,
+            serviceType:         resolvedService,
+            frequency:           (session as any).frequency ?? "One-time",
+            price:               resolvedPrice,
+            slots:               resolvedSlots,
+            source:              session.leadSource ?? "LeadFlow SMS",
+            conversationSummary: history.filter(m => m.role === "user").slice(-3).map(m => m.content).join(" "),
+          });
+          if (quoteResult?.url) {
+            finalReplyContent = `${result.reply}\n\nView your custom quote here: ${quoteResult.url}`;
+            console.log(`[QuoteLink] Appended quote URL to SLOT_CHOICE reply for ${fromPhone}: ${quoteResult.url}`);
+          }
+        } catch (err) {
+          console.error("[QuoteLink] Failed to generate quote link — sending plain price SMS:", err);
+        }
+      }
+
       // Send the reply via OpenPhone
       const smsResult = await sendSms({
         to: fromPhone,
-        content: result.reply,
+        content: finalReplyContent,
       });
 
       if (!smsResult.success) {
