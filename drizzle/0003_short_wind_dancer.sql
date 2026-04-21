@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` ADD `quoteSlug` varchar(255);

@@ -25,7 +25,7 @@ import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
-import { createQuoteLink } from "./quoteLink";
+import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { processLeadReply } from "./conversationEngine";
 import { processLeadReplyV2 } from "./engine";
@@ -823,8 +823,14 @@ export function registerWebhookRoutes(app: Express) {
           ...(result.extractedData?.preferredDates ? { preferredDates: result.extractedData.preferredDates } : {}),
           ...(result.extractedData?.specialNotes ? { specialNotes: result.extractedData.specialNotes } : {}),
         })
-        .where(eq(conversationSessions.id, session.id));
-
+         .where(eq(conversationSessions.id, session.id));
+      // Flow C: when address is collected, update the quote app with the address so checkout can pre-fill it
+      const newAddress = result.extractedData?.address;
+      if (newAddress && session.smsFlow === "C" && (session as any).quoteSlug) {
+        updateQuoteAddress((session as any).quoteSlug, newAddress).catch(err =>
+          console.error("[QuoteLink] updateQuoteAddress failed:", err)
+        );
+      }
       // Generate a custom quote page when transitioning to SLOT_CHOICE (Flow B) or FLOWC_QUOTE_SENT (Flow C)
       let finalReplyContent = result.reply;
       const needsQuoteLink =
@@ -876,12 +882,18 @@ export function registerWebhookRoutes(app: Express) {
               finalReplyContent = `${result.reply}\n\nView your custom quote here: ${quoteResult.url}`;
             }
             console.log(`[QuoteLink] Injected quote URL for ${fromPhone}: ${quoteResult.url}`);
+            // Store the quote slug on the session so we can update it later (e.g. with address)
+            if (quoteResult.slug) {
+              await db.update(conversationSessions).set({ quoteSlug: quoteResult.slug }).where(eq(conversationSessions.id, session.id));
+            }
           } else {
             // No quote URL — strip any leftover {quoteLink} placeholder so it doesn't appear in the SMS
             finalReplyContent = finalReplyContent.replace(/\{quoteLink\}/g, "").trim();
           }
         } catch (err) {
           console.error("[QuoteLink] Failed to generate quote link — sending plain price SMS:", err);
+          // Always strip {quoteLink} placeholder so it never appears literally in the SMS
+          finalReplyContent = finalReplyContent.replace(/\{quoteLink\}/g, "").trim();
         }
       }
 

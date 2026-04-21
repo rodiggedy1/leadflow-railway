@@ -37,6 +37,34 @@ function parseRoomCount(value: string | number): number {
   return match ? parseInt(match[1], 10) : 1;
 }
 
+/**
+ * Update an existing quote page with the service address.
+ * Called when the lead provides their address via SMS (ADDRESS stage).
+ */
+export async function updateQuoteAddress(slug: string, address: string): Promise<boolean> {
+  const { quoteAppUrl, quoteAppSecret } = ENV;
+  if (!quoteAppSecret || !quoteAppUrl) return false;
+  try {
+    const res = await fetch(`${quoteAppUrl}/api/quotes/${slug}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-secret": quoteAppSecret,
+      },
+      body: JSON.stringify({ serviceAddress: address }),
+    });
+    if (!res.ok) {
+      console.error(`[QuoteLink] Failed to update quote ${slug} with address: ${res.status}`);
+      return false;
+    }
+    console.log(`[QuoteLink] Updated quote ${slug} with address: ${address}`);
+    return true;
+  } catch (err) {
+    console.error(`[QuoteLink] Error updating quote ${slug}:`, err);
+    return false;
+  }
+}
+
 export async function createQuoteLink(params: QuoteLinkParams): Promise<QuoteLinkResult | null> {
   const { quoteAppUrl, quoteAppSecret } = ENV;
 

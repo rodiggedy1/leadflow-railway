@@ -182,6 +182,8 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   messageHistory: text("messageHistory").notNull(),
   // Link back to the original quote lead
   quoteLeadId: int("quoteLeadId"),
+  /** Slug from the quote app (e.g. "rohan-gilkessssss-jb8c") — used to update the quote when address is collected */
+  quoteSlug: varchar("quoteSlug", { length: 255 }),
 
   // ── Agent activity fields ──────────────────────────────────────────────────
   /** ID of the agent (user.id) who has claimed this lead */
