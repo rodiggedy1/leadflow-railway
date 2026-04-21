@@ -1193,3 +1193,4 @@
 - [x] Fix: Add FLOWC_ADDON/FLOWC_DATE/FLOWC_NOTES/FLOWC_QUOTE_SENT to submitQuote ACTIVE_LEAD_STAGES so re-submissions properly supersede them
 - [x] Test: 8 new vitest tests for webhook session priority logic (all passing)
 - [x] Remove FLOWC_NOTES step from Flow C (confirm → add-ons → date → quote link)
+- [x] Update Settings UI Flow C template labels and DB values to reflect 4-step sequence (sms3=date, sms4=quote link, remove sms5)
