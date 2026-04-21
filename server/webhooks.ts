@@ -596,6 +596,9 @@ export function registerWebhookRoutes(app: Express) {
         barkQA: session.barkQA ?? undefined,
         // SMS flow variant assigned at lead creation ("A" = Madison, "B" = Jade)
         smsFlow: session.smsFlow ?? "B",
+        // Flow C: enriched data collected across the 5-step flow
+        preferredDates: (session as any).preferredDates ?? undefined,
+        specialNotes: (session as any).specialNotes ?? undefined,
       };
 
       // ── REACTIVATION / REACTIVATION_TIME: Auto-reply DISABLED ───────────────────────────────────

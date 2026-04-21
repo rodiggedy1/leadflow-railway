@@ -1482,7 +1482,17 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
       }
       // Jade flow (B): after address, send lock-in + notes + call question
       // Madison flow (A): after address, send confirmation with slot + address + call question
+      // Flow C: after address, confirm address + preferred dates (no specific slot yet)
       const flowVariantAddr = (context.smsFlow ?? "B").toUpperCase();
+      if (flowVariantAddr === "C") {
+        const preferredDates = context.preferredDates;
+        const dateRef = preferredDates ? ` around ${preferredDates}` : "";
+        return {
+          reply: `Perfect! 🎉 We've got your address at ${address}${dateRef}. We'll do a quick 60-second call to confirm everything and lock in your exact time.\n\nShould we call you now or in a few minutes?`,
+          nextStage: "CONFIRMATION",
+          extractedData: { address },
+        };
+      }
       if (flowVariantAddr === "B") {
         return {
           reply: await buildJadeLockIn(slot, address),

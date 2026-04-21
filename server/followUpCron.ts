@@ -33,6 +33,11 @@ const ACTIVE_STAGES = [
   "ADDRESS",
   "CONFIRMATION",
   "WIDGET_SIZING",
+  // Flow C stages
+  "FLOWC_ADDON",
+  "FLOWC_DATE",
+  "FLOWC_NOTES",
+  "FLOWC_QUOTE_SENT",
 ];
 
 // Maximum number of automated silence nudges before a lead is moved to COLD.
