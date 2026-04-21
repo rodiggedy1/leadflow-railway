@@ -800,19 +800,39 @@ export function registerWebhookRoutes(app: Express) {
           ...(langUpdates.preLangStage !== undefined ? { preLangStage: langUpdates.preLangStage } : {}),
           // Idempotency: record the message ID we just processed so duplicate events are dropped
           ...(inboundMessageId ? { lastProcessedMessageId: inboundMessageId } : {}),
+          // Flow C: persist extras, preferredDates, specialNotes when collected
+          ...(result.extractedData?.extras !== undefined ? { extras: JSON.stringify(result.extractedData.extras) } : {}),
+          ...(result.extractedData?.preferredDates ? { preferredDates: result.extractedData.preferredDates } : {}),
+          ...(result.extractedData?.specialNotes ? { specialNotes: result.extractedData.specialNotes } : {}),
         })
         .where(eq(conversationSessions.id, session.id));
 
-      // If transitioning to SLOT_CHOICE (price reveal), generate a custom quote page
-      // and append the link to the SMS so the lead can view their personalized quote.
+      // Generate a custom quote page when transitioning to SLOT_CHOICE (Flow B) or FLOWC_QUOTE_SENT (Flow C)
       let finalReplyContent = result.reply;
-      if (result.nextStage === "SLOT_CHOICE" && session.stage !== "SLOT_CHOICE") {
+      const needsQuoteLink =
+        (result.nextStage === "SLOT_CHOICE" && session.stage !== "SLOT_CHOICE") ||
+        (result.nextStage === "FLOWC_QUOTE_SENT" && session.stage !== "FLOWC_QUOTE_SENT");
+      if (needsQuoteLink) {
         try {
           const resolvedBedrooms  = engineData?.bedrooms  ?? session.bedrooms  ?? "1";
           const resolvedBathrooms = engineData?.bathrooms ?? session.bathrooms ?? "1";
           const resolvedPrice     = engineData?.quotedPrice ?? session.quotedPrice ?? "0";
           const resolvedService   = engineData?.serviceType ?? session.serviceType ?? "Standard Cleaning";
           const resolvedSlots     = dynamicSlots.map(s => s.label);
+          // For Flow C, use the enriched data collected across the 5-step flow
+          const isFlowC = result.nextStage === "FLOWC_QUOTE_SENT";
+          const resolvedPreferredDates = result.extractedData?.preferredDates ?? (session as any).preferredDates ?? undefined;
+          const resolvedSpecialNotes   = result.extractedData?.specialNotes   ?? (session as any).specialNotes   ?? undefined;
+          const resolvedExtras         = result.extractedData?.extras         ?? (session.extras ? JSON.parse(session.extras) : undefined);
+          // Build a richer conversation summary for Flow C
+          const userMessages = history.filter(m => m.role === "user").map(m => m.content);
+          const conversationSummary = isFlowC
+            ? [
+                resolvedPreferredDates ? `Preferred dates: ${resolvedPreferredDates}` : null,
+                resolvedSpecialNotes && resolvedSpecialNotes.toLowerCase() !== "all good" ? `Notes: ${resolvedSpecialNotes}` : null,
+                ...userMessages.slice(-5),
+              ].filter(Boolean).join(" | ")
+            : userMessages.slice(-3).join(" ");
           const quoteResult = await createQuoteLink({
             customerName:        session.leadName ?? "Customer",
             customerPhone:       fromPhone,
@@ -821,9 +841,9 @@ export function registerWebhookRoutes(app: Express) {
             serviceType:         resolvedService,
             frequency:           (session as any).frequency ?? "One-time",
             price:               resolvedPrice,
-            slots:               resolvedSlots,
+            slots:               isFlowC && resolvedPreferredDates ? [resolvedPreferredDates] : resolvedSlots,
             source:              session.leadSource ?? "LeadFlow SMS",
-            conversationSummary: history.filter(m => m.role === "user").slice(-3).map(m => m.content).join(" "),
+            conversationSummary,
           });
           if (quoteResult?.url) {
             if (finalReplyContent.includes("{quoteLink}")) {

@@ -64,9 +64,14 @@ export interface ConversationContext {
    * Which SMS flow was assigned to this lead at creation time.
    * "A" = Madison flow (price upfront + availability question)
    * "B" = Jade flow (greeting + day ask → price reveal → lock in)
+   * "C" = Jade enriched flow (add-ons → dates → notes → quote link)
    * Defaults to "B" if not set.
    */
   smsFlow?: string | null;
+  /** Flow C: preferred date(s) the lead mentioned */
+  preferredDates?: string | null;
+  /** Flow C: special notes from the lead (pets, focus areas, time of day) */
+  specialNotes?: string | null;
 }
 
 export interface ChatMessage {
@@ -83,6 +88,12 @@ export interface StageResult {
     selectedSlot?: string;
     address?: string;
     callPreference?: string;
+    /** Flow C: add-on keys parsed from the lead's reply */
+    extras?: string[];
+    /** Flow C: preferred dates from the lead's reply */
+    preferredDates?: string;
+    /** Flow C: special notes from the lead's reply */
+    specialNotes?: string;
   };
 }
 
@@ -662,6 +673,11 @@ async function handleWidgetSizingReply(
       // Flow A (Madison): send availability question
       reply = await buildAvailabilityMessage(context.extras);
       nextStage = "AVAILABILITY";
+    } else if (flowVariant === "C") {
+      // Flow C (Jade enriched): send add-on question after sizing
+      const addonFallback = `Perfect, thanks for confirming ${firstName}! 🙌\nJust a couple quick things so we can tailor your quote — do you need any of these add-ons?\n\n✨ Inside oven\n🪟 Interior windows\n🧺 Laundry (wash + fold)\n🍽️ Inside fridge\n🛏️ Inside cabinets\n🧹 Deep clean\n📦 Move in / Move out\n\nJust reply with anything that applies, or say "none" and we'll keep it standard! 😊`;
+      reply = await getFlowTemplate("flowC_sms2", addonFallback, { "{firstName}": firstName });
+      nextStage = "FLOWC_ADDON";
     } else {
       // Flow B (Jade): send price reveal with day offer using DB template (supports {recurringprice})
       const slots = getNextAvailableSlots(2);
@@ -918,6 +934,91 @@ async function _processLeadReplyCore(
   // ── WIDGET_SIZING: Extract room counts and send quote, or ask for missing info ──
   if (stage === "WIDGET_SIZING") {
     return handleWidgetSizingReply(leadReply, context);
+  }
+
+  // ── FLOW C STAGES ─────────────────────────────────────────────────────────────
+
+  // FLOWC_ADDON: Lead replied with add-ons (or "none") — store extras, ask for preferred date
+  if (stage === "FLOWC_ADDON") {
+    const lower = leadReply.toLowerCase();
+    // Parse add-on keywords from the reply
+    const addonMap: Record<string, string> = {
+      oven: "inside_oven",
+      window: "interior_windows",
+      windows: "interior_windows",
+      laundry: "laundry",
+      fridge: "inside_fridge",
+      cabinet: "inside_cabinets",
+      cabinets: "inside_cabinets",
+      "deep clean": "deep_clean",
+      deep: "deep_clean",
+      "move in": "move_in_out",
+      "move out": "move_in_out",
+      "move-in": "move_in_out",
+      "move-out": "move_in_out",
+    };
+    const parsedExtras: string[] = [];
+    for (const [keyword, key] of Object.entries(addonMap)) {
+      if (lower.includes(keyword)) parsedExtras.push(key);
+    }
+    const isNone = /\b(none|no|standard|nothing|nope|n\/a|no add|no extra)\b/.test(lower);
+    const extrasToStore = isNone ? [] : parsedExtras;
+
+    const dateFallback = `Almost there! 📅 What date works best for you? Drop a date (or a couple options) and I'll check availability right away as well! 😊⚡`;
+    const dateReply = await getFlowTemplate("flowC_sms3", dateFallback, {});
+    return {
+      reply: dateReply,
+      nextStage: "FLOWC_DATE",
+      extractedData: { extras: extrasToStore },
+    };
+  }
+
+  // FLOWC_DATE: Lead replied with preferred date(s) — store dates, ask for special notes
+  if (stage === "FLOWC_DATE") {
+    // Store whatever the lead said as preferredDates (raw text)
+    const notesFallback = `🎉 Last thing — is there anything specific we should know before we arrive? (Pets, areas to focus on, preferred time of day, etc.)\n\nOr just say "all good" and we'll give you the final quote! 🐾🏡`;
+    const notesReply = await getFlowTemplate("flowC_sms4", notesFallback, {});
+    return {
+      reply: notesReply,
+      nextStage: "FLOWC_NOTES",
+      extractedData: { preferredDates: leadReply.trim() },
+    };
+  }
+
+  // FLOWC_NOTES: Lead replied with notes or "all good" — generate quote link and send SMS 5
+  if (stage === "FLOWC_NOTES") {
+    const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
+    const quoteLinkFallback = `Hi ${firstName}! Here's your custom quote from Maids in Black — put together just for you based on everything you shared 🖤✨\n\n👉 {quoteLink}\n\nTake a look and if it all looks good, you can book directly through the link or just tell me "Looks good" and I can lock it in by text as well. Excited to work with you. 😊`;
+    const quoteReply = await getFlowTemplate("flowC_sms5", quoteLinkFallback, { "{firstName}": firstName });
+    return {
+      reply: quoteReply,
+      nextStage: "FLOWC_QUOTE_SENT",
+      extractedData: { specialNotes: leadReply.trim() },
+    };
+  }
+
+  // FLOWC_QUOTE_SENT: Quote link already sent — handle any follow-up reply ("looks good", questions, etc.)
+  if (stage === "FLOWC_QUOTE_SENT") {
+    const lower = leadReply.toLowerCase();
+    const wantsToBook = /\b(looks good|book|yes|yeah|let'?s do it|confirm|ready|lock it in|perfect|great|awesome|sounds good)\b/.test(lower);
+    if (wantsToBook) {
+      return {
+        reply: `Amazing! 🎉 To lock it in, what's the address for the service?`,
+        nextStage: "ADDRESS",
+      };
+    }
+    // Off-script reply — handle with AI
+    const offScript = await handleOffScriptReply({
+      stage,
+      leadName: context.leadName,
+      quotedPrice: context.quotedPrice,
+      serviceType: context.serviceType,
+      selectedSlot: context.selectedSlot,
+      messageHistory: context.messageHistory,
+      leadReply,
+      extrasContext: null,
+    });
+    return { reply: offScript.reply, nextStage: offScript.isWrongPath ? "DONE" : "FLOWC_QUOTE_SENT" };
   }
 
   // ── QUOTE_SENT: Route to Flow A (Madison) or Flow B (Jade) based on smsFlow ──

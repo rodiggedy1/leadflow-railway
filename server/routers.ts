@@ -4956,8 +4956,10 @@ async function processWidgetLeadInBackground(input: {
     const rawFlow = settingRows[0]?.value ?? "B";
     if (rawFlow === "split") {
       flowVariant = Math.random() < 0.5 ? "A" : "B";
+    } else if (["A", "B", "C"].includes(rawFlow.toUpperCase())) {
+      flowVariant = rawFlow.toUpperCase();
     } else {
-      flowVariant = rawFlow.toUpperCase() === "A" ? "A" : "B";
+      flowVariant = "B";
     }
   } catch (err) {
     console.warn("[submitWidgetLead] Could not read widgetSmsFlow setting, defaulting to B:", err);
@@ -4971,6 +4973,12 @@ async function processWidgetLeadInBackground(input: {
     sizingMsg = await getFlowTemplate(
       "widgetFlowA_sms1",
       `Hi ${firstName}! \uD83D\uDC4B Madison here from Maids in Black. To get you an instant price, how many bedrooms and bathrooms does your home have? (e.g. 3 bed / 2 bath)`,
+      { "{firstName}": firstName }
+    );
+  } else if (flowVariant === "C") {
+    sizingMsg = await getFlowTemplate(
+      "flowC_sms1",
+      `Hey ${firstName}! \uD83D\uDC4B This is Jade from Maids in Black \u2014 you just reached out on our site and I wanted to personally follow up! \uD83D\uDE0A\n\nWe'd love to get your home sparkling clean. Quick question to get you the right quote \u2014 just to confirm you have a {bedrooms} / {bathrooms} home \uD83C\uDFE0 correct?`,
       { "{firstName}": firstName }
     );
   } else {
@@ -4990,6 +4998,7 @@ async function processWidgetLeadInBackground(input: {
   const WIDGET_ACTIVE_STAGES = [
     "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF",
     "ADDRESS", "CONFIRMATION", "WIDGET_SIZING",
+    "FLOWC_ADDON", "FLOWC_DATE", "FLOWC_NOTES", "FLOWC_QUOTE_SENT",
   ];
   try {
     const supersededCount = await db

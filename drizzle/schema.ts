@@ -148,6 +148,17 @@ export const conversationStages = [
    * aiMode is always 0 (manual). No AI auto-reply.
    */
   "HIRING_OUTBOUND",
+  /**
+   * Flow C widget stages — 5-step enriched quote flow:
+   * FLOWC_ADDON       → Rooms confirmed, add-on question sent, waiting for add-on reply
+   * FLOWC_DATE        → Add-ons collected, date question sent, waiting for preferred date(s)
+   * FLOWC_NOTES       → Date collected, notes question sent, waiting for special notes or "all good"
+   * FLOWC_QUOTE_SENT  → Quote link sent, conversation complete (lead may reply to book)
+   */
+  "FLOWC_ADDON",
+  "FLOWC_DATE",
+  "FLOWC_NOTES",
+  "FLOWC_QUOTE_SENT",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -343,6 +354,16 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * Used to detect staleness — if the hash changes, the summary is regenerated.
    */
   aiSummaryHash: varchar("aiSummaryHash", { length: 64 }),
+  /**
+   * Flow C: preferred date(s) the lead mentioned (e.g. "Monday or Tuesday").
+   * Stored as plain text from the lead's reply.
+   */
+  preferredDates: text("preferredDates"),
+  /**
+   * Flow C: special notes from the lead (pets, areas to focus on, time of day, etc.).
+   * Stored as plain text from the lead's reply. "all good" is stored as-is.
+   */
+  specialNotes: text("specialNotes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

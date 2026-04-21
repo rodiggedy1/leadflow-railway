@@ -323,6 +323,13 @@ const WIDGET_FLOW_OPTIONS = [
     color: "coral",
   },
   {
+    value: "C",
+    label: "Flow C — Jade (Enriched Quote)",
+    icon: <Sparkles className="w-4 h-4" />,
+    description: "5-step flow: confirm sizing → collect add-ons → preferred date → special notes → send personalized quote link. No price in SMS.",
+    color: "green",
+  },
+  {
     value: "split",
     label: "A/B Test (50/50)",
     icon: <Shuffle className="w-4 h-4" />,
@@ -346,7 +353,8 @@ function applyPreviewVars(template: string): string {
     .replace(/\{slot2\}/g, "Saturday morning")
     .replace(/\{timePref\}/g, "Morning")
     .replace(/\{address\}/g, "123 Main St, DC 20001")
-    .replace(/\{extrasLine\}/g, " (including clean inside oven)");
+    .replace(/\{extrasLine\}/g, " (including clean inside oven)")
+    .replace(/\{quoteLink\}/g, "maidsquotes.../quote/sarah-ab12");
 }
 
 // ── Conversation thread definitions ──────────────────────────────────────────
@@ -390,6 +398,19 @@ const FLOW_A_CONVO: ConvoItem[] = [
   { type: 'bot', label: 'SMS 5', templateKey: 'flowA_sms5' },
   { type: 'lead', text: 'Call me now!' },
   { type: 'bot', label: 'SMS 6', templateKey: 'flowA_sms6' },
+];
+
+// Flow C: 5-step enriched quote flow
+const WIDGET_FLOW_C_CONVO: ConvoItem[] = [
+  { type: 'bot', label: 'SMS 1', templateKey: 'flowC_sms1' },
+  { type: 'lead', text: 'Yes, 3 bed / 2 bath!' },
+  { type: 'bot', label: 'SMS 2', templateKey: 'flowC_sms2' },
+  { type: 'lead', text: 'Inside oven and inside fridge please' },
+  { type: 'bot', label: 'SMS 3', templateKey: 'flowC_sms3' },
+  { type: 'lead', text: 'Thursday or Friday works for me' },
+  { type: 'bot', label: 'SMS 4', templateKey: 'flowC_sms4' },
+  { type: 'lead', text: 'We have a small dog, and please focus on the kitchen' },
+  { type: 'bot', label: 'SMS 5', templateKey: 'flowC_sms5' },
 ];
 
 // Widget: starts with persona-specific sizing SMS, then continues with shared flow scripts
@@ -443,6 +464,12 @@ const FLOW_COLOR_MAP: Record<string, { bg: string; border: string; text: string;
     text: "text-purple-700",
     badge: "bg-purple-100 text-purple-700",
   },
+  green: {
+    bg: "bg-emerald-50",
+    border: "border-emerald-400",
+    text: "text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-700",
+  },
 };
 
 // ── SMS Flow Selector ─────────────────────────────────────────────────────────
@@ -483,6 +510,7 @@ function SmsFlowSelector({
   const convoThread: ConvoItem[] | null =
     selected === "A" ? flowAConvo :
     selected === "B" ? flowBConvo :
+    selected === "C" && (flowOptions as typeof WIDGET_FLOW_OPTIONS).find(o => o.value === "C") ? WIDGET_FLOW_C_CONVO :
     null;
 
   return (

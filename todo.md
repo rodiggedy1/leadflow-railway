@@ -1174,3 +1174,11 @@
 - [x] Leads page: reduce timeline event card padding (p-4 → p-3, rounded-2xl → rounded-xl)
 - [x] Leads page: fix right panel padding (p-6 → p-4)
 - [x] Leads page: auto-select first lead on load (useEffect already added, verify it works)
+
+## Flow C — Widget SMS Quote Flow
+- [ ] Add Flow C stages to conversation engine: ADDON_COLLECTION, DATE_COLLECTION, NOTES_COLLECTION, QUOTE_LINK_SEND
+- [ ] Add flowC_sms1–5 templates to DB (with exact copy from user)
+- [ ] Wire engine to collect add-ons, preferred dates, and special notes across 5 steps
+- [ ] Pass enriched data (add-ons, dates, notes) to quote app API when generating quote link
+- [ ] Set Flow C as default active widget flow (smsFlow = "C")
+- [ ] Expose flowC_sms1–5 templates in Settings SMS editor
