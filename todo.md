@@ -1182,3 +1182,8 @@
 - [ ] Pass enriched data (add-ons, dates, notes) to quote app API when generating quote link
 - [ ] Set Flow C as default active widget flow (smsFlow = "C")
 - [ ] Expose flowC_sms1–5 templates in Settings SMS editor
+
+## Flow C — Booking Handler + Form SMS
+- [ ] Add "Looks good" handler for FLOWC_QUOTE_SENT stage → address collection → confirmation (reuse flowB_sms3/sms4)
+- [ ] Add Flow C to Form SMS flow (processSubmitQuote / submitQuote) in routers.ts
+- [ ] Add Flow C option to Form SMS flow selector in SettingsPage.tsx

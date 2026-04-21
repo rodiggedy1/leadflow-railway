@@ -937,7 +937,7 @@ export default function SettingsPage() {
     effectiveValues[key] = localEdits[key] ?? s.value;
   }
 
-  const currentFormFlow = effectiveValues["smsFlow"] ?? "B";
+  const currentFormFlow = effectiveValues["formSmsFlow"] ?? effectiveValues["smsFlow"] ?? "B";
   const currentWidgetFlow = effectiveValues["widgetSmsFlow"] ?? "B";
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
@@ -1013,14 +1013,29 @@ export default function SettingsPage() {
                   <CardContent>
                     <SmsFlowSelector
                       currentValue={currentFormFlow}
-                      onSave={(value) => handleSave("smsFlow", value)}
+                      onSave={(value) => handleSave("formSmsFlow", value)}
                       effectiveValues={effectiveValues}
-                      flowOptions={FLOW_OPTIONS}
+                      flowOptions={WIDGET_FLOW_OPTIONS}
                       flowAConvo={FLOW_A_CONVO}
                       flowBConvo={FLOW_B_CONVO}
                     />
                   </CardContent>
                 </Card>
+
+                <SmsTemplateCard
+                  title="Flow C — Jade Enriched Quote Scripts"
+                  description={
+                    <>
+                      Edit the 5-step enriched quote flow. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{bedrooms}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{bathrooms}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{slot}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{address}'}</code> — they are replaced automatically. Place <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code> in SMS 5 to send the personalized quote page URL.
+                    </>
+                  }
+                  icon={<Sparkles className="w-4 h-4 text-purple-500" />}
+                  templateKeys={["flowC_sms1", "flowC_sms2", "flowC_sms3", "flowC_sms4", "flowC_sms5"]}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
+                  onSave={handleSave}
+                />
 
                 <SmsTemplateCard
                   title="Flow B — Jade SMS Scripts"
@@ -1031,6 +1046,7 @@ export default function SettingsPage() {
                   }
                   icon={<Sparkles className="w-4 h-4 text-[#E8735A]" />}
                   templateKeys={["flowB_sms1", "flowB_sms2", "flowB_sms3", "flowB_sms4", "flowB_sms5", "flowB_sms5_later"]}
+
                   serverSettings={serverSettings}
                   localEdits={localEdits}
                   onLocalChange={handleLocalChange}

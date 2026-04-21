@@ -5133,19 +5133,24 @@ async function processQuoteInBackground(
     return;
   }
 
-  // Read the smsFlow setting (default to "B" = Jade flow)
+  // Read the formSmsFlow setting (falls back to smsFlow for backwards compat, default to "B")
   let flowVariant = "B";
   try {
     const { appSettings } = await import("../drizzle/schema");
+    // Try formSmsFlow first, fall back to smsFlow
     const settingRows = await db
-      .select({ value: appSettings.value })
+      .select({ key: appSettings.key, value: appSettings.value })
       .from(appSettings)
-      .where(eq(appSettings.key, "smsFlow"))
-      .limit(1);
-    const rawFlow = settingRows[0]?.value ?? "B";
+      .where(or(eq(appSettings.key, "formSmsFlow"), eq(appSettings.key, "smsFlow")))
+      .limit(2);
+    const formFlowRow = settingRows.find(r => r.key === "formSmsFlow");
+    const fallbackRow = settingRows.find(r => r.key === "smsFlow");
+    const rawFlow = formFlowRow?.value ?? fallbackRow?.value ?? "B";
     if (rawFlow === "split") {
-      // 50-50 random assignment
+      // 50-50 random assignment between A and B
       flowVariant = Math.random() < 0.5 ? "A" : "B";
+    } else if (rawFlow.toUpperCase() === "C") {
+      flowVariant = "C";
     } else {
       flowVariant = rawFlow.toUpperCase() === "A" ? "A" : "B";
     }
@@ -5177,6 +5182,22 @@ async function processQuoteInBackground(
       price,
     });
     initialStage = "AVAILABILITY";
+  } else if (flowVariant === "C") {
+    // ── Flow C (Jade Enriched): SMS 1 = confirm sizing, then collect add-ons → date → notes → quote link ──
+    const firstName = toTitleCase(input.name).split(" ")[0] ?? toTitleCase(input.name);
+    const { appSettings: appSettingsSchema } = await import("../drizzle/schema");
+    const flowCRows = await db
+      .select({ value: appSettingsSchema.value })
+      .from(appSettingsSchema)
+      .where(eq(appSettingsSchema.key, "flowC_sms1"))
+      .limit(1);
+    const flowCTemplate = flowCRows[0]?.value ??
+      `Hey {firstName}! 👋 This is Jade from Maids in Black — you just reached out on our site and I wanted to personally follow up! 😊\n\nWe'd love to get your home sparkling clean. Quick question to get you the right quote — just to confirm you have a {bedrooms} / {bathrooms} home 🏠 correct?`;
+    msg1 = flowCTemplate
+      .replace(/\{firstName\}/g, firstName)
+      .replace(/\{bedrooms\}/g, input.bedrooms)
+      .replace(/\{bathrooms\}/g, input.bathrooms);
+    initialStage = "WIDGET_SIZING";
   } else {
     // ── Flow B (Jade): SMS 1 = greeting + day ask (no price yet) ──
     msg1 = await generateQuoteMessage({
