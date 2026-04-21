@@ -1102,6 +1102,21 @@ export default function SettingsPage() {
                 </Card>
 
                 <SmsTemplateCard
+                  title="Widget Flow C — Jade Enriched Quote Scripts"
+                  description={
+                    <>
+                      Edit the 5-step enriched quote flow for widget leads. Use <code className="bg-gray-100 px-1 rounded">{'{firstName}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{bedrooms}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{bathrooms}'}</code>, <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code> — they are replaced automatically. Place <code className="bg-gray-100 px-1 rounded">{'{quoteLink}'}</code> in SMS 5 to send the personalized quote page URL.
+                    </>
+                  }
+                  icon={<Sparkles className="w-4 h-4 text-purple-500" />}
+                  templateKeys={["flowC_sms1", "flowC_sms2", "flowC_sms3", "flowC_sms4", "flowC_sms5"]}
+                  serverSettings={serverSettings}
+                  localEdits={localEdits}
+                  onLocalChange={handleLocalChange}
+                  onSave={handleSave}
+                />
+
+                <SmsTemplateCard
                   title="Widget SMS 1 — Sizing Question"
                   description={
                     <>
