@@ -378,7 +378,22 @@ export function registerWebhookRoutes(app: Express) {
           || s.stage === "REACTIVATION" || s.stage === "REACTIVATION_TIME"
           || s.stage === "INTERVIEW_LINK_SENT" || s.stage === "INTERVIEW_NUDGE_1" || s.stage === "INTERVIEW_NUDGE_2"
       );
-      const activeSession = reviewSession ??
+      // INTERVIEW_LINK_SENT / NUDGE sessions are for hiring candidates, not customers.
+      // If a newer active lead session exists (created after the interview session), the
+      // lead session takes priority — otherwise the interview session would steal the reply
+      // and the new lead session would be incorrectly marked DONE by the supersede logic.
+      const isInterviewSession = reviewSession &&
+        (reviewSession.stage === "INTERVIEW_LINK_SENT" ||
+         reviewSession.stage === "INTERVIEW_NUDGE_1" ||
+         reviewSession.stage === "INTERVIEW_NUDGE_2");
+      const newerLeadSession = isInterviewSession
+        ? reversedSessions.find(
+            s => s.stage !== "DONE" &&
+              s.id !== reviewSession!.id &&
+              new Date(s.createdAt) > new Date(reviewSession!.createdAt)
+          )
+        : undefined;
+      const activeSession = (newerLeadSession ?? reviewSession) ??
         reversedSessions.find(s => s.stage !== "DONE");
 
       const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent

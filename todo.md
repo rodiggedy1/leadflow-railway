@@ -1187,3 +1187,8 @@
 - [ ] Add "Looks good" handler for FLOWC_QUOTE_SENT stage → address collection → confirmation (reuse flowB_sms3/sms4)
 - [ ] Add Flow C to Form SMS flow (processSubmitQuote / submitQuote) in routers.ts
 - [ ] Add Flow C option to Form SMS flow selector in SettingsPage.tsx
+
+## Bug Fix — Flow C Sessions Going DONE (Apr 21, 2026)
+- [x] Fix: INTERVIEW_LINK_SENT sessions stealing priority over newer active lead sessions in webhook session routing (root cause of Flow C sessions going DONE ~74s after creation)
+- [x] Fix: Add FLOWC_ADDON/FLOWC_DATE/FLOWC_NOTES/FLOWC_QUOTE_SENT to submitQuote ACTIVE_LEAD_STAGES so re-submissions properly supersede them
+- [x] Test: 8 new vitest tests for webhook session priority logic (all passing)

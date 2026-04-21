@@ -5245,6 +5245,7 @@ async function processQuoteInBackground(
   const ACTIVE_LEAD_STAGES = [
     "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF",
     "ADDRESS", "CONFIRMATION", "WIDGET_SIZING",
+    "FLOWC_ADDON", "FLOWC_DATE", "FLOWC_NOTES", "FLOWC_QUOTE_SENT",
   ];
   try {
     const supersededCount = await db
