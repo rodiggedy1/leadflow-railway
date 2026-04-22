@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import {
   Select,
   SelectContent,
@@ -219,16 +219,24 @@ export default function Performance() {
         </div>
 
         <div className="mb-6 flex items-center justify-between gap-4">
-          <Tabs value={view} onValueChange={setView}>
-            <TabsList className="rounded-2xl bg-white p-1 shadow-sm">
-              <TabsTrigger value="source" className="rounded-xl data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                By source
-              </TabsTrigger>
-              <TabsTrigger value="lead" className="rounded-xl data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                Lead log
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="inline-flex rounded-2xl bg-white p-1 shadow-sm">
+            <button
+              onClick={() => setView("source")}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                view === "source" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              By source
+            </button>
+            <button
+              onClick={() => setView("lead")}
+              className={`rounded-xl px-4 py-2 text-sm font-medium transition-colors ${
+                view === "lead" ? "bg-slate-900 text-white" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Lead log
+            </button>
+          </div>
 
           <Button variant="outline" className="rounded-2xl border-white/80 bg-white shadow-sm">
             Export
