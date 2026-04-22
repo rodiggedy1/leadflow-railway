@@ -49,14 +49,45 @@ import {
   Cell,
 } from "recharts";
 
+// All real lead sources from the DB with distinct colors
 const sourceColors: Record<string, string> = {
-  "Google Ads": "#7dd3fc",
-  Thumbtack: "#fdba74",
-  Yelp: "#fca5a5",
-  Inbound: "#86efac",
-  Facebook: "#c4b5fd",
-  Referral: "#f9a8d4",
+  "google-ads":          "#7dd3fc", // sky blue
+  "form":                "#6ee7b7", // emerald
+  "widget":              "#93c5fd", // blue
+  "bark-sms":            "#64748b", // slate
+  "thumbtack-sms":       "#fdba74", // orange
+  "thumbtack":           "#fb923c", // orange-dark
+  "cs_initiated":        "#c4b5fd", // violet
+  "cs-inbound-cleaner":  "#a78bfa", // purple
+  "phone":               "#86efac", // green
+  "yelp":                "#fca5a5", // red
+  "voice":               "#fcd34d", // amber
+  "call":                "#f9a8d4", // pink
+  "email":               "#67e8f9", // cyan
+  "other":               "#cbd5e1", // slate-light
 };
+
+// Human-readable labels for each source key
+const sourceLabels: Record<string, string> = {
+  "google-ads":          "Google Ads",
+  "form":                "Form",
+  "widget":              "Widget",
+  "bark-sms":            "Bark SMS",
+  "thumbtack-sms":       "Thumbtack SMS",
+  "thumbtack":           "Thumbtack",
+  "cs_initiated":        "CS Initiated",
+  "cs-inbound-cleaner":  "CS Inbound",
+  "phone":               "Phone",
+  "yelp":                "Yelp",
+  "voice":               "Voice",
+  "call":                "Call",
+  "email":               "Email",
+  "other":               "Other",
+};
+
+const ALL_SOURCES = Object.keys(sourceColors);
+
+const label = (src: string) => sourceLabels[src] ?? src;
 
 interface LeadRow {
   id: number;
@@ -68,23 +99,24 @@ interface LeadRow {
   booking: boolean;
 }
 
+// Placeholder data — will be replaced with real tRPC query
 const leadData: LeadRow[] = [
-  { id: 1, source: "Google Ads", lead: "Josh Bornstein", date: "2026-04-21", amount: 594, status: "Open", booking: false },
-  { id: 2, source: "Google Ads", lead: "Form Lead", date: "2026-04-21", amount: 149, status: "Quoted", booking: false },
-  { id: 3, source: "Thumbtack", lead: "Laurie Swindull", date: "2026-04-20", amount: 129, status: "Booked", booking: true },
-  { id: 4, source: "Inbound", lead: "Nnenna Omukwe", date: "2026-04-20", amount: 270, status: "Booked", booking: true },
-  { id: 5, source: "Yelp", lead: "Cam Harris", date: "2026-04-19", amount: 325, status: "Booked", booking: true },
-  { id: 6, source: "Thumbtack", lead: "Mia Thomas", date: "2026-04-19", amount: 210, status: "Quoted", booking: false },
-  { id: 7, source: "Facebook", lead: "Angela Reed", date: "2026-04-18", amount: 188, status: "Booked", booking: true },
-  { id: 8, source: "Referral", lead: "Trevor Hall", date: "2026-04-18", amount: 420, status: "Booked", booking: true },
-  { id: 9, source: "Inbound", lead: "Sara King", date: "2026-04-17", amount: 155, status: "Open", booking: false },
-  { id: 10, source: "Google Ads", lead: "Dana Scott", date: "2026-04-17", amount: 305, status: "Booked", booking: true },
-  { id: 11, source: "Yelp", lead: "Marcus Webb", date: "2026-04-16", amount: 415, status: "Booked", booking: true },
-  { id: 12, source: "Thumbtack", lead: "Ariel Young", date: "2026-04-16", amount: 165, status: "Open", booking: false },
-  { id: 13, source: "Referral", lead: "Sam Patel", date: "2026-04-15", amount: 360, status: "Booked", booking: true },
-  { id: 14, source: "Facebook", lead: "Monica Price", date: "2026-04-15", amount: 205, status: "Quoted", booking: false },
-  { id: 15, source: "Inbound", lead: "Lee Watson", date: "2026-04-14", amount: 255, status: "Booked", booking: true },
-  { id: 16, source: "Google Ads", lead: "Jill Carter", date: "2026-04-14", amount: 190, status: "Booked", booking: true },
+  { id: 1,  source: "google-ads",         lead: "Josh Bornstein",   date: "2026-04-21", amount: 594, status: "Open",   booking: false },
+  { id: 2,  source: "form",               lead: "Form Lead",        date: "2026-04-21", amount: 149, status: "Quoted", booking: false },
+  { id: 3,  source: "thumbtack-sms",      lead: "Laurie Swindull",  date: "2026-04-20", amount: 129, status: "Booked", booking: true  },
+  { id: 4,  source: "phone",              lead: "Nnenna Omukwe",    date: "2026-04-20", amount: 270, status: "Booked", booking: true  },
+  { id: 5,  source: "yelp",               lead: "Cam Harris",       date: "2026-04-19", amount: 325, status: "Booked", booking: true  },
+  { id: 6,  source: "thumbtack",          lead: "Mia Thomas",       date: "2026-04-19", amount: 210, status: "Quoted", booking: false },
+  { id: 7,  source: "bark-sms",           lead: "Angela Reed",      date: "2026-04-18", amount: 188, status: "Booked", booking: true  },
+  { id: 8,  source: "widget",             lead: "Trevor Hall",      date: "2026-04-18", amount: 420, status: "Booked", booking: true  },
+  { id: 9,  source: "email",              lead: "Sara King",        date: "2026-04-17", amount: 155, status: "Open",   booking: false },
+  { id: 10, source: "google-ads",         lead: "Dana Scott",       date: "2026-04-17", amount: 305, status: "Booked", booking: true  },
+  { id: 11, source: "yelp",               lead: "Marcus Webb",      date: "2026-04-16", amount: 415, status: "Booked", booking: true  },
+  { id: 12, source: "cs_initiated",       lead: "Ariel Young",      date: "2026-04-16", amount: 165, status: "Open",   booking: false },
+  { id: 13, source: "voice",              lead: "Sam Patel",        date: "2026-04-15", amount: 360, status: "Booked", booking: true  },
+  { id: 14, source: "cs-inbound-cleaner", lead: "Monica Price",     date: "2026-04-15", amount: 205, status: "Quoted", booking: false },
+  { id: 15, source: "call",               lead: "Lee Watson",       date: "2026-04-14", amount: 255, status: "Booked", booking: true  },
+  { id: 16, source: "google-ads",         lead: "Jill Carter",      date: "2026-04-14", amount: 190, status: "Booked", booking: true  },
 ];
 
 const presets: Record<string, { label: string; days: number | null }> = {
@@ -199,13 +231,13 @@ export default function Performance() {
             </Select>
 
             <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className="h-11 w-[180px] rounded-2xl border-white/80 bg-white shadow-sm">
+              <SelectTrigger className="h-11 w-[200px] rounded-2xl border-white/80 bg-white shadow-sm">
                 <SelectValue placeholder="Source" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All sources</SelectItem>
-                {Object.keys(sourceColors).map((source) => (
-                  <SelectItem key={source} value={source}>{source}</SelectItem>
+                {ALL_SOURCES.map((src) => (
+                  <SelectItem key={src} value={src}>{label(src)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -297,7 +329,7 @@ export default function Performance() {
                                   className="h-3 w-3 rounded-full"
                                   style={{ backgroundColor: sourceColors[row.source] || "#cbd5e1" }}
                                 />
-                                {row.source}
+                                {label(row.source)}
                               </div>
                             </TableCell>
                             <TableCell className="text-right">{row.leads}</TableCell>
@@ -337,7 +369,7 @@ export default function Performance() {
                               </div>
                             </div>
                           </TableCell>
-                          <TableCell>{row.source}</TableCell>
+                          <TableCell>{label(row.source)}</TableCell>
                           <TableCell>{row.date}</TableCell>
                           <TableCell>
                             <Badge
@@ -397,7 +429,7 @@ export default function Performance() {
                           className="h-3 w-3 rounded-full"
                           style={{ backgroundColor: sourceColors[row.source] || "#cbd5e1" }}
                         />
-                        <span className="font-medium">{row.source}</span>
+                        <span className="font-medium">{label(row.source)}</span>
                       </div>
                       <div className="text-sm text-slate-500">{row.bookings} bookings</div>
                     </div>
@@ -417,7 +449,7 @@ export default function Performance() {
                 {bySource[0] ? (
                   <div className="rounded-[24px] bg-slate-50 p-4 ring-1 ring-slate-100">
                     <div className="mb-2 flex items-center justify-between">
-                      <div className="text-lg font-semibold">{bySource[0].source}</div>
+                      <div className="text-lg font-semibold">{label(bySource[0].source)}</div>
                       <Button size="sm" variant="outline" className="rounded-xl bg-white">
                         Drill in
                         <ArrowUpRight className="ml-2 h-4 w-4" />
