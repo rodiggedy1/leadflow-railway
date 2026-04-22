@@ -809,17 +809,21 @@ Respond ONLY with JSON: { "intent": "confirm" | "new_size" | "question" | "other
 
   if (bedrooms && !bathrooms) {
     // Have bedrooms but not bathrooms — ask specifically for bathrooms
+    // Persist bedrooms so the next turn has it in context
     return {
       reply: `Got it — ${bedrooms}! And how many bathrooms does your home have?`,
       nextStage: "WIDGET_SIZING",
+      extractedData: { bedrooms } as any,
     };
   }
 
   if (!bedrooms && bathrooms) {
     // Have bathrooms but not bedrooms — ask specifically for bedrooms
+    // Persist bathrooms so the next turn has it in context
     return {
       reply: `Got it — ${bathrooms}! And how many bedrooms does your home have?`,
       nextStage: "WIDGET_SIZING",
+      extractedData: { bathrooms } as any,
     };
   }
 

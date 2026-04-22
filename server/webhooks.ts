@@ -846,10 +846,11 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
             ? { isBooked: 1, bookedAt: new Date() }
             : {}),
           // Persist engine-extracted data (bedrooms, bathrooms, price, service type)
-          ...(engineData?.bedrooms    ? { bedrooms:    engineData.bedrooms }    : {}),
-          ...(engineData?.bathrooms   ? { bathrooms:   engineData.bathrooms }   : {}),
-          ...(engineData?.quotedPrice ? { quotedPrice: engineData.quotedPrice } : {}),
-          ...(engineData?.serviceType ? { serviceType: engineData.serviceType } : {}),
+          // Flow C bypass returns data in result.extractedData (no _engineData); fall back to it
+          ...((engineData?.bedrooms    ?? (result.extractedData as any)?.bedrooms)    ? { bedrooms:    engineData?.bedrooms    ?? (result.extractedData as any)?.bedrooms }    : {}),
+          ...((engineData?.bathrooms   ?? (result.extractedData as any)?.bathrooms)   ? { bathrooms:   engineData?.bathrooms   ?? (result.extractedData as any)?.bathrooms }   : {}),
+          ...((engineData?.quotedPrice ?? (result.extractedData as any)?.quotedPrice) ? { quotedPrice: engineData?.quotedPrice ?? (result.extractedData as any)?.quotedPrice } : {}),
+          ...((engineData?.serviceType ?? (result.extractedData as any)?.serviceType) ? { serviceType: engineData?.serviceType ?? (result.extractedData as any)?.serviceType } : {}),
           ...(langUpdates.language !== undefined ? { language: langUpdates.language } : {}),
           // preLangStage: null clears it after confirmation; undefined means no change
           ...(langUpdates.preLangStage !== undefined ? { preLangStage: langUpdates.preLangStage } : {}),
