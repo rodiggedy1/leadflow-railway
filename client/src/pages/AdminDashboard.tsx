@@ -851,16 +851,16 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
   }
   if (leadSource === "yelp") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-700"><img src="/manus-storage/logo-yelp_4aa7cbd0.png" alt="" className="h-3.5 w-auto" />Yelp</span>;
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/wRZdlKQWzOIVeezr.png" alt="" className="h-3.5 w-auto" />Yelp</span>;
   }
   if (leadSource === "bark" || leadSource === "bark-sms") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700"><img src="/manus-storage/logo-bark_d388efa6.png" alt="" className="h-3.5 w-auto" />Bark</span>;
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/JMHoiJWkKyjhnBlX.png" alt="" className="h-3.5 w-auto" />Bark</span>;
   }
   if (leadSource === "thumbtack") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700"><img src="/manus-storage/logo-thumbtack_e9bf8500.png" alt="" className="h-3.5 w-auto" />Thumbtack</span>;
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="" className="h-3.5 w-auto" />Thumbtack</span>;
   }
   if (leadSource === "thumbtack-sms") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700"><img src="/manus-storage/logo-thumbtack_e9bf8500.png" alt="" className="h-3.5 w-auto" />Thumbtack Opp</span>;
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="" className="h-3.5 w-auto" />Thumbtack Opp</span>;
   }
   // campaign:tomorrow_slots, campaign:reactivation, campaign:quote_followup, etc.
   if (leadSource.startsWith("campaign:")) {
@@ -3398,7 +3398,7 @@ export default function AdminDashboard() {
         (sourceFilter === "widget" && s.leadSource === "widget") ||
         (sourceFilter === "voice" && s.leadSource === "voice") ||
         (sourceFilter === "always-on" && (s.leadSource?.startsWith("always-on:") ?? false)) ||
-        (sourceFilter === "bark" && s.leadSource === "bark") ||
+        (sourceFilter === "bark" && (s.leadSource === "bark" || s.leadSource === "bark-sms")) ||
         (sourceFilter === "yelp" && s.leadSource === "yelp") ||
         (sourceFilter === "email" && s.leadSource === "email") ||
         (sourceFilter === "form" && (s.leadSource === "form" || !s.leadSource));
