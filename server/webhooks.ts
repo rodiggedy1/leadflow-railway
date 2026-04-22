@@ -924,6 +924,27 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
             if (quoteResult.slug) {
               await db.update(conversationSessions).set({ quoteSlug: quoteResult.slug }).where(eq(conversationSessions.id, session.id));
             }
+            // Gap 4: Insert quoteLeads row for widget Flow C leads when quote link fires.
+            // Widget leads don't insert at submission time (bedrooms/bathrooms/extras unknown then),
+            // so we create the row here when all data is available.
+            if (isFlowC && session.leadSource === "widget") {
+              try {
+                await db.insert(quoteLeads).values({
+                  name: session.leadName ?? "Unknown",
+                  email: null,
+                  phone: fromPhone,
+                  serviceType: resolvedService,
+                  bedrooms: resolvedBedrooms,
+                  bathrooms: resolvedBathrooms,
+                  extras: resolvedExtras && resolvedExtras.length > 0 ? JSON.stringify(resolvedExtras) : null,
+                  smsSent: 1,
+                  smsMessageId: null,
+                });
+                console.log(`[QuoteLink] Inserted quoteLeads row for widget lead ${fromPhone}`);
+              } catch (qlErr) {
+                console.error("[QuoteLink] Failed to insert quoteLeads row for widget lead:", qlErr);
+              }
+            }
           } else {
             // No quote URL — strip any leftover {quoteLink} placeholder so it doesn't appear in the SMS
             finalReplyContent = finalReplyContent.replace(/\{quoteLink\}/g, "").trim();

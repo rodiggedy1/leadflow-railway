@@ -1194,3 +1194,5 @@
 - [x] Test: 8 new vitest tests for webhook session priority logic (all passing)
 - [x] Remove FLOWC_NOTES step from Flow C (confirm → add-ons → date → quote link)
 - [x] Update Settings UI Flow C template labels and DB values to reflect 4-step sequence (sms3=date, sms4=quote link, remove sms5)
+- [x] Gap 4: Insert quoteLeads row for widget leads when FLOWC_QUOTE_SENT fires (webhooks.ts createQuoteLink block)
+- [x] Gap 5: Call logActivity for widget leads in processWidgetLeadInBackground (routers.ts)

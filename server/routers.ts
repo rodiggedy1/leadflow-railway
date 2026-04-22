@@ -5047,6 +5047,14 @@ async function processWidgetLeadInBackground(input: {
   } catch (dbErr) {
     console.error("[submitWidgetLead] Failed to create conversation session:", dbErr);
   }
+  // ── Step 5b: Log new_lead activity event ─────────────────────────────────────
+  // Widget leads log here with name/phone only — size/price are collected during the SMS flow.
+  logActivity({
+    eventType: "new_lead",
+    title: `New widget lead: ${toTitleCase(input.name)}`,
+    body: `Phone: ${normalizedPhone}${input.utmSource ? ` · Source: ${input.utmSource}` : ""}`,
+    meta: { leadPhone: normalizedPhone, leadName: toTitleCase(input.name), leadSource: "widget", smsFlow: flowVariant },
+  }).catch(() => {});
 
   // ── Step 6: Post new widget lead card to MIB Command Chat ─────────────────
   try {
