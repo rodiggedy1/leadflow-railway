@@ -378,14 +378,11 @@ export async function extractRoomInfoWithLLM(
   if (regexResult.bedrooms && regexResult.bathrooms) {
     return regexResult;
   }
+  // Regex got a partial result (or nothing) — run LLM to catch typos, non-standard phrasing,
+  // and non-English input. The English short-circuit was removed because it caused typos like
+  // "barthrooms" to return partial results without ever calling the LLM.
 
-  // If English (or no language set), regex is authoritative — don't call LLM
-  const lang = (language ?? "en").toLowerCase().split("-")[0];
-  if (lang === "en" || lang === "") {
-    return regexResult;
-  }
-
-  // Step 2: LLM fallback for non-English inputs
+  // Step 2: LLM for partial/missing results
   try {
     const response = await invokeLLM({
       messages: [
@@ -721,8 +718,9 @@ async function handleWidgetSizingReply(
   leadReply: string,
   context: ConversationContext
 ): Promise<StageResult> {
-  // First try regex extraction for explicit room counts (e.g. "3 bed / 2 bath")
-  const extracted = extractRoomInfo(leadReply);
+  // Use LLM-backed extraction — handles typos, shorthand, any phrasing (e.g. "barthrooms", "2 bths")
+  // Regex runs first as a fast path; LLM runs when regex returns partial or no result
+  const extracted = await extractRoomInfoWithLLM(leadReply, context.language);
   let bedrooms = extracted.bedrooms ?? null;
   let bathrooms = extracted.bathrooms ?? null;
 

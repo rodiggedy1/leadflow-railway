@@ -594,7 +594,11 @@ describe("Stage Guard Rule — no stage advances without a valid answer", () => 
 
   // ── WIDGET_SIZING guard ──────────────────────────────────────────────────────
   it("WIDGET_SIZING: FAQ reply stays at WIDGET_SIZING and uses AI off-script handler", async () => {
-    // handleOffScriptReply calls LLM once — returns an answer + re-asks for rooms
+    // Call 1: extractRoomInfoWithLLM — no room info in "Are you insured?"
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: null, bathrooms: null }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 2: handleOffScriptReply — returns an answer + re-asks for rooms
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: "Great question! We're fully insured. How many bedrooms and bathrooms does your home have?" }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -614,6 +618,10 @@ describe("Stage Guard Rule — no stage advances without a valid answer", () => 
   });
 
   it("WIDGET_SIZING: reply with only bedrooms stays at WIDGET_SIZING and asks for bathrooms", async () => {
+    // extractRoomInfoWithLLM LLM call — regex found bedrooms but not bathrooms, LLM also can't find bathrooms
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: 3, bathrooms: null }) }, index: 0, finish_reason: "stop" }],
+    } as any);
     const ctx = makeContext({
       stage: "WIDGET_SIZING",
       quotedPrice: "TBD",
@@ -625,10 +633,13 @@ describe("Stage Guard Rule — no stage advances without a valid answer", () => 
 
     expect(result.nextStage).toBe("WIDGET_SIZING");
     expect(result.reply.toLowerCase()).toContain("bathroom");
-    expect(mockLLM).not.toHaveBeenCalled(); // partial info path is static, no LLM needed
   });
 
   it("WIDGET_SIZING: reply with only bathrooms stays at WIDGET_SIZING and asks for bedrooms", async () => {
+    // extractRoomInfoWithLLM LLM call — regex found bathrooms but not bedrooms, LLM also can't find bedrooms
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: null, bathrooms: 2 }) }, index: 0, finish_reason: "stop" }],
+    } as any);
     const ctx = makeContext({
       stage: "WIDGET_SIZING",
       quotedPrice: "TBD",
@@ -640,7 +651,6 @@ describe("Stage Guard Rule — no stage advances without a valid answer", () => 
 
     expect(result.nextStage).toBe("WIDGET_SIZING");
     expect(result.reply.toLowerCase()).toContain("bedroom");
-    expect(mockLLM).not.toHaveBeenCalled();
   });
 
   it("WIDGET_SIZING: Flow B (default) reply with both rooms advances to SLOT_CHOICE", async () => {
@@ -869,11 +879,15 @@ describe("Wrong-path routing — existing customer / support request exits funne
   });
 
   it("WIDGET_SIZING: existing customer support request exits to DONE", async () => {
-    // Call 1: isWrongPathReply classification — returns wrong_path: true
+    // Call 1: extractRoomInfoWithLLM — no room info in support request
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: null, bathrooms: null }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 2: isWrongPathReply classification — returns wrong_path: true
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ wrong_path: true }) }, index: 0, finish_reason: "stop" }],
     } as any);
-    // Call 2: exit message generation
+    // Call 3: exit message generation
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: "Hi! For help with an existing booking, please call us at 202-888-5362. We're happy to help!" }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -1013,11 +1027,15 @@ describe("Wrong-path routing — existing customer / support request exits funne
   });
 
   it("FAQ reply (not wrong-path) stays in funnel and re-asks", async () => {
-    // Call 1: isWrongPathReply — returns wrong_path: false (FAQ is in-funnel)
+    // Call 1: extractRoomInfoWithLLM — no room info in "Are you insured?"
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: null, bathrooms: null }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 2: isWrongPathReply — returns wrong_path: false (FAQ is in-funnel)
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ wrong_path: false }) }, index: 0, finish_reason: "stop" }],
     } as any);
-    // Call 2: handleOffScriptReply FAQ answer + re-ask
+    // Call 3: handleOffScriptReply FAQ answer + re-ask
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: "Yes, we're fully insured! How many bedrooms and bathrooms does your home have?" }, index: 0, finish_reason: "stop" }],
     } as any);

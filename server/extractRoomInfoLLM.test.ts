@@ -30,14 +30,18 @@ describe("extractRoomInfoWithLLM", () => {
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
-  it("English: partial result (bedrooms only) returns null bathrooms without LLM", async () => {
+  it("English: partial result (bedrooms only) calls LLM to catch typos/shorthand like 'barthrooms'", async () => {
+    // Regex found bedrooms but not bathrooms — LLM runs to catch typos
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: 3, bathrooms: null }) }, index: 0, finish_reason: "stop" }],
+    } as any);
     const result = await extractRoomInfoWithLLM("3 bedrooms", "en");
     expect(result.bedrooms).toBe("3 Bedrooms");
     expect(result.bathrooms).toBeNull();
-    expect(mockLLM).not.toHaveBeenCalled();
+    expect(mockLLM).toHaveBeenCalledTimes(1);
   });
 
-  it("No language set: uses regex only, no LLM", async () => {
+  it("No language set: both values found via regex, no LLM needed", async () => {
     const result = await extractRoomInfoWithLLM("2 bed 1 bath");
     expect(result.bedrooms).toBe("2 Bedrooms");
     expect(result.bathrooms).toBe("1 Bathroom");
