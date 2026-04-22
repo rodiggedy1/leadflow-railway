@@ -692,7 +692,6 @@ export async function handleYelpInquiryEmail(
       serviceType: parsed.serviceType ?? null,
       bedrooms: bedroomsDisplay !== "Unknown" ? bedroomsDisplay : null,
       bathrooms: bathroomsDisplay !== "Unknown" ? bathroomsDisplay : null,
-      zipCode: parsed.zipCode ?? null,
       leadSource: "yelp",
       aiMode: 0, // no AI — no phone to SMS
       barkQA: `Requested date: ${dateDisplay}\nZip: ${zipDisplay}`,
