@@ -836,16 +836,16 @@ function getLanguageBadge(language: string | null): React.ReactElement | null {
  */
 function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (!leadSource || leadSource === "form") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">Quote</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-stone-100"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qXkbYLxnqVEGGvfG.png" alt="Quote" className="h-4 w-auto" /></span>;
   }
   if (leadSource === "widget") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>;
   }
   if (leadSource === "email") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">Google Ads Form</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ASBjJWwGAuMfSmQV.png" alt="Google Ads" className="h-4 w-auto" /></span>;
   }
   if (leadSource === "voice") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-violet-100 text-violet-700">Google Ads Call</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ASBjJWwGAuMfSmQV.png" alt="Google Ads" className="h-4 w-auto" /></span>;
   }
   if (leadSource === "reactivation") {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
