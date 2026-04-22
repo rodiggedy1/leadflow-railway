@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -644,6 +644,16 @@ function HotLeadCard({
 
       {/* Action row */}
       <div className="flex items-center gap-2 px-3.5 pb-3">
+        <a
+          href="https://maidsquotes-b55s3sg4.manus.space/"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open quote generator"
+          className="inline-flex items-center gap-1 text-[10px] text-slate-600 hover:text-slate-900 font-semibold"
+          onClick={e => e.stopPropagation()}
+        >
+          <Calculator className="h-3 w-3" /> Quote
+        </a>
         {thumbtackUrl && (
           <a
             href={thumbtackUrl}
@@ -1067,6 +1077,15 @@ const MessageList = memo(function MessageList({
                               <MessageCircle className="h-4 w-4" />
                             </a>
                           )}
+                          <a
+                            href="https://maidsquotes-b55s3sg4.manus.space/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open quote generator"
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 transition-colors shrink-0 shadow-sm text-xs font-semibold"
+                          >
+                            <Calculator className="h-3.5 w-3.5" /> Quote
+                          </a>
                           <button
                             title="Generate first outreach message for this lead"
                             onClick={() => {
