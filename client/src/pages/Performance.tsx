@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
@@ -100,25 +101,21 @@ interface LeadRow {
   booking: boolean;
 }
 
-// Placeholder data — will be replaced with real tRPC query
-const leadData: LeadRow[] = [
-  { id: 1,  source: "google-ads",         lead: "Josh Bornstein",   date: "2026-04-21", amount: 594, status: "Open",   booking: false },
-  { id: 2,  source: "form",               lead: "Form Lead",        date: "2026-04-21", amount: 149, status: "Quoted", booking: false },
-  { id: 3,  source: "thumbtack-sms",      lead: "Laurie Swindull",  date: "2026-04-20", amount: 129, status: "Booked", booking: true  },
-  { id: 4,  source: "phone",              lead: "Nnenna Omukwe",    date: "2026-04-20", amount: 270, status: "Booked", booking: true  },
-  { id: 5,  source: "yelp",               lead: "Cam Harris",       date: "2026-04-19", amount: 325, status: "Booked", booking: true  },
-  { id: 6,  source: "thumbtack",          lead: "Mia Thomas",       date: "2026-04-19", amount: 210, status: "Quoted", booking: false },
-  { id: 7,  source: "bark-sms",           lead: "Angela Reed",      date: "2026-04-18", amount: 188, status: "Booked", booking: true  },
-  { id: 8,  source: "widget",             lead: "Trevor Hall",      date: "2026-04-18", amount: 420, status: "Booked", booking: true  },
-  { id: 9,  source: "email",              lead: "Sara King",        date: "2026-04-17", amount: 155, status: "Open",   booking: false },
-  { id: 10, source: "google-ads",         lead: "Dana Scott",       date: "2026-04-17", amount: 305, status: "Booked", booking: true  },
-  { id: 11, source: "yelp",               lead: "Marcus Webb",      date: "2026-04-16", amount: 415, status: "Booked", booking: true  },
-  { id: 12, source: "cs_initiated",       lead: "Ariel Young",      date: "2026-04-16", amount: 165, status: "Open",   booking: false },
-  { id: 13, source: "voice",              lead: "Sam Patel",        date: "2026-04-15", amount: 360, status: "Booked", booking: true  },
-  { id: 14, source: "cs-inbound-cleaner", lead: "Monica Price",     date: "2026-04-15", amount: 205, status: "Quoted", booking: false },
-  { id: 15, source: "call",               lead: "Lee Watson",       date: "2026-04-14", amount: 255, status: "Booked", booking: true  },
-  { id: 16, source: "google-ads",         lead: "Jill Carter",      date: "2026-04-14", amount: 190, status: "Booked", booking: true  },
-];
+interface SourceStat {
+  source: string;
+  leads: number;
+  bookings: number;
+  bookedRevenue: number;
+  totalQuoted: number;
+}
+
+// presetDays maps UI preset key to the days param sent to the server
+const presetDays: Record<string, number> = {
+  "7d": 7,
+  "14d": 14,
+  "30d": 30,
+  "all": 0,
+};
 
 const presets: Record<string, { label: string; days: number | null }> = {
   "7d": { label: "Last 7 days", days: 7 },
@@ -136,61 +133,65 @@ export default function Performance() {
   const [view, setView] = useState("source");
   const [search, setSearch] = useState("");
 
+  const days = presetDays[datePreset] ?? 14;
+
+  // Fetch aggregated stats per source
+  const { data: statsData, isLoading: statsLoading } = trpc.performance.stats.useQuery(
+    { days },
+    { staleTime: 2 * 60 * 1000, refetchOnWindowFocus: false }
+  );
+
+  // Fetch individual lead rows (filtered by source if set)
+  const { data: leadsData, isLoading: leadsLoading } = trpc.performance.leads.useQuery(
+    { days, source: sourceFilter === "all" ? undefined : sourceFilter },
+    { staleTime: 2 * 60 * 1000, refetchOnWindowFocus: false }
+  );
+
+  // Filtered lead rows (client-side search only — source+date already filtered by server)
   const filteredLeads = useMemo(() => {
-    const today = new Date("2026-04-21T23:59:59");
-    const preset = presets[datePreset];
-
-    return leadData.filter((row) => {
-      const rowDate = new Date(row.date + "T12:00:00");
-      const matchesDate =
-        preset.days === null
-          ? true
-          : (today.getTime() - rowDate.getTime()) / (1000 * 60 * 60 * 24) <= preset.days;
-
-      const matchesSource = sourceFilter === "all" ? true : row.source === sourceFilter;
-      const q = search.toLowerCase();
-      const matchesSearch =
+    const rows = leadsData ?? [];
+    if (!search) return rows;
+    const q = search.toLowerCase();
+    return rows.filter(
+      (row: LeadRow) =>
         row.lead.toLowerCase().includes(q) ||
         row.source.toLowerCase().includes(q) ||
-        row.status.toLowerCase().includes(q);
+        row.status.toLowerCase().includes(q)
+    );
+  }, [leadsData, search]);
 
-      return matchesDate && matchesSource && matchesSearch;
-    });
-  }, [datePreset, sourceFilter, search]);
-
+   // Aggregate summary from server stats (filtered by datePreset, all sources)
   const summary = useMemo(() => {
-    const totalLeads = filteredLeads.length;
-    const bookings = filteredLeads.filter((x) => x.booking).length;
-    const bookedRevenue = filteredLeads.filter((x) => x.booking).reduce((sum, x) => sum + x.amount, 0);
-    const totalQuoted = filteredLeads.reduce((sum, x) => sum + x.amount, 0);
+    const allStats: SourceStat[] = (statsData as SourceStat[] | undefined) ?? [];
+    const sourceStats = sourceFilter === "all"
+      ? allStats
+      : allStats.filter((s: SourceStat) => s.source === sourceFilter);
+    const totalLeads = sourceStats.reduce((s: number, r: SourceStat) => s + r.leads, 0);
+    const bookings = sourceStats.reduce((s: number, r: SourceStat) => s + r.bookings, 0);
+    const bookedRevenue = sourceStats.reduce((s: number, r: SourceStat) => s + r.bookedRevenue, 0);
+    const totalQuoted = sourceStats.reduce((s: number, r: SourceStat) => s + r.totalQuoted, 0);
     const conversion = totalLeads ? Math.round((bookings / totalLeads) * 100) : 0;
     return { totalLeads, bookings, bookedRevenue, totalQuoted, conversion };
-  }, [filteredLeads]);
-
+  }, [statsData, sourceFilter]);
+  // Per-source breakdown for chart + table (from server stats)
   const bySource = useMemo(() => {
-    const grouped: Record<string, { source: string; leads: number; bookings: number; amount: number; quoted: number }> = {};
-    for (const row of filteredLeads) {
-      if (!grouped[row.source]) {
-        grouped[row.source] = { source: row.source, leads: 0, bookings: 0, amount: 0, quoted: 0 };
-      }
-      grouped[row.source].leads += 1;
-      grouped[row.source].quoted += row.amount;
-      if (row.booking) {
-        grouped[row.source].bookings += 1;
-        grouped[row.source].amount += row.amount;
-      }
-    }
-
-    return Object.values(grouped)
-      .map((row) => ({
-        ...row,
-        closeRate: row.leads ? Math.round((row.bookings / row.leads) * 100) : 0,
-        revenuePerLead: row.leads ? Math.round(row.amount / row.leads) : 0,
+    const rows: SourceStat[] = (statsData as SourceStat[] | undefined) ?? [];
+    return rows
+      .map((r: SourceStat) => ({
+        source: r.source,
+        leads: r.leads,
+        bookings: r.bookings,
+        amount: r.bookedRevenue,
+        quoted: r.totalQuoted,
+        closeRate: r.leads ? Math.round((r.bookings / r.leads) * 100) : 0,
+        revenuePerLead: r.leads ? Math.round(r.bookedRevenue / r.leads) : 0,
       }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [filteredLeads]);
+      .sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
+  }, [statsData]);
 
-  const pieData = bySource.map((row) => ({ name: row.source, value: row.bookings || 0 }));
+  const pieData = bySource.map((row: { source: string; bookings: number }) => ({ name: row.source, value: row.bookings || 0 }));
+
+  const isLoading = statsLoading || leadsLoading;
 
   return (
     <AdminPageGuard pageId="performance">
@@ -297,7 +298,7 @@ export default function Performance() {
                   <div className="h-[340px] rounded-[24px] bg-[#fafaf8] p-3 ring-1 ring-slate-100">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
-                        data={bySource.map(r => ({ ...r, source: label(r.source) }))}
+                        data={bySource.map((r: { source: string; leads: number; bookings: number; amount: number; quoted: number; closeRate: number; revenuePerLead: number }) => ({ ...r, source: label(r.source) }))}
                         barCategoryGap="30%"
                         barGap={0}
                       >
@@ -358,7 +359,7 @@ export default function Performance() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {bySource.map((row) => (
+                        {bySource.map((row: { source: string; leads: number; bookings: number; amount: number; quoted: number; closeRate: number; revenuePerLead: number }) => (
                           <TableRow key={row.source}>
                             <TableCell>
                               <div className="flex items-center gap-3 font-medium">
@@ -393,12 +394,12 @@ export default function Performance() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredLeads.map((row) => (
+                      {filteredLeads.map((row: LeadRow) => (
                         <TableRow key={row.id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700">
-                                {row.lead.split(" ").map((x) => x[0]).slice(0, 2).join("")}
+                                {row.lead.split(" ").map((x: string) => x[0]).slice(0, 2).join("")}
                               </div>
                               <div>
                                 <div className="font-medium">{row.lead}</div>
@@ -446,7 +447,7 @@ export default function Performance() {
                         outerRadius={92}
                         paddingAngle={4}
                       >
-                        {pieData.map((entry) => (
+                        {pieData.map((entry: { name: string; value: number }) => (
                           <Cell key={entry.name} fill={sourceColors[entry.name] || "#cbd5e1"} />
                         ))}
                       </Pie>
@@ -456,7 +457,7 @@ export default function Performance() {
                 </div>
 
                 <div className="mt-2 space-y-2">
-                  {bySource.slice(0, 5).map((row) => (
+                  {bySource.slice(0, 5).map((row: { source: string; bookings: number; amount: number; leads: number; quoted: number; closeRate: number; revenuePerLead: number }) => (
                     <div
                       key={row.source}
                       className="flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-3"

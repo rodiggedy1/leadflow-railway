@@ -4903,6 +4903,93 @@ Your job: fill in the following message template using the booking details provi
 
   // ── Hiring Pipeline ──────────────────────────────────────────────────────────
   hiring: hiringRouter,
+
+  // ── Performance Analytics ────────────────────────────────────────────────────
+  performance: router({
+    /** Per-source aggregated stats. days=0 = all-time. */
+    stats: adminAgentProcedure
+      .input(z.object({ days: z.number().int().min(0).max(365).default(30) }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [] as { source: string; leads: number; bookings: number; bookedRevenue: number; totalQuoted: number }[];
+        const cutoff = input.days === 0
+          ? null
+          : new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+
+        const rows = await db
+          .select({
+            leadSource: conversationSessions.leadSource,
+            totalLeads: sql<number>`COUNT(*)`,
+            bookings: sql<number>`SUM(CASE WHEN ${conversationSessions.bookedAt} IS NOT NULL THEN 1 ELSE 0 END)`,
+            bookedRevenue: sql<number>`SUM(CASE WHEN ${conversationSessions.bookedAt} IS NOT NULL THEN COALESCE(${conversationSessions.bookedAmount}, 0) ELSE 0 END)`,
+            totalQuoted: sql<number>`SUM(COALESCE(${conversationSessions.bookedAmount}, 0))`,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              isNotNull(conversationSessions.leadSource),
+              sql`${conversationSessions.leadSource} != ''`,
+              cutoff ? gte(conversationSessions.createdAt, cutoff) : undefined,
+            )
+          )
+          .groupBy(conversationSessions.leadSource)
+          .orderBy(sql`COUNT(*) DESC`);
+
+        return rows.map((r: { leadSource: string | null; totalLeads: number; bookings: number; bookedRevenue: number; totalQuoted: number }) => ({
+          source: r.leadSource ?? 'other',
+          leads: Number(r.totalLeads),
+          bookings: Number(r.bookings),
+          bookedRevenue: Number(r.bookedRevenue),
+          totalQuoted: Number(r.totalQuoted),
+        }));
+      }),
+
+    /** Individual lead rows for the lead log view. days=0 = all-time. */
+    leads: adminAgentProcedure
+      .input(z.object({
+        days: z.number().int().min(0).max(365).default(30),
+        source: z.string().optional(),
+      }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [] as { id: number; source: string; lead: string; date: string; amount: number; status: string; booking: boolean }[];
+        const cutoff = input.days === 0
+          ? null
+          : new Date(Date.now() - input.days * 24 * 60 * 60 * 1000);
+
+        const rows = await db
+          .select({
+            id: conversationSessions.id,
+            leadSource: conversationSessions.leadSource,
+            leadName: conversationSessions.leadName,
+            createdAt: conversationSessions.createdAt,
+            bookedAmount: conversationSessions.bookedAmount,
+            bookedAt: conversationSessions.bookedAt,
+            stage: conversationSessions.stage,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              isNotNull(conversationSessions.leadSource),
+              sql`${conversationSessions.leadSource} != ''`,
+              cutoff ? gte(conversationSessions.createdAt, cutoff) : undefined,
+              input.source ? eq(conversationSessions.leadSource, input.source) : undefined,
+            )
+          )
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(200);
+
+        return rows.map((r: { id: number; leadSource: string | null; leadName: string | null; createdAt: Date | null; bookedAmount: number | null; bookedAt: Date | null; stage: string }) => ({
+          id: r.id,
+          source: r.leadSource ?? 'other',
+          lead: r.leadName ?? 'Unknown',
+          date: r.createdAt ? r.createdAt.toISOString().split('T')[0] : '',
+          amount: r.bookedAmount ?? 0,
+          status: r.bookedAt ? 'Booked' : r.stage === 'LOST' ? 'Lost' : 'Open',
+          booking: r.bookedAt !== null,
+        }));
+      }),
+  }),
 });
 export type AppRouter = typeof appRouter;
 // ─── Background processor ──────────────────────────────────────────────────────
