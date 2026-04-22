@@ -851,16 +851,16 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
   }
   if (leadSource === "yelp") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/wRZdlKQWzOIVeezr.png" alt="" className="h-3.5 w-auto" />Yelp</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-red-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/wRZdlKQWzOIVeezr.png" alt="Yelp" className="h-4 w-auto" /></span>;
   }
   if (leadSource === "bark" || leadSource === "bark-sms") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/JMHoiJWkKyjhnBlX.png" alt="" className="h-3.5 w-auto" />Bark</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/JMHoiJWkKyjhnBlX.png" alt="Bark" className="h-4 w-auto" /></span>;
   }
   if (leadSource === "thumbtack") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="" className="h-3.5 w-auto" />Thumbtack</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="Thumbtack" className="h-4 w-auto" /></span>;
   }
   if (leadSource === "thumbtack-sms") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-orange-50 text-orange-700"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="" className="h-3.5 w-auto" />Thumbtack Opp</span>;
+    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="Thumbtack" className="h-4 w-auto" /></span>;
   }
   // campaign:tomorrow_slots, campaign:reactivation, campaign:quote_followup, etc.
   if (leadSource.startsWith("campaign:")) {
