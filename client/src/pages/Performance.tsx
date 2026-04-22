@@ -128,7 +128,7 @@ const fmtMoney = (n: number) => `$${n.toLocaleString()}`;
 
 export default function Performance() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
-  const [datePreset, setDatePreset] = useState("14d");
+  const [datePreset, setDatePreset] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [view, setView] = useState("source");
   const [search, setSearch] = useState("");

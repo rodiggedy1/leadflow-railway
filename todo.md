@@ -1208,3 +1208,5 @@
 - [x] Replace single-color bar chart with overlapping bars (leads muted backdrop + bookings saturated foreground)
 - [x] Wire Performance page to real DB data via tRPC procedure (no other pages touched)
 - [x] Exclude internal sources (cs_initiated, cs-inbound-cleaner, cs-inbound, hiring_interview) from Performance page stats and leads queries
+- [x] Also exclude email, review_rebooking, review from Performance page
+- [x] Default Performance page date filter to All time
