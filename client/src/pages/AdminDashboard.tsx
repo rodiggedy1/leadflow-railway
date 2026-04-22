@@ -4199,22 +4199,7 @@ export default function AdminDashboard() {
                                         </div>
                                         {/* Source */}
                                         <div className="flex items-center">
-                                          <Badge variant="outline" className="rounded-full border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium text-zinc-700 text-center leading-tight">
-                                            {(() => {
-                                              const src = session.leadSource;
-                                              if (!src || src === "form") return "Quote";
-                                              if (src === "widget") return "Widget";
-                                              if (src === "email") return "Google Ads";
-                                              if (src === "voice") return "Voice";
-                                              if (src === "reactivation" || src === "command-center") return "Campaign";
-                                              if (src === "yelp") return "Yelp";
-                                              if (src === "bark") return "Bark";
-                                              if (src === "thumbtack" || src === "thumbtack-sms") return "Thumbtack";
-                                              if (src.startsWith("always-on:")) return "Always-On";
-                                              if (src.startsWith("campaign:")) return "Campaign";
-                                              return src;
-                                            })()}
-                                          </Badge>
+                                          {getSourceBadge(session.leadSource ?? null)}
                                         </div>
                                         {/* Service */}
                                         <div className="flex items-center min-w-0 pr-4 text-sm text-zinc-700">
