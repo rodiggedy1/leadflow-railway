@@ -30,6 +30,19 @@ describe("extractRoomInfoWithLLM", () => {
     expect(mockLLM).not.toHaveBeenCalled();
   });
 
+  it("English: typo 'barthrooms' — regex gets bedrooms only, LLM resolves both", async () => {
+    // Real-world case: lead types "3 bedroom 2 barthrooms"
+    // Regex extracts bedrooms=3 but fails on "barthrooms" (not in pattern)
+    // LLM runs and correctly resolves both values
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ bedrooms: 3, bathrooms: 2 }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    const result = await extractRoomInfoWithLLM("3 bedroom 2 barthrooms", "en");
+    expect(result.bedrooms).toBe("3 Bedrooms");
+    expect(result.bathrooms).toBe("2 Bathrooms");
+    expect(mockLLM).toHaveBeenCalledTimes(1);
+  });
+
   it("English: partial result (bedrooms only) calls LLM to catch typos/shorthand like 'barthrooms'", async () => {
     // Regex found bedrooms but not bathrooms — LLM runs to catch typos
     mockLLM.mockResolvedValueOnce({
