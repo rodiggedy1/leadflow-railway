@@ -4929,7 +4929,7 @@ Your job: fill in the following message template using the booking details provi
             and(
               isNotNull(conversationSessions.leadSource),
               sql`${conversationSessions.leadSource} != ''`,
-              notInArray(conversationSessions.leadSource, ['cs_initiated', 'cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'hiring', 'review_rebooking', 'review', 'email']),
+              notInArray(conversationSessions.leadSource, ['cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'hiring', 'review_rebooking', 'review', 'email']),
               cutoff ? gte(conversationSessions.createdAt, cutoff) : undefined,
             )
           )
@@ -4973,7 +4973,7 @@ Your job: fill in the following message template using the booking details provi
             and(
               isNotNull(conversationSessions.leadSource),
               sql`${conversationSessions.leadSource} != ''`,
-              notInArray(conversationSessions.leadSource, ['cs_initiated', 'cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'hiring', 'review_rebooking', 'review', 'email']),
+              notInArray(conversationSessions.leadSource, ['cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'hiring', 'review_rebooking', 'review', 'email']),
               cutoff ? gte(conversationSessions.createdAt, cutoff) : undefined,
               input.source ? eq(conversationSessions.leadSource, input.source) : undefined,
             )

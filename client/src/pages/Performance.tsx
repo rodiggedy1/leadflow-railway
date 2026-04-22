@@ -53,38 +53,35 @@ import {
 
 // All real lead sources from the DB with distinct colors
 const sourceColors: Record<string, string> = {
-  "google-ads":          "#7dd3fc", // sky blue
-  "form":                "#6ee7b7", // emerald
-  "widget":              "#93c5fd", // blue
-  "bark-sms":            "#64748b", // slate
-  "thumbtack-sms":       "#fdba74", // orange
-  "thumbtack":           "#fb923c", // orange-dark
-  "cs_initiated":        "#c4b5fd", // violet
-  "cs-inbound-cleaner":  "#a78bfa", // purple
-  "phone":               "#86efac", // green
-  "yelp":                "#fca5a5", // red
-  "voice":               "#fcd34d", // amber
-  "call":                "#f9a8d4", // pink
-  "email":               "#67e8f9", // cyan
-  "other":               "#cbd5e1", // slate-light
+  "google-ads":              "#7dd3fc", // sky blue
+  "form":                    "#6ee7b7", // emerald
+  "widget":                  "#93c5fd", // blue
+  "bark-sms":                "#64748b", // slate
+  "thumbtack-sms":           "#fdba74", // orange
+  "thumbtack":               "#fb923c", // orange-dark
+  "cs_initiated":            "#c4b5fd", // violet
+  "phone":                   "#86efac", // green
+  "yelp":                    "#fca5a5", // red
+  "voice":                   "#fcd34d", // amber
+  "call":                    "#f9a8d4", // pink
+  "campaign:tomorrow_slots": "#818cf8", // indigo
+  "other":                   "#cbd5e1", // slate-light
 };
-
 // Human-readable labels for each source key
 const sourceLabels: Record<string, string> = {
-  "google-ads":          "Google Ads",
-  "form":                "Form",
-  "widget":              "Widget",
-  "bark-sms":            "Bark SMS",
-  "thumbtack-sms":       "Thumbtack SMS",
-  "thumbtack":           "Thumbtack",
-  "cs_initiated":        "CS Initiated",
-  "cs-inbound-cleaner":  "CS Inbound",
-  "phone":               "Phone",
-  "yelp":                "Yelp",
-  "voice":               "Voice",
-  "call":                "Call",
-  "email":               "Email",
-  "other":               "Other",
+  "google-ads":              "Google Ads",
+  "form":                    "Form",
+  "widget":                  "Widget",
+  "bark-sms":                "Bark SMS",
+  "thumbtack-sms":           "Thumbtack SMS",
+  "thumbtack":               "Thumbtack",
+  "cs_initiated":            "CS Initiated",
+  "phone":                   "Phone",
+  "yelp":                    "Yelp",
+  "voice":                   "Voice",
+  "call":                    "Call",
+  "campaign:tomorrow_slots": "Campaign",
+  "other":                   "Other",
 };
 
 const ALL_SOURCES = Object.keys(sourceColors);
