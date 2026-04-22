@@ -1,4 +1,7 @@
 import React, { useMemo, useState } from "react";
+import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
+import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import {
   Calendar,
   ChevronDown,
@@ -94,6 +97,7 @@ const presets: Record<string, { label: string; days: number | null }> = {
 const fmtMoney = (n: number) => `$${n.toLocaleString()}`;
 
 export default function Performance() {
+  const { pagePermissions, isAdmin } = useAgentPermissions();
   const [datePreset, setDatePreset] = useState("14d");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [view, setView] = useState("source");
@@ -156,7 +160,10 @@ export default function Performance() {
   const pieData = bySource.map((row) => ({ name: row.source, value: row.bookings || 0 }));
 
   return (
-    <div className="min-h-screen bg-[#f6f7f3] p-6 text-slate-900">
+    <AdminPageGuard pageId="performance">
+    <div className="hj-theme min-h-screen" style={{ backgroundColor: "#F7F7F7" }}>
+      <AdminHeader activeTab="performance" pagePermissions={pagePermissions} isAdmin={isAdmin} />
+    <div className="bg-[#f6f7f3] p-6 text-slate-900">
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
@@ -449,6 +456,8 @@ export default function Performance() {
         </div>
       </div>
     </div>
+    </div>
+    </AdminPageGuard>
   );
 }
 
