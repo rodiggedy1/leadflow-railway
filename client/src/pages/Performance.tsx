@@ -71,7 +71,7 @@ const sourceLabels: Record<string, string> = {
   "google-ads":              "Google Ads",
   "form":                    "Form",
   "widget":                  "Widget",
-  "bark-sms":                "Bark SMS",
+  "bark-sms":                "Bark",
   "thumbtack":               "Thumbtack",
   "cs_initiated":            "CS Initiated",
   "phone":                   "Phone",
