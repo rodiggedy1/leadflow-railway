@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, or, sql, SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -4929,6 +4929,7 @@ Your job: fill in the following message template using the booking details provi
             and(
               isNotNull(conversationSessions.leadSource),
               sql`${conversationSessions.leadSource} != ''`,
+              notInArray(conversationSessions.leadSource, ['cs_initiated', 'cs-inbound-cleaner', 'cs-inbound', 'hiring_interview', 'hiring']),
               cutoff ? gte(conversationSessions.createdAt, cutoff) : undefined,
             )
           )
@@ -4972,6 +4973,7 @@ Your job: fill in the following message template using the booking details provi
             and(
               isNotNull(conversationSessions.leadSource),
               sql`${conversationSessions.leadSource} != ''`,
+              notInArray(conversationSessions.leadSource, ['cs_initiated', 'cs-inbound-cleaner', 'cs-inbound', 'hiring_interview', 'hiring']),
               cutoff ? gte(conversationSessions.createdAt, cutoff) : undefined,
               input.source ? eq(conversationSessions.leadSource, input.source) : undefined,
             )
