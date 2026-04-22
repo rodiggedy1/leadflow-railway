@@ -39,6 +39,7 @@ const AIInterview = lazy(() => import("./pages/AIInterview"));
 const HiringStatus = lazy(() => import("./pages/HiringStatus"));
 const TeamPay = lazy(() => import("./pages/TeamPay"));
 const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
+const Performance = lazy(() => import("./pages/Performance"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -97,6 +98,7 @@ function Router() {
         <Route path={"/hiring-status/:token"} component={HiringStatus} />
         <Route path={"/admin/team-pay"} component={TeamPay} />
         <Route path={"/admin/payroll-summary"} component={PayrollSummary} />
+        <Route path={"/admin/performance"} component={Performance} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

@@ -40,6 +40,7 @@ import {
   BrainCircuit,
   Smartphone,
   Sparkles,
+  BarChart3,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -260,7 +261,8 @@ export type AdminTab =
   | "reactivation"
   | "review-tracker"
   | "hiring"
-  | "team-pay";
+  | "team-pay"
+  | "performance";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -282,12 +284,13 @@ interface NavEntry {
 }
 
 const NAV_ENTRIES: NavEntry[] = [
+  // { id: "command-center", label: "AI Center", icon: <BrainCircuit className="w-3.5 h-3.5" />, href: "/admin/command-center", tabId: "command-center" }, // hidden
   {
-    id: "command-center",
-    label: "AI Center",
-    icon: <BrainCircuit className="w-3.5 h-3.5" />,
-    href: "/admin/command-center",
-    tabId: "command-center",
+    id: "performance",
+    label: "Performance",
+    icon: <BarChart3 className="w-3.5 h-3.5" />,
+    href: "/admin/performance",
+    tabId: "performance",
   },
   {
     id: "leads",

@@ -1197,3 +1197,10 @@
 - [x] Gap 4: Insert quoteLeads row for widget leads when FLOWC_QUOTE_SENT fires (webhooks.ts createQuoteLink block)
 - [x] Gap 5: Call logActivity for widget leads in processWidgetLeadInBackground (routers.ts)
 - [x] Add Bark SMS lead source: intercept inbound SMS from +16506469270, parse service/name, create conversationSessions row (leadSource=bark-sms, placeholder phone), post Command Chat card
+- [x] Revert source badges to text-only rounded-full pills (no logos): MIB/Widget/Google Ads/Inbound/Yelp/Bark/Thumbtack + campaign variants
+- [x] Add emoji+label service badges (getServiceBadge): ✨ Deep, 🏠 Standard, 📦 Move-out, 🏗️ Post-Con, 🏢 Office, 🏨 Rental
+- [x] Wire getServiceBadge into Leads list service cell (replaces plain text)
+- [x] Confirm all Bark leads (Yvonne, Diego, Donna, Shafaq, etc.) already in DB — backfill script updated to process all 50 messages
+- [x] Create Performance page (Lead Source Performance dashboard) with provided UI code
+- [x] Hide AI Center nav item, add Performance in its place
+- [x] Register /performance route in App.tsx
