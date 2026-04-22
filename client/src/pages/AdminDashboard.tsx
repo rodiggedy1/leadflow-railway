@@ -834,59 +834,66 @@ function getLanguageBadge(language: string | null): React.ReactElement | null {
  * Maps a leadSource string to a human-readable badge.
  * Handles always-on group types like "always-on:new-one-time" and "always-on-test:dormant".
  */
+const SOURCE_PILL = "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium";
+
 function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (!leadSource || leadSource === "form") {
-    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-stone-100"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/qXkbYLxnqVEGGvfG.png" alt="Quote" className="h-4 w-auto" /></span>;
+    return <span className={`${SOURCE_PILL} bg-stone-100 text-stone-700`}>MIB</span>;
   }
   if (leadSource === "widget") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 text-blue-700">Widget</span>;
+    return <span className={`${SOURCE_PILL} bg-blue-100 text-blue-700`}>Widget</span>;
   }
   if (leadSource === "email") {
-    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ASBjJWwGAuMfSmQV.png" alt="Google Ads" className="h-4 w-auto" /></span>;
+    return <span className={`${SOURCE_PILL} bg-sky-100 text-sky-700`}>Google Ads</span>;
   }
   if (leadSource === "voice" || leadSource === "phone") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-zinc-100 text-zinc-700"><Phone className="h-3 w-3" />Inbound</span>;
+    return <span className={`${SOURCE_PILL} bg-zinc-100 text-zinc-700`}>Inbound</span>;
   }
   if (leadSource === "reactivation") {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-purple-100 text-purple-700">Campaign</span>;
+    return <span className={`${SOURCE_PILL} bg-purple-100 text-purple-700`}>Campaign</span>;
   }
   if (leadSource === "yelp") {
-    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-red-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/wRZdlKQWzOIVeezr.png" alt="Yelp" className="h-4 w-auto" /></span>;
+    return <span className={`${SOURCE_PILL} bg-red-100 text-red-700`}>Yelp</span>;
   }
   if (leadSource === "bark" || leadSource === "bark-sms") {
-    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/JMHoiJWkKyjhnBlX.png" alt="Bark" className="h-4 w-auto" /></span>;
+    return <span className={`${SOURCE_PILL} bg-slate-100 text-slate-700`}>Bark</span>;
   }
-  if (leadSource === "thumbtack") {
-    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="Thumbtack" className="h-4 w-auto" /></span>;
+  if (leadSource === "thumbtack" || leadSource === "thumbtack-sms") {
+    return <span className={`${SOURCE_PILL} bg-orange-100 text-orange-700`}>Thumbtack</span>;
   }
-  if (leadSource === "thumbtack-sms") {
-    return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-orange-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/OURACpjGSWaxXnXw.png" alt="Thumbtack" className="h-4 w-auto" /></span>;
-  }
-  // campaign:tomorrow_slots, campaign:reactivation, campaign:quote_followup, etc.
   if (leadSource.startsWith("campaign:")) {
     const campaignId = leadSource.replace("campaign:", "");
-    // Convert snake_case to Title Case for display
     const label = campaignId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-700">📣 Campaign: {label}</span>;
+    return <span className={`${SOURCE_PILL} bg-indigo-100 text-indigo-700`}>Campaign: {label}</span>;
   }
-  // command-center (legacy, before campaign-specific tagging)
   if (leadSource === "command-center") {
-    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-700">📣 Campaign</span>;
+    return <span className={`${SOURCE_PILL} bg-indigo-100 text-indigo-700`}>Campaign</span>;
   }
-  // always-on:new-one-time, always-on:lapsed-one-time, always-on:lapsed-recurring, always-on:dormant
   if (leadSource.startsWith("always-on:")) {
     const groupType = leadSource.replace("always-on:", "");
     const label = formatGroupType(groupType);
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-700">Always-On: {label}</span>;
+    return <span className={`${SOURCE_PILL} bg-orange-100 text-orange-700`}>Always-On: {label}</span>;
   }
-  // always-on-test:new-one-time, etc.
   if (leadSource.startsWith("always-on-test:")) {
     const groupType = leadSource.replace("always-on-test:", "");
     const label = formatGroupType(groupType);
-    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-yellow-100 text-yellow-700">Test: {label}</span>;
+    return <span className={`${SOURCE_PILL} bg-yellow-100 text-yellow-700`}>Test: {label}</span>;
   }
-  // Fallback for any unknown source
-  return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-600">{leadSource}</span>;
+  return <span className={`${SOURCE_PILL} bg-gray-100 text-gray-600`}>{leadSource}</span>;
+}
+
+const SERVICE_PILL = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700";
+
+function getServiceBadge(serviceType: string | null): React.ReactElement {
+  const s = (serviceType ?? "").toLowerCase();
+  if (s.includes("deep")) return <span className={SERVICE_PILL}>✨ Deep</span>;
+  if (s.includes("move")) return <span className={SERVICE_PILL}>📦 Move-out</span>;
+  if (s.includes("post") || s.includes("construct")) return <span className={SERVICE_PILL}>🏗️ Post-Con</span>;
+  if (s.includes("office") || s.includes("commercial")) return <span className={SERVICE_PILL}>🏢 Office</span>;
+  if (s.includes("airbnb") || s.includes("vacation") || s.includes("rental")) return <span className={SERVICE_PILL}>🏨 Rental</span>;
+  if (s.includes("standard") || s.includes("regular") || s.includes("recurring")) return <span className={SERVICE_PILL}>🏠 Standard</span>;
+  if (s) return <span className={SERVICE_PILL}>🧹 {serviceType}</span>;
+  return <span className="text-zinc-300 text-sm">—</span>;
 }
 
 /** Converts a groupType slug to a readable label */
@@ -4197,8 +4204,8 @@ export default function AdminDashboard() {
                                           {getSourceBadge(session.leadSource ?? null)}
                                         </div>
                                         {/* Service */}
-                                        <div className="flex items-center min-w-0 pr-4 text-sm text-zinc-700">
-                                          <span className="truncate">{session.serviceType ?? "—"}</span>
+                                        <div className="flex items-center min-w-0 pr-4">
+                                          {getServiceBadge(session.serviceType ?? null)}
                                         </div>
                                         {/* Quote */}
                                         <div className="flex items-center min-w-0 text-[22px] font-semibold tracking-[-0.04em]">
