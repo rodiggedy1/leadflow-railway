@@ -248,16 +248,29 @@ export async function handleBarkLead(body: BarkZapierPayload): Promise<void> {
 
   console.log(`[BarkWebhook] New lead: name=${name}, phone=${phone}, barkId=${barkId}`);
 
-  // ── Validate required fields ───────────────────────────────────────────────
+  // ── Validate / fallback phone ────────────────────────────────────────────
+  // NEVER drop a lead due to missing phone — use a placeholder so the session
+  // is always created and the CS team can follow up manually.
+  let normalizedPhone: string;
   if (!phone) {
-    console.error("[BarkWebhook] No phone number in payload — dropping lead");
-    return;
-  }
-
-  const normalizedPhone = normalizePhone(phone);
-  if (!normalizedPhone) {
-    console.error(`[BarkWebhook] Could not normalize phone: ${phone}`);
-    return;
+    normalizedPhone = `no-phone-bark-${Date.now()}`;
+    console.warn(`[BarkWebhook] No phone in payload — using placeholder: ${normalizedPhone}`);
+    notifyOwner({
+      title: "⚠️ Bark Lead — No Phone Number",
+      content: `Lead: ${name}\nBark ID: ${barkId}\nNo phone number in payload. Session created with placeholder. Follow up manually.`,
+    }).catch(() => {});
+  } else {
+    const np = normalizePhone(phone);
+    if (!np) {
+      normalizedPhone = `no-phone-bark-${Date.now()}`;
+      console.warn(`[BarkWebhook] Could not normalize phone "${phone}" — using placeholder: ${normalizedPhone}`);
+      notifyOwner({
+        title: "⚠️ Bark Lead — Unnormalizable Phone",
+        content: `Lead: ${name}\nRaw phone: ${phone}\nBark ID: ${barkId}\nSession created with placeholder. Follow up manually.`,
+      }).catch(() => {});
+    } else {
+      normalizedPhone = np;
+    }
   }
 
   const firstName = name.split(" ")[0] ?? name;

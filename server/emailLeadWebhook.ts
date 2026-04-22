@@ -1053,15 +1053,27 @@ export async function handleFormSubmissionEmail(
   const parsed = parseEmailLeadBody(body);
   console.log(`[EmailLead] Parsed: phone=${parsed.phone}, email=${parsed.email}, bedrooms=${parsed.bedrooms}, bathrooms=${parsed.bathrooms}, serviceType=${parsed.serviceType}, frequency=${parsed.frequency}`);
 
+  // NEVER drop a form lead due to missing phone — use placeholder and alert
+  let normalizedPhone: string;
   if (!parsed.phone) {
-    console.error("[EmailLead] No phone number found in form submission email — dropping lead");
-    return;
-  }
-
-  const normalizedPhone = normalizePhone(parsed.phone);
-  if (!normalizedPhone) {
-    console.error(`[EmailLead] Could not normalize phone: ${parsed.phone}`);
-    return;
+    normalizedPhone = `no-phone-form-${Date.now()}`;
+    console.warn(`[EmailLead] No phone in form email — using placeholder: ${normalizedPhone}`);
+    notifyOwner({
+      title: "⚠️ Form Lead — No Phone Number",
+      content: `From: ${fromAddress}\nNo phone number found in form submission. Session created with placeholder. Check the form email manually.`,
+    }).catch(() => {});
+  } else {
+    const np = normalizePhone(parsed.phone);
+    if (!np) {
+      normalizedPhone = `no-phone-form-${Date.now()}`;
+      console.warn(`[EmailLead] Could not normalize phone "${parsed.phone}" — using placeholder`);
+      notifyOwner({
+        title: "⚠️ Form Lead — Unnormalizable Phone",
+        content: `From: ${fromAddress}\nRaw phone: ${parsed.phone}\nSession created with placeholder. Check the form email manually.`,
+      }).catch(() => {});
+    } else {
+      normalizedPhone = np;
+    }
   }
 
   const bedrooms = parsed.bedrooms ?? "3 Bedrooms";
@@ -1212,15 +1224,27 @@ export async function handleCallNotificationEmail(
   const { phone: rawPhone, callTime } = parseCallNotificationBody(body);
   console.log(`[EmailLead] Call notification: phone=${rawPhone}, callTime=${callTime}`);
 
+  // NEVER drop a call lead due to missing phone — use placeholder and alert
+  let normalizedPhone: string;
   if (!rawPhone) {
-    console.error("[EmailLead] No phone number found in call notification — dropping");
-    return;
-  }
-
-  const normalizedPhone = normalizePhone(rawPhone);
-  if (!normalizedPhone) {
-    console.error(`[EmailLead] Could not normalize call phone: ${rawPhone}`);
-    return;
+    normalizedPhone = `no-phone-call-${Date.now()}`;
+    console.warn(`[EmailLead] No phone in call notification — using placeholder: ${normalizedPhone}`);
+    notifyOwner({
+      title: "⚠️ Call Lead — No Phone Number",
+      content: `From: ${fromAddress}\nNo phone number found in call notification. Session created with placeholder. Check the email manually.`,
+    }).catch(() => {});
+  } else {
+    const np = normalizePhone(rawPhone);
+    if (!np) {
+      normalizedPhone = `no-phone-call-${Date.now()}`;
+      console.warn(`[EmailLead] Could not normalize call phone "${rawPhone}" — using placeholder`);
+      notifyOwner({
+        title: "⚠️ Call Lead — Unnormalizable Phone",
+        content: `From: ${fromAddress}\nRaw phone: ${rawPhone}\nSession created with placeholder. Check the email manually.`,
+      }).catch(() => {});
+    } else {
+      normalizedPhone = np;
+    }
   }
 
   // Check if we already have an active session for this number — avoid duplicates

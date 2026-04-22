@@ -268,16 +268,29 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
 
   console.log(`[ThumbTackWebhook] New lead: name=${name}, phone=${phone}, leadId=${leadId}`);
 
-  // ── Validate required fields ───────────────────────────────────────────────
+  // ── Validate / fallback phone ────────────────────────────────────────────
+  // NEVER drop a lead due to missing phone — use a placeholder so the session
+  // is always created and the CS team can follow up manually.
+  let normalizedPhone: string;
   if (!phone) {
-    console.error("[ThumbTackWebhook] No phone number in payload — dropping lead");
-    return;
-  }
-
-  const normalizedPhone = normalizePhone(phone);
-  if (!normalizedPhone) {
-    console.error(`[ThumbTackWebhook] Could not normalize phone: ${phone}`);
-    return;
+    normalizedPhone = `no-phone-thumbtack-${Date.now()}`;
+    console.warn(`[ThumbTackWebhook] No phone in payload — using placeholder: ${normalizedPhone}`);
+    notifyOwner({
+      title: "⚠️ Thumbtack Lead — No Phone Number",
+      content: `Lead: ${name}\nLead ID: ${leadId}\nNo phone number in payload. Session created with placeholder. Follow up manually on Thumbtack.`,
+    }).catch(() => {});
+  } else {
+    const np = normalizePhone(phone);
+    if (!np) {
+      normalizedPhone = `no-phone-thumbtack-${Date.now()}`;
+      console.warn(`[ThumbTackWebhook] Could not normalize phone "${phone}" — using placeholder: ${normalizedPhone}`);
+      notifyOwner({
+        title: "⚠️ Thumbtack Lead — Unnormalizable Phone",
+        content: `Lead: ${name}\nRaw phone: ${phone}\nLead ID: ${leadId}\nSession created with placeholder. Follow up manually on Thumbtack.`,
+      }).catch(() => {});
+    } else {
+      normalizedPhone = np;
+    }
   }
 
   const firstName = name.split(" ")[0] ?? name;

@@ -1213,3 +1213,7 @@
 - [x] Merge thumbtack-sms into thumbtack in Performance page queries and frontend
 - [x] Rename voice to AI Voice in Performance page labels
 - [x] CRITICAL: Thumbtack direct leads go to hot leads but not conversation_sessions — root cause: messageHistory NOT NULL constraint, initialHistory was null when no phone number in email body. Fixed in emailLeadWebhook.ts and thumbtackWebhook.ts
+- [x] CRITICAL: Audit ALL webhook handlers — no lead ever dropped silently (bark, thumbtack, email-lead, voice, form)
+- [x] Fix: missing phone must use placeholder, not drop the lead
+- [x] Fix: messageHistory must never be null in any handler
+- [x] Fix: any session insert failure must notifyOwner immediately
