@@ -844,7 +844,7 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "email") {
     return <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-50"><img src="https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/ASBjJWwGAuMfSmQV.png" alt="Google Ads" className="h-4 w-auto" /></span>;
   }
-  if (leadSource === "voice") {
+  if (leadSource === "voice" || leadSource === "phone") {
     return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-zinc-100 text-zinc-700"><Phone className="h-3 w-3" />Inbound</span>;
   }
   if (leadSource === "reactivation") {
