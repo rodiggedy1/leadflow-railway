@@ -1212,3 +1212,4 @@
 - [x] Default Performance page date filter to All time
 - [x] Merge thumbtack-sms into thumbtack in Performance page queries and frontend
 - [x] Rename voice to AI Voice in Performance page labels
+- [x] CRITICAL: Thumbtack direct leads go to hot leads but not conversation_sessions — root cause: messageHistory NOT NULL constraint, initialHistory was null when no phone number in email body. Fixed in emailLeadWebhook.ts and thumbtackWebhook.ts

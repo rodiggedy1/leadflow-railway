@@ -345,7 +345,7 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
   const initialHistory = JSON.stringify([
     { role: "assistant", content: introSms, ts: now },
     { role: "assistant", content: schedulingSms, ts: now + 1 },
-  ]);
+  ]) ?? "[]"; // never null — messageHistory is NOT NULL
 
   // Store the Thumbtack description summary in barkQA column (shared field for lead Q&A)
   const leadQASummary = [

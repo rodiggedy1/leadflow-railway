@@ -924,7 +924,7 @@ export async function handleThumbtackEmail(
     parsed.description ? `Notes: ${parsed.description}` : null,
   ].filter(Boolean).join(" | ");
 
-  let initialHistory: string | null = null;
+  let initialHistory: string = "[]"; // default to empty array — messageHistory is NOT NULL
 
   if (normalizedPhone) {
     const introSms = await buildEmailLeadIntroSms(
