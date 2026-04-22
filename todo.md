@@ -1196,3 +1196,4 @@
 - [x] Update Settings UI Flow C template labels and DB values to reflect 4-step sequence (sms3=date, sms4=quote link, remove sms5)
 - [x] Gap 4: Insert quoteLeads row for widget leads when FLOWC_QUOTE_SENT fires (webhooks.ts createQuoteLink block)
 - [x] Gap 5: Call logActivity for widget leads in processWidgetLeadInBackground (routers.ts)
+- [x] Add Bark SMS lead source: intercept inbound SMS from +16506469270, parse service/name, create conversationSessions row (leadSource=bark-sms, placeholder phone), post Command Chat card

@@ -352,6 +352,108 @@ export function registerWebhookRoutes(app: Express) {
         return; // Do not process as a regular inbound SMS
       }
 
+      // ── Bark SMS lead alert ──────────────────────────────────────────────────
+      // Bark sends lead alerts from +16506469270.
+      // Format: "House Cleaning\nYvonne" (service on line 1, name on line 2)
+      const BARK_ALERT_NUMBER = "+16506469270";
+      if (fromPhone === BARK_ALERT_NUMBER) {
+        console.log(`[Webhook] Bark SMS lead detected: "${inboundText}"`);
+        const dbBark = await getDb();
+        if (dbBark) {
+          // Parse: service type on line 1, name on line 2
+          const lines = inboundText.trim().split(/\n/).map(l => l.trim()).filter(Boolean);
+          const barkService = lines[0] ?? "House Cleaning";
+          const barkName    = lines[1] ?? "Bark Lead";
+
+          // Duplicate detection: same name + service within 24 hours
+          const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+          const barkCutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
+          const barkDupes = await dbBark
+            .select({ id: conversationSessions.id })
+            .from(conversationSessions)
+            .where(
+              and(
+                eq(conversationSessions.leadName, barkName),
+                eq(conversationSessions.serviceType, barkService),
+                eq(conversationSessions.leadSource, "bark-sms"),
+                gte(conversationSessions.createdAt, barkCutoff)
+              )
+            )
+            .limit(1);
+          if (barkDupes.length > 0) {
+            console.log(`[Webhook] Bark SMS duplicate detected — skipping, existing sessionId=${barkDupes[0].id}`);
+            return;
+          }
+
+          const barkPlaceholderPhone = `bark-sms-${Date.now()}`;
+          const barkNow = Date.now();
+          const barkHistory = JSON.stringify([
+            { role: "system", content: `Bark SMS lead: ${inboundText}`, ts: barkNow },
+          ]);
+          let barkSessionId: number | null = null;
+          try {
+            const [barkIns] = await dbBark.insert(conversationSessions).values({
+              leadPhone: barkPlaceholderPhone,
+              leadName: barkName,
+              stage: "QUOTE_SENT" as any,
+              serviceType: barkService,
+              messageHistory: barkHistory,
+              leadSource: "bark-sms",
+              aiMode: 0, // no AI — no real customer phone yet
+            } as any);
+            barkSessionId = (barkIns as any).insertId ?? null;
+            console.log(`[Webhook] Bark SMS lead created — sessionId=${barkSessionId}, name=${barkName}, service=${barkService}`);
+          } catch (err) {
+            console.error("[Webhook] Failed to create Bark SMS session:", err);
+          }
+
+          // Post new_lead card to Command Chat
+          const barkCardBody = [
+            `🐶 **Bark Lead** · ${barkName}`,
+            `🏠 **${barkService}**`,
+            `⚠️ No phone yet — add customer number in lead to start SMS`,
+          ].join("\n");
+          const barkCardMeta = JSON.stringify({
+            leadName: barkName,
+            leadPhone: null,
+            serviceType: barkService,
+            utmSource: "bark-sms",
+            sessionId: barkSessionId,
+            arrivedAt: barkNow,
+          });
+          try {
+            await dbBark.insert(opsChatMessages).values({
+              cleanerJobId: null,
+              channel: "command",
+              authorName: "🐶 Bark Lead",
+              authorRole: "system",
+              body: barkCardBody,
+              mediaUrl: null,
+              quickAction: "new_lead",
+              metadata: barkCardMeta,
+            });
+          } catch (err) {
+            console.error("[Webhook] Failed to post Bark SMS card:", err);
+          }
+
+          logActivity({
+            eventType: "new_lead",
+            title: `New Bark lead: ${barkName}`,
+            body: barkService,
+            meta: { leadName: barkName, serviceType: barkService, source: "bark-sms", sessionId: barkSessionId },
+          }).catch(() => {});
+
+          void sendPushToAll({
+            title: `🐶 New Bark Lead`,
+            body: `${barkName} · ${barkService}`,
+            tag: `new-lead-bark-${barkSessionId}`,
+            url: "/ops-chat",
+            playSound: true,
+          });
+        }
+        return; // Do not process as a regular inbound SMS
+      }
+
       const db = await getDb();
       if (!db) {
         console.error("[Webhook] No DB connection available");
