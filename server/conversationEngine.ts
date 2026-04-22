@@ -535,13 +535,42 @@ async function handleReactivationReply(
     };
   }
 
-  // YES / positive intent — use the yes_reply template then REACTIVATION_TIME
-  if (/^\s*(yes|yeah|yep|sure|ok|okay|sounds good|let's do it|book|i'm in|im in|absolutely|definitely|great|perfect|yes please)\s*[!.]*\s*$/i.test(lower)) {
-    const yesReply = await getTemplate("reactivation_yes_reply", { "[Name]": firstName });
-    return {
-      reply: yesReply,
-      nextStage: "REACTIVATION_TIME",
-    };
+  // YES / positive intent — LLM determines if lead is confirming/expressing interest
+  try {
+    const intentResp = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are determining if a customer SMS reply to a reactivation offer expresses positive intent (yes, interested, wants to book, agrees) or something else (question, objection, off-topic, unclear).
+Respond ONLY with JSON: { "intent": "confirm" | "other" }`,
+        },
+        { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "reactivation_intent",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: { intent: { type: "string" } },
+            required: ["intent"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const intentParsed = JSON.parse(intentResp.choices[0].message.content as string);
+    if (intentParsed.intent === "confirm") {
+      const yesReply = await getTemplate("reactivation_yes_reply", { "[Name]": firstName });
+      return { reply: yesReply, nextStage: "REACTIVATION_TIME" };
+    }
+  } catch {
+    // LLM failed — fall back to broad regex
+    if (/\b(yes|yeah|yep|sure|ok|okay|sounds good|let.?s do it|book|i.?m in|absolutely|definitely|great|perfect)/i.test(lower)) {
+      const yesReply = await getTemplate("reactivation_yes_reply", { "[Name]": firstName });
+      return { reply: yesReply, nextStage: "REACTIVATION_TIME" };
+    }
   }
 
   // Off-script reply — LLM answers in brand voice, then steers back to time-ask
@@ -605,11 +634,43 @@ async function handleReactivationTimeReply(
     return { reply, nextStage: "DONE" };
   }
 
-  // Time window detected — any mention of a day, time, or scheduling preference
-  const hasTimeWindow = /(monday|tuesday|wednesday|thursday|friday|saturday|morning|afternoon|evening|weekend|weekday|anytime|flexible|any day|any time|\d{1,2}(am|pm)|next week|this week|tomorrow)/i.test(lower);
-  if (hasTimeWindow) {
-    const closingReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
-    return { reply: closingReply, nextStage: "DONE" };
+  // Time window detection — LLM determines if lead gave a scheduling preference
+  try {
+    const timeIntentResp = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are determining if a customer SMS reply mentions any scheduling preference, availability, day, time, or time window (e.g. "mornings work", "I'm free Tuesday", "anytime next week", "weekends are best").
+Respond ONLY with JSON: { "intent": "time_given" | "other" }`,
+        },
+        { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "reactivation_time_intent",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: { intent: { type: "string" } },
+            required: ["intent"],
+            additionalProperties: false,
+          },
+        },
+      },
+    });
+    const timeParsed = JSON.parse(timeIntentResp.choices[0].message.content as string);
+    if (timeParsed.intent === "time_given") {
+      const closingReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
+      return { reply: closingReply, nextStage: "DONE" };
+    }
+  } catch {
+    // LLM failed — fall back to keyword regex
+    const hasTimeWindow = /(monday|tuesday|wednesday|thursday|friday|saturday|morning|afternoon|evening|weekend|weekday|anytime|flexible|any day|any time|\d{1,2}(am|pm)|next week|this week|tomorrow)/i.test(lower);
+    if (hasTimeWindow) {
+      const closingReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
+      return { reply: closingReply, nextStage: "DONE" };
+    }
   }
 
   // Off-script reply — LLM answers in brand voice, then steers back to time-ask
@@ -1133,8 +1194,38 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
 
   // FLOWC_QUOTE_SENT: Quote link already sent — handle any follow-up reply ("looks good", questions, etc.)
   if (stage === "FLOWC_QUOTE_SENT") {
-    const lower = leadReply.toLowerCase();
-    const wantsToBook = /\b(looks good|book|yes|yeah|let'?s do it|confirm|ready|lock it in|perfect|great|awesome|sounds good)\b/.test(lower);
+    // LLM determines if lead wants to proceed / confirm booking
+    let wantsToBook = false;
+    try {
+      const bookIntentResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are determining if a customer SMS reply to a quote link expresses intent to proceed/book (e.g. "looks good", "let's do it", "I'd like to go ahead", "that works", "confirm", "book me in") or something else (a question, concern, objection, or off-topic).
+Respond ONLY with JSON: { "intent": "wants_to_book" | "other" }`,
+          },
+          { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "flowc_quote_intent",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: { intent: { type: "string" } },
+              required: ["intent"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const bookParsed = JSON.parse(bookIntentResp.choices[0].message.content as string);
+      wantsToBook = bookParsed.intent === "wants_to_book";
+    } catch {
+      // LLM failed — fall back to broad regex
+      wantsToBook = /\b(looks good|book|yes|yeah|let.?s do it|confirm|ready|lock it in|perfect|great|awesome|sounds good|i.?d like|let.?s go|go ahead|proceed)/i.test(leadReply);
+    }
     if (wantsToBook) {
       return {
         reply: `Amazing! 🎉 To lock it in, what's the address for the service?`,
@@ -1167,30 +1258,68 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
       };
     }
 
-    // Flow B (Jade): check if lead already mentioned a day — if so, skip straight to SMS 2 (price reveal)
-    const replyLowerQS = leadReply.toLowerCase();
-    const ALL_DAY_NAMES_QS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-    const mentionedDayQS = ALL_DAY_NAMES_QS.find(d => replyLowerQS.includes(d));
-
-    // Also check for "today", "tomorrow", "this week", "next week" as day-like signals
-    const hasDaySignal = mentionedDayQS ||
-      /\b(today|tomorrow|this week|next week|asap|as soon as possible|soonest|earliest)\b/.test(replyLowerQS);
-
-    if (hasDaySignal) {
-      // Resolve the day label
-      const dynamicSlotsQS = getNextAvailableSlots(2);
-      let dayLabel: string;
+    // Flow B (Jade): LLM determines if lead mentioned a day/time preference in their reply
+    // If so, skip straight to SMS 2 (price reveal); otherwise re-ask what day works
+    const dynamicSlotsQS = getNextAvailableSlots(2);
+    let quoteSentDayLabel: string | null = null;
+    try {
+      const dayIntentResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are determining if a customer SMS reply mentions a specific day, time, or scheduling preference (e.g. "Thursday works", "I'm free this week", "ASAP", "tomorrow", "any day", "mornings").
+If they mention a day, extract the day name or time signal.
+Respond ONLY with JSON: { "intent": "day_given" | "other", "daySignal": string | null }
+daySignal examples: "thursday", "friday", "today", "tomorrow", "this week", "asap"`,
+          },
+          { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "quote_sent_day_intent",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                intent: { type: "string" },
+                daySignal: { type: ["string", "null"] },
+              },
+              required: ["intent", "daySignal"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const dayParsed = JSON.parse(dayIntentResp.choices[0].message.content as string);
+      if (dayParsed.intent === "day_given" && dayParsed.daySignal) {
+        const sig = (dayParsed.daySignal as string).toLowerCase();
+        const matchedSlot = dynamicSlotsQS.find(s => s.shortLabel.toLowerCase() === sig);
+        if (matchedSlot) {
+          quoteSentDayLabel = matchedSlot.label;
+        } else if (sig === "today") {
+          quoteSentDayLabel = "Today";
+        } else if (sig === "tomorrow") {
+          quoteSentDayLabel = dynamicSlotsQS[0]?.label ?? "Tomorrow";
+        } else {
+          // asap / this week / next week / general
+          quoteSentDayLabel = dynamicSlotsQS[0]?.label ?? "this week";
+        }
+      }
+    } catch {
+      // LLM failed — fall back to day-name string scan
+      const replyLowerQS = leadReply.toLowerCase();
+      const ALL_DAY_NAMES_QS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const mentionedDayQS = ALL_DAY_NAMES_QS.find(d => replyLowerQS.includes(d));
       if (mentionedDayQS) {
         const matchedSlot = dynamicSlotsQS.find(s => s.shortLabel.toLowerCase() === mentionedDayQS);
-        dayLabel = matchedSlot?.label ?? (mentionedDayQS.charAt(0).toUpperCase() + mentionedDayQS.slice(1));
-      } else if (/\btoday\b/.test(replyLowerQS)) {
-        dayLabel = "Today";
-      } else if (/\btomorrow\b/.test(replyLowerQS)) {
-        dayLabel = dynamicSlotsQS[0]?.label ?? "Tomorrow";
-      } else {
-        // "this week", "asap", "next week" — offer the first available slot
-        dayLabel = dynamicSlotsQS[0]?.label ?? "this week";
+        quoteSentDayLabel = matchedSlot?.label ?? (mentionedDayQS.charAt(0).toUpperCase() + mentionedDayQS.slice(1));
+      } else if (/\b(today|tomorrow|this week|next week|asap|as soon as possible|soonest|earliest)\b/.test(replyLowerQS)) {
+        quoteSentDayLabel = dynamicSlotsQS[0]?.label ?? "this week";
       }
+    }
+
+    if (quoteSentDayLabel) {
       const firstName = context.leadName.split(" ")[0] ?? context.leadName;
       return {
         reply: await buildJadePriceReveal({
@@ -1199,14 +1328,14 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
           bathrooms: context.bathrooms,
           price: context.quotedPrice,
           extras: context.extras,
-          day: dayLabel,
+          day: quoteSentDayLabel,
         }),
         nextStage: "SLOT_CHOICE",
-        extractedData: { selectedSlot: dayLabel },
+        extractedData: { selectedSlot: quoteSentDayLabel },
       };
     }
 
-    // No day mentioned — re-ask what day works (stay in AVAILABILITY so next reply triggers day detection)
+    // No day mentioned — re-ask what day works
     return {
       reply: `What day were you thinking? We have openings most days this week. 📅`,
       nextStage: "AVAILABILITY",
@@ -1225,9 +1354,38 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
       leadReply,
       extrasContext,
     });
-    // If they're now ready to book, let them back into the flow
-    const lower = leadReply.toLowerCase();
-    const readyNow = /\b(ready|book|schedule|let'?s do it|when can|available|yes|yeah|sure|ok|okay)\b/.test(lower);
+    // LLM determines if lead is now ready to book
+    let readyNow = false;
+    try {
+      const readyIntentResp = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are determining if a customer SMS reply indicates they are now ready to book/schedule a cleaning (e.g. "I'm ready now", "let's do it", "when can you come?", "I'd like to book", "yes let's schedule").
+Respond ONLY with JSON: { "intent": "ready_now" | "other" }`,
+          },
+          { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "future_booking_intent",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: { intent: { type: "string" } },
+              required: ["intent"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const readyParsed = JSON.parse(readyIntentResp.choices[0].message.content as string);
+      readyNow = readyParsed.intent === "ready_now";
+    } catch {
+      // LLM failed — fall back to broad regex
+      readyNow = /\b(ready|book|schedule|let.?s do it|when can|available|yes|yeah|sure|ok|okay)\b/i.test(leadReply);
+    }
     if (readyNow) {
       return {
         reply: await buildAvailabilityMessage(context.extras),
@@ -1297,27 +1455,58 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
         };
       }
 
-      // Step 1b: Check for future-date intent BEFORE the LLM — catches "early May", "next month", etc.
-      // This runs after the day-name check but before the LLM to avoid misclassifying as "unclear"
-      const futureDatePatterns = [
-        /\b(next month|next year|in a few weeks|in a few months|in \d+ weeks|in \d+ months)\b/i,
-        /\b(early|mid|late)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
-        /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
-        /\b(not until|won't need|won't be ready|not ready|not for a while|a while from now|after the holidays|when i move|after i move|when we move|after we move)\b/i,
-        /\b(summer|fall|winter|spring|next season|after summer|after winter)\b/i,
-        /\b(in a month|in two months|in three months|in a couple months|in a couple of months)\b/i,
-      ];
-      const isFutureDate = futureDatePatterns.some(p => p.test(leadReply));
-      if (isFutureDate) {
-        const objectionResult = await handleObjection("future_booking", {
-          leadName: context.leadName,
-          quotedPrice: context.quotedPrice,
-          serviceType: context.serviceType,
+      // Step 1b: LLM check for future-date intent — catches "early May", "next month", "thinking spring", etc.
+      try {
+        const futureDateResp = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are determining if a customer SMS reply indicates they want a cleaning in the distant future (not this week or next week) — e.g. "next month", "early May", "after we move", "sometime in the spring", "not for a few months".
+Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
+            },
+            { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "availability_future_intent",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: { intent: { type: "string" } },
+                required: ["intent"],
+                additionalProperties: false,
+              },
+            },
+          },
         });
-        return {
-          reply: objectionResult.reply,
-          nextStage: "FUTURE_BOOKING",
-        };
+        const futureParsed = JSON.parse(futureDateResp.choices[0].message.content as string);
+        if (futureParsed.intent === "future_date") {
+          const objectionResult = await handleObjection("future_booking", {
+            leadName: context.leadName,
+            quotedPrice: context.quotedPrice,
+            serviceType: context.serviceType,
+          });
+          return { reply: objectionResult.reply, nextStage: "FUTURE_BOOKING" };
+        }
+      } catch {
+        // LLM failed — fall back to pattern list
+        const futureDatePatterns = [
+          /\b(next month|next year|in a few weeks|in a few months|in \d+ weeks|in \d+ months)\b/i,
+          /\b(early|mid|late)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+          /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+          /\b(not until|won't need|won't be ready|not ready|not for a while|a while from now|after the holidays|when i move|after i move|when we move|after we move)\b/i,
+          /\b(summer|fall|winter|spring|next season|after summer|after winter)\b/i,
+          /\b(in a month|in two months|in three months|in a couple months|in a couple of months)\b/i,
+        ];
+        if (futureDatePatterns.some(p => p.test(leadReply))) {
+          const objectionResult = await handleObjection("future_booking", {
+            leadName: context.leadName,
+            quotedPrice: context.quotedPrice,
+            serviceType: context.serviceType,
+          });
+          return { reply: objectionResult.reply, nextStage: "FUTURE_BOOKING" };
+        }
       }
 
       // Step 2: Use LLM for intent — with strict instructions to only return "no" on hard opt-out
@@ -1376,15 +1565,10 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
     case "SLOT_CHOICE": {
       const parsed = await parseLeadReply(stage, leadReply, context);
 
-      // Detect 9am / 1pm pick (or morning/afternoon equivalent)
-      const replyLowerSlot = leadReply.toLowerCase();
-      const picked9am = /\b(9|9am|9\s*am|morning|first|early)\b/.test(replyLowerSlot);
-      const picked1pm = /\b(1|1pm|1\s*pm|afternoon|second|later)\b/.test(replyLowerSlot);
-
       const chosenDay = context.selectedSlot ?? "your chosen day";
 
-      if (picked9am || picked1pm || parsed.intent === "slot1" || parsed.intent === "slot2") {
-        const timeLabel = (picked9am || parsed.intent === "slot1") ? "9am" : "1pm";
+      if (parsed.intent === "slot1" || parsed.intent === "slot2") {
+        const timeLabel = parsed.intent === "slot1" ? "9am" : "1pm";
         const slotWithTime = `${chosenDay} at ${timeLabel}`;
         // If address already on file (reactivation/always-on), skip address step
         if (context.address && context.address.length >= 5) {
@@ -1578,10 +1762,10 @@ Respond ONLY with JSON: { "intent": "date_provided" | "no_date" | "question" | "
         };
       }
 
-      // Looks like notes/special instructions (not a call preference) — acknowledge and re-ask call question
-      // This handles replies like "no pets", "gate code is 1234", "just let yourselves in", etc.
-      const looksLikeNotes = parsed.intent !== "now" && parsed.intent !== "few_minutes" &&
-        !/\b(call|phone|ring|now|minute|soon|later|yes|yeah|sure|ok|okay)\b/i.test(leadReply);
+      // Notes/special instructions (not a call preference) — acknowledge and re-ask call question
+      // Relies entirely on parseLeadReply intent; no regex guard needed
+      // Handles replies like "no pets", "gate code is 1234", "just let yourselves in", etc.
+      const looksLikeNotes = parsed.intent !== "now" && parsed.intent !== "few_minutes" && parsed.intent !== "no";
 
       if (looksLikeNotes) {
         // Check if this is a wrong-path reply (existing customer, support request, wrong number)

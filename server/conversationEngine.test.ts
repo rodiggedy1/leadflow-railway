@@ -168,22 +168,25 @@ describe("processLeadReply — State Machine", () => {
 
   // ── QUOTE_SENT: Flow B (Jade) — re-ask for day if no day mentioned ──
   it("QUOTE_SENT (Flow B): no day mentioned → re-asks for day, stays in AVAILABILITY", async () => {
+    // LLM call: day intent detection returns "other" (no day mentioned)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "other", daySignal: null }) }, index: 0, finish_reason: "stop" }],
+    } as any);
     const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "B" });
     const result = await processLeadReply("ok thanks", ctx);
-
     expect(result.nextStage).toBe("AVAILABILITY");
     expect(result.reply).toContain("day");
-    expect(mockLLM).not.toHaveBeenCalled();
   });
-
   it("QUOTE_SENT (Flow B): day mentioned → advances to SLOT_CHOICE with price reveal", async () => {
+    // LLM call: day intent detection returns "day_given" with "friday"
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "day_given", daySignal: "friday" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
     const ctx = makeContext({ stage: "QUOTE_SENT", smsFlow: "B" });
     const result = await processLeadReply("Friday works for me", ctx);
-
     expect(result.nextStage).toBe("SLOT_CHOICE");
     // Price reveal should be in the reply
     expect(result.reply).toContain("$130");
-    expect(mockLLM).not.toHaveBeenCalled();
   });
 
   // Stage: AVAILABILITY → day mentioned → SLOT_CHOICE (Jade SMS 2: price reveal + 9am/1pm offer)
@@ -207,7 +210,11 @@ describe("processLeadReply — State Machine", () => {
   it("AVAILABILITY: explicit hard opt-out ends conversation", async () => {
     // Call 1: detectObjection returns "on_track" (no objection)
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns intent "no" with high confidence (hard opt-out like "not interested")
+    // Call 2: future-date LLM check returns "other" (not a future date)
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "other" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: parseLeadReply returns intent "no" with high confidence (hard opt-out like "not interested")
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "no", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "high" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -222,7 +229,11 @@ describe("processLeadReply — State Machine", () => {
   it("AVAILABILITY: soft no or unclear reply re-engages instead of ending", async () => {
     // Call 1: detectObjection returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply returns intent "unclear" ("no thanks" alone is not a hard opt-out)
+    // Call 2: future-date LLM check returns "other"
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "other" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: parseLeadReply returns intent "unclear" ("no thanks" alone is not a hard opt-out)
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -812,7 +823,11 @@ describe("Stage Guard Rule — no stage advances without a valid answer", () => 
   it("AVAILABILITY: FAQ reply stays at AVAILABILITY (guard prevents advance)", async () => {
     // Call 1: detectObjection — returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply — returns unclear (FAQ, not a day selection)
+    // Call 2: future-date LLM check — returns "other"
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "other" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: parseLeadReply — returns unclear (FAQ, not a day selection)
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
     } as any);
@@ -882,7 +897,11 @@ describe("Wrong-path routing — existing customer / support request exits funne
   it("AVAILABILITY: wrong number exits to DONE without re-asking for slot", async () => {
     // Call 1: detectObjection — returns "on_track"
     mockLLM.mockResolvedValueOnce({ choices: [{ message: { content: "on_track" }, index: 0, finish_reason: "stop" }] } as any);
-    // Call 2: parseLeadReply — returns unclear (not a day selection)
+    // Call 2: future-date LLM check — returns "other"
+    mockLLM.mockResolvedValueOnce({
+      choices: [{ message: { content: JSON.stringify({ intent: "other" }) }, index: 0, finish_reason: "stop" }],
+    } as any);
+    // Call 3: parseLeadReply — returns unclear (not a day selection)
     mockLLM.mockResolvedValueOnce({
       choices: [{ message: { content: JSON.stringify({ intent: "unclear", extractedSlot: null, extractedAddress: null, extractedCallPreference: null, confidence: "low" }) }, index: 0, finish_reason: "stop" }],
     } as any);
