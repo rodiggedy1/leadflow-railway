@@ -44,6 +44,7 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
   PieChart,
   Pie,
   Cell,
@@ -293,17 +294,53 @@ export default function Performance() {
             <CardContent>
               {view === "source" ? (
                 <div className="space-y-4">
-                  <div className="h-[310px] rounded-[24px] bg-[#fafaf8] p-3 ring-1 ring-slate-100">
+                  <div className="h-[340px] rounded-[24px] bg-[#fafaf8] p-3 ring-1 ring-slate-100">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={bySource}>
+                      <BarChart
+                        data={bySource.map(r => ({ ...r, source: label(r.source) }))}
+                        barCategoryGap="30%"
+                        barGap={0}
+                      >
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                        <XAxis dataKey="source" tickLine={false} axisLine={false} />
-                        <YAxis tickLine={false} axisLine={false} />
-                        <Tooltip
-                          cursor={{ fill: "rgba(15,23,42,0.04)" }}
-                          contentStyle={{ borderRadius: 16, border: "1px solid #e5e7eb" }}
+                        <XAxis
+                          dataKey="source"
+                          tickLine={false}
+                          axisLine={false}
+                          tick={{ fontSize: 11, fill: "#94a3b8" }}
                         />
-                        <Bar dataKey="bookings" radius={[10, 10, 0, 0]} fill="#86efac" name="Bookings" />
+                        <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8" }} />
+                        <Tooltip
+                          cursor={{ fill: "rgba(15,23,42,0.03)" }}
+                          contentStyle={{ borderRadius: 16, border: "1px solid #e5e7eb", fontSize: 13 }}
+                          formatter={(value: number, name: string) => [
+                            value,
+                            name === "leads" ? "Leads" : "Bookings",
+                          ]}
+                        />
+                        <Legend
+                          iconType="circle"
+                          iconSize={8}
+                          wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+                          formatter={(v) => v === "leads" ? "Leads" : "Bookings"}
+                        />
+                        {/* Backdrop bar — total leads, muted slate */}
+                        <Bar
+                          dataKey="leads"
+                          name="leads"
+                          barSize={28}
+                          radius={[6, 6, 0, 0]}
+                          fill="#e2e8f0"
+                          isAnimationActive={false}
+                        />
+                        {/* Foreground bar — bookings, saturated green, narrower */}
+                        <Bar
+                          dataKey="bookings"
+                          name="bookings"
+                          barSize={16}
+                          radius={[4, 4, 0, 0]}
+                          fill="#4ade80"
+                          isAnimationActive={false}
+                        />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>

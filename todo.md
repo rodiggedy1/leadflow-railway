@@ -1205,3 +1205,4 @@
 - [x] Hide AI Center nav item, add Performance in its place
 - [x] Register /performance route in App.tsx
 - [x] Update Performance page sourceColors and source filter to cover all real DB lead sources
+- [x] Replace single-color bar chart with overlapping bars (leads muted backdrop + bookings saturated foreground)
