@@ -672,18 +672,55 @@ export function registerWebhookRoutes(app: Express) {
       if (session.stage === "REVIEW_REBOOKING_REQUESTED" || session.stage === "REVIEW_REBOOKING_DONE") {
         const firstName = (session.leadName ?? "there").split(" ")[0] ?? "there";
         const lc = inboundText.trim().toLowerCase();
-        const isYes = /\b(yes|yeah|yep|sure|ok|okay|sounds good|please|definitely|absolutely|let's do it|lets do it|yes please|i'd like that|id like that)\b/i.test(lc);
-        const isNo = /\b(no|nope|not now|maybe later|not interested|no thanks|no thank you|nah|pass)\b/i.test(lc);
+        // LLM-based intent detection — catches natural phrasing regex misses
+        // yes → CONFIRMATION, no → UNHANDLED, other → UNHANDLED
+        let rebookingIntent: "yes" | "no" | "other" = "other";
+        try {
+          const rebookIntentResp = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: `You are determining if a customer SMS reply is a "yes" (wants to rebook / interested), "no" (not interested / declining), or "other" (unclear / question / off-topic).
+Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
+              },
+              { role: "user", content: `Customer reply: "${inboundText.trim()}"` },
+            ],
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "rebooking_intent",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: { intent: { type: "string" } },
+                  required: ["intent"],
+                  additionalProperties: false,
+                },
+              },
+            },
+          });
+          const rebookParsed = JSON.parse(rebookIntentResp.choices[0].message.content as string);
+          if (rebookParsed.intent === "yes" || rebookParsed.intent === "no") {
+            rebookingIntent = rebookParsed.intent;
+          }
+        } catch {
+          // LLM failed — fall back to broad regex
+          if (/\b(yes|yeah|yep|sure|ok|okay|sounds good|please|definitely|absolutely|let's do it|lets do it|yes please|i'd like that|id like that)\b/i.test(lc)) {
+            rebookingIntent = "yes";
+          } else if (/\b(no|nope|not now|maybe later|not interested|no thanks|no thank you|nah|pass)\b/i.test(lc)) {
+            rebookingIntent = "no";
+          }
+        }
         let replyMsg: string;
         // ALL replies surface in the pipeline so agents can see and act on them.
-        // isYes  → CONFIRMATION ("New Leads" column — ready to book)
-        // isNo   → UNHANDLED   ("Follow Up" column — agent can decide)
-        // other  → UNHANDLED   ("Follow Up" column — agent can decide)
+        // yes   → CONFIRMATION ("New Leads" column — ready to book)
+        // no    → UNHANDLED   ("Follow Up" column — agent can decide)
+        // other → UNHANDLED   ("Follow Up" column — agent can decide)
         let newStage: ConversationStage;
-        if (isYes) {
+        if (rebookingIntent === "yes") {
           replyMsg = `Amazing, ${firstName}! 🎉 I'll have someone reach out shortly to lock in your spot. Talk soon!`;
           newStage = "CONFIRMATION";
-        } else if (isNo) {
+        } else if (rebookingIntent === "no") {
           replyMsg = `No worries at all, ${firstName}! If you ever need us again, just text back. 😊`;
           newStage = "UNHANDLED";
         } else {
@@ -701,7 +738,7 @@ export function registerWebhookRoutes(app: Express) {
         if (!replyResult.success) {
           console.error(`[Webhook] Failed to send rebooking reply to ${fromPhone}:`, replyResult.error);
         }
-        console.log(`[Webhook] Review rebooking reply: ${session.stage} → ${newStage}. isYes=${isYes}, isNo=${isNo}`);
+        console.log(`[Webhook] Review rebooking reply: ${session.stage} → ${newStage}. intent=${rebookingIntent}`);
         return;
       }
 
