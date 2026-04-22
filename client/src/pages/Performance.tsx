@@ -184,7 +184,15 @@ export default function Performance() {
       .sort((a: { amount: number }, b: { amount: number }) => b.amount - a.amount);
   }, [statsData]);
 
-  const pieData = bySource.map((row: { source: string; bookings: number }) => ({ name: row.source, value: row.bookings || 0 }));
+  const totalBookings = bySource.reduce((s: number, r: { bookings: number }) => s + r.bookings, 0);
+  const pieData = bySource
+    .filter((row: { bookings: number }) => row.bookings > 0)
+    .map((row: { source: string; bookings: number }) => ({
+      name: row.source,          // raw key for color lookup
+      label: label(row.source),  // human-readable for display
+      value: row.bookings,
+      pct: totalBookings > 0 ? Math.round((row.bookings / totalBookings) * 100) : 0,
+    }));
 
   const isLoading = statsLoading || leadsLoading;
 
@@ -437,16 +445,32 @@ export default function Performance() {
                       <Pie
                         data={pieData}
                         dataKey="value"
-                        nameKey="name"
+                        nameKey="label"
                         innerRadius={62}
                         outerRadius={92}
                         paddingAngle={4}
+                        label={({ cx, cy, midAngle, innerRadius, outerRadius, pct }: { cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; pct: number }) => {
+                          if (pct < 5) return null;
+                          const RADIAN = Math.PI / 180;
+                          const r = innerRadius + (outerRadius - innerRadius) * 0.5;
+                          const x = cx + r * Math.cos(-midAngle * RADIAN);
+                          const y = cy + r * Math.sin(-midAngle * RADIAN);
+                          return (
+                            <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={600}>
+                              {`${pct}%`}
+                            </text>
+                          );
+                        }}
+                        labelLine={false}
                       >
-                        {pieData.map((entry: { name: string; value: number }) => (
+                        {pieData.map((entry: { name: string; label: string; value: number; pct: number }) => (
                           <Cell key={entry.name} fill={sourceColors[entry.name] || "#cbd5e1"} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={{ borderRadius: 16, border: "1px solid #e5e7eb" }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 16, border: "1px solid #e5e7eb" }}
+                        formatter={(value: number, _name: string, props: { payload?: { pct?: number } }) => [`${value} bookings (${props.payload?.pct ?? 0}%)`, ""]}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -464,7 +488,10 @@ export default function Performance() {
                         />
                         <span className="font-medium">{label(row.source)}</span>
                       </div>
-                      <div className="text-sm text-slate-500">{row.bookings} bookings</div>
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <span>{row.bookings} bookings</span>
+                        <span className="font-semibold text-slate-700">{totalBookings > 0 ? Math.round((row.bookings / totalBookings) * 100) : 0}%</span>
+                      </div>
                     </div>
                   ))}
                 </div>
