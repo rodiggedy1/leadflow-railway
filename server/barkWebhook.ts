@@ -345,6 +345,10 @@ export async function handleBarkLead(body: BarkZapierPayload): Promise<void> {
     console.log(`[BarkWebhook] Session created for ${normalizedPhone}`);
   } catch (dbErr) {
     console.error("[BarkWebhook] Failed to create session:", dbErr);
+    notifyOwner({
+      title: "⚠️ Bark Lead Lost — Session Creation Failed",
+      content: `Lead: ${name}\nPhone: ${normalizedPhone}\nError: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}\n\nThis Bark lead was NOT saved to the Leads list.`,
+    }).catch(() => {});
   }
 
   // ── Step 8: Log activity ───────────────────────────────────────────────────

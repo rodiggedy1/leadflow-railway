@@ -405,6 +405,10 @@ export function registerWebhookRoutes(app: Express) {
             console.log(`[Webhook] Bark SMS lead created — sessionId=${barkSessionId}, name=${barkName}, service=${barkService}`);
           } catch (err) {
             console.error("[Webhook] Failed to create Bark SMS session:", err);
+            notifyOwner({
+              title: "⚠️ Bark SMS Lead Lost — Session Creation Failed",
+              content: `Lead: ${barkName}\nService: ${barkService}\nError: ${err instanceof Error ? err.message : String(err)}\n\nThis Bark lead appeared in Command Chat but was NOT saved to the Leads list.`,
+            }).catch(() => {});
           }
 
           // Post new_lead card to Command Chat

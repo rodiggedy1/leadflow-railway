@@ -699,6 +699,10 @@ export async function handleYelpInquiryEmail(
     console.log(`[YelpLead] Created placeholder session with phone=${placeholderPhone}`);
   } catch (err) {
     console.error("[YelpLead] Failed to create placeholder session:", err);
+    notifyOwner({
+      title: "⚠️ Yelp Lead Lost — Session Creation Failed",
+      content: `Lead: ${displayName}\nError: ${err instanceof Error ? err.message : String(err)}\n\nThis lead appeared in Command Chat but was NOT saved to the Leads list.`,
+    }).catch(() => {});
   }
 }
 
@@ -968,6 +972,10 @@ export async function handleThumbtackEmail(
     console.log(`[Thumbtack] Session created — phone=${sessionPhone}`);
   } catch (dbErr) {
     console.error("[Thumbtack] Failed to create session:", dbErr);
+    notifyOwner({
+      title: "⚠️ Thumbtack Lead Lost — Session Creation Failed",
+      content: `Lead: ${displayName}\nPhone: ${sessionPhone}\nError: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}\n\nThis lead appeared in Command Chat but was NOT saved to the Leads list.`,
+    }).catch(() => {});
   }
 
   // Build Command Chat card
@@ -1131,6 +1139,10 @@ export async function handleFormSubmissionEmail(
     console.log(`[EmailLead] Session created for ${normalizedPhone}`);
   } catch (dbErr) {
     console.error("[EmailLead] Failed to create session:", dbErr);
+    notifyOwner({
+      title: "⚠️ Form Lead Lost — Session Creation Failed",
+      content: `Lead: ${displayName}\nPhone: ${normalizedPhone}\nError: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}\n\nThis lead submitted the form but was NOT saved to the Leads list.`,
+    }).catch(() => {});
   }
 
   logActivity({
@@ -1274,6 +1286,10 @@ export async function handleCallNotificationEmail(
     console.log(`[EmailLead] Voice lead session created for ${normalizedPhone}`);
   } catch (dbErr: any) {
     console.error("[EmailLead] Failed to create voice lead session:", dbErr?.message ?? dbErr);
+    notifyOwner({
+      title: "⚠️ Inbound Call Lead Lost — Session Creation Failed",
+      content: `Phone: ${normalizedPhone}\nError: ${dbErr?.message ?? String(dbErr)}\n\nThis caller was NOT saved to the Leads list.`,
+    }).catch(() => {});
   }
 
   logActivity({

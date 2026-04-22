@@ -3418,12 +3418,7 @@ export default function AdminDashboard() {
   const [leadsView, setLeadsView] = useState<"split" | "board">("split");
   const [leadsCollapsed, setLeadsCollapsed] = useState(false);
   const [selectedLeadPanel, setSelectedLeadPanel] = useState<typeof sessions[0] | null>(null);
-  // Auto-select first lead when filtered list loads
-  useEffect(() => {
-    if (filtered.length > 0 && !selectedLeadPanel) {
-      setSelectedLeadPanel(filtered[0]);
-    }
-  }, [filtered]);
+  // No auto-select — table starts full-width with nothing selected
   // ── Auth guards (after ALL hooks)) ─────────────────────────────────────────────────────
   if (!authChecked) {
     return (
@@ -4127,7 +4122,7 @@ export default function AdminDashboard() {
                         )}
                       </div>
                     ) : (
-                      <div className={`grid min-h-[760px] ${leadsCollapsed ? "grid-cols-1" : "grid-cols-1 xl:grid-cols-[1.2fr_360px]"}`}>
+                      <div className="relative min-h-[760px]">
                         {/* Lead list */}
                         {!leadsCollapsed && (
                           <div className="border-r border-black/5">
@@ -4257,17 +4252,29 @@ export default function AdminDashboard() {
                             )}
                           </div>
                         )}
-                        {/* Right detail panel */}
-                        <AnimatePresence mode="wait">
-                          {selectedLeadPanel ? (
-                            <motion.div
-                              key={selectedLeadPanel.id}
-                              initial={{ opacity: 0, x: 20 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: 20 }}
-                              transition={{ duration: 0.18 }}
-                              className="overflow-y-auto bg-[radial-gradient(circle_at_top,_rgba(200,255,111,0.16),_transparent_34%)] p-6 space-y-5"
-                            >
+                        {/* Right detail panel — fixed overlay drawer */}
+                        <AnimatePresence>
+                          {selectedLeadPanel && (
+                            <>
+                              {/* Backdrop */}
+                              <motion.div
+                                key="backdrop"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.15 }}
+                                className="fixed inset-0 z-40 bg-black/20"
+                                onClick={() => setSelectedLeadPanel(null)}
+                              />
+                              {/* Drawer */}
+                              <motion.div
+                                key={selectedLeadPanel.id}
+                                initial={{ opacity: 0, x: 400 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: 400 }}
+                                transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                                className="fixed inset-y-0 right-0 z-50 w-[400px] overflow-y-auto bg-white shadow-2xl p-6 space-y-5"
+                              >
                               {/* Header + actions card */}
                               <div className="rounded-[28px] border border-black/5 bg-white p-6 shadow-sm">
                               <div className="flex items-start justify-between gap-4">
@@ -4471,19 +4478,7 @@ export default function AdminDashboard() {
                                 <ExternalLink className="h-4 w-4" /> Open full conversation
                               </button>
                             </motion.div>
-                          ) : (
-                            <motion.div
-                              key="empty"
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              className="flex flex-col items-center justify-center p-12 text-center bg-[radial-gradient(circle_at_top,_rgba(200,255,111,0.10),_transparent_50%)]"
-                            >
-                              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-zinc-100 mb-4">
-                                <Users className="h-8 w-8 text-zinc-400" />
-                              </div>
-                              <div className="text-lg font-semibold text-zinc-700">Select a lead</div>
-                              <p className="mt-2 text-sm text-zinc-400 max-w-[200px]">Click any row to see the lead detail panel here.</p>
-                            </motion.div>
+                            </>
                           )}
                         </AnimatePresence>
                       </div>
