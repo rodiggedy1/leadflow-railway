@@ -57,12 +57,11 @@ const sourceColors: Record<string, string> = {
   "form":                    "#6ee7b7", // emerald
   "widget":                  "#93c5fd", // blue
   "bark-sms":                "#64748b", // slate
-  "thumbtack-sms":           "#fdba74", // orange
-  "thumbtack":               "#fb923c", // orange-dark
+  "thumbtack":               "#fb923c", // orange
   "cs_initiated":            "#c4b5fd", // violet
   "phone":                   "#86efac", // green
   "yelp":                    "#fca5a5", // red
-  "voice":                   "#fcd34d", // amber
+  "voice":                   "#fcd34d", // amber (AI Voice)
   "call":                    "#f9a8d4", // pink
   "campaign:tomorrow_slots": "#818cf8", // indigo
   "other":                   "#cbd5e1", // slate-light
@@ -73,12 +72,11 @@ const sourceLabels: Record<string, string> = {
   "form":                    "Form",
   "widget":                  "Widget",
   "bark-sms":                "Bark SMS",
-  "thumbtack-sms":           "Thumbtack SMS",
   "thumbtack":               "Thumbtack",
   "cs_initiated":            "CS Initiated",
   "phone":                   "Phone",
   "yelp":                    "Yelp",
-  "voice":                   "Voice",
+  "voice":                   "AI Voice",
   "call":                    "Call",
   "campaign:tomorrow_slots": "Campaign",
   "other":                   "Other",

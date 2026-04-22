@@ -1210,3 +1210,5 @@
 - [x] Exclude internal sources (cs_initiated, cs-inbound-cleaner, cs-inbound, hiring_interview) from Performance page stats and leads queries
 - [x] Also exclude email, review_rebooking, review from Performance page
 - [x] Default Performance page date filter to All time
+- [x] Merge thumbtack-sms into thumbtack in Performance page queries and frontend
+- [x] Rename voice to AI Voice in Performance page labels

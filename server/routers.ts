@@ -4936,13 +4936,21 @@ Your job: fill in the following message template using the booking details provi
           .groupBy(conversationSessions.leadSource)
           .orderBy(sql`COUNT(*) DESC`);
 
-        return rows.map((r: { leadSource: string | null; totalLeads: number; bookings: number; bookedRevenue: number; totalQuoted: number }) => ({
-          source: r.leadSource ?? 'other',
-          leads: Number(r.totalLeads),
-          bookings: Number(r.bookings),
-          bookedRevenue: Number(r.bookedRevenue),
-          totalQuoted: Number(r.totalQuoted),
-        }));
+        // Normalize: merge thumbtack-sms into thumbtack
+        const normalized = new Map<string, { source: string; leads: number; bookings: number; bookedRevenue: number; totalQuoted: number }>();
+        for (const r of rows) {
+          const src = (r.leadSource === 'thumbtack-sms' ? 'thumbtack' : r.leadSource) ?? 'other';
+          const existing = normalized.get(src);
+          if (existing) {
+            existing.leads += Number(r.totalLeads);
+            existing.bookings += Number(r.bookings);
+            existing.bookedRevenue += Number(r.bookedRevenue);
+            existing.totalQuoted += Number(r.totalQuoted);
+          } else {
+            normalized.set(src, { source: src, leads: Number(r.totalLeads), bookings: Number(r.bookings), bookedRevenue: Number(r.bookedRevenue), totalQuoted: Number(r.totalQuoted) });
+          }
+        }
+        return Array.from(normalized.values());
       }),
 
     /** Individual lead rows for the lead log view. days=0 = all-time. */
@@ -4983,7 +4991,7 @@ Your job: fill in the following message template using the booking details provi
 
         return rows.map((r: { id: number; leadSource: string | null; leadName: string | null; createdAt: Date | null; bookedAmount: number | null; bookedAt: Date | null; stage: string }) => ({
           id: r.id,
-          source: r.leadSource ?? 'other',
+          source: (r.leadSource === 'thumbtack-sms' ? 'thumbtack' : r.leadSource) ?? 'other',
           lead: r.leadName ?? 'Unknown',
           date: r.createdAt ? r.createdAt.toISOString().split('T')[0] : '',
           amount: r.bookedAmount ?? 0,
