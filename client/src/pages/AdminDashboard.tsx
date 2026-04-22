@@ -4207,7 +4207,9 @@ export default function AdminDashboard() {
                                         </div>
                                         {/* Quote */}
                                         <div className="flex items-center min-w-0 text-[22px] font-semibold tracking-[-0.04em]">
-                                          {total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
+                                          {session.bookedAmount != null && session.bookedAmount > 0
+                                            ? `$${session.bookedAmount}`
+                                            : total ? `$${total}` : session.reactivationLastPrice ? <span className="text-violet-700">${session.reactivationLastPrice}</span> : <span className="text-zinc-300 text-base">—</span>}
                                         </div>
                                         {/* Stage */}
                                         <div className="flex items-center min-w-0">
