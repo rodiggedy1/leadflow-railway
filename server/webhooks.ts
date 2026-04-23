@@ -143,8 +143,14 @@ export function registerWebhookRoutes(app: Express) {
       if (!configuredNumberId) {
         console.warn("[Webhook] OPENPHONE_PHONE_NUMBER_ID is not set — processing messages from ALL numbers. Set this env var to filter by number.");
       } else if (msg.phoneNumberId && msg.phoneNumberId !== configuredNumberId) {
-        console.log(`[Webhook] Skipping: phoneNumberId ${msg.phoneNumberId} does not match configured ${configuredNumberId}`);
-        return;
+        // Exception: allow messages arriving on the Bark number (PNO7yagqfm / +19497634135)
+        // so they reach the Bark SMS handler below.
+        const barkNumberId = ENV.openPhoneBarkNumberId;
+        if (!barkNumberId || msg.phoneNumberId !== barkNumberId) {
+          console.log(`[Webhook] Skipping: phoneNumberId ${msg.phoneNumberId} does not match configured ${configuredNumberId}`);
+          return;
+        }
+        console.log(`[Webhook] Bark number (${msg.phoneNumberId}) — allowing through to Bark handler`);
       }
 
       const rawPhone: string = msg.from;

@@ -10,6 +10,7 @@ export const ENV = {
   openPhoneApiKey: process.env.OPENPHONE_API_KEY ?? "",
   openPhoneNumberId: process.env.OPENPHONE_PHONE_NUMBER_ID ?? "",
   openPhoneCsNumberId: process.env.OPENPHONE_CS_PHONE_NUMBER_ID ?? "",
+  openPhoneBarkNumberId: process.env.OPENPHONE_BARK_PHONE_NUMBER_ID ?? "",
   openPhoneFromNumber: process.env.OPENPHONE_FROM_NUMBER ?? "",
   launch27BearerToken: process.env.LAUNCH27_BEARER_TOKEN ?? "",
   launch27Subdomain: process.env.LAUNCH27_TENANT ?? process.env.LAUNCH27_SUBDOMAIN ?? "maidsinblack",
