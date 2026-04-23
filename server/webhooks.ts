@@ -366,23 +366,25 @@ export function registerWebhookRoutes(app: Express) {
         console.log(`[Webhook] Bark SMS lead detected: "${inboundText}"`);
         const dbBark = await getDb();
         if (dbBark) {
-          // Parse: service type on line 1, name on line 2
+          // Parse best-effort — always create a lead regardless of format.
+          // Store the raw text so nothing is lost. Name/service are cosmetic.
           const lines = inboundText.trim().split(/\n/).map(l => l.trim()).filter(Boolean);
-          const barkService = lines[0] ?? "House Cleaning";
-          const barkName    = lines[1] ?? "Bark Lead";
+          const barkService = lines[0] || "Bark Lead";
+          const barkName    = lines[1] || "Bark Lead";
 
-          // Duplicate detection: same name + service within 24 hours
-          const DEDUP_WINDOW_MS = 24 * 60 * 60 * 1000;
+          // Duplicate detection: same raw message text within 10 minutes
+          // (guards against OpenPhone at-least-once retries only — not across different leads)
+          const DEDUP_WINDOW_MS = 10 * 60 * 1000;
           const barkCutoff = new Date(Date.now() - DEDUP_WINDOW_MS);
+          const rawTextMarker = `Bark SMS lead: ${inboundText}`;
           const barkDupes = await dbBark
             .select({ id: conversationSessions.id })
             .from(conversationSessions)
             .where(
               and(
-                eq(conversationSessions.leadName, barkName),
-                eq(conversationSessions.serviceType, barkService),
                 eq(conversationSessions.leadSource, "bark-sms"),
-                gte(conversationSessions.createdAt, barkCutoff)
+                gte(conversationSessions.createdAt, barkCutoff),
+                sql`JSON_CONTAINS(message_history, ${JSON.stringify([{ content: rawTextMarker }])}, '$')`
               )
             )
             .limit(1);
