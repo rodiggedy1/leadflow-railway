@@ -1217,3 +1217,5 @@
 - [x] Fix: missing phone must use placeholder, not drop the lead
 - [x] Fix: messageHistory must never be null in any handler
 - [x] Fix: any session insert failure must notifyOwner immediately
+- [x] CRITICAL: Fix cleaner sessions showing in CS Chat Clients column — set csQueue=Teams permanently in webhooks.ts and opsChatRouter.ts
+- [x] Backfill existing cleaner sessions with csQueue=Teams (14 rows updated)

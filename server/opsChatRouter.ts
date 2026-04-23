@@ -2401,9 +2401,11 @@ export const opsChatRouter = router({
       if (existing.length > 0) {
         sessionId = existing[0].id;
         // Always ensure the session surfaces in the CS inbox and has the right name
+        // If the session is already tagged as a cleaner (Teams), never overwrite csQueue
+        const existingIsTeams = existing[0].csQueue === "Teams" || existing[0].leadSource === "cs-inbound-cleaner";
         const updates: Record<string, unknown> = {
-          csQueue: existing[0].csQueue ?? "Needs attention",
-          leadSource: "cs_initiated",
+          csQueue: existingIsTeams ? "Teams" : (existing[0].csQueue ?? "Needs attention"),
+          leadSource: existingIsTeams ? "cs-inbound-cleaner" : "cs_initiated",
         };
         if (resolvedName && (existing[0].leadName === e164 || !existing[0].leadName)) {
           updates.leadName = resolvedName;

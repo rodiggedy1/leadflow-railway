@@ -1771,6 +1771,11 @@ async function handleCsInboundMessage(msg: any) {
       updatePayload.leadSource = "cs-inbound-cleaner";
       console.log(`[CS] Upgraded session ${existingSession.id} leadSource from ${existingSession.leadSource} → cs-inbound-cleaner (cleaner texted in)`);
     }
+    // Always lock cleaner sessions to Teams queue — regardless of previous csQueue value
+    if (isCleaner && (existingSession as any).csQueue !== "Teams") {
+      updatePayload.csQueue = "Teams";
+      console.log(`[CS] Locked session ${existingSession.id} csQueue → Teams (cleaner identified)`);
+    }
     // Auto-unresolve: if this session was resolved, a new inbound message reopens it
     if ((existingSession as any).csResolvedAt) {
       updatePayload.csResolvedAt = null;
