@@ -262,7 +262,8 @@ export type AdminTab =
   | "review-tracker"
   | "hiring"
   | "team-pay"
-  | "performance";
+  | "performance"
+  | "metrics";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -286,11 +287,13 @@ interface NavEntry {
 const NAV_ENTRIES: NavEntry[] = [
   // { id: "command-center", label: "AI Center", icon: <BrainCircuit className="w-3.5 h-3.5" />, href: "/admin/command-center", tabId: "command-center" }, // hidden
   {
-    id: "performance",
+    id: "performance-group",
     label: "Performance",
     icon: <BarChart3 className="w-3.5 h-3.5" />,
-    href: "/admin/performance",
-    tabId: "performance",
+    children: [
+      { id: "performance", label: "Dashboard", href: "/admin/performance", icon: <BarChart3 className="w-3.5 h-3.5" /> },
+      { id: "metrics",     label: "Metrics",   href: "/admin/metrics",     icon: <BarChart3 className="w-3.5 h-3.5" /> },
+    ],
   },
   {
     id: "leads",
