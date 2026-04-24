@@ -241,9 +241,9 @@ function MetricsContent() {
                     <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} />
                     <Tooltip formatter={(value: number, name: string) => name === "revenue" ? money(value) : value} />
                     <Legend />
-                    <Area yAxisId="left" type="monotone" dataKey="revenue" fillOpacity={0.14} strokeWidth={3} />
-                    <Bar yAxisId="right" dataKey="leads" radius={[8, 8, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="booked" strokeWidth={3} dot={false} />
+                  <Bar yAxisId="left" dataKey="revenue" radius={[8, 8, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="leads" strokeWidth={3} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="booked" strokeWidth={3} dot={false} stroke="#f97316" />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
