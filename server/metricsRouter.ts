@@ -44,7 +44,8 @@ function dateRangeDates(range: string): { start: Date; end: Date } {
 }
 
 function toYYYYMM(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  // Use UTC to match how dates are stored in the DB
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 function monthLabel(yyyymm: string): string {
