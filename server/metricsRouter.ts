@@ -357,17 +357,19 @@ export const metricsRouter = router({
       const totalBooked = leadRows.filter((r) => r.isBooked).length;
       const convRate = totalLeads > 0 ? Math.round((totalBooked / totalLeads) * 100) : 0;
 
-      const prompt = `You are a business analyst for a home cleaning company. Based on the following metrics, generate exactly 3 concise growth alerts or insights. Each should be actionable and specific. Return JSON array with objects: { title, description, type } where type is one of: "warning" | "positive" | "insight".
+      const prompt = `You are a business analyst for a home cleaning company. Generate exactly 3 growth alerts. Return JSON with objects: { title, summary, detail, type } where:
+- title: short headline (5-7 words)
+- summary: one sentence takeaway
+- detail: 2-3 sentences with specific numbers, context, and a concrete action to take
+- type: "warning" | "positive" | "insight"
 
 Metrics (${input.range} range):
 - Total leads: ${totalLeads}
-- Total booked: ${totalBooked}  
+- Total booked: ${totalBooked}
 - Overall conversion rate: ${convRate}%
 
 Lead source breakdown:
-${sourceSummary}
-
-Return only the JSON array, no other text.`;
+${sourceSummary}`;
 
       try {
         const response = await invokeLLM({
@@ -389,10 +391,11 @@ Return only the JSON array, no other text.`;
                       type: "object",
                       properties: {
                         title: { type: "string" },
-                        description: { type: "string" },
+                        summary: { type: "string" },
+                        detail: { type: "string" },
                         type: { type: "string", enum: ["warning", "positive", "insight"] },
                       },
-                      required: ["title", "description", "type"],
+                      required: ["title", "summary", "detail", "type"],
                       additionalProperties: false,
                     },
                   },

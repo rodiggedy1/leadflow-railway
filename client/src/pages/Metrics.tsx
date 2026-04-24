@@ -105,6 +105,73 @@ function ChartCard({ title, subtitle, children, action }: {
   );
 }
 
+
+type AiAlert = { type: string; title: string; summary: string; detail: string };
+
+function AiAlertsCard({ alerts, loading }: { alerts: AiAlert[]; loading: boolean }) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+
+  const iconName = (type: string) =>
+    type === "warning" ? "down" : type === "positive" ? "trend" : "sparkles";
+  const colorClass = (type: string) =>
+    type === "warning"
+      ? "bg-orange-100 text-orange-600"
+      : type === "positive"
+      ? "bg-emerald-100 text-emerald-600"
+      : "bg-blue-100 text-blue-600";
+
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-5">
+        <h3 className="font-semibold text-slate-950">AI growth alerts</h3>
+        <p className="mt-1 text-sm text-slate-500">What changed and what to fix first.</p>
+      </div>
+      {loading ? (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+          ))}
+        </div>
+      ) : alerts.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-400">No alerts available.</p>
+      ) : (
+        <div className="space-y-2">
+          {alerts.map((alert, i) => (
+            <div key={i} className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50">
+              <button
+                onClick={() => setExpanded(expanded === i ? null : i)}
+                className="flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-slate-100"
+              >
+                <div
+                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colorClass(alert.type)}`}
+                >
+                  <Icon name={iconName(alert.type)} size={15} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-slate-950">{alert.title}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">{alert.summary}</p>
+                </div>
+                <div
+                  className={`mt-1 shrink-0 text-slate-400 transition-transform duration-200 ${
+                    expanded === i ? "rotate-180" : ""
+                  }`}
+                >
+                  <Icon name="down" size={14} />
+                </div>
+              </button>
+              {expanded === i && (
+                <div className="border-t border-slate-100 px-4 pb-4 pt-3">
+                  <p className="text-sm leading-relaxed text-slate-600">{alert.detail}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const PIE_COLORS = ["#0f172a", "#334155", "#64748b", "#94a3b8"];
 
 function MetricsContent() {
@@ -373,37 +440,7 @@ function MetricsContent() {
           </div>
 
           {/* AI Growth Alerts */}
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="mb-5">
-              <h3 className="font-semibold text-slate-950">AI growth alerts</h3>
-              <p className="mt-1 text-sm text-slate-500">What changed and what to fix first.</p>
-            </div>
-            {alertsLoading ? (
-              <div className="space-y-4">
-                {[1,2,3].map(i => <div key={i} className="h-16 animate-pulse rounded-2xl bg-slate-100" />)}
-              </div>
-            ) : aiAlerts.length === 0 ? (
-              <p className="py-8 text-center text-sm text-slate-400">No alerts available.</p>
-            ) : (
-              <div className="space-y-3">
-                {aiAlerts.map((alert: { type: string; title: string; body: string }, i: number) => (
-                  <div key={i} className="flex gap-3 rounded-2xl bg-slate-50 p-4">
-                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
-                      alert.type === "warning" ? "bg-orange-100 text-orange-600" :
-                      alert.type === "positive" ? "bg-emerald-100 text-emerald-600" :
-                      "bg-blue-100 text-blue-600"
-                    }`}>
-                      <Icon name={alert.type === "warning" ? "down" : alert.type === "positive" ? "trend" : "sparkles"} size={15} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-950">{alert.title}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{alert.body}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <AiAlertsCard alerts={aiAlerts} loading={alertsLoading} />
         </section>
 
         {/* Job type pie + operational health */}
