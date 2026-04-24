@@ -1,6 +1,6 @@
 /**
  * AdminHeader — shared header for all admin sub-pages.
- * Renders the full "HeyJade" logo row + grouped nav tabs.
+ * Renders the full "Fast Leads" logo row + grouped nav tabs.
  *
  * Nav structure (7 entries, 3 with dropdowns):
  *   Leads | Pipeline | Voice ▾ | Staff ▾ | Campaigns ▾ | Happiness | Jobs
@@ -530,15 +530,24 @@ export default function AdminHeader({ activeTab, rightExtra, onSessionOpen, page
       {/* Logo row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
         <a href="/admin/command-center" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-          <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ backgroundColor: "#AAFF00" }}
-          >
-            <span className="text-black text-sm font-bold">J</span>
+          <div className="w-8 h-8 flex-shrink-0">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <rect width="28" height="28" rx="6" fill="black" />
+              <rect x="3" y="3" width="5" height="5" fill="white" />
+              <rect x="13" y="3" width="5" height="5" fill="white" />
+              <rect x="8" y="8" width="5" height="5" fill="white" />
+              <rect x="18" y="8" width="5" height="5" fill="white" />
+              <rect x="3" y="13" width="5" height="5" fill="white" />
+              <rect x="13" y="13" width="5" height="5" fill="white" />
+              <rect x="8" y="18" width="5" height="5" fill="white" />
+              <rect x="18" y="18" width="5" height="5" fill="white" />
+              <rect x="3" y="23" width="5" height="2" fill="white" />
+              <rect x="13" y="23" width="5" height="2" fill="white" />
+            </svg>
           </div>
           <div>
             <h1 className="font-bold text-gray-900 text-lg leading-tight" style={{ letterSpacing: "-0.02em" }}>
-              HeyJade
+              Fast Leads
             </h1>
             <p className="text-xs text-gray-500">Leads Dashboard</p>
           </div>
