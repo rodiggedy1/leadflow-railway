@@ -28,6 +28,7 @@ import { cleanerRouter } from "./cleanerRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
+import { metricsRouter } from "./metricsRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
 import { opsChatRouter } from "./opsChatRouter";
 import { followUpsRouter } from "./followUpsRouter";
@@ -4740,6 +4741,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
   tracker: trackerRouter,
   settings: settingsRouter,
   commandCenter: commandCenterRouter,
+  metrics: metricsRouter,
   fieldMgmt: fieldMgmtRouter,
   opsChat: opsChatRouter,
   followUps: followUpsRouter,
