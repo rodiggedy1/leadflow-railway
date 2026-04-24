@@ -182,11 +182,11 @@ function MetricsContent() {
 
   const { data, isLoading, refetch } = trpc.metrics.getOverview.useQuery(
     { range: apiRange },
-    { staleTime: 5 * 60 * 1000 }
+    { staleTime: 5 * 60 * 1000, refetchOnMount: "always" }
   );
   const { data: alertsData, isLoading: alertsLoading } = trpc.metrics.getAiAlerts.useQuery(
     { range: apiRange },
-    { staleTime: 60 * 60 * 1000 }
+    { staleTime: 60 * 60 * 1000, refetchOnMount: "always" }
   );
   const aiAlerts = alertsData?.alerts ?? [];
 

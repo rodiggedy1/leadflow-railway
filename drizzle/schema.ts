@@ -2045,3 +2045,16 @@ export const jobAlerts = mysqlTable("job_alerts", {
 }));
 export type JobAlert = typeof jobAlerts.$inferSelect;
 export type InsertJobAlert = typeof jobAlerts.$inferInsert;
+
+/**
+ * metrics_ai_alerts — pre-generated AI growth alerts for the Metrics page.
+ * A cron job regenerates these every hour so page load reads a DB row instead
+ * of blocking on an LLM call.
+ */
+export const metricsAiAlerts = mysqlTable("metrics_ai_alerts", {
+  id: int("id").autoincrement().primaryKey(),
+  range: varchar("range", { length: 10 }).notNull().default("12m"),
+  alertsJson: text("alertsJson").notNull(),
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+});
+export type MetricsAiAlert = typeof metricsAiAlerts.$inferSelect;

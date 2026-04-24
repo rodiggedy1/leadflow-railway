@@ -25,6 +25,7 @@ import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
 import { warmAiInsightsCache } from "./commandCenterRouter";
+import { warmMetricsAiAlerts } from "./metricsRouter";
 import {
   FIELD_MGMT_ENABLED,
   runPreJobReminders,
@@ -557,6 +558,21 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Metrics AI alerts pre-generation: every hour ────────────────────────────
+  // Pre-generates AI growth alerts for all 5 time ranges (today/7d/30d/90d/12m)
+  // and stores them in metrics_ai_alerts so the Metrics page serves from cache.
+  cron.schedule("0 0 * * * *", async () => {
+    try {
+      const result = await warmMetricsAiAlerts();
+      const summary = `generated: ${result.generated}, errors: ${result.errors}`;
+      console.log(`[InternalCron] MetricsAiAlerts — ${summary}`);
+      await recordHeartbeat("metrics-ai-alerts", summary, result.generated > 0);
+    } catch (err) {
+      console.error("[InternalCron] MetricsAiAlerts failed:", err);
+      await recordHeartbeat("metrics-ai-alerts", `error: ${err instanceof Error ? err.message : String(err)}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
@@ -567,4 +583,5 @@ export function startInternalCron(): void {
   console.log("  - TrackerLinkSend:    8 AM ET daily");
   console.log("  - AiCacheWarmUp:      every 30 minutes");
   console.log(`  - FieldMgmt:          every 5 min 6AM-10PM ET (ENABLED=${FIELD_MGMT_ENABLED})`);
+  console.log("  - MetricsAiAlerts:    every hour (all 5 ranges)");
 }

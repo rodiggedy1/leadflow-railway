@@ -10,7 +10,8 @@
 import { router, agentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { cleanerJobs, completedJobs, conversationSessions } from "../drizzle/schema";
+import { cleanerJobs, completedJobs, conversationSessions, metricsAiAlerts } from "../drizzle/schema";
+import { sql } from "drizzle-orm";
 import { and, eq, gte, lte, isNotNull, notInArray } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 
@@ -317,9 +318,24 @@ export const metricsRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      // ── Serve from DB cache if fresh (< 1 hour old) ──────────────────────
+      const cached = await db
+        .select()
+        .from(metricsAiAlerts)
+        .where(eq(metricsAiAlerts.range, input.range))
+        .orderBy(sql`generatedAt DESC`)
+        .limit(1);
+      if (cached.length > 0) {
+        const age = Date.now() - new Date(cached[0].generatedAt).getTime();
+        if (age < ONE_HOUR_MS) {
+          try {
+            return { alerts: JSON.parse(cached[0].alertsJson) };
+          } catch { /* fall through to regenerate */ }
+        }
+      }
+      // ── Generate fresh alerts via LLM ─────────────────────────────────────
       const { start, end } = dateRangeDates(input.range);
-
-      // Gather key metrics to feed the LLM
       const leadRows = await db
         .select({
           isBooked: conversationSessions.isBooked,
@@ -334,8 +350,6 @@ export const metricsRouter = router({
             notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
-
-      // Source breakdown
       const srcMap: Record<string, { leads: number; booked: number }> = {};
       for (const r of leadRows) {
         const src = r.leadSource ?? "unknown";
@@ -346,31 +360,20 @@ export const metricsRouter = router({
       const sourceSummary = Object.entries(srcMap)
         .map(([src, d]) => `${src}: ${d.leads} leads, ${d.booked} booked (${d.leads > 0 ? Math.round((d.booked / d.leads) * 100) : 0}% conv)`)
         .join("\n");
-
-      // Recurring growth
-      const [recurringData] = await db
-        .select({ frequency: completedJobs.frequency, phone: completedJobs.phone, jobDate: completedJobs.jobDate })
-        .from(completedJobs)
-        .where(and(gte(completedJobs.jobDate, start.toISOString().slice(0, 10)), lte(completedJobs.jobDate, end.toISOString().slice(0, 10)), isNotNull(completedJobs.frequency)));
-
       const totalLeads = leadRows.length;
       const totalBooked = leadRows.filter((r) => r.isBooked).length;
       const convRate = totalLeads > 0 ? Math.round((totalBooked / totalLeads) * 100) : 0;
-
       const prompt = `You are a business analyst for a home cleaning company. Generate exactly 3 growth alerts. Return JSON with objects: { title, summary, detail, type } where:
 - title: short headline (5-7 words)
 - summary: one sentence takeaway
 - detail: 2-3 sentences with specific numbers, context, and a concrete action to take
 - type: "warning" | "positive" | "insight"
-
 Metrics (${input.range} range):
 - Total leads: ${totalLeads}
 - Total booked: ${totalBooked}
 - Overall conversion rate: ${convRate}%
-
 Lead source breakdown:
 ${sourceSummary}`;
-
       try {
         const response = await invokeLLM({
           messages: [
@@ -407,11 +410,118 @@ ${sourceSummary}`;
           },
         });
         const rawContent = response.choices[0]?.message?.content;
-        const content = typeof rawContent === "string" ? rawContent : "{}";
-        const parsed = JSON.parse(content);
-        return { alerts: (parsed.alerts ?? []).slice(0, 3) };
+        const alertsJson = typeof rawContent === "string" ? rawContent : "{}";
+        const parsed = JSON.parse(alertsJson);
+        const alerts = (parsed.alerts ?? []).slice(0, 3);
+        // ── Persist to DB for next request ─────────────────────────────────
+        await db.insert(metricsAiAlerts).values({ range: input.range, alertsJson: JSON.stringify(alerts) });
+        return { alerts };
       } catch {
+        // Return stale cache rather than empty on LLM failure
+        if (cached.length > 0) {
+          try { return { alerts: JSON.parse(cached[0].alertsJson) }; } catch { /* ignore */ }
+        }
         return { alerts: [] };
       }
     }),
 });
+// ── Background pre-generation helper (called by internalCron) ─────────────────
+/**
+ * Pre-generates AI alerts for all time ranges and persists them to the DB.
+ * Called hourly by internalCron so the Metrics page always serves from cache.
+ */
+export async function warmMetricsAiAlerts(): Promise<{ generated: number; errors: number }> {
+  const RANGES = ["today", "7d", "30d", "90d", "12m"];
+  let generated = 0;
+  let errors = 0;
+  const db = await getDb();
+  if (!db) return { generated: 0, errors: RANGES.length };
+
+  for (const range of RANGES) {
+    try {
+      const { start, end } = dateRangeDates(range);
+      const leadRows = await db
+        .select({
+          isBooked: conversationSessions.isBooked,
+          leadSource: conversationSessions.leadSource,
+          createdAt: conversationSessions.createdAt,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, start),
+            lte(conversationSessions.createdAt, end),
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
+          )
+        );
+      const srcMap: Record<string, { leads: number; booked: number }> = {};
+      for (const r of leadRows) {
+        const src = r.leadSource ?? "unknown";
+        if (!srcMap[src]) srcMap[src] = { leads: 0, booked: 0 };
+        srcMap[src].leads++;
+        if (r.isBooked) srcMap[src].booked++;
+      }
+      const sourceSummary = Object.entries(srcMap)
+        .map(([src, d]) => `${src}: ${d.leads} leads, ${d.booked} booked (${d.leads > 0 ? Math.round((d.booked / d.leads) * 100) : 0}% conv)`)
+        .join("\n");
+      const totalLeads = leadRows.length;
+      const totalBooked = leadRows.filter((r) => r.isBooked).length;
+      const convRate = totalLeads > 0 ? Math.round((totalBooked / totalLeads) * 100) : 0;
+      const prompt = `You are a business analyst for a home cleaning company. Generate exactly 3 growth alerts. Return JSON with objects: { title, summary, detail, type } where:
+- title: short headline (5-7 words)
+- summary: one sentence takeaway
+- detail: 2-3 sentences with specific numbers, context, and a concrete action to take
+- type: "warning" | "positive" | "insight"
+Metrics (${range} range):
+- Total leads: ${totalLeads}
+- Total booked: ${totalBooked}
+- Overall conversion rate: ${convRate}%
+Lead source breakdown:
+${sourceSummary}`;
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are a business analyst. Return only valid JSON." },
+          { role: "user", content: prompt },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "growth_alerts",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                alerts: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      summary: { type: "string" },
+                      detail: { type: "string" },
+                      type: { type: "string", enum: ["warning", "positive", "insight"] },
+                    },
+                    required: ["title", "summary", "detail", "type"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["alerts"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const rawContent = response.choices[0]?.message?.content;
+      const alertsJson = typeof rawContent === "string" ? rawContent : "{}";
+      const parsed = JSON.parse(alertsJson);
+      const alerts = (parsed.alerts ?? []).slice(0, 3);
+      await db.insert(metricsAiAlerts).values({ range, alertsJson: JSON.stringify(alerts) });
+      generated++;
+    } catch (err) {
+      console.error(`[warmMetricsAiAlerts] Failed for range=${range}:`, err);
+      errors++;
+    }
+  }
+  return { generated, errors };
+}
