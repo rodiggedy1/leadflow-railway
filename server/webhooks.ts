@@ -1718,13 +1718,16 @@ async function handleCsInboundMessage(msg: any) {
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
   // Find the most recent matching session for this phone.
-  // For cleaners (isCleaner=true), also match cs_initiated sessions — a cleaner texting in
-  // should always land in the Teams column (cs-inbound-cleaner). We update the leadSource
-  // in the same write so the session is correctly typed permanently.
+  // For cleaners, match ALL session types for their phone — cs-inbound-cleaner, cs_initiated,
+  // AND cs-inbound. A cleaner's identity is authoritative: once isCleaner=true, any existing
+  // session for their phone should be upgraded to cs-inbound-cleaner rather than creating a
+  // duplicate. This prevents the two-session bug where a cleaner who previously texted in as
+  // a client ends up with two separate threads.
   const sourceMatch = isCleaner
     ? or(
         eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
-        eq(conversationSessions.leadSource, "cs_initiated")
+        eq(conversationSessions.leadSource, "cs_initiated"),
+        eq(conversationSessions.leadSource, "cs-inbound")
       )
     : eq(conversationSessions.leadSource, sessionSource);
   const [existingSession] = await db

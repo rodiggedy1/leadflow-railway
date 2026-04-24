@@ -1229,3 +1229,8 @@
 ## Performance Optimization
 
 - [x] leads.list: make AI summary LLM call non-blocking (fire-and-forget background job)
+
+## CS Chat Two-Session Bug Fix
+
+- [ ] Fix webhook cleaner session lookup to include cs-inbound sessions (prevents duplicate sessions)
+- [ ] One-time DB cleanup: merge Solange's duplicate cs-inbound session into her cs-inbound-cleaner session
