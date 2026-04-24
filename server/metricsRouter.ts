@@ -90,7 +90,7 @@ export const metricsRouter = router({
 
       // ── 2. Recurring customers from completed_jobs ───────────────────────
       const recurringRows = await db
-        .select({ frequency: completedJobs.frequency, jobDate: completedJobs.jobDate })
+        .select({ frequency: completedJobs.frequency, jobDate: completedJobs.jobDate, phone: completedJobs.phone })
         .from(completedJobs)
         .where(
           and(
@@ -148,15 +148,20 @@ export const metricsRouter = router({
         buckets[ym].revenue += rev;
       }
 
-      // Fill recurring
+      // Fill recurring — count distinct customers (by phone) per month
+      const recurringPhonesByMonth: Record<string, Set<string>> = {};
+      for (const m of months) recurringPhonesByMonth[m] = new Set();
       for (const row of recurringRows) {
-        if (!row.jobDate) continue;
+        if (!row.jobDate || !row.phone) continue;
         const ym = row.jobDate.slice(0, 7);
-        if (!buckets[ym]) continue;
+        if (!recurringPhonesByMonth[ym]) continue;
         const freq = (row.frequency ?? "").toLowerCase();
         if (freq && freq !== "one-time" && freq !== "one time" && freq !== "onetime") {
-          buckets[ym].recurring += 1;
+          recurringPhonesByMonth[ym].add(row.phone);
         }
+      }
+      for (const m of months) {
+        if (buckets[m]) buckets[m].recurring = recurringPhonesByMonth[m].size;
       }
 
       // Fill leads + booked
