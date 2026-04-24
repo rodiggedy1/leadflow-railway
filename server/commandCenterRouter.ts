@@ -26,6 +26,15 @@ import {
   smsOptOuts,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, lte, ne, notInArray, sql, isNotNull, or, isNull } from "drizzle-orm";
+const NON_LEAD_SOURCES = [
+  "cs_initiated",
+  "cs-inbound",
+  "cs-inbound-cleaner",
+  "hiring_interview",
+  "review",
+  "review_rebooking",
+];
+
 import { invokeLLM } from "./_core/llm";
 import { sendSms } from "./openphone";
 import { normalizePhone } from "./routers";
@@ -199,7 +208,7 @@ export const commandCenterRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
 
@@ -211,7 +220,7 @@ export const commandCenterRouter = router({
           and(
             gte(conversationSessions.createdAt, prevSince),
             lte(conversationSessions.createdAt, prevUntil),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
 
@@ -296,7 +305,7 @@ export const commandCenterRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         )
         .groupBy(conversationSessions.stage);
@@ -403,7 +412,7 @@ export const commandCenterRouter = router({
             ne(conversationSessions.stage, "REVIEW_REQUESTED"),
             ne(conversationSessions.stage, "REVIEW_DONE"),
             ne(conversationSessions.stage, "QUALITY_RATING_DONE"),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"])),
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES),
           )
         )
         .orderBy(desc(conversationSessions.updatedAt))
@@ -476,7 +485,7 @@ export const commandCenterRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
 
@@ -569,7 +578,7 @@ export const commandCenterRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
 
@@ -691,7 +700,7 @@ export const commandCenterRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
 
@@ -764,7 +773,7 @@ export const commandCenterRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         )
         .limit(200);
@@ -1228,7 +1237,7 @@ If TOP OBJECTIONS are provided in the metrics:
         .where(
           and(
             gte(conversationSessions.createdAt, since),
-            and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         )
         .limit(200);
@@ -2376,7 +2385,7 @@ export async function warmAiInsightsCache(): Promise<{ warmed: string[]; errors:
           serviceType: conversationSessions.serviceType,
         })
         .from(conversationSessions)
-        .where(and(gte(conversationSessions.createdAt, since), and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))));
+        .where(and(gte(conversationSessions.createdAt, since), notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)));
 
       const totalLeads = sessions.length;
       const booked = sessions.filter(s => s.stage === "BOOKED" || s.isBooked === 1);
@@ -2428,7 +2437,7 @@ export async function warmAiInsightsCache(): Promise<{ warmed: string[]; errors:
       const allSessions = await db
         .select({ messageHistory: conversationSessions.messageHistory, stage: conversationSessions.stage, isBooked: conversationSessions.isBooked })
         .from(conversationSessions)
-        .where(and(gte(conversationSessions.createdAt, since), and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))))
+        .where(and(gte(conversationSessions.createdAt, since), notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)))
         .limit(200);
 
       const leadMessages: string[] = [];
@@ -2535,7 +2544,7 @@ SERVICE TYPES: ${JSON.stringify(serviceCount)}${objectionContext}`.trim();
     const sessions = await db
       .select({ id: conversationSessions.id, stage: conversationSessions.stage, messageHistory: conversationSessions.messageHistory, isBooked: conversationSessions.isBooked })
       .from(conversationSessions)
-      .where(and(gte(conversationSessions.createdAt, since), and(ne(conversationSessions.leadSource, "review"), notInArray(conversationSessions.leadSource, ["cs-inbound", "cs-inbound-cleaner"]))))
+      .where(and(gte(conversationSessions.createdAt, since), notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)))
       .limit(200);
 
     const leadMessages: string[] = [];
