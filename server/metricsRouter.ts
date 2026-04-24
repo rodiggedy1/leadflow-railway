@@ -10,7 +10,17 @@ import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { cleanerJobs, completedJobs, conversationSessions } from "../drizzle/schema";
-import { and, eq, gte, lte, sql, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, sql, isNotNull, notInArray } from "drizzle-orm";
+
+// Sources that are NOT leads — same exclusion list used by the Leads list page
+const NON_LEAD_SOURCES = [
+  "cs_initiated",
+  "cs-inbound",
+  "cs-inbound-cleaner",
+  "hiring_interview",
+  "review",
+  "review_rebooking",
+];
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -100,7 +110,8 @@ export const metricsRouter = router({
         .where(
           and(
             gte(conversationSessions.createdAt, start),
-            lte(conversationSessions.createdAt, end)
+            lte(conversationSessions.createdAt, end),
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
           )
         );
 
