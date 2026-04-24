@@ -1225,3 +1225,7 @@
 - [x] metricsRouter.ts: getAiAlerts reads from metrics_ai_alerts DB cache first (serves instantly if < 1 hour old), falls back to LLM, persists result to DB
 - [x] internalCron.ts: hourly cron added to pre-generate AI alerts for all 5 ranges (today/7d/30d/90d/12m) via warmMetricsAiAlerts()
 - [x] Metrics.tsx: stale-while-revalidate on getOverview (staleTime 5m, refetchOnMount always) and getAiAlerts (staleTime 1h, refetchOnMount always)
+
+## Performance Optimization
+
+- [x] leads.list: make AI summary LLM call non-blocking (fire-and-forget background job)
