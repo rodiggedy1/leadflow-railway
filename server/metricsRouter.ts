@@ -106,6 +106,7 @@ export const metricsRouter = router({
           createdAt: conversationSessions.createdAt,
           isBooked: conversationSessions.isBooked,
           leadSource: conversationSessions.leadSource,
+          messageHistory: conversationSessions.messageHistory,
         })
         .from(conversationSessions)
         .where(
@@ -233,22 +234,23 @@ export const metricsRouter = router({
         .sort((a, b) => b.leads - a.leads);
 
       // ── Funnel ───────────────────────────────────────────────────────────
-      const reached = Math.round(totalLeads * 0.84); // proxy: no "reached" field yet
-      const quoted = totalBooked > 0 ? Math.round(totalBooked * 1.7) : Math.round(totalLeads * 0.61);
-      const completed = totalJobs;
-      const recurringTotal = recurringRows.filter((r) => {
-        const freq = (r.frequency ?? "").toLowerCase();
-        return freq && freq !== "one-time" && freq !== "one time" && freq !== "onetime";
-      }).length;
+      // Count leads that have at least one inbound (user) message in messageHistory
+      let respondedCount = 0;
+      for (const row of leadRows) {
+        if (!row.messageHistory) continue;
+        try {
+          const hist = JSON.parse(row.messageHistory as string);
+          if (Array.isArray(hist) && hist.some((m: { role: string }) => m.role === "user")) {
+            respondedCount++;
+          }
+        } catch { /* skip malformed */ }
+      }
 
       const funnelBase = totalLeads || 1;
       const funnel = [
         { step: "Leads", value: totalLeads, pct: 100 },
-        { step: "Reached", value: reached, pct: Math.round((reached / funnelBase) * 100) },
-        { step: "Quoted", value: Math.min(quoted, reached), pct: Math.round((Math.min(quoted, reached) / funnelBase) * 100) },
+        { step: "Responded", value: respondedCount, pct: Math.round((respondedCount / funnelBase) * 100) },
         { step: "Booked", value: totalBooked, pct: Math.round((totalBooked / funnelBase) * 100) },
-        { step: "Completed", value: completed, pct: Math.round((completed / funnelBase) * 100) },
-        { step: "Recurring", value: recurringTotal, pct: Math.round((recurringTotal / funnelBase) * 100) },
       ];
 
       return {
