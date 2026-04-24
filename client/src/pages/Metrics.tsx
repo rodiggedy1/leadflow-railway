@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from "react";
+import AdminHeader from "@/components/AdminHeader";
+import AdminPageGuard from "@/components/AdminPageGuard";
 import {
   Area,
   AreaChart,
@@ -145,7 +147,7 @@ function ChartCard({ title, subtitle, children, action }: {
   );
 }
 
-export default function Metrics() {
+function MetricsContent() {
   const [range, setRange] = useState("12 months");
   const [selectedSource, setSelectedSource] = useState("All sources");
   const latest = monthly[monthly.length - 1];
@@ -416,5 +418,14 @@ export default function Metrics() {
         </section>
       </main>
     </div>
+  );
+}
+
+export default function Metrics() {
+  return (
+    <AdminPageGuard pageId="metrics">
+      <AdminHeader activeTab="metrics" />
+      <MetricsContent />
+    </AdminPageGuard>
   );
 }
