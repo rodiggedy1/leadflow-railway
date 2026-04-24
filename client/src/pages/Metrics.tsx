@@ -371,6 +371,39 @@ function MetricsContent() {
               </div>
             )}
           </div>
+
+          {/* AI Growth Alerts */}
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-5">
+              <h3 className="font-semibold text-slate-950">AI growth alerts</h3>
+              <p className="mt-1 text-sm text-slate-500">What changed and what to fix first.</p>
+            </div>
+            {alertsLoading ? (
+              <div className="space-y-4">
+                {[1,2,3].map(i => <div key={i} className="h-16 animate-pulse rounded-2xl bg-slate-100" />)}
+              </div>
+            ) : aiAlerts.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-400">No alerts available.</p>
+            ) : (
+              <div className="space-y-3">
+                {aiAlerts.map((alert: { type: string; title: string; body: string }, i: number) => (
+                  <div key={i} className="flex gap-3 rounded-2xl bg-slate-50 p-4">
+                    <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+                      alert.type === "warning" ? "bg-orange-100 text-orange-600" :
+                      alert.type === "positive" ? "bg-emerald-100 text-emerald-600" :
+                      "bg-blue-100 text-blue-600"
+                    }`}>
+                      <Icon name={alert.type === "warning" ? "down" : alert.type === "positive" ? "trend" : "sparkles"} size={15} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950">{alert.title}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{alert.body}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
 
         {/* Job type pie + operational health */}
