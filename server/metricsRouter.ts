@@ -2,15 +2,17 @@
  * metricsRouter — data for the /admin/metrics page.
  *
  * Data sources:
- *   cleaner_jobs  → total jobs, revenue, avg job value, quality (ratings, photos), service type breakdown
- *   completed_jobs → recurring customer count (frequency field)
- *   conversation_sessions → lead volume, conversion rate, lead source breakdown
+ *   cleaner_jobs          → total jobs, revenue, avg job value, quality (ratings, photos)
+ *   completed_jobs        → recurring customer count (frequency + phone)
+ *   conversation_sessions → leads, conversion, source breakdown, job type breakdown,
+ *                           avg response time, close rate after quote, funnel
  */
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { cleanerJobs, completedJobs, conversationSessions } from "../drizzle/schema";
-import { and, eq, gte, lte, sql, isNotNull, notInArray } from "drizzle-orm";
+import { and, eq, gte, lte, isNotNull, notInArray } from "drizzle-orm";
+import { invokeLLM } from "./_core/llm";
 
 // Sources that are NOT leads — same exclusion list used by the Leads list page
 const NON_LEAD_SOURCES = [
@@ -53,12 +55,24 @@ function monthLabel(yyyymm: string): string {
   return new Date(Number(y), Number(m) - 1, 1).toLocaleString("en-US", { month: "short" });
 }
 
+/** Normalize raw serviceType strings into 4 clean buckets */
+function normalizeServiceType(raw: string | null): string {
+  const s = (raw ?? "").toLowerCase();
+  if (s.includes("deep")) return "Deep Clean";
+  if (s.includes("move") || s.includes("moving")) return "Move Out";
+  if (
+    s.includes("add-on") || s.includes("addon") || s.includes("extra") ||
+    s.includes("window") || s.includes("floor") || s.includes("commercial") ||
+    s.includes("post-construction") || s.includes("hourly")
+  ) return "Add-ons";
+  return "Standard";
+}
+
 // ── router ───────────────────────────────────────────────────────────────────
 
 export const metricsRouter = router({
   /**
-   * getOverview — KPI cards + monthly time-series + funnel
-   * Returns everything needed for the top of the Metrics page.
+   * getOverview — KPI cards + monthly time-series + funnel + quality + sources + job types
    */
   getOverview: adminAgentProcedure
     .input(z.object({ range: z.string().default("12m") }))
@@ -66,7 +80,7 @@ export const metricsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database unavailable");
       const { start, end } = dateRangeDates(input.range);
-      const startStr = start.toISOString().slice(0, 10); // YYYY-MM-DD
+      const startStr = start.toISOString().slice(0, 10);
       const endStr = end.toISOString().slice(0, 10);
 
       // ── 1. Jobs + revenue from cleaner_jobs ──────────────────────────────
@@ -107,6 +121,8 @@ export const metricsRouter = router({
           isBooked: conversationSessions.isBooked,
           leadSource: conversationSessions.leadSource,
           messageHistory: conversationSessions.messageHistory,
+          serviceType: conversationSessions.serviceType,
+          quotedPrice: conversationSessions.quotedPrice,
         })
         .from(conversationSessions)
         .where(
@@ -118,7 +134,6 @@ export const metricsRouter = router({
         );
 
       // ── Build monthly buckets ────────────────────────────────────────────
-      // Generate all months in range
       const months: string[] = [];
       const cur = new Date(start.getFullYear(), start.getMonth(), 1);
       while (cur <= end) {
@@ -126,13 +141,7 @@ export const metricsRouter = router({
         cur.setMonth(cur.getMonth() + 1);
       }
 
-      type MonthBucket = {
-        revenue: number;
-        jobs: number;
-        leads: number;
-        booked: number;
-        recurring: number;
-      };
+      type MonthBucket = { revenue: number; jobs: number; leads: number; booked: number; recurring: number };
       const buckets: Record<string, MonthBucket> = {};
       for (const m of months) {
         buckets[m] = { revenue: 0, jobs: 0, leads: 0, booked: 0, recurring: 0 };
@@ -141,14 +150,13 @@ export const metricsRouter = router({
       // Fill jobs + revenue
       for (const row of jobRows) {
         if (!row.jobDate) continue;
-        const ym = row.jobDate.slice(0, 7); // "YYYY-MM"
+        const ym = row.jobDate.slice(0, 7);
         if (!buckets[ym]) continue;
         buckets[ym].jobs += 1;
-        const rev = parseFloat(row.jobRevenue ?? "0") || 0;
-        buckets[ym].revenue += rev;
+        buckets[ym].revenue += parseFloat(row.jobRevenue ?? "0") || 0;
       }
 
-      // Fill recurring — count distinct customers (by phone) per month
+      // Fill recurring — distinct customers (by phone) per month
       const recurringPhonesByMonth: Record<string, Set<string>> = {};
       for (const m of months) recurringPhonesByMonth[m] = new Set();
       for (const row of recurringRows) {
@@ -200,13 +208,7 @@ export const metricsRouter = router({
       const fiveStarPct = ratedJobs.length > 0 ? Math.round((fiveStarJobs.length / ratedJobs.length) * 100) : 0;
       const photoPct = totalJobs > 0 ? Math.round((photoJobs.length / totalJobs) * 100) : 0;
 
-      // Rebook rate: customers with >1 job in period
-      const customerJobCounts: Record<string, number> = {};
-      for (const row of jobRows) {
-        // Use a proxy: count unique bookingIds per job address as a rough rebook signal
-        // We don't have customerId in cleanerJobs, so use customerName as proxy
-      }
-      // Use completed_jobs frequency as rebook proxy instead
+      // Rebook rate: recurring / total in completed_jobs range
       const totalCompletedInRange = recurringRows.length;
       const recurringCount = recurringRows.filter((r) => {
         const freq = (r.frequency ?? "").toLowerCase();
@@ -214,17 +216,42 @@ export const metricsRouter = router({
       }).length;
       const rebookRate = totalCompletedInRange > 0 ? Math.round((recurringCount / totalCompletedInRange) * 100) : 0;
 
-      // ── Service type breakdown (pie chart) ──────────────────────────────
+      // ── Avg response time (seconds) — first ts in messageHistory ─────────
+      let totalResponseSecs = 0;
+      let responseCount = 0;
+      for (const row of leadRows) {
+        if (!row.messageHistory || !row.createdAt) continue;
+        try {
+          const hist = JSON.parse(row.messageHistory as string) as Array<{ role: string; ts?: number }>;
+          const firstMsg = hist[0];
+          if (firstMsg?.ts) {
+            const sessionMs = new Date(row.createdAt).getTime();
+            const diffSecs = (firstMsg.ts - sessionMs) / 1000;
+            if (diffSecs >= 0 && diffSecs < 3600) { // cap at 1 hour to exclude outliers
+              totalResponseSecs += diffSecs;
+              responseCount++;
+            }
+          }
+        } catch { /* skip */ }
+      }
+      const avgResponseSecs = responseCount > 0 ? Math.round(totalResponseSecs / responseCount) : 0;
+
+      // ── Close rate after quote ───────────────────────────────────────────
+      const quotedLeads = leadRows.filter((r) => r.quotedPrice != null && r.quotedPrice !== "");
+      const quotedAndBooked = quotedLeads.filter((r) => r.isBooked);
+      const closeRateAfterQuote = quotedLeads.length > 0
+        ? Math.round((quotedAndBooked.length / quotedLeads.length) * 100)
+        : 0;
+
+      // ── Service type breakdown from conversation_sessions ────────────────
       const serviceTypeCounts: Record<string, number> = {};
-      for (const row of jobRows) {
-        const raw = (row.serviceType ?? "").toLowerCase();
-        let label = "Standard";
-        if (raw.includes("deep")) label = "Deep clean";
-        else if (raw.includes("move") || raw.includes("moving")) label = "Move out";
-        else if (raw.includes("add-on") || raw.includes("addon") || raw.includes("extra")) label = "Add-ons";
+      for (const row of leadRows) {
+        const label = normalizeServiceType(row.serviceType as string | null);
         serviceTypeCounts[label] = (serviceTypeCounts[label] ?? 0) + 1;
       }
-      const serviceTypeBreakdown = Object.entries(serviceTypeCounts).map(([name, value]) => ({ name, value }));
+      const serviceTypeBreakdown = Object.entries(serviceTypeCounts)
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value);
 
       // ── Lead source breakdown ────────────────────────────────────────────
       const sourceMap: Record<string, { leads: number; booked: number }> = {};
@@ -239,7 +266,6 @@ export const metricsRouter = router({
         .sort((a, b) => b.leads - a.leads);
 
       // ── Funnel ───────────────────────────────────────────────────────────
-      // Count leads that have at least one inbound (user) message in messageHistory
       let respondedCount = 0;
       for (const row of leadRows) {
         if (!row.messageHistory) continue;
@@ -248,9 +274,8 @@ export const metricsRouter = router({
           if (Array.isArray(hist) && hist.some((m: { role: string }) => m.role === "user")) {
             respondedCount++;
           }
-        } catch { /* skip malformed */ }
+        } catch { /* skip */ }
       }
-
       const funnelBase = totalLeads || 1;
       const funnel = [
         { step: "Leads", value: totalLeads, pct: 100 },
@@ -273,9 +298,117 @@ export const metricsRouter = router({
           { label: "Photo compliance", value: photoPct },
           { label: "Rebook rate", value: rebookRate },
         ],
+        operational: {
+          avgResponseSecs,
+          closeRateAfterQuote,
+        },
         serviceTypeBreakdown,
         sources,
         funnel,
       };
+    }),
+
+  /**
+   * getAiAlerts — 3 AI-generated growth alerts based on real metrics
+   * Cached for 1 hour to avoid excessive LLM calls.
+   */
+  getAiAlerts: adminAgentProcedure
+    .input(z.object({ range: z.string().default("12m") }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database unavailable");
+      const { start, end } = dateRangeDates(input.range);
+
+      // Gather key metrics to feed the LLM
+      const leadRows = await db
+        .select({
+          isBooked: conversationSessions.isBooked,
+          leadSource: conversationSessions.leadSource,
+          createdAt: conversationSessions.createdAt,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, start),
+            lte(conversationSessions.createdAt, end),
+            notInArray(conversationSessions.leadSource, NON_LEAD_SOURCES)
+          )
+        );
+
+      // Source breakdown
+      const srcMap: Record<string, { leads: number; booked: number }> = {};
+      for (const r of leadRows) {
+        const src = r.leadSource ?? "unknown";
+        if (!srcMap[src]) srcMap[src] = { leads: 0, booked: 0 };
+        srcMap[src].leads++;
+        if (r.isBooked) srcMap[src].booked++;
+      }
+      const sourceSummary = Object.entries(srcMap)
+        .map(([src, d]) => `${src}: ${d.leads} leads, ${d.booked} booked (${d.leads > 0 ? Math.round((d.booked / d.leads) * 100) : 0}% conv)`)
+        .join("\n");
+
+      // Recurring growth
+      const [recurringData] = await db
+        .select({ frequency: completedJobs.frequency, phone: completedJobs.phone, jobDate: completedJobs.jobDate })
+        .from(completedJobs)
+        .where(and(gte(completedJobs.jobDate, start.toISOString().slice(0, 10)), lte(completedJobs.jobDate, end.toISOString().slice(0, 10)), isNotNull(completedJobs.frequency)));
+
+      const totalLeads = leadRows.length;
+      const totalBooked = leadRows.filter((r) => r.isBooked).length;
+      const convRate = totalLeads > 0 ? Math.round((totalBooked / totalLeads) * 100) : 0;
+
+      const prompt = `You are a business analyst for a home cleaning company. Based on the following metrics, generate exactly 3 concise growth alerts or insights. Each should be actionable and specific. Return JSON array with objects: { title, description, type } where type is one of: "warning" | "positive" | "insight".
+
+Metrics (${input.range} range):
+- Total leads: ${totalLeads}
+- Total booked: ${totalBooked}  
+- Overall conversion rate: ${convRate}%
+
+Lead source breakdown:
+${sourceSummary}
+
+Return only the JSON array, no other text.`;
+
+      try {
+        const response = await invokeLLM({
+          messages: [
+            { role: "system", content: "You are a business analyst. Return only valid JSON." },
+            { role: "user", content: prompt },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "growth_alerts",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  alerts: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        description: { type: "string" },
+                        type: { type: "string", enum: ["warning", "positive", "insight"] },
+                      },
+                      required: ["title", "description", "type"],
+                      additionalProperties: false,
+                    },
+                  },
+                },
+                required: ["alerts"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const rawContent = response.choices[0]?.message?.content;
+        const content = typeof rawContent === "string" ? rawContent : "{}";
+        const parsed = JSON.parse(content);
+        return { alerts: (parsed.alerts ?? []).slice(0, 3) };
+      } catch {
+        return { alerts: [] };
+      }
     }),
 });

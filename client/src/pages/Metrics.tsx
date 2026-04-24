@@ -117,10 +117,16 @@ function MetricsContent() {
     { range: apiRange },
     { staleTime: 5 * 60 * 1000 }
   );
+  const { data: alertsData, isLoading: alertsLoading } = trpc.metrics.getAiAlerts.useQuery(
+    { range: apiRange },
+    { staleTime: 60 * 60 * 1000 }
+  );
+  const aiAlerts = alertsData?.alerts ?? [];
 
   const monthly = data?.monthly ?? [];
   const kpis = data?.kpis;
   const quality = data?.quality ?? [];
+  const operational = data?.operational;
   const serviceTypeBreakdown = data?.serviceTypeBreakdown ?? [];
   const sources = data?.sources ?? [];
   const funnel = data?.funnel ?? [];
@@ -325,9 +331,9 @@ function MetricsContent() {
           </ChartCard>
         </section>
 
-        {/* Source table */}
-        <section className="mt-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* Source table + AI alerts */}
+        <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-slate-950">Lead source performance</h3>
@@ -410,19 +416,45 @@ function MetricsContent() {
                 {[1,2,3].map(i => <div key={i} className="h-20 animate-pulse rounded-2xl bg-slate-100" />)}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {quality.map((q) => (
-                  <div key={q.label} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="font-semibold text-slate-800">{q.label}</span>
-                      <span className="text-sm font-bold text-slate-950">{q.value}%</span>
+              <>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {quality.map((q) => (
+                    <div key={q.label} className="rounded-2xl border border-slate-200 p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="font-semibold text-slate-800">{q.label}</span>
+                        <span className="text-sm font-bold text-slate-950">{q.value}%</span>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-slate-950" style={{ width: `${q.value}%` }} />
+                      </div>
                     </div>
-                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-slate-950" style={{ width: `${q.value}%` }} />
+                  ))}
+                </div>
+                {operational && (
+                  <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Icon name="phone" size={13} /> Avg response time
+                      </div>
+                      <p className="mt-1 text-xl font-semibold text-slate-950">
+                        {operational.avgResponseSecs > 0
+                          ? operational.avgResponseSecs >= 60
+                            ? `${Math.floor(operational.avgResponseSecs / 60)}m ${operational.avgResponseSecs % 60}s`
+                            : `${operational.avgResponseSecs}s`
+                          : "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        <Icon name="target" size={13} /> Close rate after quote
+                      </div>
+                      <p className="mt-1 text-xl font-semibold text-slate-950">
+                        {operational.closeRateAfterQuote}%
+                      </p>
                     </div>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </section>
