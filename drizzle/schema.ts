@@ -1,4 +1,4 @@
-import { bigint, decimal, index, int, json, longtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, index, int, json, longtext, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -179,7 +179,7 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
   address: text("address"),
   callPreference: varchar("callPreference", { length: 50 }), // "now" | "few_minutes"
   // Full message history as JSON array for ChatGPT context (stored as JSON string)
-  messageHistory: text("messageHistory").notNull(),
+  messageHistory: mediumtext("messageHistory").notNull(),
   // Link back to the original quote lead
   quoteLeadId: int("quoteLeadId"),
   /** Slug from the quote app (e.g. "rohan-gilkessssss-jb8c") — used to update the quote when address is collected */

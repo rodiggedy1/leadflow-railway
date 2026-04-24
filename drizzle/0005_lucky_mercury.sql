@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_sessions` MODIFY COLUMN `messageHistory` mediumtext NOT NULL;

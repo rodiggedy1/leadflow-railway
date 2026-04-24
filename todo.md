@@ -1234,3 +1234,5 @@
 
 - [ ] Fix webhook cleaner session lookup to include cs-inbound sessions (prevents duplicate sessions)
 - [ ] One-time DB cleanup: merge Solange's duplicate cs-inbound session into her cs-inbound-cleaner session
+- [x] messageHistory column: migrate TEXT to MEDIUMTEXT to fix 65KB hard limit (Solange/GoGreen/MaidsPlus all at wall)
+- [x] webhooks.ts: extend cleaner session lookup to include cs-inbound sessions (prevents two-session duplicate bug)
