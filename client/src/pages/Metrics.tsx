@@ -127,6 +127,9 @@ function MetricsContent() {
 
   const latest = monthly[monthly.length - 1];
 
+  // Current calendar month label for sub-text
+  const currentMonthName = new Date().toLocaleString("en-US", { month: "long" });
+
   const totals = useMemo(() => {
     if (!kpis) return { revenue: 0, leads: 0, booked: 0, conversion: 0 };
     return {
@@ -186,7 +189,7 @@ function MetricsContent() {
           <MetricCard
             title="Total revenue"
             value={money(totals.revenue)}
-            sub={latest ? `${money(latest.revenue)} this month` : ""}
+            sub={latest ? `${money(latest.revenue)} so far in ${currentMonthName}` : ""}
             icon="dollar"
             tone="green"
             loading={isLoading}

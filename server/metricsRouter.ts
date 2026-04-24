@@ -72,7 +72,8 @@ export const metricsRouter = router({
         .where(
           and(
             gte(cleanerJobs.jobDate, startStr),
-            lte(cleanerJobs.jobDate, endStr)
+            lte(cleanerJobs.jobDate, endStr),
+            eq(cleanerJobs.bookingStatus, "completed")
           )
         );
 
