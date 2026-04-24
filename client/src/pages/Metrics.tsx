@@ -431,12 +431,12 @@ function MetricsContent() {
                   ))}
                 </div>
                 {operational && (
-                  <div className="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4">
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                         <Icon name="phone" size={13} /> Avg response time
                       </div>
-                      <p className="mt-1 text-xl font-semibold text-slate-950">
+                      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
                         {operational.avgResponseSecs > 0
                           ? operational.avgResponseSecs >= 60
                             ? `${Math.floor(operational.avgResponseSecs / 60)}m ${operational.avgResponseSecs % 60}s`
@@ -444,11 +444,11 @@ function MetricsContent() {
                           : "N/A"}
                       </p>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <div className="rounded-2xl bg-slate-50 p-4">
+                      <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
                         <Icon name="target" size={13} /> Close rate after quote
                       </div>
-                      <p className="mt-1 text-xl font-semibold text-slate-950">
+                      <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
                         {operational.closeRateAfterQuote}%
                       </p>
                     </div>
