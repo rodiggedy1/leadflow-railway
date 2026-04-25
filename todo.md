@@ -1236,3 +1236,8 @@
 - [ ] One-time DB cleanup: merge Solange's duplicate cs-inbound session into her cs-inbound-cleaner session
 - [x] messageHistory column: migrate TEXT to MEDIUMTEXT to fix 65KB hard limit (Solange/GoGreen/MaidsPlus all at wall)
 - [x] webhooks.ts: extend cleaner session lookup to include cs-inbound sessions (prevents two-session duplicate bug)
+
+## AI SMS Conversation Bug Fixes
+
+- [x] Fix {quoteLink} literal in SMS — store finalReplyContent (post-substitution) to messageHistory instead of result.reply
+- [x] Fix wrong service type in quote — persist engineData.serviceType to DB in the session update (already persisted at line 967; root cause was {quoteLink} in history confusing AI)

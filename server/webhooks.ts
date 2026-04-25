@@ -913,9 +913,8 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
 
       console.log(`[Webhook] Stage: ${session.stage} → ${result.nextStage}. Reply: "${result.reply}"`);
 
-      // Append the assistant's reply to history
-      history.push({ role: "assistant", content: result.reply, ts: Date.now() });
-
+      // NOTE: history push is deferred until after finalReplyContent is resolved
+      // so the stored message contains the real quote URL, not the raw {quoteLink} placeholder.
 
       // Update the session in DB
       // Track lastAiMessageAt so the silence-follow-up cron can detect 5-min inactivity.
@@ -952,7 +951,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           selectedSlot: result.extractedData?.selectedSlot ?? session.selectedSlot ?? undefined,
           address: result.extractedData?.address ?? session.address ?? undefined,
           callPreference: result.extractedData?.callPreference ?? session.callPreference ?? undefined,
-          messageHistory: JSON.stringify(history),
+          // messageHistory updated below after finalReplyContent is resolved
           lastAiMessageAt: new Date(),
           autoFollowUpSent: isTerminalStage ? session.autoFollowUpSent : 0,
           // Sync isBooked flag whenever stage transitions to/from BOOKED
@@ -1069,6 +1068,14 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           finalReplyContent = finalReplyContent.replace(/\{quoteLink\}/g, "").trim();
         }
       }
+
+      // Append the assistant's reply to history NOW — after finalReplyContent is fully resolved
+      // so the stored message contains the real quote URL, not the raw {quoteLink} placeholder.
+      history.push({ role: "assistant", content: finalReplyContent, ts: Date.now() });
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify(history) })
+        .where(eq(conversationSessions.id, session.id));
 
       // Send the reply via OpenPhone
       const smsResult = await sendSms({
