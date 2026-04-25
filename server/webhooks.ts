@@ -384,7 +384,7 @@ export function registerWebhookRoutes(app: Express) {
               and(
                 eq(conversationSessions.leadSource, "bark-sms"),
                 gte(conversationSessions.createdAt, barkCutoff),
-                sql`JSON_CONTAINS(message_history, ${JSON.stringify([{ content: rawTextMarker }])}, '$')`
+                sql`JSON_CONTAINS(${conversationSessions.messageHistory}, ${JSON.stringify([{ content: rawTextMarker }])}, '$')`
               )
             )
             .limit(1);
