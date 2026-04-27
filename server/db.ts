@@ -19,7 +19,11 @@ export function resetDb() {
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      // timezone: 'Z' forces mysql2 to serialize JavaScript Date objects as UTC strings,
+      // preventing a 4-hour offset that occurs when the production container's system
+      // timezone (America/New_York) causes mysql2 to format dates as local time strings
+      // which MySQL then stores as-is, making them 4 hours ahead of actual UTC.
+      _db = drizzle(process.env.DATABASE_URL, { connection: { timezone: 'Z' } } as any);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

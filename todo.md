@@ -1244,3 +1244,4 @@
 - [x] Fix Command Chat "today's bookings" ticker: todayDateStr was a static useMemo (never updated), now uses useState+useEffect that ticks every minute so it rolls over at ET midnight
 - [x] Fix Command Chat "today's bookings" ticker: always show $0 at midnight instead of disappearing (removed {todayRevenue > 0 &&} guard)
 - [x] Fix duplicate unclaimed lead escalation alerts: added singleton guard to startInternalCron() + atomic DB-level UPDATE gate in runUnclaimedLeadEscalation to prevent race condition duplicates
+- [x] Fix bookedAt timestamps being stored 4 hours ahead: added timezone:'Z' to mysql2 connection in db.ts so Date objects always serialize as UTC; corrected 3 existing bad rows (IDs 1680010, 1740005, 1710033) by subtracting 4 hours
