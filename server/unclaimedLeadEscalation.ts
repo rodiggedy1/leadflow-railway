@@ -9,11 +9,17 @@
  * For each such lead, posts a ⚠️ nudge message to the command channel and
  * marks the original card's metadata with escalationPosted = true so the
  * nudge fires only once per lead.
+ *
+ * Duplicate-prevention strategy (two layers):
+ *   1. startInternalCron() has a singleton guard — crons are registered once per process.
+ *   2. The escalationPosted flag is set via an atomic UPDATE … WHERE JSON_EXTRACT … IS NULL
+ *      so that concurrent runs (race condition) cannot both pass the gate.
+ *      Only the run whose UPDATE affects 1 row proceeds to insert the nudge.
  */
 
 import { getDb } from "./db";
 import { opsChatMessages } from "../drizzle/schema";
-import { eq, and, isNull, lt } from "drizzle-orm";
+import { eq, and, lt, sql } from "drizzle-orm";
 
 const ESCALATION_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -23,7 +29,8 @@ export async function runUnclaimedLeadEscalation(): Promise<{ checked: number; e
 
   const cutoff = new Date(Date.now() - ESCALATION_THRESHOLD_MS);
 
-  // Find all new_lead cards older than 5 minutes
+  // Find all new_lead cards older than 5 minutes that have NOT yet been escalated.
+  // We filter escalationPosted at the DB level to reduce candidates to only actionable rows.
   const candidates = await db
     .select()
     .from(opsChatMessages)
@@ -32,6 +39,8 @@ export async function runUnclaimedLeadEscalation(): Promise<{ checked: number; e
         eq(opsChatMessages.channel, "command"),
         eq(opsChatMessages.quickAction, "new_lead"),
         lt(opsChatMessages.createdAt, cutoff),
+        // Only rows where escalationPosted is not yet set
+        sql`JSON_EXTRACT(${opsChatMessages.metadata}, '$.escalationPosted') IS NULL`
       )
     );
 
@@ -48,8 +57,26 @@ export async function runUnclaimedLeadEscalation(): Promise<{ checked: number; e
     // Skip if already claimed
     if (meta.claimedBy) continue;
 
-    // Skip if escalation already posted
-    if (meta.escalationPosted) continue;
+    // ── Atomic gate: attempt to claim the escalation slot ────────────────────
+    // UPDATE the row to set escalationPosted=true ONLY IF it is still NULL.
+    // If two concurrent runs both reach this point, only one UPDATE will match
+    // (the other will see escalationPosted already set and affect 0 rows).
+    const updatedMeta = { ...meta, escalationPosted: true };
+    const result = await db
+      .update(opsChatMessages)
+      .set({ metadata: JSON.stringify(updatedMeta) })
+      .where(
+        and(
+          eq(opsChatMessages.id, card.id),
+          // Re-check: only update if escalationPosted is still absent
+          sql`JSON_EXTRACT(${opsChatMessages.metadata}, '$.escalationPosted') IS NULL`
+        )
+      );
+
+    // rowsAffected === 0 means another concurrent run already claimed this slot
+    // Drizzle with mysql2 returns [ResultSetHeader, ...] — affectedRows is on index 0
+    const affectedRows = (result as unknown as [{ affectedRows: number }])[0]?.affectedRows ?? 1;
+    if (affectedRows === 0) continue;
 
     const leadName = (meta.leadName as string) ?? "A lead";
     const arrivedAt = (meta.arrivedAt as number) ?? card.createdAt.getTime();
@@ -70,13 +97,6 @@ export async function runUnclaimedLeadEscalation(): Promise<{ checked: number; e
         minutesWaiting,
       }),
     });
-
-    // Mark the original card so we don't fire again
-    const updatedMeta = { ...meta, escalationPosted: true };
-    await db
-      .update(opsChatMessages)
-      .set({ metadata: JSON.stringify(updatedMeta) })
-      .where(eq(opsChatMessages.id, card.id));
 
     escalated++;
   }

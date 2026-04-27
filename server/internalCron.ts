@@ -95,7 +95,14 @@ async function recordSyncRun(params: {
   }
 }
 
+let _cronStarted = false;
+
 export function startInternalCron(): void {
+  if (_cronStarted) {
+    console.warn("[InternalCron] startInternalCron() called more than once — ignoring duplicate registration.");
+    return;
+  }
+  _cronStarted = true;
   // ── Silence follow-up: every 5 minutes ──────────────────────────────────────
   // Nudges leads who haven't replied 5+ minutes after the AI sent a message.
   // ── Ops follow-up due-time reminders: every 5 minutes ────────────────────────

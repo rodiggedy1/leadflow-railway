@@ -1243,3 +1243,4 @@
 - [x] Fix wrong service type in quote — persist engineData.serviceType to DB in the session update (already persisted at line 967; root cause was {quoteLink} in history confusing AI)
 - [x] Fix Command Chat "today's bookings" ticker: todayDateStr was a static useMemo (never updated), now uses useState+useEffect that ticks every minute so it rolls over at ET midnight
 - [x] Fix Command Chat "today's bookings" ticker: always show $0 at midnight instead of disappearing (removed {todayRevenue > 0 &&} guard)
+- [x] Fix duplicate unclaimed lead escalation alerts: added singleton guard to startInternalCron() + atomic DB-level UPDATE gate in runUnclaimedLeadEscalation to prevent race condition duplicates
