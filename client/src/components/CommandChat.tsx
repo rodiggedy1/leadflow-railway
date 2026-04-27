@@ -2554,9 +2554,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }, [channelMsgs]);
 
   // ── Today's Revenue ticker — same query as leads page Booked Revenue card ──
-  const todayDateStr = useMemo(() => {
-    // Use ET date so "today" aligns with the EST/EDT midnight boundary on the server
-    return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  // todayDateStr must update at ET midnight so the query rolls over to the new day.
+  // We recompute it every minute; when the date string changes the query input
+  // changes and tRPC automatically re-fetches with the new date.
+  const [todayDateStr, setTodayDateStr] = useState(() =>
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" })
+  );
+  useEffect(() => {
+    const id = setInterval(() => {
+      const next = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      setTodayDateStr(prev => (prev !== next ? next : prev));
+    }, 60_000);
+    return () => clearInterval(id);
   }, []);
   const { data: todayStats } = trpc.leads.stats.useQuery(
     { dateFrom: todayDateStr, dateTo: todayDateStr },
@@ -3164,11 +3173,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </div>
                     );
                   })()}
-                  {todayRevenue > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                      ${todayRevenue.toLocaleString()} today
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                    ${todayRevenue.toLocaleString()} today
+                  </span>
                 </div>
               )}
             </div>

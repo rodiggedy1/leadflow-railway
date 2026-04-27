@@ -1241,3 +1241,5 @@
 
 - [x] Fix {quoteLink} literal in SMS — store finalReplyContent (post-substitution) to messageHistory instead of result.reply
 - [x] Fix wrong service type in quote — persist engineData.serviceType to DB in the session update (already persisted at line 967; root cause was {quoteLink} in history confusing AI)
+- [x] Fix Command Chat "today's bookings" ticker: todayDateStr was a static useMemo (never updated), now uses useState+useEffect that ticks every minute so it rolls over at ET midnight
+- [x] Fix Command Chat "today's bookings" ticker: always show $0 at midnight instead of disappearing (removed {todayRevenue > 0 &&} guard)
