@@ -436,6 +436,7 @@ export const appRouter = router({
               reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
               leadName: conversationSessions.leadName,
               bookedByAgentName: conversationSessions.bookedByAgentName,
+              assignedAgentName: conversationSessions.assignedAgentName,
               bookedAt: conversationSessions.bookedAt,
             })
             .from(conversationSessions)
@@ -469,6 +470,7 @@ export const appRouter = router({
               reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
               leadName: conversationSessions.leadName,
               bookedByAgentName: conversationSessions.bookedByAgentName,
+              assignedAgentName: conversationSessions.assignedAgentName,
               bookedAt: conversationSessions.bookedAt,
             }).from(conversationSessions).where(baseWhere);
           })(),
@@ -506,7 +508,7 @@ export const appRouter = router({
         // Build per-booking detail list — same rows that make up bookedRevenue total
         const bookedList = [...organicBooked.rows, ...campaignBooked.rows].map(r => ({
           leadName: r.leadName ?? 'Unknown',
-          bookedByAgentName: r.bookedByAgentName ?? null,
+          bookedByAgentName: r.bookedByAgentName ?? r.assignedAgentName ?? null,
           amount: calcBookedRevenue(r),
           bookedAt: r.bookedAt instanceof Date ? r.bookedAt.getTime() : r.bookedAt ? new Date(r.bookedAt as string).getTime() : null,
         })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
