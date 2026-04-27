@@ -3179,27 +3179,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         ${todayRevenue.toLocaleString()} today
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[220px] max-w-[280px]">
-                      <div className="px-3 py-2 bg-emerald-700 text-white">
-                        <p className="text-[11px] font-semibold">{todayBookingCount} booking{todayBookingCount !== 1 ? 's' : ''} today</p>
-                        <p className="text-[10px] opacity-75">${todayRevenue.toLocaleString()} total</p>
+                    <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[230px] max-w-[290px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
+                      <div className="px-3 py-2.5 border-b border-white/10">
+                        <p className="text-[12px] font-semibold text-white">${todayRevenue.toLocaleString()} booked today</p>
+                        <p className="text-[10px] text-white/50">{todayBookingCount} booking{todayBookingCount !== 1 ? 's' : ''}</p>
                       </div>
                       {todayStats?.bookedList && todayStats.bookedList.length > 0 ? (
-                        <div className="divide-y divide-slate-100">
+                        <div className="divide-y divide-white/[0.06]">
                           {todayStats.bookedList.map((b, i) => (
-                            <div key={i} className="px-3 py-1.5 flex items-center justify-between gap-3">
+                            <div key={i} className="px-3 py-2 flex items-center justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="text-[11px] font-medium text-slate-800 truncate">{b.leadName}</p>
+                                <p className="text-[11px] font-medium text-white truncate">{b.leadName}</p>
                                 {b.bookedByAgentName && (
-                                  <p className="text-[10px] text-slate-400 truncate">by {b.bookedByAgentName}</p>
+                                  <p className="text-[10px] text-white/40 truncate">by {b.bookedByAgentName}</p>
                                 )}
                               </div>
-                              <span className="text-[11px] font-semibold text-emerald-700 shrink-0">${b.amount.toLocaleString()}</span>
+                              <span className="text-[11px] font-semibold text-emerald-400 shrink-0">${b.amount.toLocaleString()}</span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="px-3 py-2 text-[11px] text-slate-400">No bookings yet today</p>
+                        <p className="px-3 py-2.5 text-[11px] text-white/40">No bookings yet today</p>
                       )}
                     </TooltipContent>
                   </Tooltip>

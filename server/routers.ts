@@ -434,12 +434,15 @@ export const appRouter = router({
               bookedAmount: conversationSessions.bookedAmount,
               reactivationLastPrice: conversationSessions.reactivationLastPrice,
               reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+              leadName: conversationSessions.leadName,
+              bookedByAgentName: conversationSessions.bookedByAgentName,
+              bookedAt: conversationSessions.bookedAt,
             })
             .from(conversationSessions)
             .where(baseWhere);
           const bookedCount = rows.length;
           const bookedRevenue = rows.reduce((s, r) => s + calcBookedRevenue(r), 0);
-          return { bookedCount, bookedRevenue };
+          return { bookedCount, bookedRevenue, rows };
         }
 
         // Run all queries in parallel
@@ -500,8 +503,8 @@ export const appRouter = router({
           revenueBySource[src] = (revenueBySource[src] ?? 0) + calcBookedRevenue(r);
         }
 
-        // Build per-booking detail list for tooltip display
-        const bookedList = allBooked.map(r => ({
+        // Build per-booking detail list — same rows that make up bookedRevenue total
+        const bookedList = [...organicBooked.rows, ...campaignBooked.rows].map(r => ({
           leadName: r.leadName ?? 'Unknown',
           bookedByAgentName: r.bookedByAgentName ?? null,
           amount: calcBookedRevenue(r),
