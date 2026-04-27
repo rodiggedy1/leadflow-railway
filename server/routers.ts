@@ -230,17 +230,22 @@ export const appRouter = router({
           return { ...s, lastActivityText, lastActivityAt, lastActivityType, lastCustomerReplyAt };
         });
 
-        // Sort by lastCustomerReplyAt descending — only inbound customer replies
-        // (or calls) move a lead to the top. Automated follow-up messages do NOT
-        // change the sort position. Falls back to createdAt for new leads with no
-        // customer reply yet.
+        // Sort by the most recent "significant action" descending:
+        //   - lastCustomerReplyAt: inbound SMS or call (customer engagement)
+        //   - bookedAt: staff marks lead as booked — also counts as a bump
+        //   - falls back to createdAt for new leads with no activity yet.
+        // Automated follow-up messages (role:"assistant") do NOT change sort position.
+        const toMs = (d: Date | string | null | undefined): number =>
+          d ? (d instanceof Date ? d.getTime() : new Date(d as string).getTime()) : 0;
         mapped.sort((a, b) => {
-          const aTime = a.lastCustomerReplyAt
-            ? (a.lastCustomerReplyAt instanceof Date ? a.lastCustomerReplyAt.getTime() : new Date(a.lastCustomerReplyAt as string).getTime())
-            : (a.createdAt instanceof Date ? a.createdAt.getTime() : new Date(a.createdAt as string).getTime());
-          const bTime = b.lastCustomerReplyAt
-            ? (b.lastCustomerReplyAt instanceof Date ? b.lastCustomerReplyAt.getTime() : new Date(b.lastCustomerReplyAt as string).getTime())
-            : (b.createdAt instanceof Date ? b.createdAt.getTime() : new Date(b.createdAt as string).getTime());
+          const aTime = Math.max(
+            toMs(a.lastCustomerReplyAt),
+            toMs(a.bookedAt),
+          ) || toMs(a.createdAt);
+          const bTime = Math.max(
+            toMs(b.lastCustomerReplyAt),
+            toMs(b.bookedAt),
+          ) || toMs(b.createdAt);
           return bTime - aTime;
         });
 
