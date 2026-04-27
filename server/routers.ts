@@ -366,10 +366,11 @@ export const appRouter = router({
         const db = await getDb();
         const emptyBreakdown = { total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0 };
         if (!db) return {
-          total: 0, byStage: {}, bookedCount: 0, bookedRevenue: 0, conversionRate: 0,
+          total: 0, byStage: {} as Record<string,number>, bookedCount: 0, bookedRevenue: 0, conversionRate: 0,
           revenueBySource: { form: 0, widget: 0, reactivation: 0 },
           organic: emptyBreakdown,
           campaign: emptyBreakdown,
+          bookedList: [] as Array<{ leadName: string; bookedByAgentName: string | null; amount: number; bookedAt: number | null }>,
         };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
         const bookedConditions = buildBookedDateConditions(input?.dateFrom, input?.dateTo);
@@ -451,7 +452,7 @@ export const appRouter = router({
           stageBreakdown(campaignFilter),
           bookedBreakdown(organicFilter),
           bookedBreakdown(campaignFilter),
-          // legacy combined booked for revenueBySource
+          // legacy combined booked for revenueBySource + per-booking detail list
           (async () => {
             const baseWhere = conditions
               ? and(conditions, listVisibilityFilter, eq(conversationSessions.stage, "BOOKED"))
@@ -463,6 +464,9 @@ export const appRouter = router({
               bookedAmount: conversationSessions.bookedAmount,
               reactivationLastPrice: conversationSessions.reactivationLastPrice,
               reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+              leadName: conversationSessions.leadName,
+              bookedByAgentName: conversationSessions.bookedByAgentName,
+              bookedAt: conversationSessions.bookedAt,
             }).from(conversationSessions).where(baseWhere);
           })(),
         ]);
@@ -496,7 +500,15 @@ export const appRouter = router({
           revenueBySource[src] = (revenueBySource[src] ?? 0) + calcBookedRevenue(r);
         }
 
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign };
+        // Build per-booking detail list for tooltip display
+        const bookedList = allBooked.map(r => ({
+          leadName: r.leadName ?? 'Unknown',
+          bookedByAgentName: r.bookedByAgentName ?? null,
+          amount: calcBookedRevenue(r),
+          bookedAt: r.bookedAt instanceof Date ? r.bookedAt.getTime() : r.bookedAt ? new Date(r.bookedAt as string).getTime() : null,
+        })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
+
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign, bookedList };
       }),
 
     /**

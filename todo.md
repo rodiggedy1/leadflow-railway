@@ -1246,3 +1246,4 @@
 - [x] Fix duplicate unclaimed lead escalation alerts: added singleton guard to startInternalCron() + atomic DB-level UPDATE gate in runUnclaimedLeadEscalation to prevent race condition duplicates
 - [x] Fix bookedAt timestamps being stored 4 hours ahead: added timezone:'Z' to mysql2 connection in db.ts so Date objects always serialize as UTC; corrected 3 existing bad rows (IDs 1680010, 1740005, 1710033) by subtracting 4 hours
 - [x] Make marking a lead as BOOKED bump it to the top of the Leads list (include bookedAt in sort key)
+- [x] Add hover tooltip on "booked today" ticker in Command Chat showing per-booking details (customer name, amount, agent)
