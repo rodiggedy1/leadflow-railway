@@ -1263,3 +1263,12 @@
 - [x] Nurture: Send cron (fire due messages, handle exit conditions)
 - [x] Nurture: Wire Lead Nurturing UI to real data (nurtureRouter.ts tRPC procedures)
 - [x] Nurture: Manual re-enroll after human takeover (nurture.resume mutation)
+
+## Nurture Sequence Critical Fixes
+
+- [x] Nurture: Add NURTURE_SMS_ENABLED = false kill switch to nurtureCron.ts (SMS sends disabled until approved)
+- [x] Nurture: Exclude cs_initiated sessions from enrollment (team members, not leads)
+- [x] Nurture: Cancel 11 bad cs_initiated enrollments from DB (set to done/manual)
+- [x] Nurture: Cancel 100 stale historical enrollments (48-hour enrollment window enforced)
+- [ ] Nurture: Wire Lead Nurturing UI lead progression table to real tRPC data (trpc.nurture.enrollments)
+- [ ] Nurture: Wire Lead Nurturing UI KPI cards to real tRPC data (trpc.nurture.stats)

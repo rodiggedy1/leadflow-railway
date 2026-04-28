@@ -42,6 +42,12 @@ const SPEED_TO_LEAD_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
  */
 const OPT_OUT_KEYWORDS = ["stop", "unsubscribe", "quit", "cancel", "end", "optout", "opt out", "opt-out"];
 
+/**
+ * Kill switch — set to false to disable all nurture SMS sends.
+ * Flip to true when the sequence is validated and ready to go live.
+ */
+const NURTURE_SMS_ENABLED = false;
+
 // ── Enrollment runner ─────────────────────────────────────────────────────────
 
 export async function runNurtureEnrollment(): Promise<{
@@ -93,6 +99,8 @@ export async function runNurtureEnrollment(): Promise<{
           sql`${conversationSessions.leadPhone} LIKE '+1%'`,
           // Not on human takeover (aiMode=1 means human has taken over)
           ne(conversationSessions.aiMode as any, 1),
+          // Exclude internal CS-initiated sessions (team members, not leads)
+          ne(conversationSessions.leadSource as any, 'cs_initiated'),
         )
       )
       .limit(100);
@@ -249,11 +257,16 @@ export async function runNurtureSend(): Promise<{
         });
         const messageBody = step.buildMessage(ctx);
 
-        // Send SMS
-        const smsResult = await sendSms({
-          to: enrollment.leadPhone,
-          content: messageBody,
-        });
+        // Send SMS (guarded by kill switch)
+        if (!NURTURE_SMS_ENABLED) {
+          console.log(`[NurtureSend] SMS DISABLED — would send step ${enrollment.nextStep} to ${enrollment.leadPhone}: ${messageBody.slice(0, 60)}...`);
+        }
+        const smsResult = NURTURE_SMS_ENABLED
+          ? await sendSms({
+              to: enrollment.leadPhone,
+              content: messageBody,
+            })
+          : { success: true, error: null };
 
         if (!smsResult.success) {
           console.error(
