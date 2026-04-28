@@ -222,7 +222,7 @@ export default function LeadNurturing() {
         <div className="rounded-[28px] border border-white/70 bg-white/80 shadow-[0_12px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           {/* ── Page header ─────────────────────────────────────────────── */}
           <div className="border-b border-slate-200/80 px-6 py-5 lg:px-7">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
                   <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -435,7 +435,7 @@ export default function LeadNurturing() {
             </div>
 
             {/* ── Right column ────────────────────────────────────────── */}
-            <div className="space-y-5">
+            <div className="space-y-5 min-w-0 overflow-hidden">
               {/* Selected lead panel */}
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="mb-4 flex items-start justify-between gap-3">
