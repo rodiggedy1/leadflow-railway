@@ -218,7 +218,7 @@ export default function LeadNurturing() {
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <AdminHeader activeTab="lead-nurturing" />
 
-      <div className="mx-auto max-w-[1600px] p-5 lg:p-6">
+      <div className="mx-auto max-w-[1600px] px-5 py-5 lg:px-8 lg:py-6">
         <div className="rounded-[28px] border border-white/70 bg-white/80 shadow-[0_12px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           {/* ── Page header ─────────────────────────────────────────────── */}
           <div className="border-b border-slate-200/80 px-6 py-5 lg:px-7">
@@ -438,12 +438,12 @@ export default function LeadNurturing() {
             <div className="space-y-5">
               {/* Selected lead panel */}
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <h2 className="text-lg font-semibold tracking-tight">Selected lead</h2>
-                    <p className="text-sm text-slate-500">AI orchestration + manual takeover controls</p>
+                    <p className="text-sm text-slate-500 whitespace-nowrap">AI orchestration + manual takeover controls</p>
                   </div>
-                  <button className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+                  <button className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
                     Open full thread
                   </button>
                 </div>
