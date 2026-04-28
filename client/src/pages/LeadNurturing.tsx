@@ -1,10 +1,85 @@
 /**
  * LeadNurturing — Sequence Control Center
- * AI Lead Nurturing Engine — pixel-perfect UI from spec.
- * UI-only phase: all data is static/placeholder.
+ * AI Lead Nurturing Engine — KPI cards and lead progression table wired to real tRPC data.
+ * Sequence map, activity feed, and automation logic remain illustrative.
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
+import { trpc } from "@/lib/trpc";
+
+// ── Step metadata (mirrors nurtureSequence.ts NURTURE_STEPS) ─────────────────
+const STEP_META: Record<number, { label: string; phase: 1 | 2 | 3 | 4 }> = {
+  3:  { label: "Holding a spot",     phase: 1 },
+  4:  { label: "Urgency",            phase: 1 },
+  5:  { label: "Soft reset",         phase: 1 },
+  6:  { label: "Fresh start",        phase: 2 },
+  7:  { label: "Simple CTA",         phase: 2 },
+  8:  { label: "Last call",          phase: 2 },
+  9:  { label: "Value reminder",     phase: 2 },
+  10: { label: "Circle back",        phase: 3 },
+  11: { label: "Timing opener",      phase: 3 },
+  12: { label: "First-time offer",   phase: 3 },
+  13: { label: "Still need help?",   phase: 4 },
+  14: { label: "Convenience reframe",phase: 4 },
+  15: { label: "Trust signal",       phase: 4 },
+  16: { label: "Schedule gap fill",  phase: 4 },
+  17: { label: "Breakup text",       phase: 4 },
+};
+
+const PHASE_NAMES: Record<1 | 2 | 3 | 4, string> = {
+  1: "Speed-to-Lead",
+  2: "Close Window",
+  3: "High-Intent Follow-Up",
+  4: "Reactivation",
+};
+
+function getStepLabel(step: number): string {
+  return STEP_META[step]?.label ?? `Step ${step}`;
+}
+function getPhaseNum(step: number): 1 | 2 | 3 | 4 {
+  return STEP_META[step]?.phase ?? 1;
+}
+function getPhaseName(step: number): string {
+  return PHASE_NAMES[getPhaseNum(step)];
+}
+
+function formatNextSendAt(date: Date | string | null): string {
+  if (!date) return "—";
+  const d = date instanceof Date ? date : new Date(date);
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  if (diffMs < 0) return "overdue";
+  const diffMin = Math.round(diffMs / 60000);
+  if (diffMin < 60) return `in ${diffMin}m`;
+  const diffHr = Math.round(diffMs / 3600000);
+  if (diffHr < 24) return `in ${diffHr}h`;
+  const diffDays = Math.round(diffMs / 86400000);
+  return `in ${diffDays}d`;
+}
+
+function formatSource(src: string | null): string {
+  if (!src) return "Unknown";
+  const map: Record<string, string> = {
+    "bark-sms": "Bark",
+    "thumbtack": "Thumbtack",
+    "thumbtack-sms": "Thumbtack",
+    "yelp-sms": "Yelp",
+    "email": "Google Ads",
+    "voice": "AI Voice",
+    "form": "Quote Form",
+    "manual": "Manual",
+    "newsource": "New Source",
+  };
+  return map[src] ?? src;
+}
+
+function getInitials(name: string | null): string {
+  if (!name) return "?";
+  return name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
+}
+
+// ── Status filter type ────────────────────────────────────────────────────────
+type StatusFilter = "active" | "paused" | "done" | "all";
 
 export default function LeadNurturing() {
   const [activePanel, setActivePanel] = useState<"message" | "segment" | null>(null);
@@ -14,7 +89,40 @@ export default function LeadNurturing() {
     time: "+53 min",
     phase: "Phase 1 · Speed-to-Lead",
   });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(null);
 
+  // ── tRPC queries ─────────────────────────────────────────────────────────
+  const { data: stats, isLoading: statsLoading } = trpc.nurture.stats.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+
+  const { data: enrollmentsData, isLoading: enrollmentsLoading } = trpc.nurture.enrollments.useQuery(
+    { status: statusFilter, limit: 50, offset: 0 },
+    { refetchInterval: 30_000 }
+  );
+
+  const enrollments = enrollmentsData?.rows ?? [];
+  const total = enrollmentsData?.total ?? 0;
+
+  // Selected enrollment
+  const selectedEnrollment = useMemo(
+    () => enrollments.find((e) => e.id === selectedEnrollmentId) ?? null,
+    [enrollments, selectedEnrollmentId]
+  );
+
+  // ── Derived stats ─────────────────────────────────────────────────────────
+  const activeCount = stats?.active ?? 0;
+  const pausedCount = stats?.paused ?? 0;
+  const doneCount = stats?.done ?? 0;
+  const totalCount = stats?.total ?? 0;
+
+  // Count how many active enrollments are in Phase 1 (steps 3-5)
+  const phase1Count = enrollments.filter(
+    (e) => e.status === "active" && getPhaseNum(e.nextStep) === 1
+  ).length;
+
+  // ── Static data (sequence map, activity, automation) ─────────────────────
   const phases = [
     {
       key: "p1",
@@ -41,7 +149,8 @@ export default function LeadNurturing() {
       steps: [
         { label: "Fresh start", time: "9:00 am", status: "queued" },
         { label: "Simple CTA", time: "1:30 pm", status: "queued" },
-        { label: "Scarcity / last call", time: "6:00 pm", status: "queued" },
+        { label: "Last call", time: "6:00 pm", status: "queued" },
+        { label: "Value reminder", time: "Day 3", status: "queued" },
       ],
     },
     {
@@ -52,9 +161,9 @@ export default function LeadNurturing() {
       border: "border-violet-200",
       badge: "bg-violet-50 text-violet-700 border-violet-200",
       steps: [
-        { label: "Day 4 follow-up", time: "Day 4", status: "queued" },
-        { label: "Day 6 follow-up", time: "Day 6", status: "queued" },
-        { label: "Offer-based touch", time: "Day 7", status: "queued" },
+        { label: "Circle back", time: "Day 4", status: "queued" },
+        { label: "Timing opener", time: "Day 6", status: "queued" },
+        { label: "First-time offer", time: "Day 7", status: "queued" },
       ],
     },
     {
@@ -65,146 +174,33 @@ export default function LeadNurturing() {
       border: "border-amber-200",
       badge: "bg-amber-50 text-amber-700 border-amber-200",
       steps: [
-        { label: "Still need help this week?", time: "Day 10", status: "queued" },
-        { label: "Value-based reminder", time: "Day 14", status: "queued" },
-        { label: "Social proof / reassurance", time: "Day 18", status: "queued" },
-        { label: "Offer / limited opening", time: "Day 21", status: "queued" },
+        { label: "Still need help?", time: "Day 10", status: "queued" },
+        { label: "Convenience reframe", time: "Day 14", status: "queued" },
+        { label: "Trust signal", time: "Day 18", status: "queued" },
+        { label: "Schedule gap fill", time: "Day 21", status: "queued" },
         { label: "Breakup text", time: "Day 30", status: "queued" },
       ],
     },
   ];
 
-  const leads = [
-    {
-      name: "Sarah Mitchell",
-      source: "Thumbtack",
-      service: "Deep Clean",
-      intent: "High intent",
-      ai: "Running",
-      phase: "Phase 1",
-      phaseLabel: "Speed-to-Lead",
-      step: "Holding a spot",
-      nextAt: "in 34 min",
-      owner: "AI",
-      health: "Hot",
-      reply: "Viewed quote · no reply",
-      revenue: "$420",
-      score: 92,
-    },
-    {
-      name: "David Brooks",
-      source: "Yelp",
-      service: "Move-out",
-      intent: "High intent",
-      ai: "Running",
-      phase: "Phase 2",
-      phaseLabel: "Close Window",
-      step: "Simple CTA",
-      nextAt: "1:30 pm",
-      owner: "AI",
-      health: "Warm",
-      reply: "Replied once · went quiet",
-      revenue: "$560",
-      score: 81,
-    },
-    {
-      name: "Priya Shah",
-      source: "Website",
-      service: "Recurring",
-      intent: "Medium intent",
-      ai: "Waiting",
-      phase: "Phase 3",
-      phaseLabel: "High-Intent Follow-Up",
-      step: "Day 6 follow-up",
-      nextAt: "tomorrow",
-      owner: "AI",
-      health: "Warm",
-      reply: "Asked about pricing",
-      revenue: "$300/mo",
-      score: 74,
-    },
-    {
-      name: "Angela Reed",
-      source: "Facebook Lead",
-      service: "Standard Clean",
-      intent: "Low response",
-      ai: "Needs human",
-      phase: "Phase 4",
-      phaseLabel: "Reactivation",
-      step: "Offer / limited opening",
-      nextAt: "Day 21",
-      owner: "CSR",
-      health: "At risk",
-      reply: "Negative timing friction",
-      revenue: "$280",
-      score: 49,
-    },
-    {
-      name: "Marcus Green",
-      source: "Google LSA",
-      service: "One-time clean",
-      intent: "Fresh lead",
-      ai: "Queued",
-      phase: "Phase 1",
-      phaseLabel: "Speed-to-Lead",
-      step: "Instant response",
-      nextAt: "now",
-      owner: "AI",
-      health: "Hot",
-      reply: "New submission",
-      revenue: "$260",
-      score: 95,
-    },
-    {
-      name: "Emily Parker",
-      source: "Referral",
-      service: "Apartment clean",
-      intent: "Price shopper",
-      ai: "Running",
-      phase: "Phase 4",
-      phaseLabel: "Reactivation",
-      step: "Breakup text",
-      nextAt: "Day 30",
-      owner: "AI",
-      health: "Cooling",
-      reply: "No response for 12 days",
-      revenue: "$220",
-      score: 38,
-    },
-  ];
-
-  const queue = [
-    { title: "Send AI message", count: 18, tone: "emerald" },
-    { title: "Needs human takeover", count: 6, tone: "rose" },
-    { title: "Offer eligible", count: 11, tone: "amber" },
-    { title: "Booked from sequence", count: 9, tone: "sky" },
-  ];
-
   const activity = [
-    { time: "11:02 am", event: "AI sent 'holding a spot' to Sarah Mitchell", type: "ai" },
-    { time: "10:47 am", event: "Marcus Green entered Phase 1 from Google LSA", type: "lead" },
-    { time: "10:16 am", event: "Angela Reed flagged for human rescue after negative sentiment", type: "human" },
-    { time: "9:58 am", event: "David Brooks advanced to Phase 2 after no reply on Day 1", type: "system" },
+    { time: "Live", event: `${activeCount} leads actively in nurture sequence`, type: "system" },
+    { time: "Live", event: `${pausedCount} leads paused (human takeover)`, type: "human" },
+    { time: "All time", event: `${doneCount} leads completed or exited the sequence`, type: "ai" },
+    { time: "Config", event: "SMS sends are DISABLED — kill switch active (NURTURE_SMS_ENABLED = false)", type: "system" },
   ];
 
+  // ── Style maps ────────────────────────────────────────────────────────────
   const statusClass: Record<string, string> = {
     done: "bg-slate-900 text-white border-slate-900",
     active: "bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-600/20",
     queued: "bg-white text-slate-700 border-slate-200",
   };
 
-  const chipClass: Record<string, string> = {
-    Hot: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    Warm: "bg-amber-50 text-amber-700 border-amber-200",
-    Cooling: "bg-slate-100 text-slate-700 border-slate-200",
-    "At risk": "bg-rose-50 text-rose-700 border-rose-200",
-  };
-
-  const aiClass: Record<string, string> = {
-    Running: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    Queued: "bg-sky-50 text-sky-700 border-sky-200",
-    Waiting: "bg-amber-50 text-amber-700 border-amber-200",
-    "Needs human": "bg-rose-50 text-rose-700 border-rose-200",
+  const enrollmentStatusClass: Record<string, string> = {
+    active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    paused: "bg-amber-50 text-amber-700 border-amber-200",
+    done: "bg-slate-100 text-slate-600 border-slate-200",
   };
 
   const queueTone: Record<string, string> = {
@@ -213,6 +209,13 @@ export default function LeadNurturing() {
     amber: "from-amber-500/15 to-amber-500/5 border-amber-200",
     sky: "from-sky-500/15 to-sky-500/5 border-sky-200",
   };
+
+  const filterTabs: { label: string; value: StatusFilter }[] = [
+    { label: "Active", value: "active" },
+    { label: "Paused", value: "paused" },
+    { label: "Done", value: "done" },
+    { label: "All", value: "all" },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
@@ -239,11 +242,15 @@ export default function LeadNurturing() {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                   <div className="text-xs font-medium text-slate-500">Active leads in sequence</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight">146</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight">
+                    {statsLoading ? <span className="text-slate-300">—</span> : activeCount}
+                  </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500">Booked from nurture</div>
-                  <div className="mt-1 text-2xl font-semibold tracking-tight">23</div>
+                  <div className="text-xs font-medium text-slate-500">Completed sequence</div>
+                  <div className="mt-1 text-2xl font-semibold tracking-tight">
+                    {statsLoading ? <span className="text-slate-300">—</span> : doneCount}
+                  </div>
                 </div>
                 <button className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5">
                   New automation rule
@@ -256,16 +263,23 @@ export default function LeadNurturing() {
           <div className="grid gap-5 p-5 lg:grid-cols-[3fr_2fr] lg:p-6">
             {/* ── Left column ─────────────────────────────────────────── */}
             <div className="space-y-5">
-              {/* KPI queue cards */}
+              {/* KPI queue cards — wired to real stats */}
               <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {queue.map((item) => (
+                {[
+                  { title: "Active in sequence", count: activeCount, tone: "emerald" },
+                  { title: "Paused (human takeover)", count: pausedCount, tone: "amber" },
+                  { title: "Completed / exited", count: doneCount, tone: "sky" },
+                  { title: "Total enrolled (all time)", count: totalCount, tone: "rose" },
+                ].map((item) => (
                   <div
                     key={item.title}
                     className={`rounded-[24px] border bg-gradient-to-br p-4 shadow-sm ${queueTone[item.tone]}`}
                   >
                     <div className="text-sm font-medium text-slate-600">{item.title}</div>
                     <div className="mt-2 flex items-end justify-between">
-                      <div className="text-3xl font-semibold tracking-tight text-slate-950">{item.count}</div>
+                      <div className="text-3xl font-semibold tracking-tight text-slate-950">
+                        {statsLoading ? <span className="text-slate-300">—</span> : item.count}
+                      </div>
                       <div className="rounded-full border border-white/80 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-600">
                         Live
                       </div>
@@ -282,19 +296,25 @@ export default function LeadNurturing() {
                     <p className="text-sm text-slate-500">See exactly where leads are, what fired, and what AI will send next.</p>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs font-medium">
-                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600">146 active</div>
-                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600">42 in Phase 1</div>
-                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600">18 touching today</div>
+                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600">
+                      {statsLoading ? "— active" : `${activeCount} active`}
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600">
+                      {enrollmentsLoading ? "— in Phase 1" : `${phase1Count} in Phase 1`}
+                    </div>
+                    <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-600">
+                      SMS disabled
+                    </div>
                   </div>
                 </div>
 
                 {/* Segment lane buttons */}
                 <div className="mb-5 grid gap-3 xl:grid-cols-4">
                   {[
-                    { name: "Hot", sub: "Fast movers · high intent", count: 28, tone: "border-emerald-200 bg-emerald-50/70 text-emerald-700" },
-                    { name: "Price Shopper", sub: "Sensitive to price framing", count: 31, tone: "border-amber-200 bg-amber-50/70 text-amber-700" },
-                    { name: "Ghosted", sub: "No reply after early sequence", count: 22, tone: "border-slate-200 bg-slate-50 text-slate-700" },
-                    { name: "Reactivation Gold", sub: "Older leads likely to revive", count: 19, tone: "border-violet-200 bg-violet-50/70 text-violet-700" },
+                    { name: "Hot", sub: "Fast movers · high intent", count: "—", tone: "border-emerald-200 bg-emerald-50/70 text-emerald-700" },
+                    { name: "Price Shopper", sub: "Sensitive to price framing", count: "—", tone: "border-amber-200 bg-amber-50/70 text-amber-700" },
+                    { name: "Ghosted", sub: "No reply after early sequence", count: "—", tone: "border-slate-200 bg-slate-50 text-slate-700" },
+                    { name: "Reactivation Gold", sub: "Older leads likely to revive", count: "—", tone: "border-violet-200 bg-violet-50/70 text-violet-700" },
                   ].map((lane) => (
                     <button
                       key={lane.name}
@@ -358,78 +378,133 @@ export default function LeadNurturing() {
                 </div>
               </section>
 
-              {/* Lead progression table */}
+              {/* Lead progression table — wired to real enrollments */}
               <section className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <h2 className="text-lg font-semibold tracking-tight">Lead progression table</h2>
-                    <p className="text-sm text-slate-500">The operating view for AI status, next touch, ownership, and recovery.</p>
+                    <p className="text-sm text-slate-500">
+                      {total > 0 ? `${total} enrollment${total !== 1 ? "s" : ""}` : "No enrollments"} · click a row to inspect
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <button className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">All leads</button>
-                    <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">Needs human</button>
-                    <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">Offer eligible</button>
-                    <button className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-500">Booked</button>
+                    {filterTabs.map((tab) => (
+                      <button
+                        key={tab.value}
+                        onClick={() => { setStatusFilter(tab.value); setSelectedEnrollmentId(null); }}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                          statusFilter === tab.value
+                            ? "border-slate-900 bg-slate-900 text-white"
+                            : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                        }`}
+                      >
+                        {tab.label}
+                        {tab.value === "active" && stats ? ` (${stats.active})` : ""}
+                        {tab.value === "paused" && stats ? ` (${stats.paused})` : ""}
+                        {tab.value === "done" && stats ? ` (${stats.done})` : ""}
+                        {tab.value === "all" && stats ? ` (${stats.total})` : ""}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-left">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-[0.14em] text-slate-500">
-                        <th className="px-5 py-3 font-semibold">Lead</th>
-                        <th className="px-4 py-3 font-semibold">Current phase</th>
-                        <th className="px-4 py-3 font-semibold">Current step</th>
-                        <th className="px-4 py-3 font-semibold">Next touch</th>
-                        <th className="px-4 py-3 font-semibold">AI</th>
-                        <th className="px-4 py-3 font-semibold">Health</th>
-                        <th className="px-4 py-3 font-semibold">Owner</th>
-                        <th className="px-5 py-3 font-semibold">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {leads.map((lead) => (
-                        <tr key={lead.name} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
-                          <td className="px-5 py-4 align-top">
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white">
-                                {lead.name.split(" ").map((v) => v[0]).join("")}
-                              </div>
-                              <div>
-                                <div className="text-sm font-semibold text-slate-900">{lead.name}</div>
-                                <div className="mt-1 text-xs text-slate-500">{lead.source} · {lead.service}</div>
-                                <div className="mt-2 text-xs text-slate-600">{lead.reply}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <div className="text-sm font-medium text-slate-800">{lead.phase}</div>
-                            <div className="mt-1 text-xs text-slate-500">{lead.phaseLabel}</div>
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <div className="text-sm font-medium text-slate-800">{lead.step}</div>
-                            <div className="mt-1 text-xs text-slate-500">Lead score {lead.score}</div>
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <div className="text-sm font-semibold text-slate-900">{lead.nextAt}</div>
-                            <div className="mt-1 text-xs text-slate-500">{lead.intent}</div>
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${aiClass[lead.ai]}`}>
-                              {lead.ai}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${chipClass[lead.health]}`}>
-                              {lead.health}
-                            </span>
-                          </td>
-                          <td className="px-4 py-4 align-top text-sm text-slate-700">{lead.owner}</td>
-                          <td className="px-5 py-4 align-top text-sm font-semibold text-slate-900">{lead.revenue}</td>
+                  {enrollmentsLoading ? (
+                    <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+                      Loading enrollments…
+                    </div>
+                  ) : enrollments.length === 0 ? (
+                    <div className="flex items-center justify-center py-12 text-sm text-slate-400">
+                      No {statusFilter === "all" ? "" : statusFilter} enrollments found.
+                    </div>
+                  ) : (
+                    <table className="min-w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-[0.14em] text-slate-500">
+                          <th className="px-5 py-3 font-semibold">Lead</th>
+                          <th className="px-4 py-3 font-semibold">Phase</th>
+                          <th className="px-4 py-3 font-semibold">Current step</th>
+                          <th className="px-4 py-3 font-semibold">Next touch</th>
+                          <th className="px-4 py-3 font-semibold">Status</th>
+                          <th className="px-4 py-3 font-semibold">Source</th>
+                          <th className="px-5 py-3 font-semibold">Enrolled</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {enrollments.map((enrollment) => {
+                          const phaseNum = getPhaseNum(enrollment.nextStep);
+                          const phaseName = getPhaseName(enrollment.nextStep);
+                          const stepLabel = getStepLabel(enrollment.nextStep);
+                          const isSelected = enrollment.id === selectedEnrollmentId;
+                          const displayName = enrollment.sessionLeadName ?? enrollment.leadFirstName ?? "Unknown";
+                          const initials = getInitials(displayName);
+                          const enrolledDate = enrollment.enrolledAt
+                            ? new Date(enrollment.enrolledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                            : "—";
+
+                          return (
+                            <tr
+                              key={enrollment.id}
+                              onClick={() => setSelectedEnrollmentId(isSelected ? null : enrollment.id)}
+                              className={`border-b border-slate-100 last:border-0 cursor-pointer transition ${
+                                isSelected ? "bg-slate-100" : "hover:bg-slate-50/60"
+                              }`}
+                            >
+                              <td className="px-5 py-4 align-top">
+                                <div className="flex items-start gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white">
+                                    {initials}
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-semibold text-slate-900">{displayName}</div>
+                                    <div className="mt-1 text-xs text-slate-500">{enrollment.leadPhone}</div>
+                                    {enrollment.serviceType && (
+                                      <div className="mt-1 text-xs text-slate-400">{enrollment.serviceType}</div>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <div className="text-sm font-medium text-slate-800">Phase {phaseNum}</div>
+                                <div className="mt-1 text-xs text-slate-500">{phaseName}</div>
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <div className="text-sm font-medium text-slate-800">{stepLabel}</div>
+                                <div className="mt-1 text-xs text-slate-500">Step {enrollment.nextStep} of 17</div>
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <div className={`text-sm font-semibold ${
+                                  enrollment.status === "paused" ? "text-amber-600" : "text-slate-900"
+                                }`}>
+                                  {enrollment.status === "paused"
+                                    ? "Paused"
+                                    : enrollment.status === "done"
+                                    ? enrollment.endReason ?? "done"
+                                    : formatNextSendAt(enrollment.nextSendAt)}
+                                </div>
+                                {enrollment.lastStepSent != null && (
+                                  <div className="mt-1 text-xs text-slate-500">
+                                    Last: step {enrollment.lastStepSent}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-4 align-top">
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${enrollmentStatusClass[enrollment.status] ?? ""}`}>
+                                  {enrollment.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 align-top text-sm text-slate-700">
+                                {formatSource(enrollment.sessionSource)}
+                              </td>
+                              <td className="px-5 py-4 align-top text-sm text-slate-500">
+                                {enrolledDate}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </section>
             </div>
@@ -448,134 +523,89 @@ export default function LeadNurturing() {
                   </button>
                 </div>
 
-                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white">SM</div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-semibold text-slate-900">Sarah Mitchell</div>
-                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
-                          Hot lead
-                        </span>
+                {selectedEnrollment ? (
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-sm font-semibold text-white">
+                        {getInitials(selectedEnrollment.sessionLeadName ?? selectedEnrollment.leadFirstName)}
                       </div>
-                      <div className="mt-1 text-xs text-slate-500">Thumbtack · Deep Clean · Submitted 58 minutes ago</div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-white bg-white p-3">
-                      <div className="text-xs font-medium text-slate-500">Current phase</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">Phase 1 · Speed-to-Lead</div>
-                    </div>
-                    <div className="rounded-2xl border border-white bg-white p-3">
-                      <div className="text-xs font-medium text-slate-500">Next AI action</div>
-                      <div className="mt-1 text-sm font-semibold text-slate-900">Urgency text in 34 min</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 space-y-3">
-                  {/* Timeline */}
-                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-slate-900">Timeline</div>
-                      <div className="text-xs text-slate-500">AI + human events</div>
-                    </div>
-                    <div className="space-y-3">
-                      {[
-                        { side: "left", tag: "Lead submitted", text: "Thumbtack request received for a deep clean in DC.", time: "10:21 am" },
-                        { side: "right", tag: "AI sent", text: "Hi Sarah — thanks for reaching out. We can help. What day were you hoping for?", time: "10:21 am" },
-                        { side: "right", tag: "AI sent", text: "Just checking in — I can still hold a team if you want me to.", time: "10:34 am" },
-                        { side: "right", tag: "Queued", text: "Urgency touch scheduled: 'Afternoon is filling up — want me to reserve a spot?'", time: "12:02 pm" },
-                      ].map((item, i) => (
-                        <div key={i} className={`flex ${item.side === "right" ? "justify-end" : "justify-start"}`}>
-                          <div className={`max-w-[85%] rounded-2xl border p-3 ${item.side === "right" ? "border-sky-200 bg-sky-50" : "border-slate-200 bg-slate-50"}`}>
-                            <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                              <span>{item.tag}</span>
-                              <span>•</span>
-                              <span>{item.time}</span>
-                            </div>
-                            <div className="mt-1 text-sm text-slate-800">{item.text}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm font-semibold text-slate-900 truncate">
+                            {selectedEnrollment.sessionLeadName ?? selectedEnrollment.leadFirstName ?? "Unknown"}
                           </div>
+                          <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${enrollmentStatusClass[selectedEnrollment.status]}`}>
+                            {selectedEnrollment.status}
+                          </span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Outreach detail */}
-                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-slate-900">Outreach detail (click any step above to load message)</div>
-                      <div className="text-xs text-slate-500">Step template editor</div>
-                    </div>
-
-                    <div className="mb-3 flex flex-wrap gap-2">
-                      {["Instant response", "Nudge", "Holding a spot", "Urgency", "Soft reset"].map((item, idx) => (
-                        <button
-                          key={item}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-medium ${idx === 2 ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-700"}`}
-                        >
-                          {item}
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="grid gap-3">
-                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                        <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">AI context used</div>
-                        <div className="mt-2 text-sm text-slate-700">Source: Thumbtack · Service: Deep clean · City: DC · Intent score: 92 · No reply after 2 prior touches</div>
+                        <div className="mt-1 text-xs text-slate-500 truncate">
+                          {formatSource(selectedEnrollment.sessionSource)} · {selectedEnrollment.serviceType ?? "Unknown service"} · {selectedEnrollment.leadPhone}
+                        </div>
                       </div>
+                    </div>
 
-                      <button
-                        onClick={() => setActivePanel("message")}
-                        className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-left transition hover:border-slate-300 hover:shadow-sm"
-                      >
-                        <div className="mb-2 flex items-center justify-between">
-                          <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Message text</div>
-                          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">Open editor →</span>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white bg-white p-3">
+                        <div className="text-xs font-medium text-slate-500">Current phase</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          Phase {getPhaseNum(selectedEnrollment.nextStep)} · {getPhaseName(selectedEnrollment.nextStep)}
                         </div>
-                        <div className="min-h-[140px] rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800">
-                          Hey Sarah — just a heads up, our afternoon is filling up pretty quickly. If you still want help with the deep clean, I can hold a spot for you before it gets taken. Want me to reserve one?
+                      </div>
+                      <div className="rounded-2xl border border-white bg-white p-3">
+                        <div className="text-xs font-medium text-slate-500">Next AI action</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {selectedEnrollment.status === "paused"
+                            ? "Paused — awaiting manual resume"
+                            : selectedEnrollment.status === "done"
+                            ? `Ended: ${selectedEnrollment.endReason ?? "done"}`
+                            : `${getStepLabel(selectedEnrollment.nextStep)} ${formatNextSendAt(selectedEnrollment.nextSendAt)}`}
                         </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white bg-white p-3">
+                        <div className="text-xs font-medium text-slate-500">Step</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {getStepLabel(selectedEnrollment.nextStep)} (step {selectedEnrollment.nextStep})
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-white bg-white p-3">
+                        <div className="text-xs font-medium text-slate-500">Enrolled</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">
+                          {selectedEnrollment.enrolledAt
+                            ? new Date(selectedEnrollment.enrolledAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                            : "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Next best actions */}
+                    <div className="mt-4 space-y-2">
+                      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Actions</div>
+                      {selectedEnrollment.status === "paused" && (
+                        <button className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-medium text-emerald-800 transition hover:bg-emerald-100">
+                          <span>Resume sequence (re-enroll)</span>
+                          <span className="text-emerald-500">→</span>
+                        </button>
+                      )}
+                      {selectedEnrollment.status === "active" && (
+                        <button className="flex w-full items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-medium text-amber-800 transition hover:bg-amber-100">
+                          <span>Pause sequence (human takeover)</span>
+                          <span className="text-amber-500">→</span>
+                        </button>
+                      )}
+                      <button className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white">
+                        <span>End sequence manually</span>
+                        <span className="text-slate-400">→</span>
                       </button>
-
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Trigger</div>
-                          <div className="mt-2 text-sm font-medium text-slate-900">No reply after "holding a spot"</div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Send time</div>
-                          <div className="mt-2 text-sm font-medium text-slate-900">+2.5 hours from submission</div>
-                        </div>
-                      </div>
                     </div>
                   </div>
-
-                  {/* Next best actions */}
-                  <div className="rounded-[22px] border border-slate-200 bg-white p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="text-sm font-semibold text-slate-900">Next best actions</div>
-                      <div className="text-xs text-slate-500">AI suggestions</div>
-                    </div>
-                    <div className="grid gap-2">
-                      {[
-                        "Let AI send urgency text",
-                        "Switch to human and call now",
-                        "Offer 10% close incentive",
-                        "Pause sequence for 24 hrs",
-                      ].map((action) => (
-                        <button
-                          key={action}
-                          className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white"
-                        >
-                          <span>{action}</span>
-                          <span className="text-slate-400">→</span>
-                        </button>
-                      ))}
-                    </div>
+                ) : (
+                  <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-6 text-center">
+                    <div className="text-sm text-slate-500">Click any row in the lead table to inspect that enrollment here.</div>
                   </div>
-                </div>
+                )}
               </section>
 
               {/* Live activity */}
@@ -585,13 +615,13 @@ export default function LeadNurturing() {
                     <h2 className="text-lg font-semibold tracking-tight">Live activity</h2>
                     <p className="text-sm text-slate-500">Everything the system is doing right now</p>
                   </div>
-                  <div className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    AI online
+                  <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    SMS disabled
                   </div>
                 </div>
                 <div className="space-y-3">
-                  {activity.map((item) => (
-                    <div key={item.event} className="flex gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  {activity.map((item, i) => (
+                    <div key={i} className="flex gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <div className={`mt-1 h-2.5 w-2.5 flex-shrink-0 rounded-full ${item.type === "ai" ? "bg-emerald-500" : item.type === "human" ? "bg-rose-500" : item.type === "lead" ? "bg-sky-500" : "bg-slate-400"}`} />
                       <div className="flex-1">
                         <div className="text-sm font-medium text-slate-800">{item.event}</div>
@@ -614,6 +644,9 @@ export default function LeadNurturing() {
                     ["Opened quote but silent", "Use 'holding a spot' framing"],
                     ["Positive signal + no booking", "Offer exact time CTA"],
                     ["Negative sentiment or objection", "Route to human rescue"],
+                    ["Lead books", "End sequence immediately"],
+                    ["STOP / UNSUBSCRIBE keyword", "End sequence, record opt-out"],
+                    ["Human takeover (aiMode=1)", "Pause sequence until manually resumed"],
                   ].map(([a, b]) => (
                     <div key={a} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                       <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Trigger</div>
@@ -678,60 +711,8 @@ export default function LeadNurturing() {
                   </div>
                   <textarea
                     className="min-h-[170px] w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-slate-400"
-                    defaultValue="Hey Sarah — just a heads up, our afternoon is filling up pretty quickly. If you still want help with the deep clean, I can hold a spot for you before it gets taken. Want me to reserve one?"
+                    defaultValue="Hey — just a heads up, our afternoon is filling up pretty quickly. If you still want help with the clean, I can hold a spot for you before it gets taken. Want me to reserve one?"
                   />
-                </div>
-
-                {/* Reply rate / booking rate */}
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Reply rate</div>
-                    <div className="mt-2 text-3xl font-semibold tracking-tight text-emerald-800">39%</div>
-                    <div className="mt-1 text-xs text-emerald-700">+8% vs default message</div>
-                  </div>
-                  <div className="rounded-[22px] border border-sky-200 bg-sky-50 p-4">
-                    <div className="text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">Booking rate</div>
-                    <div className="mt-2 text-3xl font-semibold tracking-tight text-sky-800">14%</div>
-                    <div className="mt-1 text-xs text-sky-700">From leads that reached this step</div>
-                  </div>
-                </div>
-
-                {/* A/B variants */}
-                <div className="rounded-[24px] border border-slate-200 bg-white p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">A/B variants</div>
-                      <div className="text-xs text-slate-500">Test different angles without rebuilding the sequence.</div>
-                    </div>
-                    <button className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">Add variant</button>
-                  </div>
-                  <div className="space-y-3">
-                    {[
-                      ["A · Urgency", "Afternoon spots are almost full — want me to hold one for you?", "Winning"],
-                      ["B · Convenience", "We bring everything and can handle the whole clean in one visit. Want me to check times?", "Testing"],
-                      ["C · Direct CTA", "Would 9am or 1pm work better if we can fit you in?", "Paused"],
-                    ].map(([name, copy, status]) => (
-                      <button key={name} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-left transition hover:border-slate-300 hover:bg-white">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-semibold text-slate-900">{name}</div>
-                          <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-600">{status}</span>
-                        </div>
-                        <div className="mt-2 text-sm leading-5 text-slate-700">{copy}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Personalization tokens */}
-                <div className="rounded-[24px] border border-slate-200 bg-white p-4">
-                  <div className="mb-3 text-sm font-semibold text-slate-900">Personalization tokens</div>
-                  <div className="flex flex-wrap gap-2">
-                    {["{{first_name}}", "{{service}}", "{{city}}", "{{preferred_day}}", "{{quote_price}}", "{{open_slots}}", "{{source}}"].map((token) => (
-                      <button key={token} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white">
-                        {token}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 {/* Trigger + guardrails */}
@@ -748,6 +729,18 @@ export default function LeadNurturing() {
                         <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">{label}</div>
                         <div className="mt-1 text-sm font-medium text-slate-900">{value}</div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Personalization tokens */}
+                <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <div className="mb-3 text-sm font-semibold text-slate-900">Personalization tokens</div>
+                  <div className="flex flex-wrap gap-2">
+                    {["{{first_name}}", "{{service}}", "{{preferred_day_or_this_week}}", "{{slot_1}}", "{{slot_2}}"].map((token) => (
+                      <button key={token} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white">
+                        {token}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -769,15 +762,15 @@ export default function LeadNurturing() {
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-white bg-white p-3">
                       <div className="text-xs text-slate-500">Leads</div>
-                      <div className="mt-1 text-2xl font-semibold">28</div>
+                      <div className="mt-1 text-2xl font-semibold">—</div>
                     </div>
                     <div className="rounded-2xl border border-white bg-white p-3">
                       <div className="text-xs text-slate-500">Reply rate</div>
-                      <div className="mt-1 text-2xl font-semibold">44%</div>
+                      <div className="mt-1 text-2xl font-semibold">—</div>
                     </div>
                     <div className="rounded-2xl border border-white bg-white p-3">
                       <div className="text-xs text-slate-500">Booked</div>
-                      <div className="mt-1 text-2xl font-semibold">9</div>
+                      <div className="mt-1 text-2xl font-semibold">—</div>
                     </div>
                   </div>
                 </div>

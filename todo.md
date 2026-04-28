@@ -1270,5 +1270,5 @@
 - [x] Nurture: Exclude cs_initiated sessions from enrollment (team members, not leads)
 - [x] Nurture: Cancel 11 bad cs_initiated enrollments from DB (set to done/manual)
 - [x] Nurture: Cancel 100 stale historical enrollments (48-hour enrollment window enforced)
-- [ ] Nurture: Wire Lead Nurturing UI lead progression table to real tRPC data (trpc.nurture.enrollments)
-- [ ] Nurture: Wire Lead Nurturing UI KPI cards to real tRPC data (trpc.nurture.stats)
+- [x] Nurture: Wire Lead Nurturing UI lead progression table to real tRPC data (trpc.nurture.enrollments)
+- [x] Nurture: Wire Lead Nurturing UI KPI cards to real tRPC data (trpc.nurture.stats)
