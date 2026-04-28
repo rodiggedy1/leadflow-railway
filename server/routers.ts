@@ -2487,8 +2487,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
 
         // 2. Insert conversation session
         const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : input.isFollowUp ? "FOLLOW_UP_SCHEDULED" : "CALL_SCHEDULED";
+        const normalizedCallPhone = normalizePhone(input.phone);
         const [sessionResult] = await db.insert(conversationSessions).values({
-          leadPhone:          input.phone,
+          leadPhone:          normalizedCallPhone,
           leadName:           input.name,
           stage,
           quotedPrice:        input.quotedPrice ?? null,
@@ -2665,8 +2666,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const stage = (input.status as any) ?? "QUOTE_SENT";
         const BOOKED_STAGES_SET = ["BOOKED", "BOOKING_CONFIRMED", "BOOKING_COMPLETE"];
         const isBookedFlag = BOOKED_STAGES_SET.includes(stage) ? 1 : 0;
+        const normalizedManualPhone = normalizePhone(input.phone);
         const [sessionResult] = await db.insert(conversationSessions).values({
-          leadPhone:          input.phone,
+          leadPhone:          normalizedManualPhone,
           leadName:           input.name,
           stage,
           serviceType:        input.serviceType,

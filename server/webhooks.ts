@@ -474,10 +474,22 @@ export function registerWebhookRoutes(app: Express) {
 
       // Look up the most recent ACTIVE (non-DONE) session for this phone number.
       // Multiple sessions can exist per phone (e.g. same customer 6 months later).
+      //
+      // IMPORTANT: Sessions may be stored with non-normalized phone formats (e.g. "703-727-5500"
+      // or "(703) 727-5500") because they were created before strict E.164 normalization was
+      // enforced. The webhook always receives E.164 from OpenPhone (+17037275500).
+      // We must match on the last 10 digits (digit-only) to handle all stored formats.
+      // fromPhone is always E.164 here (+1XXXXXXXXXX), so last 10 digits = the US local number.
+      const fromPhoneDigits = fromPhone.replace(/[^\d]/g, "").slice(-10);
       const sessions = await db
         .select()
         .from(conversationSessions)
-        .where(eq(conversationSessions.leadPhone, fromPhone))
+        .where(
+          or(
+            eq(conversationSessions.leadPhone, fromPhone),
+            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') LIKE ${`%${fromPhoneDigits}`}`
+          )
+        )
         .orderBy(conversationSessions.createdAt)
         .limit(50);
 

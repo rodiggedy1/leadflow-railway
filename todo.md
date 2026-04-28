@@ -1252,3 +1252,7 @@
 - [x] Add "Growth" dropdown to admin nav with "Lead Nurture" as first item
 - [x] Move "Journey" from top-level nav into the Jobs dropdown
 - [x] Register /admin/lead-nurturing route in App.tsx
+
+- [x] Fix: inbound SMS replies not showing in drawer for leads with non-E.164 phone (e.g. "703-727-5500") — webhook lookup now uses digit-only fallback match
+- [x] Fix: normalize phone to E.164 at manual lead creation and call-assist lead creation so new sessions always store +1XXXXXXXXXX
+- [x] Data fix: backfilled 79 existing sessions with non-normalized phones to E.164 format
