@@ -7,7 +7,7 @@ import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
-import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive, insertSession } from "./db";
+import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
@@ -2488,7 +2488,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // 2. Insert conversation session
         const stage = input.isBooked ? "BOOKED" : input.notInterested ? "NOT_INTERESTED" : input.isFollowUp ? "FOLLOW_UP_SCHEDULED" : "CALL_SCHEDULED";
         const normalizedCallPhone = normalizePhone(input.phone);
-        const [sessionResult] = await insertSession(db, {
+        const [sessionResult] = await db.insert(conversationSessions).values({
           leadPhone:          normalizedCallPhone,
           leadName:           input.name,
           stage,
@@ -2667,7 +2667,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const BOOKED_STAGES_SET = ["BOOKED", "BOOKING_CONFIRMED", "BOOKING_COMPLETE"];
         const isBookedFlag = BOOKED_STAGES_SET.includes(stage) ? 1 : 0;
         const normalizedManualPhone = normalizePhone(input.phone);
-        const [sessionResult] = await insertSession(db, {
+        const [sessionResult] = await db.insert(conversationSessions).values({
           leadPhone:          normalizedManualPhone,
           leadName:           input.name,
           stage,
@@ -5148,7 +5148,7 @@ async function processWidgetLeadInBackground(input: {
     { role: "assistant", content: sizingMsg, ts: now },
   ]);
   try {
-    await insertSession(db, {
+    await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
       leadName: toTitleCase(input.name),
       stage: "WIDGET_SIZING",
@@ -5399,7 +5399,7 @@ async function processQuoteInBackground(
 
   // Always create a new session row — same phone can submit again months later
   try {
-    await insertSession(db, {
+    await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
       leadName: toTitleCase(input.name),
       stage: initialStage as any,

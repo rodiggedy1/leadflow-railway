@@ -18,7 +18,7 @@ import { ENV } from "./_core/env";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { calculatePrice, SERVICE_MULTIPLIERS } from "./engine/pricing";
 import { sendSms } from "./openphone";
-import { getDb, insertSession } from "./db";
+import { getDb } from "./db";
 import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages, fieldMgmtCalls } from "../drizzle/schema";
 import { eq, desc } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
@@ -713,7 +713,7 @@ export async function handleCreateLead(args: {
 
     // Create a conversation session in QUOTE_SENT stage
     const slot = preferredDate ?? "To be confirmed";
-    const [sessionResult] = await insertSession(db, {
+    const [sessionResult] = await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
       leadName: name,
       stage: "QUOTE_SENT",

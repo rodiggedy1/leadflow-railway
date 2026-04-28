@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import { adminAgentProcedure, router } from "./_core/trpc";
-import { getDb, insertSession } from "./db";
+import { getDb } from "./db";
 import {
   conversationSessions,
   activityLog,
@@ -1971,7 +1971,7 @@ Respond in JSON with this exact schema:
                   .limit(1);
                 // Use serviceType if available, fall back to frequency (e.g. "Monthly", "One-time")
                 const resolvedServiceType = priceRow?.serviceType || priceRow?.frequency || null;
-                await insertSession(db, {
+                await db.insert(conversationSessions).values({
                   leadPhone: target.phone,
                   leadName: target.name ?? "",
                   stage: "REACTIVATION",
@@ -2244,7 +2244,7 @@ Respond in JSON with this exact schema:
       // only DONE sessions and silently drops the reply.
       if (db && result.success) {
         try {
-          await insertSession(db, {
+          await db.insert(conversationSessions).values({
             leadPhone: e164Phone,
             leadName: input.testName ?? "Test",
             stage: "REACTIVATION",

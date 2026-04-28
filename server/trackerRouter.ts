@@ -16,7 +16,7 @@
 import { z } from "zod";
 import { router, publicProcedure, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { getDb, insertSession } from "./db";
+import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { eq, and, isNull, isNotNull, desc, gte, lte } from "drizzle-orm";
 import { jobSmsReplies } from "../drizzle/schema";
@@ -197,7 +197,7 @@ export const trackerRouter = router({
           // Use REVIEW_REBOOKING_REQUESTED for one-time (rebooking pitch) or REVIEW_DONE for recurring (thanks)
           const sessionStage = isRecurring ? "REVIEW_DONE" : "REVIEW_REBOOKING_REQUESTED";
           try {
-            await insertSession(db, {
+            await db.insert(conversationSessions).values({
               leadPhone: job.customerPhone,
               leadName: job.customerName ?? undefined,
               stage: sessionStage as typeof conversationSessions.$inferInsert["stage"],

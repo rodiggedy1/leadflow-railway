@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
-import { getDb, insertSession } from "./db";
+import { getDb } from "./db";
 import {
   alwaysOnGroups,
   alwaysOnEnrollments,
@@ -201,7 +201,7 @@ export const alwaysOnRouter = router({
         : 180; // $180 placeholder
       const discountPct = sampleEnrollment?.discountPct ?? 10;
 
-      await insertSession(db, {
+      await db.insert(conversationSessions).values({
         leadPhone: e164,
         leadName: sampleEnrollment?.firstName ?? "Sarah",
         stage: "REACTIVATION",

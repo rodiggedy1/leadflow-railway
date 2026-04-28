@@ -10,7 +10,7 @@
 import { z } from "zod";
 import { and, desc, eq, isNull, ne, notInArray, or, sql } from "drizzle-orm";
 import { router, protectedProcedure } from "./_core/trpc";
-import { getDb, insertSession } from "./db";
+import { getDb } from "./db";
 import { reactivationCampaigns, reactivationContacts, conversationSessions, completedJobs } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
@@ -797,7 +797,7 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
       await sendSms({ to: contact.phone, content: message });
 
       // Create a conversation session for this contact so inbound replies are routed correctly
-      const [sessionResult] = await insertSession(db, {
+      const [sessionResult] = await db.insert(conversationSessions).values({
         leadPhone: contact.phone,
         leadName: contact.name ?? "",
         stage: "REACTIVATION",

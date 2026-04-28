@@ -22,7 +22,7 @@ import { z } from "zod";
 import { and, desc, eq, gte, isNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
 import { router, agentProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { getDb, insertSession } from "./db";
+import { getDb } from "./db";
 
 import {
   cleanerProfiles,
@@ -321,7 +321,7 @@ export async function sendApprovedRatingSms(): Promise<{
 
   for (const pending of approved) {
     // Create a conversation session so inbound replies are routed to the rating flow
-    const [sessionInsert] = await insertSession(db, {
+    const [sessionInsert] = await db.insert(conversationSessions).values({
       leadPhone: pending.customerPhone,
       leadName: pending.customerFirstName ?? "Customer",
       stage: "QUALITY_RATING_REQUESTED",
