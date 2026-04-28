@@ -41,6 +41,7 @@ import {
   Smartphone,
   Sparkles,
   BarChart3,
+  TrendingUp,
 } from "lucide-react";
 
 // ── Widget health badge ───────────────────────────────────────────────────
@@ -263,7 +264,8 @@ export type AdminTab =
   | "hiring"
   | "team-pay"
   | "performance"
-  | "metrics";
+  | "metrics"
+  | "lead-nurturing";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -352,16 +354,18 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "Jobs",
     icon: <ClipboardCheck className="w-3.5 h-3.5" />,
     children: [
-      { id: "quality",   label: "Jobs",     href: "/admin/quality",    icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
-      { id: "team-pay",  label: "Team Pay", href: "/admin/team-pay",   icon: <Trophy className="w-3.5 h-3.5" /> },
+      { id: "quality",      label: "Jobs",     href: "/admin/quality",       icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
+      { id: "team-pay",     label: "Team Pay", href: "/admin/team-pay",      icon: <Trophy className="w-3.5 h-3.5" /> },
+      { id: "tracker-flow", label: "Journey",  href: "/admin/tracker-flow", icon: <Smartphone className="w-3.5 h-3.5" /> },
     ],
   },
   {
-    id: "tracker-flow",
-    label: "Journey",
-    icon: <Smartphone className="w-3.5 h-3.5" />,
-    href: "/admin/tracker-flow",
-    tabId: "tracker-flow",
+    id: "growth-group",
+    label: "Growth",
+    icon: <TrendingUp className="w-3.5 h-3.5" />,
+    children: [
+      { id: "lead-nurturing", label: "Lead Nurture", href: "/admin/lead-nurturing", icon: <TrendingUp className="w-3.5 h-3.5" /> },
+    ],
   },
   {
     id: "review-tracker",
