@@ -13,7 +13,7 @@
  */
 
 import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
-import { eq, and, lte, isNull, ne, lt, inArray } from "drizzle-orm";
+import { eq, and, lte, gte, isNull, ne, lt, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
@@ -81,6 +81,8 @@ export async function runNurtureEnrollment(): Promise<{
         and(
           // Speed-to-lead window passed
           lte(conversationSessions.createdAt, cutoff),
+          // Only leads from the last 48 hours (yesterday + today)
+          gte(conversationSessions.createdAt, new Date(Date.now() - 48 * 60 * 60 * 1000)),
           // Not booked
           ne(conversationSessions.stage, "BOOKED" as any),
           // Has a real phone (not a placeholder)
