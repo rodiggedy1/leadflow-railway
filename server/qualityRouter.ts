@@ -1449,10 +1449,12 @@ export const qualityRouter = router({
 
           for (const team of teams) {
             // Find or create cleaner profile for this team
+            // Use normalized match (LOWER + TRIM) to prevent duplicates from whitespace/case variations
+            const normalizedTitle = team.title.trim().toLowerCase();
             let [profile] = await db
               .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
               .from(cleanerProfiles)
-              .where(eq(cleanerProfiles.name, team.title))
+              .where(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`)
               .limit(1);
 
             if (!profile) {
