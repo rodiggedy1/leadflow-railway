@@ -218,7 +218,7 @@ export default function LeadNurturing() {
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
       <AdminHeader activeTab="lead-nurturing" />
 
-      <div className="mx-auto max-w-[1600px] px-5 py-5 lg:px-8 lg:py-6">
+      <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:py-6">
         <div className="rounded-[28px] border border-white/70 bg-white/80 shadow-[0_12px_50px_rgba(15,23,42,0.08)] backdrop-blur">
           {/* ── Page header ─────────────────────────────────────────────── */}
           <div className="border-b border-slate-200/80 px-6 py-5 lg:px-7">
