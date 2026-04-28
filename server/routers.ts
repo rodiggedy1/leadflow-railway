@@ -3278,12 +3278,15 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
-        // Normalize to 10 digits
-        const digits = input.phone.replace(/^\+1/, "").replace(/[^\d]/g, "");
+        // Normalize input to last 10 digits (handles E.164, local, formatted)
+        const digits10 = input.phone.replace(/[^\d]/g, "").slice(-10);
+        if (!digits10 || digits10.length < 10) return null;
+        // Normalize DB side too — strip all non-digits and take last 10
+        // This handles any stored format: +13025551234, (302) 555-1234, 3025551234, etc.
         const [profile] = await db
           .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
           .from(cleanerProfiles)
-          .where(eq(cleanerProfiles.phone, digits))
+          .where(sql`RIGHT(REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', ''), 10) = ${digits10}`)
           .limit(1);
         return profile ?? null;
       }),
