@@ -253,7 +253,7 @@ export default function LeadNurturing() {
           </div>
 
           {/* ── Two-column body ──────────────────────────────────────────── */}
-          <div className="grid gap-5 p-5 lg:grid-cols-[1.2fr_0.8fr] lg:p-6">
+          <div className="grid gap-5 p-5 lg:grid-cols-[3fr_2fr] lg:p-6">
             {/* ── Left column ─────────────────────────────────────────── */}
             <div className="space-y-5">
               {/* KPI queue cards */}
