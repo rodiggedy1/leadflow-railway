@@ -2058,3 +2058,54 @@ export const metricsAiAlerts = mysqlTable("metrics_ai_alerts", {
   generatedAt: timestamp("generatedAt").defaultNow().notNull(),
 });
 export type MetricsAiAlert = typeof metricsAiAlerts.$inferSelect;
+
+/**
+ * nurture_enrollments — one row per lead enrolled in the 30-day SMS nurture sequence.
+ *
+ * The sequence starts at message 3 (Phase 1 · +50 min) because messages 1 and 2
+ * are already handled by the existing speed-to-lead flow.
+ *
+ * nextStep: 3–17 (message number to send next). When nextStep > 17, the sequence is done.
+ *
+ * status:
+ *   active   → sequence is running, cron will fire due messages
+ *   paused   → human takeover; cron skips this lead until re-enrolled
+ *   done     → sequence completed (day 30 reached or lead booked/opted-out)
+ */
+export const nurtureEnrollments = mysqlTable("nurture_enrollments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to conversation_sessions.id */
+  sessionId: int("sessionId").notNull(),
+  /** E.164 phone — denormalized for fast cron queries without joins */
+  leadPhone: varchar("leadPhone", { length: 30 }).notNull(),
+  /** Lead first name (extracted from leadName at enrollment time) */
+  leadFirstName: varchar("leadFirstName", { length: 100 }),
+  /** Service type (from conversation_sessions.serviceType) — used in message templates */
+  serviceType: varchar("serviceType", { length: 100 }),
+  /** UTC timestamp when this lead was enrolled */
+  enrolledAt: timestamp("enrolledAt").defaultNow().notNull(),
+  /**
+   * UTC timestamp of the original lead submission (conversation_sessions.createdAt).
+   * All day-based offsets (Day 2, Day 3, Day 10…) are calculated from this anchor.
+   */
+  leadCreatedAt: timestamp("leadCreatedAt").notNull(),
+  /** Next message step number to send (3–17). >17 = sequence done. */
+  nextStep: int("nextStep").default(3).notNull(),
+  /** UTC timestamp when nextStep is scheduled to fire */
+  nextSendAt: timestamp("nextSendAt").notNull(),
+  /** status: active | paused | done */
+  status: mysqlEnum("status", ["active", "paused", "done"]).default("active").notNull(),
+  /** Reason the sequence ended (booked | opted_out | day30 | manual) */
+  endReason: varchar("endReason", { length: 32 }),
+  /** UTC timestamp when status was set to done */
+  endedAt: timestamp("endedAt"),
+  /** Last step that was successfully sent */
+  lastStepSent: int("lastStepSent"),
+  /** UTC timestamp of last successful send */
+  lastSentAt: timestamp("lastSentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NurtureEnrollment = typeof nurtureEnrollments.$inferSelect;
+export type InsertNurtureEnrollment = typeof nurtureEnrollments.$inferInsert;

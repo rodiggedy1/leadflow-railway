@@ -1,0 +1,170 @@
+/**
+ * nurtureRouter.ts
+ *
+ * tRPC procedures for the Lead Nurturing page:
+ *  - nurture.stats         — KPI cards (enrolled, active, paused, done)
+ *  - nurture.enrollments   — paginated list of active/paused enrollments with lead info
+ *  - nurture.resume        — manually re-enroll / resume a paused enrollment
+ *  - nurture.end           — manually end an enrollment
+ *  - nurture.enroll        — manually enroll a specific session
+ */
+
+import { router, adminAgentProcedure } from "./_core/trpc";
+import { z } from "zod";
+import { getDb } from "./db";
+import { nurtureEnrollments, conversationSessions } from "../drizzle/schema";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { enrollLead, resumeEnrollment, endEnrollment } from "./nurtureSequence";
+import { NURTURE_STEPS } from "./nurtureSequence";
+
+export const nurtureRouter = router({
+  /** KPI stats for the header cards */
+  stats: adminAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { active: 0, paused: 0, done: 0, total: 0 };
+
+    const rows = await db
+      .select({
+        status: nurtureEnrollments.status,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(nurtureEnrollments)
+      .groupBy(nurtureEnrollments.status);
+
+    const result = { active: 0, paused: 0, done: 0, total: 0 };
+    for (const r of rows) {
+      const count = Number(r.count);
+      if (r.status === "active") result.active = count;
+      else if (r.status === "paused") result.paused = count;
+      else if (r.status === "done") result.done = count;
+      result.total += count;
+    }
+    return result;
+  }),
+
+  /** Paginated list of enrollments with lead info */
+  enrollments: adminAgentProcedure
+    .input(
+      z.object({
+        status: z.enum(["active", "paused", "done", "all"]).default("active"),
+        limit: z.number().int().min(1).max(100).default(50),
+        offset: z.number().int().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { rows: [], total: 0 };
+
+      const whereClause =
+        input.status === "all"
+          ? undefined
+          : eq(nurtureEnrollments.status, input.status);
+
+      const rows = await db
+        .select({
+          id: nurtureEnrollments.id,
+          sessionId: nurtureEnrollments.sessionId,
+          leadPhone: nurtureEnrollments.leadPhone,
+          leadFirstName: nurtureEnrollments.leadFirstName,
+          serviceType: nurtureEnrollments.serviceType,
+          status: nurtureEnrollments.status,
+          nextStep: nurtureEnrollments.nextStep,
+          nextSendAt: nurtureEnrollments.nextSendAt,
+          lastStepSent: nurtureEnrollments.lastStepSent,
+          lastSentAt: nurtureEnrollments.lastSentAt,
+          endReason: nurtureEnrollments.endReason,
+          endedAt: nurtureEnrollments.endedAt,
+          enrolledAt: nurtureEnrollments.enrolledAt,
+          leadCreatedAt: nurtureEnrollments.leadCreatedAt,
+          // Join session for stage info
+          sessionStage: conversationSessions.stage,
+          sessionLeadName: conversationSessions.leadName,
+          sessionSource: conversationSessions.leadSource,
+        })
+        .from(nurtureEnrollments)
+        .leftJoin(
+          conversationSessions,
+          eq(nurtureEnrollments.sessionId, conversationSessions.id)
+        )
+        .where(whereClause)
+        .orderBy(desc(nurtureEnrollments.enrolledAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const [{ count }] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(nurtureEnrollments)
+        .where(whereClause);
+
+      return { rows, total: Number(count) };
+    }),
+
+  /** Resume a paused enrollment (manual re-enroll after human takeover) */
+  resume: adminAgentProcedure
+    .input(z.object({ sessionId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await resumeEnrollment(db, input.sessionId);
+      return { success: true };
+    }),
+
+  /** Manually end an enrollment */
+  end: adminAgentProcedure
+    .input(
+      z.object({
+        enrollmentId: z.number().int(),
+        reason: z.enum(["booked", "opted_out", "day30", "manual"]).default("manual"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await endEnrollment(db, input.enrollmentId, input.reason);
+      return { success: true };
+    }),
+
+  /** Manually enroll a specific session */
+  enroll: adminAgentProcedure
+    .input(z.object({ sessionId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const [session] = await db
+        .select({
+          id: conversationSessions.id,
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          serviceType: conversationSessions.serviceType,
+          createdAt: conversationSessions.createdAt,
+        })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+
+      if (!session) throw new Error("Session not found");
+
+      const enrollmentId = await enrollLead(db, {
+        id: session.id,
+        leadPhone: session.leadPhone,
+        leadName: session.leadName,
+        serviceType: session.serviceType,
+        createdAt:
+          session.createdAt instanceof Date
+            ? session.createdAt
+            : new Date(session.createdAt),
+      });
+
+      return { success: true, enrollmentId };
+    }),
+
+  /** Step definitions for the sequence map UI */
+  steps: adminAgentProcedure.query(() => {
+    return NURTURE_STEPS.map((s) => ({
+      step: s.step,
+      phase: s.phase,
+      label: s.label,
+    }));
+  }),
+});

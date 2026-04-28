@@ -39,6 +39,7 @@ import { sendPushToAgent, sendPushToAll } from "./webPush";
 import { pushSubscriptions } from "../drizzle/schema";
 import { hiringRouter } from "./hiringRouter";
 import { teamPayRouter } from "./teamPayRouter";
+import { nurtureRouter } from "./nurtureRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -4927,8 +4928,11 @@ Your job: fill in the following message template using the booking details provi
       }),
   }),
 
-  // ── Hiring Pipeline ──────────────────────────────────────────────────────────
+  // ── Hiring  // ── Hiring Pipeline ────────────────────────────────────────────
   hiring: hiringRouter,
+
+  // ── Lead Nurture Sequence ───────────────────────────────────────
+  nurture: nurtureRouter,
 
   // ── Performance Analytics ────────────────────────────────────────────────────
   performance: router({

@@ -1256,3 +1256,10 @@
 - [x] Fix: inbound SMS replies not showing in drawer for leads with non-E.164 phone (e.g. "703-727-5500") — webhook lookup now uses digit-only fallback match
 - [x] Fix: normalize phone to E.164 at manual lead creation and call-assist lead creation so new sessions always store +1XXXXXXXXXX
 - [x] Data fix: backfilled 79 existing sessions with non-normalized phones to E.164 format
+
+- [x] Nurture: Add nurture_enrollments DB table and migration
+- [x] Nurture: Add message templates and sequence engine (nurtureSequence.ts, 15 steps, 20 tests all pass)
+- [x] Nurture: Enrollment cron (detect eligible leads, enroll at +15min after nudge) — 100 leads enrolled on first run
+- [x] Nurture: Send cron (fire due messages, handle exit conditions)
+- [x] Nurture: Wire Lead Nurturing UI to real data (nurtureRouter.ts tRPC procedures)
+- [x] Nurture: Manual re-enroll after human takeover (nurture.resume mutation)

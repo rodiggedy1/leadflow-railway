@@ -17,6 +17,7 @@
  */
 
 import cron from "node-cron";
+import { runNurtureEnrollment, runNurtureSend } from "./nurtureCron";
 import { runNightlySync } from "./cronSync";
 import { runSyncTodayJobs } from "./qualityRouter";
 import { runSilenceFollowUp, runScheduledFollowUp, runFollowUpDueAlerts } from "./followUpCron";
@@ -103,6 +104,40 @@ export function startInternalCron(): void {
     return;
   }
   _cronStarted = true;
+  // ── Nurture enrollment: every 5 minutes ────────────────────────────────────
+  // Finds leads whose speed-to-lead window has passed (15+ min) and enrolls
+  // them in the 30-day nurture sequence if not already enrolled.
+  cron.schedule("0 */5 * * * *", async () => {
+    try {
+      const result = await runNurtureEnrollment();
+      if (result.enrolled > 0) {
+        console.log(`[InternalCron] NurtureEnrollment — checked: ${result.checked}, enrolled: ${result.enrolled}, errors: ${result.errors}`);
+      }
+      await recordHeartbeat("nurture-enrollment", `checked: ${result.checked}, enrolled: ${result.enrolled}, errors: ${result.errors}`, result.enrolled > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] NurtureEnrollment failed:", msg);
+      await recordHeartbeat("nurture-enrollment", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Nurture send: every 5 minutes ────────────────────────────────────────────
+  // Fires any nurture messages whose nextSendAt <= now, advances the sequence,
+  // and handles exit conditions (booked, opted-out, day30, human takeover).
+  cron.schedule("0 */5 * * * *", async () => {
+    try {
+      const result = await runNurtureSend();
+      if (result.sent > 0 || result.ended > 0) {
+        console.log(`[InternalCron] NurtureSend — checked: ${result.checked}, sent: ${result.sent}, ended: ${result.ended}, errors: ${result.errors}`);
+      }
+      await recordHeartbeat("nurture-send", `checked: ${result.checked}, sent: ${result.sent}, ended: ${result.ended}, errors: ${result.errors}`, result.sent > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] NurtureSend failed:", msg);
+      await recordHeartbeat("nurture-send", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   // ── Silence follow-up: every 5 minutes ──────────────────────────────────────
   // Nudges leads who haven't replied 5+ minutes after the AI sent a message.
   // ── Ops follow-up due-time reminders: every 5 minutes ────────────────────────
