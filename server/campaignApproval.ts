@@ -13,7 +13,7 @@
  * calling sendAlwaysOnBatch() directly.
  */
 
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import {
   alwaysOnGroups,
   alwaysOnEnrollments,
@@ -238,7 +238,7 @@ export async function approveBatch(
       // Create conversation session
       let sessionId: number | null = null;
       try {
-        const [sessionResult] = await db.insert(conversationSessions).values({
+        const [sessionResult] = await insertSession(db, {
           leadPhone: enrollment.phone,
           leadName: enrollment.name ?? enrollment.firstName ?? "",
           stage: "REACTIVATION",

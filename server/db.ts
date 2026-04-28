@@ -1,8 +1,44 @@
 import { and, eq, gt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, agents, type Agent, cleanerMagicLinkTokens } from "../drizzle/schema";
+import { InsertUser, users, agents, type Agent, cleanerMagicLinkTokens, conversationSessions } from "../drizzle/schema";
+import type { InferInsertModel } from "drizzle-orm";
 import { ENV } from './_core/env';
 import { randomBytes } from "crypto";
+
+// ── Phone normalization guard ─────────────────────────────────────────────────
+// TiDB does not support stored triggers, so we enforce E.164 normalization here
+// at the application layer. Every insert/update that touches leadPhone MUST go
+// through normalizeLeadPhone() so no code path can store a non-E.164 number.
+
+/**
+ * Normalizes a US phone string to E.164 (+1XXXXXXXXXX).
+ * Placeholder phones (thumbtack-sms-*, bark-sms-*, yelp-*, etc.) are passed through unchanged.
+ * This is the single source of truth — mirrors the logic in normalizePhone() in routers.ts.
+ */
+export function normalizeLeadPhone(phone: string): string {
+  // Pass through placeholder / non-numeric phones
+  if (/^[a-zA-Z]/.test(phone)) return phone;
+  const digits = phone.replace(/[^\d]/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  // Already E.164 or unrecognized — return as-is
+  return phone;
+}
+
+type SessionInsertValues = InferInsertModel<typeof conversationSessions>;
+
+/**
+ * Safe wrapper around insertSession(db, ...).
+ * Automatically normalizes leadPhone to E.164 before the insert.
+ * Use this instead of calling db.insert(conversationSessions) directly.
+ */
+export async function insertSession(
+  db: ReturnType<typeof drizzle>,
+  values: SessionInsertValues
+) {
+  const normalized = { ...values, leadPhone: normalizeLeadPhone(values.leadPhone as string) };
+  return db.insert(conversationSessions).values(normalized as any);
+}
 
 let _db: ReturnType<typeof drizzle> | null = null;
 

@@ -1256,3 +1256,6 @@
 - [x] Fix: inbound SMS replies not showing in drawer for leads with non-E.164 phone (e.g. "703-727-5500") — webhook lookup now uses digit-only fallback match
 - [x] Fix: normalize phone to E.164 at manual lead creation and call-assist lead creation so new sessions always store +1XXXXXXXXXX
 - [x] Data fix: backfilled 79 existing sessions with non-normalized phones to E.164 format
+
+- [x] DB trigger: BEFORE INSERT/UPDATE on conversation_sessions to auto-normalize leadPhone to E.164 (implemented as insertSession() app-layer guard in db.ts — TiDB does not support triggers)
+- [x] Vitest: webhook phone-matching test — assert "703-727-5500" and "+17037275500" resolve to same session (server/phoneNormalization.test.ts, 23 tests all pass)

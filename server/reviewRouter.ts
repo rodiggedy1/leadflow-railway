@@ -10,7 +10,7 @@ import { z } from "zod";
 import { and, desc, eq, gte, isNull, lt, ne, sql, count } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import {
   completedJobBatches,
   completedJobs,
@@ -858,7 +858,7 @@ export const reviewRouter = router({
       }
 
       // ── Create a real conversation session ───────────────────────────────────
-      const [sessionInsert] = await db.insert(conversationSessions).values({
+      const [sessionInsert] = await insertSession(db, {
         leadPhone: e164,
         leadName: input.firstName,
         stage: "REVIEW_REQUESTED",

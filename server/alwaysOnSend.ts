@@ -12,7 +12,7 @@
  *  - Returns a summary of sends per group
  */
 
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import { alwaysOnGroups, alwaysOnEnrollments, conversationSessions, completedJobs, type AlwaysOnGroupType } from "../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { sendSms } from "./openphone";
@@ -250,7 +250,7 @@ export async function sendAlwaysOnBatch(
         // Create a conversation session so inbound replies are routed through the AI engine
         let sessionId: number | null = null;
         try {
-          const [sessionResult] = await db.insert(conversationSessions).values({
+          const [sessionResult] = await insertSession(db, {
             leadPhone: enrollment.phone,
             leadName: enrollment.name ?? enrollment.firstName ?? "",
             stage: "REACTIVATION",

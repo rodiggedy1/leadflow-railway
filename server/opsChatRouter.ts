@@ -13,7 +13,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { storagePut } from "./storage";
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import { sendPushToAll } from "./webPush";
 import {
   cleanerJobs,
@@ -2413,9 +2413,7 @@ export const opsChatRouter = router({
         await db.update(conversationSessions).set(updates as any).where(eq(conversationSessions.id, sessionId));
       } else {
         // Create a new agent-initiated CS session with resolved name
-        const [result] = await db
-          .insert(conversationSessions)
-          .values({
+        const [result] = await insertSession(db, {
             leadPhone: e164,
             leadName: resolvedName ?? e164,  // use real name if found, else phone as fallback
             stage: "QUOTE_SENT",
@@ -2423,7 +2421,7 @@ export const opsChatRouter = router({
             aiMode: 0,               // agent-driven; no AI auto-replies
             csQueue: "Needs attention",
             leadSource: "cs_initiated",
-          });
+          } as any);
         sessionId = (result as any).insertId;
       }
 

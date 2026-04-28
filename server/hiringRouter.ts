@@ -8,7 +8,7 @@ import { z } from "zod";
 import { conversationSessions } from "../drizzle/schema";
 import { invokeLLM } from "./_core/llm";
 import { publicProcedure, agentProcedure, router } from "./_core/trpc";
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import { sendSms } from "./openphone";
 
 export const hiringRouter = router({
@@ -139,7 +139,7 @@ export const hiringRouter = router({
             const smsText = `Hey ${firstName} — got your application 👋\n\nNext step is a quick 5-min interview:\n${interviewLink}`;
 
             // Create session BEFORE sending SMS so replies are routable
-            const [sessionInsert] = await db.insert(conversationSessions).values({
+            const [sessionInsert] = await insertSession(db, {
               leadPhone: e164Phone,
               leadName: `${input.firstName} ${input.lastName}`.trim(),
               stage: "INTERVIEW_LINK_SENT" as any,
@@ -481,7 +481,7 @@ export const hiringRouter = router({
                     .where(eq(conversationSessions.id, existing[0].id));
                 } else {
                   // No session yet — create one so the message is visible in the drawer
-                  await db.insert(conversationSessions).values({
+                  await insertSession(db, {
                     leadPhone: e164Phone,
                     leadName: firstName,
                     stage: "INTERVIEW_LINK_SENT" as any,
@@ -616,7 +616,7 @@ export const hiringRouter = router({
           try { history = JSON.parse(existing[0].messageHistory ?? "[]"); } catch { history = []; }
         } else {
           // No session yet — create one (aiMode=0 so AI doesn't auto-reply)
-          const [ins] = await db.insert(conversationSessions).values({
+          const [ins] = await insertSession(db, {
             leadPhone: e164Phone,
             leadName: input.candidateName,
             messageHistory: "[]",

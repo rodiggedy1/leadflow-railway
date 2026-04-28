@@ -22,7 +22,7 @@
 
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
@@ -280,7 +280,7 @@ export function registerWebhookRoutes(app: Express) {
 
           let ttSessionId: number | null = null;
           try {
-            const [ins] = await dbTT.insert(conversationSessions).values({
+            const [ins] = await insertSession(dbTT, {
               leadPhone: placeholderPhone,
               leadName: ttName,
               stage: "QUOTE_SENT" as any,
@@ -400,7 +400,7 @@ export function registerWebhookRoutes(app: Express) {
           ]);
           let barkSessionId: number | null = null;
           try {
-            const [barkIns] = await dbBark.insert(conversationSessions).values({
+            const [barkIns] = await insertSession(dbBark, {
               leadPhone: barkPlaceholderPhone,
               leadName: barkName,
               stage: "QUOTE_SENT" as any,

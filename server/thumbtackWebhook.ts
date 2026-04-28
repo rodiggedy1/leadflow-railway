@@ -20,7 +20,7 @@
  */
 
 import type { Express } from "express";
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import { conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { desc, eq } from "drizzle-orm";
 import { sendSms, estimatePrice } from "./openphone";
@@ -370,7 +370,7 @@ export async function handleThumbTackLead(body: ThumbTackZapierPayload): Promise
     .join(" | ");
 
   try {
-    await db.insert(conversationSessions).values({
+    await insertSession(db, {
       leadPhone: normalizedPhone,
       leadName: name,
       stage: "AVAILABILITY",

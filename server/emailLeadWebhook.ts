@@ -33,7 +33,7 @@
 
 import type { Express } from "express";
 import crypto from "crypto";
-import { getDb } from "./db";
+import { getDb, insertSession } from "./db";
 import { conversationSessions, opsChatMessages } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { getNextAvailableSlots, formatAvailabilityQuestion } from "./availability";
@@ -685,7 +685,7 @@ export async function handleYelpInquiryEmail(
   // Use a synthetic phone key since Yelp does not provide a phone number.
   const placeholderPhone = `yelp-${Date.now()}`;
   try {
-    await db.insert(conversationSessions).values({
+    await insertSession(db, {
       leadPhone: placeholderPhone,
       leadName: displayName,
       stage: "QUOTE_SENT" as any,
@@ -955,7 +955,7 @@ export async function handleThumbtackEmail(
   // Use a placeholder phone key when no phone is available (same pattern as Yelp).
   const sessionPhone = normalizedPhone ?? `thumbtack-${Date.now()}`;
   try {
-    await db.insert(conversationSessions).values({
+    await insertSession(db, {
       leadPhone: sessionPhone,
       leadName: displayName,
       stage: normalizedPhone ? "AVAILABILITY" : ("QUOTE_SENT" as any),
@@ -1135,7 +1135,7 @@ export async function handleFormSubmissionEmail(
   ].filter(Boolean).join(" | ");
 
   try {
-    await db.insert(conversationSessions).values({
+    await insertSession(db, {
       leadPhone: normalizedPhone,
       leadName: displayName,
       stage: "AVAILABILITY",
@@ -1293,7 +1293,7 @@ export async function handleCallNotificationEmail(
   ]);
 
   try {
-    await db.insert(conversationSessions).values({
+    await insertSession(db, {
       leadPhone: normalizedPhone,
       leadName: "Anonymous (Google Ads Call)",
       stage: "WIDGET_SIZING",
