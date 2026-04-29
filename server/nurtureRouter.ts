@@ -222,7 +222,7 @@ export const nurtureRouter = router({
 
   /** Upsert a custom script override for a step */
   saveScript: adminAgentProcedure
-    .input(z.object({ step: z.number().int().min(3).max(17), body: z.string().min(1) }))
+    .input(z.object({ step: z.number().int().min(1).max(17), body: z.string().min(1) }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
