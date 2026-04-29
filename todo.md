@@ -1293,3 +1293,6 @@
 - [x] Fix AI WIDGET_SIZING: partial scope replies ("only the basement", "just the kitchen") now acknowledged and advanced instead of looping back to ask for room counts
 - [x] Increase AI thinking budget from 128 to 2048 tokens globally in llm.ts for smarter reasoning across all AI features
 - [x] Architectural rewrite: two-step conversation engine (extract → advance deterministically → reply). LLM no longer decides stage transitions — pure code does. Eliminates entire class of re-asking bugs.
+- [x] Fix $0 price bug: add dollar-sign prefixed substitution key for ${price} in aiService.ts
+- [x] Fix doubled "Perfect. Perfect" in flowB_sms2 DB template — removed bad saved template text
+- [x] Fix insurance question ignored: when DB template override fires, prepend question answer before price reveal

@@ -150,7 +150,33 @@ export async function processLeadReplyV2(
       const price     = persistedData.quotedPrice  ?? context.quotedPrice  ?? "?";
       const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
       try {
-        finalReply = await buildJadePriceReveal({ firstName, bedrooms, bathrooms, price, day: slot, extras: context.extras });
+        const priceReveal = await buildJadePriceReveal({ firstName, bedrooms, bathrooms, price, day: slot, extras: context.extras });
+        // If the lead asked questions, generate a short answer prefix and prepend it
+        // so the question is answered before the price reveal — not silently dropped.
+        if (signals.questions.length > 0) {
+          try {
+            const qaResponse = await invokeLLM({
+              messages: [
+                {
+                  role: "system",
+                  content: `You are Jade, the AI booking assistant for Maids in Black. Answer the following question(s) from a lead in 1 SHORT sentence. Be direct and confident. Use the knowledge base if needed. Do NOT ask a follow-up question — just answer.\n\nKnowledge: Maids in Black teams are fully bonded and insured. All cleaners pass background checks. 100% satisfaction guarantee. Service area: Washington DC Metro (DC, MD, VA). Phone: 202-888-5362.`,
+                },
+                { role: "user", content: signals.questions.join(" ") },
+              ],
+            });
+            const qaContent = qaResponse?.choices?.[0]?.message?.content;
+            if (qaContent && typeof qaContent === "string" && qaContent.trim().length > 0) {
+              finalReply = qaContent.trim() + "\n\n" + priceReveal;
+              console.log("[Engine] Prepended question answer to price reveal.");
+            } else {
+              finalReply = priceReveal;
+            }
+          } catch {
+            finalReply = priceReveal; // fallback: just the price reveal
+          }
+        } else {
+          finalReply = priceReveal;
+        }
         console.log("[Engine] Overrode price reveal with DB template.");
       } catch (err) {
         console.error("[Engine] buildJadePriceReveal failed, using LLM reply:", err);

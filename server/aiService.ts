@@ -135,6 +135,8 @@ export async function buildJadePriceReveal(params: {
       "{bedrooms}": bedrooms,
       "{bathrooms}": bathrooms,
       "{price}": priceForTemplate,
+      // ${price} — dollar-sign prefixed variant (DB template may use either form)
+      "${price}": `$${priceForTemplate}`,
       "{recurringprice}": recurringPriceForTemplate,
       "$(recurringprice}": recurringPriceForTemplate,
       // ${recurringprice} — user-friendly format where $ is part of the placeholder
