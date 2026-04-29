@@ -1291,3 +1291,4 @@
 - [x] Tighten recency gate from 30 to 20 minutes
 - [x] Fix AI SLOT_CHOICE: "any day/either works/you pick" now picks 9am and advances to ADDRESS instead of re-asking
 - [x] Fix AI WIDGET_SIZING: partial scope replies ("only the basement", "just the kitchen") now acknowledged and advanced instead of looping back to ask for room counts
+- [x] Increase AI thinking budget from 128 to 2048 tokens globally in llm.ts for smarter reasoning across all AI features
