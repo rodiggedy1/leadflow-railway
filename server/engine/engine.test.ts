@@ -199,14 +199,14 @@ describe("advanceStage — CONFIRMATION", () => {
     expect(result.nextStage).toBe("CALL_SCHEDULED");
   });
 
-  it("stays on CONFIRMATION when no call preference", () => {
+  it("advances to CALL_SCHEDULED even with no explicit call preference (any reply advances)", () => {
     const result = advanceStage("CONFIRMATION", emptySignals(), ctx("CONFIRMATION"));
-    expect(result.nextStage).toBe("CONFIRMATION");
+    expect(result.nextStage).toBe("CALL_SCHEDULED");
   });
 
-  it("stays on CONFIRMATION when only questions asked", () => {
+  it("advances to CALL_SCHEDULED when lead gives notes/questions (any reply advances)", () => {
     const result = advanceStage("CONFIRMATION", emptySignals({ questions: ["Do you have parking?"] }), ctx("CONFIRMATION"));
-    expect(result.nextStage).toBe("CONFIRMATION");
+    expect(result.nextStage).toBe("CALL_SCHEDULED");
   });
 });
 

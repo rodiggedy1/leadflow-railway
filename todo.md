@@ -1298,3 +1298,5 @@
 - [x] Fix insurance question ignored: when DB template override fires, prepend question answer before price reveal
 - [x] Remove DB template overrides (buildJadePriceReveal, buildJadeLockIn) from engine — LLM now writes every reply with full context including price, slot, questions, knowledge base
 - [x] Rewrite SLOT_CHOICE and CONFIRMATION reply instructions as rich context goals, not rigid scripted templates
+- [ ] Extend two-step architecture to alwaysOnEngine.ts (re-engagement engine)
+- [x] Fix CONFIRMATION stage: any substantive reply advances to CALL_SCHEDULED instead of re-asking for notes

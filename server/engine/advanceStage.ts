@@ -190,9 +190,11 @@ export function advanceStage(
     case "CONFIRMATION": {
       if (signals.callPreference) {
         persisted.callPreference = signals.callPreference;
-        return { nextStage: "CALL_SCHEDULED", persistedData: persisted, replyContext: replyCtx };
       }
-      return { nextStage: "CONFIRMATION", persistedData: persisted, replyContext: replyCtx };
+      // Any substantive reply (notes, questions answered, call preference, or anything
+      // that isn't silence) advances past CONFIRMATION. The lead has already confirmed
+      // the booking — CONFIRMATION's only job is to collect notes and move on.
+      return { nextStage: "CALL_SCHEDULED", persistedData: persisted, replyContext: replyCtx };
     }
 
     case "REACTIVATION": {
