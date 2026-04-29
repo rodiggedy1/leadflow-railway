@@ -85,7 +85,7 @@ export async function runNurtureEnrollment(): Promise<{
       .where(
         and(
           // Only enroll real leads from the quote form or widget (whitelist approach)
-          inArray(conversationSessions.leadSource as any, ['form', 'widget', 'bark', 'thumbtack']),
+          inArray(conversationSessions.leadSource as any, ['form', 'widget', 'bark', 'thumbtack', 'yelp']),
           // Has a real E.164 phone
           sql`${conversationSessions.leadPhone} LIKE '+1%'`,
           // Only leads created AFTER go-live cutoff (Apr 29 2026 15:00 UTC)
