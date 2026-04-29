@@ -659,7 +659,7 @@ export default function LeadNurturing() {
                         <div className="text-sm font-semibold text-slate-900">Timeline</div>
                         <div className="text-xs text-slate-400">AI + human events</div>
                       </div>
-                      <div className="space-y-2">
+                      <div className="max-h-[480px] overflow-y-auto space-y-2 pr-1">
                         {sessionDetail?.createdAt && (
                           <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
                             <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
@@ -707,7 +707,7 @@ export default function LeadNurturing() {
                               >
                                 {label}{timeStr ? " · " + timeStr : ""}
                               </div>
-                              <div className="mt-1 text-sm text-slate-700 line-clamp-3">{msg.content}</div>
+                              <div className="mt-1 text-sm text-slate-700 whitespace-pre-wrap break-words">{msg.content}</div>
                             </div>
                           );
                         })}
