@@ -292,6 +292,16 @@ export const nurtureRouter = router({
       return { ok: true };
     }),
 
+  /** Delete an enrollment record entirely */
+  deleteEnrollment: adminAgentProcedure
+    .input(z.object({ enrollmentId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await db.delete(nurtureEnrollments).where(eq(nurtureEnrollments.id, input.enrollmentId));
+      return { ok: true };
+    }),
+
   /** Send a test SMS for a given step to the test number +13029816191 */
   testSend: adminAgentProcedure
     .input(z.object({ step: z.number().int().min(1).max(17), body: z.string().min(1) }))

@@ -139,6 +139,10 @@ export default function LeadNurturing() {
   const resumeMutation = trpc.nurture.resume.useMutation({
     onSuccess: () => { utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); },
   });
+  const deleteMutation = trpc.nurture.deleteEnrollment.useMutation({
+    onSuccess: () => { setSelectedEnrollment(null); utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); toast.success("Enrollment deleted"); },
+    onError: () => toast.error("Delete failed"),
+  });
   const regenerateMutation = trpc.nurture.regenerateScript.useMutation({
     onSuccess: (data) => { setScriptText(data.body); toast.success("Script regenerated — review and save"); },
     onError: () => toast.error("Regeneration failed — try again"),
@@ -762,6 +766,18 @@ export default function LeadNurturing() {
                       >
                         <span>{endMutation.isPending ? "Ending..." : "End sequence manually"}</span>
                         <span className="text-slate-400">→</span>
+                      </button>
+                      <button
+                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                          if (confirm("Delete this enrollment? This cannot be undone.")) {
+                            deleteMutation.mutate({ enrollmentId: selectedEnrollment.id });
+                          }
+                        }}
+                        className="flex w-full items-center justify-between rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left text-sm font-medium text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                      >
+                        <span>{deleteMutation.isPending ? "Deleting..." : "Delete enrollment"}</span>
+                        <span className="text-red-400">✕</span>
                       </button>
                     </div>
 
