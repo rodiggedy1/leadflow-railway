@@ -64,14 +64,12 @@ export async function runNurtureEnrollment(): Promise<{
   let errors = 0;
 
   try {
-    const cutoff = new Date(Date.now() - SPEED_TO_LEAD_WINDOW_MS);
-
     // Find sessions that:
-    // 1. Were created more than 15 minutes ago (speed-to-lead window passed)
-    // 2. Are not booked
-    // 3. Have a real phone number (not a placeholder like "thumbtack-sms-*")
-    // 4. Are not on human takeover (aiMode = 0 means AI is active)
-    // 5. Do NOT already have an active or paused nurture enrollment
+    // 1. Have a real phone number (not a placeholder)
+    // 2. Are not CS-initiated (team members)
+    // NOTE: No delay, no booked check, no aiMode check — enroll immediately so
+    // every lead appears on the nurture page as soon as they come in.
+    // Nurture SMS steps still respect the 15-min delay via nextSendAt.
     const candidates = await db
       .select({
         id: conversationSessions.id,
@@ -86,22 +84,16 @@ export async function runNurtureEnrollment(): Promise<{
       .from(conversationSessions)
       .where(
         and(
-          // Speed-to-lead window passed
-          lte(conversationSessions.createdAt, cutoff),
-          // Only leads from the last 48 hours (yesterday + today)
-          gte(conversationSessions.createdAt, new Date(Date.now() - 48 * 60 * 60 * 1000)),
-          // Not booked
-          ne(conversationSessions.stage, "BOOKED" as any),
           // Has a real phone (not a placeholder)
           sql`${conversationSessions.leadPhone} NOT LIKE 'thumbtack-sms-%'`,
           sql`${conversationSessions.leadPhone} NOT LIKE 'yelp-sms-%'`,
           sql`${conversationSessions.leadPhone} NOT LIKE 'bark-sms-%'`,
           sql`${conversationSessions.leadPhone} NOT LIKE 'newsource-sms-%'`,
           sql`${conversationSessions.leadPhone} LIKE '+1%'`,
-          // Not on human takeover (aiMode=1 means human has taken over)
-          ne(conversationSessions.aiMode as any, 1),
           // Exclude internal CS-initiated sessions (team members, not leads)
           ne(conversationSessions.leadSource as any, 'cs_initiated'),
+          // Only leads from the last 30 days (prevent re-processing ancient history)
+          gte(conversationSessions.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
         )
       )
       .limit(100);

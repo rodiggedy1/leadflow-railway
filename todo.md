@@ -1285,3 +1285,4 @@
 - [ ] Update endEnrollment to capture session estimatedValue when reason=booked
 - [ ] Update stats query to return bookedCount and bookedRevenue
 - [ ] Replace KPI cards: "Active leads in sequence" → "Booked in sequence", "Completed sequence" → "Booking revenue from sequence"
+- [x] Enroll all new leads with real phone immediately (no delay/booked/aiMode checks)
