@@ -3,7 +3,7 @@
  * AI Lead Nurturing Engine — KPI cards and lead progression table wired to real tRPC data.
  * Sequence map, activity feed, and automation logic remain illustrative.
  */
-import React, { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 
@@ -105,13 +105,10 @@ export default function LeadNurturing() {
   });
   const testSendMutation = trpc.nurture.testSend.useMutation();
   // Reset test send state when the active step changes
-  const prevStepRef = React.useRef<number | null>(null);
-  if (activeStep && prevStepRef.current !== activeStep.stepNum) {
-    prevStepRef.current = activeStep.stepNum;
-    if (testSendMutation.isSuccess || testSendMutation.isError) {
-      testSendMutation.reset();
-    }
-  }
+  useEffect(() => {
+    testSendMutation.reset();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep?.stepNum]);
   const pauseMutation = trpc.nurture.end.useMutation({
     onSuccess: () => utils.nurture.enrollments.invalidate(),
   });
