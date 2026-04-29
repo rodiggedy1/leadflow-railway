@@ -86,8 +86,6 @@ export async function runNurtureEnrollment(): Promise<{
         and(
           // Mirror the leads page: exclude CS, hiring, and review sessions
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated', 'hiring_interview', 'review', 'review_rebooking'))`,
-          // Has a real E.164 phone
-          sql`${conversationSessions.leadPhone} LIKE '+1%'`,
           // Only leads created AFTER go-live cutoff (Apr 29 2026 15:00 UTC)
           sql`${conversationSessions.createdAt} > '2026-04-29 15:00:00'`,
         )
@@ -244,6 +242,16 @@ export async function runNurtureSend(): Promise<{
           continue;
         }
 
+        // Skip send if lead still has no phone — keep enrollment active, retry next tick
+        const currentPhone = session.leadPhone ?? enrollment.leadPhone;
+        if (!currentPhone || !currentPhone.startsWith('+1')) {
+          // Update enrollment phone if it appeared since enrollment
+          continue;
+        }
+        // Sync phone onto enrollment record if it was missing at enrollment time
+        if (enrollment.leadPhone !== currentPhone) {
+          await db.update(nurtureEnrollments).set({ leadPhone: currentPhone }).where(eq(nurtureEnrollments.id, enrollment.id));
+        }
         // Get the step to send
         const step = STEP_MAP.get(enrollment.nextStep);
         if (!step) {
