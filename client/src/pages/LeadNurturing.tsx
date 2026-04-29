@@ -147,6 +147,17 @@ export default function LeadNurturing() {
     onSuccess: (data) => { setScriptText(data.body); toast.success("Script regenerated — review and save"); },
     onError: () => toast.error("Regeneration failed — try again"),
   });
+  const skipMutation = trpc.nurture.skipStep.useMutation({
+    onSuccess: (data) => {
+      utils.nurture.enrollments.invalidate();
+      if (data.ended) {
+        toast.success("Last step skipped — sequence ended");
+      } else {
+        toast.success(`Skipped to step ${data.newStep}`);
+      }
+    },
+    onError: () => toast.error("Skip failed — try again"),
+  });
   // Ref for the script textarea (used by token insert)
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: stats, isLoading: statsLoading } = trpc.nurture.stats.useQuery(undefined, {
@@ -841,15 +852,27 @@ export default function LeadNurturing() {
                         })}
 
                         {selectedEnrollment.status === "active" && (
-                          <div className="ml-4 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2.5">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-500">
-                              Queued
-                              {selectedEnrollment.nextSendAt
-                                ? " · " + new Date(selectedEnrollment.nextSendAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-                                : ""}
-                            </div>
-                            <div className="mt-1 text-sm text-slate-700">
-                              {getStepLabel(selectedEnrollment.nextStep)} scheduled
+                          <div className="group/queued relative ml-4 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-500">
+                                  Queued
+                                  {selectedEnrollment.nextSendAt
+                                    ? " · " + new Date(selectedEnrollment.nextSendAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                                    : ""}
+                                </div>
+                                <div className="mt-1 text-sm text-slate-700">
+                                  {getStepLabel(selectedEnrollment.nextStep)} scheduled
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => skipMutation.mutate({ enrollmentId: selectedEnrollment.id })}
+                                disabled={skipMutation.isPending}
+                                className="invisible group-hover/queued:visible flex-shrink-0 rounded-lg border border-amber-200 bg-amber-100 px-2 py-1 text-[10px] font-semibold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50"
+                                title="Skip this message and queue the next one"
+                              >
+                                {skipMutation.isPending ? "..." : "Skip →"}
+                              </button>
                             </div>
                           </div>
                         )}

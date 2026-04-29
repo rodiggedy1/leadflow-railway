@@ -302,6 +302,55 @@ export const nurtureRouter = router({
       return { ok: true };
     }),
 
+  /**
+   * Skip the current queued step — advance nextStep by 1 without sending anything.
+   * The cron will fire the new step at its scheduled time.
+   * If already at the last step (17), ends the sequence.
+   */
+  skipStep: adminAgentProcedure
+    .input(z.object({ enrollmentId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const [enrollment] = await db
+        .select({ id: nurtureEnrollments.id, nextStep: nurtureEnrollments.nextStep, leadCreatedAt: nurtureEnrollments.leadCreatedAt, status: nurtureEnrollments.status })
+        .from(nurtureEnrollments)
+        .where(eq(nurtureEnrollments.id, input.enrollmentId))
+        .limit(1);
+
+      if (!enrollment) throw new Error("Enrollment not found");
+      if (enrollment.status !== "active") throw new Error("Enrollment is not active");
+
+      const maxStep = Math.max(...NURTURE_STEPS.map((s) => s.step));
+      const nextStepNum = enrollment.nextStep + 1;
+
+      if (nextStepNum > maxStep) {
+        // Already at last step — end the sequence
+        await db
+          .update(nurtureEnrollments)
+          .set({ status: "done", endReason: "manual", endedAt: new Date(), lastStepSent: enrollment.nextStep })
+          .where(eq(nurtureEnrollments.id, input.enrollmentId));
+        return { ok: true, ended: true };
+      }
+
+      // Find the next step definition
+      const nextStep = NURTURE_STEPS.find((s) => s.step === nextStepNum)
+        ?? NURTURE_STEPS.find((s) => s.step > enrollment.nextStep);
+
+      if (!nextStep) throw new Error("No next step found");
+
+      // Calculate nextSendAt from NOW so skipped leads don't get a past-due timestamp
+      const nextSendAt = nextStep.scheduledAt(new Date());
+
+      await db
+        .update(nurtureEnrollments)
+        .set({ nextStep: nextStep.step, nextSendAt })
+        .where(eq(nurtureEnrollments.id, input.enrollmentId));
+
+      return { ok: true, ended: false, newStep: nextStep.step };
+    }),
+
   /** Send a test SMS for a given step to the test number +13029816191 */
   testSend: adminAgentProcedure
     .input(z.object({ step: z.number().int().min(1).max(17), body: z.string().min(1) }))
