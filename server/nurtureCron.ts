@@ -224,18 +224,16 @@ export async function runNurtureSend(): Promise<{
           continue;
         }
 
-        // Recency gate: if the lead sent an inbound message in the last 30 minutes,
-        // skip this cycle to avoid overlapping with an active conversation.
-        // The enrollment stays active and will be checked again on the next cron tick.
-        const RECENCY_GATE_MS = 20 * 60 * 1000; // 20 minutes
-        const recentInbound = (JSON.parse(session.messageHistory as unknown as string || '[]') as any[]).some((msg: any) => {
-          if (msg.role !== 'user') return false;
-          const ts = msg.timestamp ?? msg.createdAt ?? msg.ts;
-          if (!ts) return false;
-          return Date.now() - new Date(ts).getTime() < RECENCY_GATE_MS;
-        });
-        if (recentInbound) {
-          // Lead is mid-conversation — hold nurture, check again next tick
+        // ── Reply guard ──────────────────────────────────────────────────────
+        // If the lead has sent ANY inbound message after the last nurture step
+        // was sent (lastSentAt), the sequence must PAUSE — not just skip one tick.
+        // A time-window check is not enough: a lead can reply hours later and
+        // still be mid-conversation (Jacqueline replied 97 min after last send).
+        if (hasReplyAfterLastSend(session.messageHistory as unknown as string, enrollment.lastSentAt)) {
+          await pauseEnrollment(db, enrollment.sessionId);
+          console.log(
+            `[NurtureSend] Paused enrollment ${enrollment.id} (session ${enrollment.sessionId}) — lead replied after lastSentAt`
+          );
           continue;
         }
         // No aiMode pause — enrollment only pauses on: book, manual pause from UI, or STOP reply
@@ -400,3 +398,25 @@ function parseMessageHistory(json: string | null): any[] {
     return [];
   }
 }
+
+/**
+ * Pure helper — exported for unit tests.
+ *
+ * Returns true if the lead has sent at least one inbound message whose
+ * timestamp is AFTER lastSentAt (the time the last nurture step was sent).
+ * When lastSentAt is null (no step sent yet), any inbound message triggers a pause.
+ */
+export function hasReplyAfterLastSend(
+  messageHistoryJson: string | null,
+  lastSentAt: Date | null
+): boolean {
+  const history = parseMessageHistory(messageHistoryJson);
+  const lastSentMs = lastSentAt ? lastSentAt.getTime() : 0;
+  return history.some((msg: any) => {
+    if (msg.role !== "user") return false;
+    const ts = msg.ts ?? msg.timestamp ?? msg.createdAt;
+    if (!ts) return false;
+    return lastSentMs === 0 ? true : new Date(ts).getTime() > lastSentMs;
+  });
+}
+
