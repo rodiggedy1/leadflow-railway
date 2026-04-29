@@ -99,9 +99,13 @@ export default function LeadNurturing() {
   const utils = trpc.useUtils();
 
   // ── tRPC queries ─────────────────────────────────────────────────────────
-  const { data: customScripts } = trpc.nurture.getScripts.useQuery(undefined, { staleTime: 60_000 });
+  const { data: customScripts } = trpc.nurture.getScripts.useQuery(undefined, { staleTime: 0 });
   const saveScriptMutation = trpc.nurture.saveScript.useMutation({
-    onSuccess: () => utils.nurture.getScripts.invalidate(),
+    onSuccess: (_data, variables) => {
+      // Update scriptText immediately so textarea reflects the saved value
+      setScriptText(variables.body);
+      utils.nurture.getScripts.invalidate();
+    },
   });
   const testSendMutation = trpc.nurture.testSend.useMutation();
   // Reset test send state when the active step changes
