@@ -140,7 +140,7 @@ export default function LeadNurturing() {
     onSuccess: () => { utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); },
   });
   const deleteMutation = trpc.nurture.deleteEnrollment.useMutation({
-    onSuccess: () => { setSelectedEnrollment(null); utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); toast.success("Enrollment deleted"); },
+    onSuccess: () => { setSelectedEnrollmentId(null); utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); toast.success("Enrollment deleted"); },
     onError: () => toast.error("Delete failed"),
   });
   const regenerateMutation = trpc.nurture.regenerateScript.useMutation({
