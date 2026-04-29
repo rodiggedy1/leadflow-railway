@@ -272,7 +272,7 @@ export default function LeadNurturing() {
   const filterTabs: { label: string; value: StatusFilter }[] = [
     { label: "Active", value: "active" },
     { label: "Paused", value: "paused" },
-    { label: "Done", value: "done" },
+    { label: "Booked", value: "done" },
     { label: "All", value: "all" },
   ];
 
@@ -330,7 +330,7 @@ export default function LeadNurturing() {
                 {[
                   { title: "Active in sequence", count: activeCount, tone: "emerald" },
                   { title: "Paused (human takeover)", count: pausedCount, tone: "amber" },
-                  { title: "Completed / exited", count: doneCount, tone: "sky" },
+                  { title: "Booked", count: doneCount, tone: "sky" },
                   { title: "Total enrolled (all time)", count: totalCount, tone: "rose" },
                 ].map((item) => (
                   <div
