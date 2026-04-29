@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -40,6 +40,7 @@ import { pushSubscriptions } from "../drizzle/schema";
 import { hiringRouter } from "./hiringRouter";
 import { teamPayRouter } from "./teamPayRouter";
 import { nurtureRouter } from "./nurtureRouter";
+import { endEnrollment } from "./nurtureSequence";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -823,6 +824,17 @@ export const appRouter = router({
           } catch (err) {
             console.error("[adminUpdateStage] Failed to post booking announcement:", err);
           }
+          // End any active/paused nurture enrollment for this session
+          try {
+            const [enrollment] = await db
+              .select({ id: nurtureEnrollments.id })
+              .from(nurtureEnrollments)
+              .where(and(eq(nurtureEnrollments.sessionId, input.sessionId), inArray(nurtureEnrollments.status, ["active", "paused"])))
+              .limit(1);
+            if (enrollment) await endEnrollment(db, enrollment.id, "booked");
+          } catch (err) {
+            console.error("[updateStage] Failed to end nurture enrollment on booking:", err);
+          }
         }
         return { success: true };
       }),
@@ -900,6 +912,17 @@ export const appRouter = router({
             });
           } catch (err) {
             console.error("[agentUpdateStage] Failed to post booking announcement:", err);
+          }
+          // End any active/paused nurture enrollment for this session
+          try {
+            const [enrollment] = await db
+              .select({ id: nurtureEnrollments.id })
+              .from(nurtureEnrollments)
+              .where(and(eq(nurtureEnrollments.sessionId, input.sessionId), inArray(nurtureEnrollments.status, ["active", "paused"])))
+              .limit(1);
+            if (enrollment) await endEnrollment(db, enrollment.id, "booked");
+          } catch (err) {
+            console.error("[updateStage] Failed to end nurture enrollment on booking:", err);
           }
         }
         return { success: true };
