@@ -159,6 +159,50 @@ export const nurtureRouter = router({
       return { success: true, enrollmentId };
     }),
 
+  /** Session detail — message history + session info for timeline */
+  sessionDetail: adminAgentProcedure
+    .input(z.object({ sessionId: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      const [session] = await db
+        .select({
+          id: conversationSessions.id,
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          serviceType: conversationSessions.serviceType,
+          leadSource: conversationSessions.leadSource,
+          stage: conversationSessions.stage,
+          createdAt: conversationSessions.createdAt,
+          messageHistory: conversationSessions.messageHistory,
+        })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.id, input.sessionId))
+        .limit(1);
+
+      if (!session) return null;
+
+      // Parse message history
+      let messages: Array<{ role: string; content: string; ts?: number; source?: string; nurtureStep?: number }> = [];
+      try {
+        messages = JSON.parse(session.messageHistory ?? "[]");
+      } catch {
+        messages = [];
+      }
+
+      return {
+        id: session.id,
+        leadPhone: session.leadPhone,
+        leadName: session.leadName,
+        serviceType: session.serviceType,
+        leadSource: session.leadSource,
+        stage: session.stage,
+        createdAt: session.createdAt,
+        messages,
+      };
+    }),
+
   /** Step definitions for the sequence map UI */
   steps: adminAgentProcedure.query(() => {
     return NURTURE_STEPS.map((s) => ({

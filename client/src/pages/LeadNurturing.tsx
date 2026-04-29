@@ -111,6 +111,13 @@ export default function LeadNurturing() {
     [enrollments, selectedEnrollmentId]
   );
 
+  // Session detail for timeline (only fetch when a lead is selected)
+  const selectedSessionId = selectedEnrollment?.sessionId ?? null;
+  const { data: sessionDetail } = trpc.nurture.sessionDetail.useQuery(
+    { sessionId: selectedSessionId! },
+    { enabled: selectedSessionId !== null, refetchInterval: 15_000 }
+  );
+
   // ── Derived stats ─────────────────────────────────────────────────────────
   const activeCount = stats?.active ?? 0;
   const pausedCount = stats?.paused ?? 0;
@@ -599,6 +606,85 @@ export default function LeadNurturing() {
                         <span>End sequence manually</span>
                         <span className="text-slate-400">→</span>
                       </button>
+                    </div>
+
+                    {/* Timeline */}
+                    <div className="mt-4 rounded-[20px] border border-slate-200 bg-white p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="text-sm font-semibold text-slate-900">Timeline</div>
+                        <div className="text-xs text-slate-400">AI + human events</div>
+                      </div>
+                      <div className="space-y-2">
+                        {sessionDetail?.createdAt && (
+                          <div className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                              Lead submitted
+                              {" · "}
+                              {new Date(sessionDetail.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-700">
+                              {formatSource(sessionDetail.leadSource)} request received
+                              {sessionDetail.serviceType ? " for " + sessionDetail.serviceType.toLowerCase() : ""}.
+                            </div>
+                          </div>
+                        )}
+
+                        {(sessionDetail?.messages ?? []).map((msg, i) => {
+                          const isAI = msg.role === "assistant";
+                          const isCustomer = msg.role === "user" || msg.role === "customer";
+                          const isNurture = msg.source === "nurture";
+                          if (!isAI && !isCustomer) return null;
+                          const timeStr = msg.ts
+                            ? new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                            : "";
+                          const label = isNurture
+                            ? ("Nurture step " + msg.nurtureStep)
+                            : isAI
+                            ? "AI sent"
+                            : "Customer replied";
+                          return (
+                            <div
+                              key={i}
+                              className={
+                                "rounded-2xl border px-3 py-2.5 " +
+                                (isCustomer
+                                  ? "border-slate-100 bg-slate-50"
+                                  : isNurture
+                                  ? "ml-4 border-violet-100 bg-violet-50/60"
+                                  : "ml-4 border-sky-100 bg-sky-50/60")
+                              }
+                            >
+                              <div
+                                className={
+                                  "text-[10px] font-semibold uppercase tracking-[0.12em] " +
+                                  (isCustomer ? "text-slate-400" : isNurture ? "text-violet-500" : "text-sky-500")
+                                }
+                              >
+                                {label}{timeStr ? " · " + timeStr : ""}
+                              </div>
+                              <div className="mt-1 text-sm text-slate-700 line-clamp-3">{msg.content}</div>
+                            </div>
+                          );
+                        })}
+
+                        {selectedEnrollment.status === "active" && (
+                          <div className="ml-4 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2.5">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-500">
+                              Queued
+                              {selectedEnrollment.nextSendAt
+                                ? " · " + new Date(selectedEnrollment.nextSendAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                                : ""}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-700">
+                              {getStepLabel(selectedEnrollment.nextStep)} scheduled
+                            </div>
+                          </div>
+                        )}
+
+                        {!sessionDetail && (
+                          <div className="py-4 text-center text-xs text-slate-400">Loading timeline...</div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ) : (
