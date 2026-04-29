@@ -1,31 +1,66 @@
 /**
- * Flow A/B Routing Tests for the V2 Engine
+ * Flow A/B Tests for the Two-Step Engine
  *
- * Verifies that:
- * - Flow A uses Madison persona and Flow A stage instructions
- * - Flow B uses Jade persona and Flow B stage instructions (price reveal + 9am/1pm)
- * - buildUserMessage uses the correct persona name in history
- * - Full engine integration with Flow B stages
+ * Tests:
+ * 1. Prompt builder tests (no LLM needed — pure string checks)
+ * 2. Integration tests for processLeadReplyV2 with two-step LLM mocks
+ *    - First mock call = extraction (returns LeadSignals JSON)
+ *    - Second mock call = reply (returns plain text string)
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildSystemPrompt, buildUserMessage } from "./prompt";
 import { processLeadReplyV2 } from "./index";
 import type { ConversationContext } from "../conversationEngine";
-import type { LLMDecision } from "./schema";
+import type { LeadSignals } from "./extractSchema";
 
 // ─── Mock LLM ─────────────────────────────────────────────────────────────────
 vi.mock("../_core/llm", () => ({
   invokeLLM: vi.fn(),
 }));
 
+vi.mock("../messageTemplateRouter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../messageTemplateRouter")>();
+  return {
+    ...actual,
+    getTemplate: vi.fn().mockResolvedValue("Template reply"),
+  };
+});
+
+vi.mock("../aiService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../aiService")>();
+  return {
+    ...actual,
+    buildJadePriceReveal: vi.fn().mockResolvedValue("Price reveal reply"),
+  };
+});
+
+vi.mock("../conversationEngine", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../conversationEngine")>();
+  return {
+    ...actual,
+    buildJadeLockIn: vi.fn().mockResolvedValue("Lock-in reply"),
+  };
+});
+
 import { invokeLLM } from "../_core/llm";
 const mockLLM = vi.mocked(invokeLLM);
 
-function makeLLMResponse(decision: LLMDecision) {
-  return {
-    choices: [{ message: { content: JSON.stringify(decision) } }],
+/** Returns a mock extraction response (Step 1) */
+function makeExtractionResponse(signals: Partial<LeadSignals>) {
+  const full: LeadSignals = {
+    bedrooms: null, bathrooms: null, timeSlot: null, dayPreference: null,
+    address: null, callPreference: null, specialScope: null, optOut: false,
+    isFlexible: false, questions: [], wantsFutureBooking: false,
+    isExistingCustomer: false, serviceType: null, quotedPrice: null,
+    ...signals,
   };
+  return { choices: [{ message: { content: JSON.stringify(full) } }] };
+}
+
+/** Returns a mock reply response (Step 3) */
+function makeReplyResponse(text: string) {
+  return { choices: [{ message: { content: text } }] };
 }
 
 function makeContext(overrides: Partial<ConversationContext> = {}): ConversationContext {
@@ -137,47 +172,68 @@ describe("buildUserMessage persona in history", () => {
   });
 });
 
-// ─── Full Engine Integration Tests — Flow B ───────────────────────────────────
+// ─── Full Engine Integration Tests — Two-Step Architecture ───────────────────
 
 describe("processLeadReplyV2 — Flow B (Jade) integration", () => {
   beforeEach(() => {
     mockLLM.mockReset();
   });
 
-  it("Flow B AVAILABILITY→SLOT_CHOICE: reveals price + 9am/1pm when lead gives a day", async () => {
+  it("Flow B AVAILABILITY→SLOT_CHOICE: advances when lead gives a specific day", async () => {
     const ctx = makeContext({ smsFlow: "B", stage: "AVAILABILITY" });
-    mockLLM.mockResolvedValueOnce(makeLLMResponse({
-      reply: "Perfect. We handle a lot of 2 bed / 2 bath homes — no problem at all.\n\nFor a home like yours, most clients land around $239. That covers everything, no hidden fees.\nI've got Thursday at 9am or 1pm — which one should I lock in?",
-      nextStage: "SLOT_CHOICE",
-      extractedData: { bedrooms: null, bathrooms: null, selectedSlot: "Thursday", address: null, callPreference: null, quotedPrice: "239", serviceType: null },
-      reasoning: "Lead gave a specific day (Thursday). Revealing price and offering 9am/1pm.",
-    }));
+    // Step 1: extraction
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ dayPreference: "Thursday, May 1" }));
+    // Step 3: reply (Step 2 is deterministic code, no LLM)
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Perfect. For a 2 bed / 2 bath home, we're looking at $239. I've got Thursday at 9am or 1pm — which one should I lock in?"));
+
     const result = await processLeadReplyV2("Thursday", ctx);
     expect(result.nextStage).toBe("SLOT_CHOICE");
-    expect(result.reply).toContain("239");
   });
 
-  it("Flow B SLOT_CHOICE→ADDRESS: asks for address after lead picks a time", async () => {
-    const ctx = makeContext({ smsFlow: "B", stage: "SLOT_CHOICE", selectedSlot: "Thursday" });
-    mockLLM.mockResolvedValueOnce(makeLLMResponse({
-      reply: "Awesome Sarah, what's the address for service?",
-      nextStage: "ADDRESS",
-      extractedData: { bedrooms: null, bathrooms: null, selectedSlot: "Thursday at 9am", address: null, callPreference: null, quotedPrice: null, serviceType: null },
-      reasoning: "Lead picked 9am. Asking for address.",
-    }));
+  it("Flow B SLOT_CHOICE→ADDRESS: advances when lead picks 9am", async () => {
+    const ctx = makeContext({ smsFlow: "B", stage: "SLOT_CHOICE", selectedSlot: "Thursday, May 1" });
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ timeSlot: "9am" }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Awesome Sarah, what's the address for service?"));
+
     const result = await processLeadReplyV2("9am", ctx);
     expect(result.nextStage).toBe("ADDRESS");
-    expect(result.extractedData?.selectedSlot).toBe("Thursday at 9am");
+    expect(result.extractedData?.selectedSlot).toBe("Thursday, May 1 at 9am");
   });
 
-  it("Flow B ADDRESS→CONFIRMATION: sends lock-in message after address", async () => {
+  it("Flow B SLOT_CHOICE→ADDRESS: advances with default 9am when lead says 'any day works'", async () => {
+    const ctx = makeContext({ smsFlow: "B", stage: "SLOT_CHOICE", selectedSlot: "Thursday, May 1" });
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ isFlexible: true }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Perfect, I'll lock you in for Thursday at 9am! What's the address?"));
+
+    const result = await processLeadReplyV2("any day works", ctx);
+    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.extractedData?.selectedSlot).toBe("Thursday, May 1 at 9am");
+  });
+
+  it("Flow B SLOT_CHOICE→ADDRESS: advances when lead says '9am' AND asks a question (multi-intent)", async () => {
+    const ctx = makeContext({ smsFlow: "B", stage: "SLOT_CHOICE", selectedSlot: "Saturday, May 9" });
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ timeSlot: "9am", questions: ["Are the teams insured?"] }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Yes, our teams are fully bonded and insured! I've locked you in for Saturday at 9am. What's the address?"));
+
+    const result = await processLeadReplyV2("grab 9am, are the teams insured?", ctx);
+    expect(result.nextStage).toBe("ADDRESS");
+    expect(result.extractedData?.selectedSlot).toBe("Saturday, May 9 at 9am");
+  });
+
+  it("Flow B SLOT_CHOICE stays when lead only asks a question (no slot)", async () => {
+    const ctx = makeContext({ smsFlow: "B", stage: "SLOT_CHOICE", selectedSlot: "Thursday, May 1" });
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ questions: ["Do you bring supplies?"] }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Yes, we bring all supplies! Which slot works — 9am or 1pm?"));
+
+    const result = await processLeadReplyV2("do you bring supplies?", ctx);
+    expect(result.nextStage).toBe("SLOT_CHOICE");
+  });
+
+  it("Flow B ADDRESS→CONFIRMATION: advances after address provided", async () => {
     const ctx = makeContext({ smsFlow: "B", stage: "ADDRESS", selectedSlot: "Thursday at 9am" });
-    mockLLM.mockResolvedValueOnce(makeLLMResponse({
-      reply: "Perfect — I've reserved Thursday at 9am for you at 123 Oak St, Washington DC 20001. ✅\nAnything I should pass to the team?\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?",
-      nextStage: "CONFIRMATION",
-      extractedData: { bedrooms: null, bathrooms: null, selectedSlot: null, address: "123 Oak St, Washington DC 20001", callPreference: null, quotedPrice: null, serviceType: null },
-      reasoning: "Address received. Sending lock-in confirmation and asking about call.",
-    }));
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ address: "123 Oak St, Washington DC 20001" }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Lock-in reply"));
+
     const result = await processLeadReplyV2("123 Oak St, Washington DC 20001", ctx);
     expect(result.nextStage).toBe("CONFIRMATION");
     expect(result.extractedData?.address).toBe("123 Oak St, Washington DC 20001");
@@ -190,12 +246,9 @@ describe("processLeadReplyV2 — Flow B (Jade) integration", () => {
       selectedSlot: "Thursday at 9am",
       address: "123 Oak St, Washington DC 20001",
     });
-    mockLLM.mockResolvedValueOnce(makeLLMResponse({
-      reply: "Perfect Sarah! Expect a call from us shortly. We look forward to serving you! 🏠✨",
-      nextStage: "CALL_SCHEDULED",
-      extractedData: { bedrooms: null, bathrooms: null, selectedSlot: null, address: null, callPreference: "now", quotedPrice: null, serviceType: null },
-      reasoning: "Lead said now. Setting callPreference to now.",
-    }));
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ callPreference: "now" }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Perfect Sarah! Expect a call from us shortly. 🏠✨"));
+
     const result = await processLeadReplyV2("now", ctx);
     expect(result.nextStage).toBe("CALL_SCHEDULED");
     expect(result.extractedData?.callPreference).toBe("now");
@@ -203,13 +256,28 @@ describe("processLeadReplyV2 — Flow B (Jade) integration", () => {
 
   it("Flow B AVAILABILITY stays when lead is vague (no specific day)", async () => {
     const ctx = makeContext({ smsFlow: "B", stage: "AVAILABILITY" });
-    mockLLM.mockResolvedValueOnce(makeLLMResponse({
-      reply: "Of course! What specific day works best for you?",
-      nextStage: "AVAILABILITY",
-      extractedData: { bedrooms: null, bathrooms: null, selectedSlot: null, address: null, callPreference: null, quotedPrice: null, serviceType: null },
-      reasoning: "Lead said ASAP — no specific day. Asking for a day.",
-    }));
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ isFlexible: false, dayPreference: null }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Of course! What specific day works best for you?"));
+
     const result = await processLeadReplyV2("as soon as possible", ctx);
     expect(result.nextStage).toBe("AVAILABILITY");
+  });
+
+  it("WIDGET_SIZING→AVAILABILITY: advances on special scope 'only the basement'", async () => {
+    const ctx = makeContext({ smsFlow: "B", stage: "WIDGET_SIZING" });
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ specialScope: "only the basement" }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("Got it — we'll take care of the basement. When were you hoping to schedule?"));
+
+    const result = await processLeadReplyV2("only need the basement cleaned", ctx);
+    expect(result.nextStage).toBe("AVAILABILITY");
+  });
+
+  it("opt-out moves to DONE from any stage", async () => {
+    const ctx = makeContext({ smsFlow: "B", stage: "SLOT_CHOICE" });
+    mockLLM.mockResolvedValueOnce(makeExtractionResponse({ optOut: true }));
+    mockLLM.mockResolvedValueOnce(makeReplyResponse("No problem! You've been unsubscribed. Have a great day!"));
+
+    const result = await processLeadReplyV2("STOP", ctx);
+    expect(result.nextStage).toBe("DONE");
   });
 });
