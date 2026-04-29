@@ -95,24 +95,28 @@ export default function LeadNurturing() {
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(null);
 
   // ── Script editor state ─────────────────────────────────────────────────
-  const [scriptText, setScriptText] = useState("");
+   const [scriptText, setScriptText] = useState("");
+  const [isSaved, setIsSaved] = useState(false);
   const utils = trpc.useUtils();
-
   // ── tRPC queries ─────────────────────────────────────────────────────────
   const { data: customScripts } = trpc.nurture.getScripts.useQuery(undefined, { staleTime: 0 });
   const saveScriptMutation = trpc.nurture.saveScript.useMutation({
     onSuccess: (_data, variables) => {
-      // Update scriptText immediately so textarea reflects the saved value
       setScriptText(variables.body);
       utils.nurture.getScripts.invalidate();
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 2000);
     },
   });
   const testSendMutation = trpc.nurture.testSend.useMutation();
-  // Reset test send state when the active step changes
+  // Sync scriptText from DB whenever customScripts loads or active step changes
   useEffect(() => {
+    if (!activeStep) return;
+    const override = customScripts?.find((s) => s.step === activeStep.stepNum);
+    setScriptText(override?.body ?? activeStep.script ?? "");
     testSendMutation.reset();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStep?.stepNum]);
+  }, [activeStep?.stepNum, customScripts]);
   const pauseMutation = trpc.nurture.end.useMutation({
     onSuccess: () => utils.nurture.enrollments.invalidate(),
   });
@@ -851,7 +855,7 @@ export default function LeadNurturing() {
                           saveScriptMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
                         }}
                       >
-                        {saveScriptMutation.isPending ? "Saving..." : "Save changes"}
+                        {saveScriptMutation.isPending ? "Saving..." : isSaved ? "Saved ✓" : "Save changes"}
                       </button>
                     </div>
                   </div>
