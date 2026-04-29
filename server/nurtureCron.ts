@@ -236,11 +236,7 @@ export async function runNurtureSend(): Promise<{
           // Lead is mid-conversation — hold nurture, check again next tick
           continue;
         }
-        // Pause: human takeover (aiMode=0 means agent is handling manually)
-        if (session.aiMode === 0) {
-          await pauseEnrollment(db, session.id);
-          continue;
-        }
+        // No aiMode pause — enrollment only pauses on: book, manual pause from UI, or STOP reply
 
         // Skip send if lead still has no phone — keep enrollment active, retry next tick
         const currentPhone = session.leadPhone ?? enrollment.leadPhone;
