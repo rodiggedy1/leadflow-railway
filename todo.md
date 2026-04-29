@@ -1300,3 +1300,8 @@
 - [x] Rewrite SLOT_CHOICE and CONFIRMATION reply instructions as rich context goals, not rigid scripted templates
 - [ ] Extend two-step architecture to alwaysOnEngine.ts (re-engagement engine)
 - [x] Fix CONFIRMATION stage: any substantive reply advances to CALL_SCHEDULED instead of re-asking for notes
+- [x] Full stage audit: add isPositiveReply + isUrgent signals to extraction schema
+- [x] Fix AVAILABILITY: ASAP/urgent replies now pick first available slot and advance
+- [x] Fix REACTIVATION: "yes/sure/sounds good" now advances to AVAILABILITY
+- [x] Fix REACTIVATION_TIME: positive replies now advance to DONE
+- [x] Fix ADDRESS: lower min length 10→5, handle "same address" via ctx.address

@@ -117,12 +117,12 @@ export function advanceStage(
         return { nextStage: "SLOT_CHOICE", persistedData: persisted, replyContext: replyCtx };
       }
 
-      // Flexible about day → pick first available
-      if (signals.isFlexible) {
+      // Flexible about day OR urgent (ASAP) → pick first available slot
+      if (signals.isFlexible || signals.isUrgent) {
         const defaultSlot = pickDefaultSlot(null);
         persisted.selectedSlot = defaultSlot;
         replyCtx.usedDefault = true;
-        replyCtx.defaultDescription = defaultSlot;
+        replyCtx.defaultDescription = signals.isUrgent ? `${defaultSlot} (soonest available)` : defaultSlot;
         return { nextStage: "SLOT_CHOICE", persistedData: persisted, replyContext: replyCtx };
       }
 
@@ -180,8 +180,10 @@ export function advanceStage(
     }
 
     case "ADDRESS": {
-      if (signals.address && signals.address.length >= 10) {
-        persisted.address = signals.address;
+      // Accept any address with at least 5 chars, OR if they say "same address" use ctx.address
+      const addressToUse = signals.address ?? (signals.isPositiveReply && ctx.address ? ctx.address : null);
+      if (addressToUse && addressToUse.length >= 5) {
+        persisted.address = addressToUse;
         return { nextStage: "CONFIRMATION", persistedData: persisted, replyContext: replyCtx };
       }
       return { nextStage: "ADDRESS", persistedData: persisted, replyContext: replyCtx };
@@ -198,16 +200,16 @@ export function advanceStage(
     }
 
     case "REACTIVATION": {
-      // Any positive reply → move to availability
-      if (signals.dayPreference || signals.isFlexible || signals.timeSlot) {
+      // Any positive reply, urgency, flexibility, or specific day/time → move to availability
+      if (signals.dayPreference || signals.isFlexible || signals.timeSlot || signals.isPositiveReply || signals.isUrgent) {
         return { nextStage: "AVAILABILITY", persistedData: persisted, replyContext: replyCtx };
       }
       return { nextStage: "REACTIVATION", persistedData: persisted, replyContext: replyCtx };
     }
 
     case "REACTIVATION_TIME": {
-      // Any time/day reply → done
-      if (signals.dayPreference || signals.timeSlot || signals.isFlexible) {
+      // Any positive/flexible/day/time reply → done
+      if (signals.dayPreference || signals.timeSlot || signals.isFlexible || signals.isPositiveReply || signals.isUrgent) {
         return { nextStage: "DONE", persistedData: persisted, replyContext: replyCtx };
       }
       return { nextStage: "REACTIVATION_TIME", persistedData: persisted, replyContext: replyCtx };

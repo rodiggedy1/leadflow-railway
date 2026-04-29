@@ -180,8 +180,13 @@ describe("advanceStage — ADDRESS", () => {
   });
 
   it("stays on ADDRESS when address too short (not a real address)", () => {
-    const result = advanceStage("ADDRESS", emptySignals({ address: "123 Main" }), ctx("ADDRESS"));
+    const result = advanceStage("ADDRESS", emptySignals({ address: "123" }), ctx("ADDRESS"));
     expect(result.nextStage).toBe("ADDRESS");
+  });
+  it("advances to CONFIRMATION when lead says 'same address' and ctx has address", () => {
+    const result = advanceStage("ADDRESS", emptySignals({ isPositiveReply: true }), { ...ctx("ADDRESS"), address: "456 Oak Ave, Arlington VA" });
+    expect(result.nextStage).toBe("CONFIRMATION");
+    expect(result.persistedData.address).toBe("456 Oak Ave, Arlington VA");
   });
 });
 

@@ -23,6 +23,8 @@ export interface LeadSignals {
   isExistingCustomer: boolean;
   serviceType: string | null;
   quotedPrice: string | null;
+  isPositiveReply: boolean;
+  isUrgent: boolean;
 }
 
 export const LEAD_SIGNALS_JSON_SCHEMA = {
@@ -45,11 +47,14 @@ export const LEAD_SIGNALS_JSON_SCHEMA = {
       isExistingCustomer: { type: "boolean", description: "true if this is an existing customer needing support." },
       serviceType:        { type: ["string", "null"], description: "Service type if mentioned. null if not mentioned." },
       quotedPrice:        { type: ["string", "null"], description: "Price quoted if mentioned (numeric string). null if not mentioned." },
+      isPositiveReply:    { type: "boolean", description: "true if the lead expressed general agreement or interest (yes, sure, sounds good, let's do it, great, ok, definitely, absolutely, etc.)" },
+      isUrgent:           { type: "boolean", description: "true if the lead wants service as soon as possible (ASAP, as soon as you can, right away, urgent, etc.)" },
     },
     required: [
       "bedrooms", "bathrooms", "timeSlot", "dayPreference", "address",
       "callPreference", "specialScope", "optOut", "isFlexible", "questions",
       "wantsFutureBooking", "isExistingCustomer", "serviceType", "quotedPrice",
+      "isPositiveReply", "isUrgent",
     ],
     additionalProperties: false,
   },
@@ -76,6 +81,8 @@ EXTRACTION RULES:
 - questions: list any questions the lead asked.
 - wantsFutureBooking: true if they want to book weeks away.
 - isExistingCustomer: true if they mention an existing booking or need support.
+- isPositiveReply: true if the lead said yes, sure, sounds good, ok, great, let's do it, definitely, absolutely, or any general agreement.
+- isUrgent: true if the lead said ASAP, as soon as possible, as soon as you can, right away, urgent, or similar urgency signals.
 
 Return ONLY valid JSON. No explanation, no markdown.`;
 }
