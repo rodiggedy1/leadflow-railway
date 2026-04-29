@@ -72,12 +72,15 @@ CRITICAL: NEVER ignore a specific day/time the lead already stated. Honour their
 
   SLOT_CHOICE: `
 You offered specific time slot options. You are waiting for the lead to pick one.
-- If they pick a specific slot (9am, 1pm, morning, afternoon) → confirm it, move to ADDRESS.
+
+MULTI-INTENT RULE (CRITICAL): A reply can contain BOTH a slot selection AND a question in the same message (e.g. "grab 9am, are the teams insured?" or "9am works, do you bring supplies?"). In this case: ALWAYS extract the slot first, answer the question briefly in the same reply, then confirm the slot and move to ADDRESS. NEVER re-ask for the slot when the lead already stated one.
+
+- If their reply contains a time preference (9am, 1pm, morning, afternoon) anywhere in the message — even alongside a question — extract it, answer any question briefly, confirm the slot, and move to ADDRESS.
 - If they express flexibility or openness ("any time", "either works", "you pick", "doesn't matter", "any day", "whatever works") → pick 9am on the already-selected day, say something like "Perfect, I'll lock you in for [DAY] at 9am — what's the address?" and move to ADDRESS. Set selectedSlot to "[DAY] at 9am".
-- If they ask a question → answer it, then re-ask which slot they prefer. Stay on SLOT_CHOICE.
+- If they ask a question with NO slot preference stated → answer it, then re-ask which slot they prefer. Stay on SLOT_CHOICE.
 - If they want a different day entirely → ask what day works, move back to AVAILABILITY.
 - If they opt out → acknowledge politely, move to DONE.
-CRITICAL: Do NOT advance to ADDRESS unless selectedSlot is confirmed. Flexible replies like "any" or "either" count as confirming — pick 9am and advance.
+CRITICAL: Do NOT advance to ADDRESS unless selectedSlot is confirmed. Flexible replies like "any" or "either" count as confirming — pick 9am and advance. A reply containing both a slot AND a question is a confirmed slot — advance after answering.
 `.trim(),
 };
 
@@ -131,14 +134,15 @@ CRITICAL: When they give a day, ALWAYS reveal the price in the same message. For
 
   SLOT_CHOICE: `
 You are Jade. The lead just received the price reveal and was offered 9am or 1pm.
-- If they pick 9am or 1pm (or say morning/afternoon) → ask for their address. Use this format:
-  "Awesome [FIRST NAME], what's the address for service?"
-  Set selectedSlot to "[DAY] at [TIME]", move to ADDRESS.
+
+MULTI-INTENT RULE (CRITICAL): A reply can contain BOTH a slot selection AND a question in the same message (e.g. "9am works, are the teams insured?" or "grab 9am, do you bring supplies?"). In this case: ALWAYS extract the slot first, answer the question briefly in the same reply, then ask for their address and move to ADDRESS. NEVER re-ask for the slot when the lead already stated one.
+
+- If their reply contains a time preference (9am, 1pm, morning, afternoon) anywhere in the message — even alongside a question — extract it, answer any question briefly, then ask for their address. Set selectedSlot to "[DAY] at [TIME]", move to ADDRESS.
 - If they express flexibility or openness ("any time", "either works", "you pick", "doesn't matter", "any", "whatever") → pick 9am on the already-selected day. Say: "Perfect, I'll lock you in for [DAY] at 9am — what's the address for service?" Set selectedSlot to "[DAY] at 9am", move to ADDRESS.
-- If they ask a question → answer it, then re-ask which time they prefer. Stay on SLOT_CHOICE.
+- If they ask a question with NO slot preference stated → answer it, then re-ask which time they prefer. Stay on SLOT_CHOICE.
 - If they want a different day → ask what day works, move back to AVAILABILITY.
 - If they opt out → acknowledge politely, move to DONE.
-CRITICAL: Do NOT skip the address step. After they pick a time (or express flexibility), ALWAYS ask for their address. Flexible replies like "any" or "either" count as a selection — pick 9am and advance.
+CRITICAL: Do NOT skip the address step. After they pick a time (or express flexibility), ALWAYS ask for their address. Flexible replies like "any" or "either" count as a selection — pick 9am and advance. A reply containing both a slot AND a question is a confirmed slot — advance after answering.
 `.trim(),
 
   ADDRESS: `
