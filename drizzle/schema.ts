@@ -2099,6 +2099,11 @@ export const nurtureEnrollments = mysqlTable("nurture_enrollments", {
   endReason: varchar("endReason", { length: 32 }),
   /** UTC timestamp when status was set to done */
   endedAt: timestamp("endedAt"),
+  /**
+   * Soft-delete timestamp. When set, the enrollment is hidden from the UI and the cron
+   * will never re-enroll this session — the row acts as a permanent block record.
+   */
+  deletedAt: timestamp("deletedAt"),
   /** Revenue captured at booking time (session.bookedAmount or parsed quotedPrice). NULL if not booked via sequence. */
   bookedRevenue: int("bookedRevenue"),
   /** Last step that was successfully sent */

@@ -1289,3 +1289,5 @@
 - [x] Add recency gate to nurture send runner (skip if inbound message in last 30 min)
 - [x] Add Speed to Lead status badge to enrollment table rows
 - [x] Tighten recency gate from 30 to 20 minutes
+- [x] Fix AI SLOT_CHOICE: "any day/either works/you pick" now picks 9am and advances to ADDRESS instead of re-asking
+- [x] Fix AI WIDGET_SIZING: partial scope replies ("only the basement", "just the kitchen") now acknowledged and advanced instead of looping back to ask for room counts

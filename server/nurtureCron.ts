@@ -13,7 +13,7 @@
  */
 
 import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
-import { eq, and, lte, gte, isNull, ne, lt, inArray, notInArray } from "drizzle-orm";
+import { eq, and, lte, gte, isNull, isNotNull, ne, lt, inArray, notInArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
@@ -96,15 +96,16 @@ export async function runNurtureEnrollment(): Promise<{
 
     for (const session of candidates) {
       try {
-        // Check if already enrolled (active, paused, or done within last 30 days)
+         // Check if already enrolled (active, paused, done, OR soft-deleted).
+        // Soft-deleted rows (deletedAt IS NOT NULL) act as a permanent block —
+        // the session must never be re-enrolled even after the record is "deleted".
         const existingEnrollment = await db
-          .select({ id: nurtureEnrollments.id, status: nurtureEnrollments.status })
+          .select({ id: nurtureEnrollments.id, status: nurtureEnrollments.status, deletedAt: nurtureEnrollments.deletedAt })
           .from(nurtureEnrollments)
           .where(eq(nurtureEnrollments.sessionId, session.id))
           .limit(1);
-
         if (existingEnrollment.length > 0) {
-          // Already enrolled — skip
+          // Already enrolled (or soft-deleted) — skip
           continue;
         }
 
@@ -166,14 +167,15 @@ export async function runNurtureSend(): Promise<{
   try {
     const now = new Date();
 
-    // Find active enrollments where nextSendAt <= now
+    // Find active enrollments where nextSendAt <= now (exclude soft-deleted rows)
     const due = await db
       .select()
       .from(nurtureEnrollments)
       .where(
         and(
           eq(nurtureEnrollments.status, "active"),
-          lte(nurtureEnrollments.nextSendAt, now)
+          lte(nurtureEnrollments.nextSendAt, now),
+          isNull(nurtureEnrollments.deletedAt)
         )
       )
       .limit(50);
