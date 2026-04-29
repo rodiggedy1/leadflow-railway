@@ -658,21 +658,10 @@ export function registerWebhookRoutes(app: Express) {
         meta: { sessionId: session.id, leadPhone: fromPhone, leadName: session.leadName, stage: session.stage },
       }).catch(() => {});
 
-      // ── Auto-pause nurture enrollment on any inbound reply ────────────────────
-      // If this lead has an active nurture enrollment, pause it immediately so the
-      // drip sequence doesn't fire on top of an ongoing conversation.
-      // The admin can resume from the Lead Nurturing page if needed.
-      {
-        const dbNurture = await getDb();
-        if (dbNurture) {
-          try {
-            await pauseEnrollment(dbNurture, session.id);
-            console.log(`[Webhook] Auto-paused nurture enrollment for session ${session.id} on inbound reply.`);
-          } catch {
-            // Non-critical — don't block the reply flow
-          }
-        }
-      }
+      // NOTE: We do NOT auto-pause nurture on inbound reply.
+      // The recency gate in nurtureCron (20-min window) already skips sending
+      // during active conversations. Pausing here caused new leads to always
+      // show as "paused" in the UI even while mid-conversation with Jade.
 
       // If agent has taken over (aiMode = 0), just store the inbound message and stop.
       // The agent will reply manually from the app.
