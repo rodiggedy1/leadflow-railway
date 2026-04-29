@@ -238,9 +238,13 @@ export const nurtureRouter = router({
     .input(z.object({ step: z.number().int().min(1).max(17), body: z.string().min(1) }))
     .mutation(async ({ input }) => {
       const { sendSms } = await import("./openphone");
+      // Substitute template placeholders with test values
+      const rendered = input.body
+        .replace(/\{\{first_name\}\}/g, "Rohan")
+        .replace(/\{\{service\}\}/g, "house cleaning");
       const result = await sendSms({
         to: "+13029816191",
-        content: `[TEST step ${input.step}] ${input.body}`,
+        content: `[TEST step ${input.step}] ${rendered}`,
       });
       if (!result.success) throw new Error(result.error ?? "SMS failed");
       return { ok: true };
