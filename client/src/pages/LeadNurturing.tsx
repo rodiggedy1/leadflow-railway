@@ -88,6 +88,7 @@ export default function LeadNurturing() {
     label: "Holding a spot",
     time: "+53 min",
     phase: "Phase 1 · Speed-to-Lead",
+    script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week?",
   });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(null);
@@ -139,11 +140,11 @@ export default function LeadNurturing() {
       border: "border-emerald-200",
       badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
       steps: [
-        { label: "Instant response", time: "0 min", status: "done" },
-        { label: "Nudge", time: "+12 min", status: "done" },
-        { label: "Holding a spot", time: "+53 min", status: "active" },
-        { label: "Urgency", time: "+2.5 hrs", status: "queued" },
-        { label: "Soft reset", time: "7:15 pm", status: "queued" },
+        { label: "Instant response", time: "0 min", status: "done", script: "Hey {{first_name}}, this is Madison from Maids in Black 👋 Just got your request for {{service}}. What day were you hoping to get this done?" },
+        { label: "Nudge", time: "+12 min", status: "done", script: "Just checking — we may be able to help with {{service}} this week. Did you have a day in mind?" },
+        { label: "Holding a spot", time: "+53 min", status: "active", script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week?" },
+        { label: "Urgency", time: "+2.5 hrs", status: "queued", script: "Heads up — openings this week are filling up fast. Want me to check what's left before they're gone?" },
+        { label: "Soft reset", time: "7:15 pm", status: "queued", script: "No worries if today got busy — happens to everyone. I can check what's open tomorrow or later this week if that works better?" },
       ],
     },
     {
@@ -154,10 +155,10 @@ export default function LeadNurturing() {
       border: "border-sky-200",
       badge: "bg-sky-50 text-sky-700 border-sky-200",
       steps: [
-        { label: "Fresh start", time: "9:00 am", status: "queued" },
-        { label: "Simple CTA", time: "1:30 pm", status: "queued" },
-        { label: "Last call", time: "6:00 pm", status: "queued" },
-        { label: "Value reminder", time: "Day 3", status: "queued" },
+        { label: "Fresh start", time: "9:00 am", status: "queued", script: "Morning {{first_name}} — still need the cleaning done? I've got the schedule in front of me." },
+        { label: "Simple CTA", time: "1:30 pm", status: "queued", script: "Would morning or evening work better if we can fit you in?" },
+        { label: "Last call", time: "6:00 pm", status: "queued", script: "Last message for today — we're almost full this week. Want me to grab you one of the last spots?" },
+        { label: "Value reminder", time: "Day 3", status: "queued", script: "Just so you know — we bring everything and handle the full home in one visit. No prep needed on your end. Want me to check times?" },
       ],
     },
     {
@@ -168,9 +169,9 @@ export default function LeadNurturing() {
       border: "border-violet-200",
       badge: "bg-violet-50 text-violet-700 border-violet-200",
       steps: [
-        { label: "Circle back", time: "Day 4", status: "queued" },
-        { label: "Timing opener", time: "Day 6", status: "queued" },
-        { label: "First-time offer", time: "Day 7", status: "queued" },
+        { label: "Circle back", time: "Day 4", status: "queued", script: "Hey {{first_name}} — still looking to get the cleaning done, or did you already sort it out?" },
+        { label: "Timing opener", time: "Day 6", status: "queued", script: "If timing was the issue, we still have a few spots open this week. Want me to check what works for you?" },
+        { label: "First-time offer", time: "Day 7", status: "queued", script: "We had a couple openings come up — if you book this week I can take something off for a first-time clean. Want me to check times?" },
       ],
     },
     {
@@ -181,11 +182,11 @@ export default function LeadNurturing() {
       border: "border-amber-200",
       badge: "bg-amber-50 text-amber-700 border-amber-200",
       steps: [
-        { label: "Still need help?", time: "Day 10", status: "queued" },
-        { label: "Convenience reframe", time: "Day 14", status: "queued" },
-        { label: "Trust signal", time: "Day 18", status: "queued" },
-        { label: "Schedule gap fill", time: "Day 21", status: "queued" },
-        { label: "Breakup text", time: "Day 30", status: "queued" },
+        { label: "Still need help?", time: "Day 10", status: "queued", script: "Hey {{first_name}}, still need help with the cleaning this week, or should I close this out for now?" },
+        { label: "Convenience reframe", time: "Day 14", status: "queued", script: "Quick one — you don't have to be home, we bring everything, and the whole place gets done in one visit. Want me to check what's open?" },
+        { label: "Trust signal", time: "Day 18", status: "queued", script: "Totally get it if you're still deciding — we're insured, background-checked, and our team cleans homes like yours every week. Want me to send a couple times?" },
+        { label: "Schedule gap fill", time: "Day 21", status: "queued", script: "We had a few last-minute openings come up — if you still want the cleaning done, I can check if one of them works for you." },
+        { label: "Breakup text", time: "Day 30", status: "queued", script: "Hey {{first_name}}, I'll close this out for now so I'm not bugging you. If you still need help with the cleaning later, just reply here and I'll check the schedule 👍" },
       ],
     },
   ];
@@ -364,7 +365,7 @@ export default function LeadNurturing() {
                             </div>
                             <button
                               onClick={() => {
-                                setActiveStep({ label: step.label, time: step.time, phase: phase.name });
+                                setActiveStep({ label: step.label, time: step.time, phase: phase.name, script: step.script ?? "" });
                                 setActivePanel("message");
                               }}
                               className="flex-1 rounded-2xl border border-white/70 bg-white/85 px-4 py-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-white cursor-pointer"
@@ -796,8 +797,9 @@ export default function LeadNurturing() {
                     <button className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white">Save changes</button>
                   </div>
                   <textarea
+                    key={activeStep.label}
                     className="min-h-[170px] w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-slate-400"
-                    defaultValue="Hey — just a heads up, our afternoon is filling up pretty quickly. If you still want help with the clean, I can hold a spot for you before it gets taken. Want me to reserve one?"
+                    defaultValue={activeStep.script}
                   />
                 </div>
 
