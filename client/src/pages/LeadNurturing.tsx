@@ -104,6 +104,14 @@ export default function LeadNurturing() {
     onSuccess: () => utils.nurture.getScripts.invalidate(),
   });
   const testSendMutation = trpc.nurture.testSend.useMutation();
+  // Reset test send state when the active step changes
+  const prevStepRef = React.useRef<number | null>(null);
+  if (activeStep && prevStepRef.current !== activeStep.stepNum) {
+    prevStepRef.current = activeStep.stepNum;
+    if (testSendMutation.isSuccess || testSendMutation.isError) {
+      testSendMutation.reset();
+    }
+  }
   const pauseMutation = trpc.nurture.end.useMutation({
     onSuccess: () => utils.nurture.enrollments.invalidate(),
   });
