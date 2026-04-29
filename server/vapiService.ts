@@ -424,7 +424,7 @@ function buildAssistantConfig(toolIds: string[], webhookUrl: string) {
         },
       ],
       temperature: 0.4,
-      maxTokens: 380,
+      maxTokens: 550,
       toolIds,
     },
     voice: {

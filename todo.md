@@ -1305,3 +1305,6 @@
 - [x] Fix REACTIVATION: "yes/sure/sounds good" now advances to AVAILABILITY
 - [x] Fix REACTIVATION_TIME: positive replies now advance to DONE
 - [x] Fix ADDRESS: lower min length 10→5, handle "same address" via ctx.address
+- [x] Add loop guard to SMS engine: force-advance after 3 stuck turns on same stage
+- [x] Raise Vapi maxTokens from 380 to 550 for complete voice responses
+- [x] Add hourly Vapi assistant refresh cron so time context is never more than 1 hour stale

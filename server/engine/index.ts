@@ -104,9 +104,31 @@ export async function processLeadReplyV2(
   console.log(`[Engine] Step 1 signals: timeSlot=${signals.timeSlot}, dayPref=${signals.dayPreference}, isFlexible=${signals.isFlexible}, questions=${signals.questions.length}`);
 
   // ── Step 2: ADVANCE (deterministic) ───────────────────────────────────────
-  const advance = advanceStage(context.stage, signals, context);
+  let advance = advanceStage(context.stage, signals, context);
 
-  console.log(`[Engine] Step 2 advance: ${context.stage} → ${advance.nextStage} | usedDefault=${advance.replyContext.usedDefault}`);
+  // ── Loop guard: if stuck on same stage for 3+ turns, force-advance ─────────
+  // This is the final backstop. If the extractor can't classify the lead's reply
+  // after 3 turns, we pick the best available default and move forward.
+  const stuckCount = context.stuckCount ?? 0;
+  const isStuck = advance.nextStage === context.stage;
+  if (isStuck && stuckCount >= 2) {
+    console.warn(`[Engine] Loop guard triggered: stage=${context.stage} stuck for ${stuckCount + 1} turns — force-advancing`);
+    // Force flexible/positive signals and re-advance
+    const forcedSignals: LeadSignals = {
+      ...signals,
+      isFlexible: true,
+      isPositiveReply: true,
+      isUrgent: false,
+    };
+    advance = advanceStage(context.stage, forcedSignals, context);
+    // If still stuck (e.g. ADDRESS with no address), skip to DONE and flag ops
+    if (advance.nextStage === context.stage) {
+      console.warn(`[Engine] Loop guard: could not force-advance from ${context.stage} — routing to DONE`);
+      advance = { nextStage: "DONE", persistedData: {}, replyContext: { answeredQuestions: [], usedDefault: true } };
+    }
+  }
+
+  console.log(`[Engine] Step 2 advance: ${context.stage} → ${advance.nextStage} | usedDefault=${advance.replyContext.usedDefault} | stuck=${isStuck ? stuckCount + 1 : 0}`);
 
   // ── REACTIVATION_TIME override (scripted closing message from DB) ──────────
   if (context.stage === "REACTIVATION_TIME") {

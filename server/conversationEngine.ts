@@ -72,6 +72,12 @@ export interface ConversationContext {
   preferredDates?: string | null;
   /** Flow C: special notes from the lead (pets, focus areas, time of day) */
   specialNotes?: string | null;
+  /**
+   * Number of consecutive turns the engine has been stuck on the same stage.
+   * Incremented by the webhook handler each turn the stage doesn't advance.
+   * Used by the loop guard in engine/index.ts.
+   */
+  stuckCount?: number | null;
 }
 
 export interface ChatMessage {

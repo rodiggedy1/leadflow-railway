@@ -27,6 +27,7 @@ import { generatePendingBatches } from "./campaignApproval";
 import { sendTrackerLinksForToday } from "./trackerCron";
 import { warmAiInsightsCache } from "./commandCenterRouter";
 import { warmMetricsAiAlerts } from "./metricsRouter";
+import { bootstrapVapiAssistant } from "./vapiService";
 import {
   FIELD_MGMT_ENABLED,
   runPreJobReminders,
@@ -615,6 +616,21 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Vapi assistant hourly refresh ──────────────────────────────────────────
+  // Re-bootstraps the Vapi assistant every hour so the system prompt's
+  // current date/time context is never more than 1 hour stale.
+  cron.schedule("0 30 * * * *", async () => {
+    try {
+      const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
+      await bootstrapVapiAssistant(webhookUrl);
+      console.log("[InternalCron] VapiRefresh — assistant prompt refreshed");
+      await recordHeartbeat("vapi-refresh", "assistant prompt refreshed", true);
+    } catch (err) {
+      console.error("[InternalCron] VapiRefresh failed:", err);
+      await recordHeartbeat("vapi-refresh", `error: ${err instanceof Error ? err.message : String(err)}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
@@ -626,4 +642,5 @@ export function startInternalCron(): void {
   console.log("  - AiCacheWarmUp:      every 30 minutes");
   console.log(`  - FieldMgmt:          every 5 min 6AM-10PM ET (ENABLED=${FIELD_MGMT_ENABLED})`);
   console.log("  - MetricsAiAlerts:    every hour (all 5 ranges)");
+  console.log("  - VapiRefresh:        every hour at :30 (system prompt time context)");
 }
