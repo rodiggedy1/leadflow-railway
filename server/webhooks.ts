@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -46,6 +46,7 @@ import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { getSetting } from "./settingsRouter";
+import { pauseEnrollment } from "./nurtureSequence";
 import { ENV } from "./_core/env";
 import { scoreAndCacheStatusById } from "./csStatusScorer";
 
@@ -656,6 +657,22 @@ export function registerWebhookRoutes(app: Express) {
         body: inboundText.length > 120 ? inboundText.slice(0, 120) + "…" : inboundText,
         meta: { sessionId: session.id, leadPhone: fromPhone, leadName: session.leadName, stage: session.stage },
       }).catch(() => {});
+
+      // ── Auto-pause nurture enrollment on any inbound reply ────────────────────
+      // If this lead has an active nurture enrollment, pause it immediately so the
+      // drip sequence doesn't fire on top of an ongoing conversation.
+      // The admin can resume from the Lead Nurturing page if needed.
+      {
+        const dbNurture = await getDb();
+        if (dbNurture) {
+          try {
+            await pauseEnrollment(dbNurture, session.id);
+            console.log(`[Webhook] Auto-paused nurture enrollment for session ${session.id} on inbound reply.`);
+          } catch {
+            // Non-critical — don't block the reply flow
+          }
+        }
+      }
 
       // If agent has taken over (aiMode = 0), just store the inbound message and stop.
       // The agent will reply manually from the app.

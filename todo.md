@@ -1272,3 +1272,4 @@
 - [x] Nurture: Cancel 100 stale historical enrollments (48-hour enrollment window enforced)
 - [x] Nurture: Wire Lead Nurturing UI lead progression table to real tRPC data (trpc.nurture.enrollments)
 - [x] Nurture: Wire Lead Nurturing UI KPI cards to real tRPC data (trpc.nurture.stats)
+- [x] Auto-pause nurture enrollment when lead sends any inbound reply (webhook)
