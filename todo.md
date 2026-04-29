@@ -1287,3 +1287,5 @@
 - [ ] Replace KPI cards: "Active leads in sequence" → "Booked in sequence", "Completed sequence" → "Booking revenue from sequence"
 - [x] Enroll all new leads with real phone immediately (no delay/booked/aiMode checks)
 - [x] Add recency gate to nurture send runner (skip if inbound message in last 30 min)
+- [x] Add Speed to Lead status badge to enrollment table rows
+- [x] Tighten recency gate from 30 to 20 minutes

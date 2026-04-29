@@ -577,6 +577,8 @@ export default function LeadNurturing() {
                           const enrolledDate = enrollment.enrolledAt
                             ? new Date(enrollment.enrolledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                             : "—";
+                          const STL_STAGES = ["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF", "ADDRESS", "CONFIRMATION", "WIDGET_SIZING"];
+                          const isInSTL = enrollment.sessionStage != null && STL_STAGES.includes(enrollment.sessionStage);
 
                           return (
                             <tr
@@ -594,6 +596,12 @@ export default function LeadNurturing() {
                                   <div>
                                     <div className="text-sm font-semibold text-slate-900">{displayName}</div>
                                     <div className="mt-1 text-xs text-slate-500">{enrollment.leadPhone}</div>
+                                    {isInSTL && (
+                                      <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600 border border-blue-200">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                        Speed to Lead
+                                      </span>
+                                    )}
                                     {enrollment.serviceType && (
                                       <div className="mt-1 text-xs text-slate-400">{enrollment.serviceType}</div>
                                     )}

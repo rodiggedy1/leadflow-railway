@@ -231,7 +231,7 @@ export async function runNurtureSend(): Promise<{
         // Recency gate: if the lead sent an inbound message in the last 30 minutes,
         // skip this cycle to avoid overlapping with an active conversation.
         // The enrollment stays active and will be checked again on the next cron tick.
-        const RECENCY_GATE_MS = 30 * 60 * 1000; // 30 minutes
+        const RECENCY_GATE_MS = 20 * 60 * 1000; // 20 minutes
         const recentInbound = (JSON.parse(session.messageHistory as unknown as string || '[]') as any[]).some((msg: any) => {
           if (msg.role !== 'user') return false;
           const ts = msg.timestamp ?? msg.createdAt ?? msg.ts;
