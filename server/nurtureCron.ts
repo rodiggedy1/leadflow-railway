@@ -13,7 +13,7 @@
  */
 
 import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
-import { eq, and, lte, gte, isNull, ne, lt, inArray } from "drizzle-orm";
+import { eq, and, lte, gte, isNull, ne, lt, inArray, notInArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
@@ -84,17 +84,12 @@ export async function runNurtureEnrollment(): Promise<{
       .from(conversationSessions)
       .where(
         and(
-          // Has a real phone (not a placeholder)
-          sql`${conversationSessions.leadPhone} NOT LIKE 'thumbtack-sms-%'`,
-          sql`${conversationSessions.leadPhone} NOT LIKE 'yelp-sms-%'`,
-          sql`${conversationSessions.leadPhone} NOT LIKE 'bark-sms-%'`,
-          sql`${conversationSessions.leadPhone} NOT LIKE 'newsource-sms-%'`,
+          // Only enroll real leads from the quote form or widget (whitelist approach)
+          inArray(conversationSessions.leadSource as any, ['form', 'widget', 'bark', 'thumbtack']),
+          // Has a real E.164 phone
           sql`${conversationSessions.leadPhone} LIKE '+1%'`,
-          // Exclude internal CS-initiated sessions (team members, not leads)
-          ne(conversationSessions.leadSource as any, 'cs_initiated'),
-          // Only enroll leads created AFTER the go-live cutoff (Apr 29 2026 ~15:00 UTC)
-          // This prevents any historical leads from being enrolled.
-          gte(conversationSessions.createdAt, new Date(1777474800000)),
+          // Only leads created AFTER go-live cutoff (Apr 29 2026 15:00 UTC)
+          sql`${conversationSessions.createdAt} > '2026-04-29 15:00:00'`,
         )
       )
       .limit(100);
