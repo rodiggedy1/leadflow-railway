@@ -83,7 +83,11 @@ function getInitials(name: string | null): string {
 type StatusFilter = "active" | "paused" | "done" | "all";
 
 export default function LeadNurturing() {
-  const [activePanel, setActivePanel] = useState<"message" | "segment" | null>(null);
+  const [activePanel, setActivePanel] = useState<"message" | "segment" | "stl" | null>(null);
+  const [stlFlow, setStlFlow] = useState<"form" | "widget">("form");
+  const [stlStep, setStlStep] = useState<{ key: string; label: string; value: string } | null>(null);
+  const [stlText, setStlText] = useState("");
+  const [stlSaved, setStlSaved] = useState(false);
   const [activeSegment, setActiveSegment] = useState("Hot");
   const [activeStep, setActiveStep] = useState({
     label: "Holding a spot",
@@ -101,6 +105,14 @@ export default function LeadNurturing() {
   const utils = trpc.useUtils();
   // ── tRPC queries ─────────────────────────────────────────────────────────
   const { data: customScripts } = trpc.nurture.getScripts.useQuery(undefined, { staleTime: 0 });
+  const { data: allSettings } = trpc.settings.getAll.useQuery(undefined, { staleTime: 0 });
+  const stlUpdateMutation = trpc.settings.update.useMutation({
+    onSuccess: () => {
+      utils.settings.getAll.invalidate();
+      setStlSaved(true);
+      setTimeout(() => setStlSaved(false), 2000);
+    },
+  });
   const saveScriptMutation = trpc.nurture.saveScript.useMutation({
     onSuccess: (_data, variables) => {
       setScriptText(variables.body);
@@ -381,6 +393,77 @@ export default function LeadNurturing() {
                     </button>
                   ))}
                 </div>
+
+                {/* Speed-to-Lead step cards */}
+                {(() => {
+                  const formSteps = [
+                    { key: "flowB_sms1", label: "SMS 1 · Greeting", defaultValue: "Awesome, we'd love to help! What day were you thinking so we can see how fast we can get you taken care of?" },
+                    { key: "flowB_sms2", label: "SMS 2 · Price Reveal", defaultValue: "Perfect. We handle a lot of {bedrooms} bed / {bathrooms} bath homes..." },
+                    { key: "flowB_sms3", label: "SMS 3 · Address Request", defaultValue: "Awesome {firstName}, what's the address for service?" },
+                    { key: "flowB_sms4", label: "SMS 4 · Lock-In", defaultValue: "Perfect — I've reserved {slot} for you at {address}. ✅" },
+                    { key: "flowB_sms5", label: "SMS 5 · Confirmed (Now)", defaultValue: "Perfect {firstName}! Expect a call from us shortly." },
+                    { key: "flowB_sms5_later", label: "SMS 5 · Confirmed (Later)", defaultValue: "No problem {firstName}! We'll give you a call in a few minutes." },
+                  ];
+                  const widgetSteps = [
+                    { key: "widgetFlowB_sms1", label: "SMS 1 · Sizing Question", defaultValue: "Hey {firstName}! Jade here from Maids in Black 😊 To get you an instant price, how many bedrooms and bathrooms does your home have?" },
+                    { key: "flowB_sms2", label: "SMS 2 · Price Reveal", defaultValue: "Perfect. We handle a lot of {bedrooms} bed / {bathrooms} bath homes..." },
+                    { key: "flowB_sms3", label: "SMS 3 · Address Request", defaultValue: "Awesome {firstName}, what's the address for service?" },
+                    { key: "flowB_sms4", label: "SMS 4 · Lock-In", defaultValue: "Perfect — I've reserved {slot} for you at {address}. ✅" },
+                    { key: "flowB_sms5", label: "SMS 5 · Confirmed (Now)", defaultValue: "Perfect {firstName}! Expect a call from us shortly." },
+                    { key: "flowB_sms5_later", label: "SMS 5 · Confirmed (Later)", defaultValue: "No problem {firstName}! We'll give you a call in a few minutes." },
+                  ];
+                  const steps = stlFlow === "form" ? formSteps : widgetSteps;
+                  return (
+                    <div className="mb-5 rounded-[24px] border border-emerald-200 bg-gradient-to-br from-emerald-500/10 to-green-500/5 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="text-sm font-semibold text-slate-900">Speed-to-Lead messages</div>
+                        <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white p-0.5 text-xs font-semibold">
+                          <button
+                            onClick={() => setStlFlow("form")}
+                            className={`rounded-full px-3 py-1 transition ${
+                              stlFlow === "form" ? "bg-slate-950 text-white" : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            Form
+                          </button>
+                          <button
+                            onClick={() => setStlFlow("widget")}
+                            className={`rounded-full px-3 py-1 transition ${
+                              stlFlow === "widget" ? "bg-slate-950 text-white" : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            Widget
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {steps.map((step) => {
+                          const currentValue = allSettings?.find((s) => s.key === step.key)?.value ?? step.defaultValue;
+                          return (
+                            <button
+                              key={step.key}
+                              onClick={() => {
+                                setStlStep({ key: step.key, label: step.label, value: currentValue });
+                                setStlText(currentValue);
+                                setActivePanel("stl");
+                              }}
+                              className="flex w-full items-center gap-3 rounded-2xl border border-white/70 bg-white/85 px-4 py-3 text-left shadow-sm transition hover:border-slate-300 hover:bg-white"
+                            >
+                              <div className="flex h-8 min-w-[60px] items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-semibold text-emerald-700">
+                                {step.label.split(" · ")[0]}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-slate-800">{step.label.split(" · ")[1]}</div>
+                                <div className="mt-0.5 truncate text-xs text-slate-400">{currentValue.slice(0, 80)}{currentValue.length > 80 ? "…" : ""}</div>
+                              </div>
+                              <div className="text-[11px] uppercase tracking-[0.14em] text-slate-400">edit</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Phase cards */}
                 <div className="grid gap-4 xl:grid-cols-2">
@@ -831,13 +914,15 @@ export default function LeadNurturing() {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="mb-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {activePanel === "message" ? "Message editor" : "Segment lane"}
+                    {activePanel === "stl" ? "Speed-to-Lead editor" : activePanel === "message" ? "Message editor" : "Segment lane"}
                   </div>
                   <h2 className="text-xl font-semibold tracking-tight text-slate-950">
-                    {activePanel === "message" ? activeStep.label : activeSegment}
+                    {activePanel === "stl" ? (stlStep?.label ?? "Edit step") : activePanel === "message" ? activeStep.label : activeSegment}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    {activePanel === "message"
+                    {activePanel === "stl"
+                      ? `Speed-to-Lead · ${stlFlow === "form" ? "Quote Form" : "Widget"} flow`
+                      : activePanel === "message"
                       ? `${activeStep.phase} · ${activeStep.time}`
                       : "Filter, inspect, and tune this lead segment."}
                   </p>
@@ -851,7 +936,44 @@ export default function LeadNurturing() {
               </div>
             </div>
 
-            {activePanel === "message" ? (
+            {activePanel === "stl" && stlStep ? (
+              <div className="space-y-5 p-6">
+                <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">Editable message</div>
+                      <div className="text-xs text-slate-500">This is what AI sends for this speed-to-lead step.</div>
+                    </div>
+                    <button
+                      className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      disabled={stlUpdateMutation.isPending}
+                      onClick={() => stlUpdateMutation.mutate({ key: stlStep.key, value: stlText })}
+                    >
+                      {stlUpdateMutation.isPending ? "Saving..." : stlSaved ? "Saved ✓" : "Save changes"}
+                    </button>
+                  </div>
+                  <textarea
+                    className="min-h-[200px] w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-slate-400"
+                    value={stlText}
+                    onChange={(e) => setStlText(e.target.value)}
+                  />
+                </div>
+                <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <div className="mb-2 text-sm font-semibold text-slate-900">Available tokens</div>
+                  <div className="flex flex-wrap gap-2">
+                    {["{firstName}", "{bedrooms}", "{bathrooms}", "{price}", "{day}", "{slot}", "{address}", "{quoteLink}"].map((token) => (
+                      <button
+                        key={token}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white"
+                        onClick={() => setStlText((prev) => prev + token)}
+                      >
+                        {token}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : activePanel === "message" ? (
               <div className="space-y-5 p-6">
                 {/* Editable message */}
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
@@ -964,7 +1086,7 @@ export default function LeadNurturing() {
                   </div>
                 </div>
               </div>
-            ) : (
+            ) : activePanel === "segment" ? (
               <div className="space-y-5 p-6">
                 {/* Segment summary */}
                 <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
@@ -1015,7 +1137,7 @@ export default function LeadNurturing() {
                   Apply segment filter
                 </button>
               </div>
-            )}
+            ) : null}
           </aside>
         </div>
       )}
