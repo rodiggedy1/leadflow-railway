@@ -295,12 +295,9 @@ export async function enrollLead(
     .limit(1);
 
   if (existing.length > 0) {
-    const e = existing[0];
-    if (e.status === "active" || e.status === "paused") {
-      console.log(`[Nurture] Session ${session.id} already enrolled (${e.status}), skipping`);
-      return null;
-    }
-    // If done, allow re-enrollment (e.g. after human takeover re-enroll)
+    // Never re-enroll — any existing record (active, paused, or done) blocks re-enrollment
+    console.log(`[Nurture] Session ${session.id} already enrolled (${existing[0].status}), skipping`);
+    return null;
   }
 
   const ctx = buildNurtureContext(session);

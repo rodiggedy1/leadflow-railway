@@ -1013,8 +1013,8 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       }
       // Generate a custom quote page when transitioning to SLOT_CHOICE (Flow B) or FLOWC_QUOTE_SENT (Flow C)
       let finalReplyContent = result.reply;
+      // Only Flow C generates a quote link — Flow B sends exactly what's in the speed-to-lead templates
       const needsQuoteLink =
-        (result.nextStage === "SLOT_CHOICE" && session.stage !== "SLOT_CHOICE") ||
         (result.nextStage === "FLOWC_QUOTE_SENT" && session.stage !== "FLOWC_QUOTE_SENT");
       if (needsQuoteLink) {
         try {
