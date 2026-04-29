@@ -1309,3 +1309,5 @@
 - [x] Raise Vapi maxTokens from 380 to 550 for complete voice responses
 - [x] Add hourly Vapi assistant refresh cron so time context is never more than 1 hour stale
 - [x] Add Skip button on hover of queued message bubble in nurture lead drawer — advances enrollment to next step without sending current one
+- [x] Fix deleted nurture enrollments coming back — convert hard DELETE to soft-delete (deletedAt tombstone), filter from UI query and stats count
+- [x] Add Remove button on hover of lead card row in nurture table — no need to open detail panel

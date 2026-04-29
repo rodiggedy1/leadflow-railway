@@ -598,7 +598,7 @@ export default function LeadNurturing() {
                             <tr
                               key={enrollment.id}
                               onClick={() => setSelectedEnrollmentId(isSelected ? null : enrollment.id)}
-                              className={`border-b border-slate-100 last:border-0 cursor-pointer transition ${
+                              className={`group/row border-b border-slate-100 last:border-0 cursor-pointer transition ${
                                 isSelected ? "bg-slate-100" : "hover:bg-slate-50/60"
                               }`}
                             >
@@ -655,7 +655,22 @@ export default function LeadNurturing() {
                                 {formatSource(enrollment.sessionSource)}
                               </td>
                               <td className="px-5 py-4 align-top text-sm text-slate-500">
-                                {enrolledDate}
+                                <div className="flex items-center justify-between gap-2">
+                                  <span>{enrolledDate}</span>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Remove ${displayName} from the nurture sequence? They won't be re-enrolled.`)) {
+                                        deleteMutation.mutate({ enrollmentId: enrollment.id });
+                                      }
+                                    }}
+                                    disabled={deleteMutation.isPending}
+                                    className="invisible group-hover/row:visible rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+                                    title="Remove from sequence"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
                               </td>
                             </tr>
                           );

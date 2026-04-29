@@ -13,7 +13,7 @@ import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
 import { nurtureEnrollments, conversationSessions, nurtureStepScripts } from "../drizzle/schema";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, inArray, isNull } from "drizzle-orm";
 import { enrollLead, resumeEnrollment, endEnrollment, pauseEnrollment } from "./nurtureSequence";
 import { NURTURE_STEPS } from "./nurtureSequence";
 import { invokeLLM } from "./_core/llm";
@@ -30,6 +30,7 @@ export const nurtureRouter = router({
         count: sql<number>`COUNT(*)`,
       })
       .from(nurtureEnrollments)
+      .where(isNull(nurtureEnrollments.deletedAt))
       .groupBy(nurtureEnrollments.status);
 
     const result = { active: 0, paused: 0, done: 0, total: 0, bookedCount: 0, bookedRevenue: 0 };
@@ -72,11 +73,11 @@ export const nurtureRouter = router({
       const db = await getDb();
       if (!db) return { rows: [], total: 0 };
 
+       const notDeleted = isNull(nurtureEnrollments.deletedAt);
       const whereClause =
         input.status === "all"
-          ? undefined
-          : eq(nurtureEnrollments.status, input.status);
-
+          ? notDeleted
+          : and(eq(nurtureEnrollments.status, input.status), notDeleted);
       const rows = await db
         .select({
           id: nurtureEnrollments.id,
@@ -292,13 +293,21 @@ export const nurtureRouter = router({
       return { ok: true };
     }),
 
-  /** Delete an enrollment record entirely */
+  /**
+   * Soft-delete an enrollment — sets deletedAt so the row is hidden from the UI
+   * and acts as a permanent block preventing the cron from re-enrolling this session.
+   * Hard DELETE is intentionally avoided: without a tombstone row the cron would
+   * re-enroll the session on its next tick.
+   */
   deleteEnrollment: adminAgentProcedure
     .input(z.object({ enrollmentId: z.number().int() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
-      await db.delete(nurtureEnrollments).where(eq(nurtureEnrollments.id, input.enrollmentId));
+      await db
+        .update(nurtureEnrollments)
+        .set({ deletedAt: new Date(), status: "done", endReason: "manual", endedAt: new Date() })
+        .where(eq(nurtureEnrollments.id, input.enrollmentId));
       return { ok: true };
     }),
 
