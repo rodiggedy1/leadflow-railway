@@ -103,6 +103,13 @@ export default function LeadNurturing() {
   const saveScriptMutation = trpc.nurture.saveScript.useMutation({
     onSuccess: () => utils.nurture.getScripts.invalidate(),
   });
+  const testSendMutation = trpc.nurture.testSend.useMutation();
+  const pauseMutation = trpc.nurture.end.useMutation({
+    onSuccess: () => utils.nurture.enrollments.invalidate(),
+  });
+  const resumeMutation = trpc.nurture.resume.useMutation({
+    onSuccess: () => utils.nurture.enrollments.invalidate(),
+  });
   const { data: stats, isLoading: statsLoading } = trpc.nurture.stats.useQuery(undefined, {
     refetchInterval: 30_000,
   });
@@ -604,18 +611,30 @@ export default function LeadNurturing() {
                     <div className="mt-4 space-y-2">
                       <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Actions</div>
                       {selectedEnrollment.status === "paused" && (
-                        <button className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-medium text-emerald-800 transition hover:bg-emerald-100">
-                          <span>Resume sequence (re-enroll)</span>
+                        <button
+                          disabled={resumeMutation.isPending}
+                          onClick={() => resumeMutation.mutate({ sessionId: selectedEnrollment.sessionId })}
+                          className="flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left text-sm font-medium text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-50"
+                        >
+                          <span>{resumeMutation.isPending ? "Resuming..." : "Resume sequence (re-enroll)"}</span>
                           <span className="text-emerald-500">→</span>
                         </button>
                       )}
                       {selectedEnrollment.status === "active" && (
-                        <button className="flex w-full items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-medium text-amber-800 transition hover:bg-amber-100">
-                          <span>Pause sequence (human takeover)</span>
+                        <button
+                          disabled={pauseMutation.isPending}
+                          onClick={() => pauseMutation.mutate({ enrollmentId: selectedEnrollment.id, reason: "manual" })}
+                          className="flex w-full items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+                        >
+                          <span>{pauseMutation.isPending ? "Pausing..." : "Pause sequence (human takeover)"}</span>
                           <span className="text-amber-500">→</span>
                         </button>
                       )}
-                      <button className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white">
+                      <button
+                        disabled={pauseMutation.isPending}
+                        onClick={() => pauseMutation.mutate({ enrollmentId: selectedEnrollment.id, reason: "manual" })}
+                        className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white disabled:opacity-50"
+                      >
                         <span>End sequence manually</span>
                         <span className="text-slate-400">→</span>
                       </button>
@@ -806,17 +825,28 @@ export default function LeadNurturing() {
                       <div className="text-sm font-semibold text-slate-900">Editable message</div>
                       <div className="text-xs text-slate-500">This is what AI will send for this outreach step.</div>
                     </div>
-                    <button
-                      className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                      disabled={saveScriptMutation.isPending}
-                      onClick={() => {
-                        if (activeStep.stepNum >= 3) {
-                          saveScriptMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
-                        }
-                      }}
-                    >
-                      {saveScriptMutation.isPending ? "Saving..." : "Save changes"}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+                        disabled={testSendMutation.isPending}
+                        onClick={() => {
+                          testSendMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
+                        }}
+                      >
+                        {testSendMutation.isPending ? "Sending..." : testSendMutation.isSuccess ? "Sent ✓" : "Test send"}
+                      </button>
+                      <button
+                        className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                        disabled={saveScriptMutation.isPending}
+                        onClick={() => {
+                          if (activeStep.stepNum >= 3) {
+                            saveScriptMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
+                          }
+                        }}
+                      >
+                        {saveScriptMutation.isPending ? "Saving..." : "Save changes"}
+                      </button>
+                    </div>
                   </div>
                   <textarea
                     key={activeStep.label}

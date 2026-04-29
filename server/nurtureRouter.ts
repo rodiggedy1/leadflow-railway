@@ -232,4 +232,17 @@ export const nurtureRouter = router({
         .onDuplicateKeyUpdate({ set: { body: input.body } });
       return { ok: true };
     }),
+
+  /** Send a test SMS for a given step to the test number +13029816191 */
+  testSend: adminAgentProcedure
+    .input(z.object({ step: z.number().int().min(1).max(17), body: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const { sendSms } = await import("./openphone");
+      const result = await sendSms({
+        to: "+13029816191",
+        content: `[TEST step ${input.step}] ${input.body}`,
+      });
+      if (!result.success) throw new Error(result.error ?? "SMS failed");
+      return { ok: true };
+    }),
 });
