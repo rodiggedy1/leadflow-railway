@@ -577,8 +577,7 @@ export default function LeadNurturing() {
                           const enrolledDate = enrollment.enrolledAt
                             ? new Date(enrollment.enrolledAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                             : "—";
-                          const STL_STAGES = ["QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF", "ADDRESS", "CONFIRMATION", "WIDGET_SIZING"];
-                          const isInSTL = enrollment.sessionStage != null && STL_STAGES.includes(enrollment.sessionStage);
+                          const isInSTL = phaseNum === 1;
 
                           return (
                             <tr
