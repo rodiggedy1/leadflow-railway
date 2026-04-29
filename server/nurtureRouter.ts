@@ -12,7 +12,7 @@
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { z } from "zod";
 import { getDb } from "./db";
-import { nurtureEnrollments, conversationSessions } from "../drizzle/schema";
+import { nurtureEnrollments, conversationSessions, nurtureStepScripts } from "../drizzle/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { enrollLead, resumeEnrollment, endEnrollment } from "./nurtureSequence";
 import { NURTURE_STEPS } from "./nurtureSequence";
@@ -211,4 +211,25 @@ export const nurtureRouter = router({
       label: s.label,
     }));
   }),
+
+  /** Get all custom script overrides from DB */
+  getScripts: adminAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [] as Array<{ step: number; body: string }>;
+    const rows = await db.select({ step: nurtureStepScripts.step, body: nurtureStepScripts.body }).from(nurtureStepScripts);
+    return rows;
+  }),
+
+  /** Upsert a custom script override for a step */
+  saveScript: adminAgentProcedure
+    .input(z.object({ step: z.number().int().min(3).max(17), body: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await db
+        .insert(nurtureStepScripts)
+        .values({ step: input.step, body: input.body })
+        .onDuplicateKeyUpdate({ set: { body: input.body } });
+      return { ok: true };
+    }),
 });

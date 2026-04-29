@@ -2109,3 +2109,17 @@ export const nurtureEnrollments = mysqlTable("nurture_enrollments", {
 
 export type NurtureEnrollment = typeof nurtureEnrollments.$inferSelect;
 export type InsertNurtureEnrollment = typeof nurtureEnrollments.$inferInsert;
+
+/**
+ * nurture_step_scripts — custom overrides for nurture step message bodies.
+ * If a row exists for a given step number, the cron uses that body instead of
+ * the default in nurtureSequence.ts.
+ */
+export const nurtureStepScripts = mysqlTable("nurture_step_scripts", {
+  step: int("step").primaryKey(), // step number (3–17)
+  body: text("body").notNull(),   // custom message body
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NurtureStepScript = typeof nurtureStepScripts.$inferSelect;
+export type InsertNurtureStepScript = typeof nurtureStepScripts.$inferInsert;

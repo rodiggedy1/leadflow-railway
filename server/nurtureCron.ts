@@ -26,6 +26,7 @@ import {
   getNextSendAt,
   NURTURE_STEPS,
 } from "./nurtureSequence";
+import { nurtureStepScripts } from "../drizzle/schema";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -250,12 +251,19 @@ export async function runNurtureSend(): Promise<{
           continue;
         }
 
-        // Build message
+        // Build message — check for custom override first
+        const [customScript] = await db
+          .select({ body: nurtureStepScripts.body })
+          .from(nurtureStepScripts)
+          .where(eq(nurtureStepScripts.step, enrollment.nextStep))
+          .limit(1);
         const ctx = buildNurtureContext({
           leadName: enrollment.leadFirstName,
           serviceType: enrollment.serviceType,
         });
-        const messageBody = step.buildMessage(ctx);
+        const messageBody = customScript
+          ? customScript.body.replace(/\{\{first_name\}\}/gi, ctx.firstName).replace(/\{\{service\}\}/gi, ctx.serviceType)
+          : step.buildMessage(ctx);
 
         // Send SMS (guarded by kill switch)
         if (!NURTURE_SMS_ENABLED) {
@@ -318,11 +326,12 @@ export async function runNurtureSend(): Promise<{
             await endEnrollment(db, enrollment.id, "day30");
             ended++;
           } else {
-            const leadCreatedAt =
-              enrollment.leadCreatedAt instanceof Date
-                ? enrollment.leadCreatedAt
-                : new Date(enrollment.leadCreatedAt);
-            const nextSendAt = nextStep.scheduledAt(leadCreatedAt);
+            // Calculate nextSendAt from NOW (not leadCreatedAt) so stale leads
+            // don't get multiple past-due steps fired back-to-back.
+            // For relative steps (minutesAfter/hoursAfter) this gives the correct
+            // delay from the current moment. For absolute etTime steps this gives
+            // today's wall-clock time, which is always in the future.
+            const nextSendAt = nextStep.scheduledAt(new Date());
 
             await db
               .update(nurtureEnrollments)
