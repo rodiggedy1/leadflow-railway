@@ -3,9 +3,10 @@
  * AI Lead Nurturing Engine — KPI cards and lead progression table wired to real tRPC data.
  * Sequence map, activity feed, and automation logic remain illustrative.
  */
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 // ── Step metadata (mirrors nurtureSequence.ts NURTURE_STEPS) ─────────────────
 const STEP_META: Record<number, { label: string; phase: 1 | 2 | 3 | 4 }> = {
@@ -117,12 +118,21 @@ export default function LeadNurturing() {
     testSendMutation.reset();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep?.stepNum, customScripts]);
-  const pauseMutation = trpc.nurture.end.useMutation({
-    onSuccess: () => utils.nurture.enrollments.invalidate(),
+  const pauseMutation = trpc.nurture.pause.useMutation({
+    onSuccess: () => { utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); },
+  });
+  const endMutation = trpc.nurture.end.useMutation({
+    onSuccess: () => { utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); },
   });
   const resumeMutation = trpc.nurture.resume.useMutation({
-    onSuccess: () => utils.nurture.enrollments.invalidate(),
+    onSuccess: () => { utils.nurture.enrollments.invalidate(); utils.nurture.stats.invalidate(); },
   });
+  const regenerateMutation = trpc.nurture.regenerateScript.useMutation({
+    onSuccess: (data) => { setScriptText(data.body); toast.success("Script regenerated — review and save"); },
+    onError: () => toast.error("Regeneration failed — try again"),
+  });
+  // Ref for the script textarea (used by token insert)
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: stats, isLoading: statsLoading } = trpc.nurture.stats.useQuery(undefined, {
     refetchInterval: 30_000,
   });
@@ -289,7 +299,10 @@ export default function LeadNurturing() {
                     {statsLoading ? <span className="text-slate-300">—</span> : doneCount}
                   </div>
                 </div>
-                <button className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5">
+                <button
+                  className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 transition hover:-translate-y-0.5"
+                  onClick={() => toast.info("Automation rules — coming soon")}
+                >
                   New automation rule
                 </button>
               </div>
@@ -558,7 +571,16 @@ export default function LeadNurturing() {
                     <h2 className="text-lg font-semibold tracking-tight">Selected lead</h2>
                     <p className="text-sm text-slate-500 whitespace-nowrap">AI orchestration + manual takeover controls</p>
                   </div>
-                  <button className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700">
+                  <button
+                    className="shrink-0 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white"
+                    onClick={() => {
+                      if (selectedEnrollment?.sessionId) {
+                        window.open(`/admin/leads?session=${selectedEnrollment.sessionId}&tab=sms`, "_blank");
+                      } else {
+                        toast.info("Select a lead first");
+                      }
+                    }}
+                  >
                     Open full thread
                   </button>
                 </div>
@@ -636,7 +658,7 @@ export default function LeadNurturing() {
                       {selectedEnrollment.status === "active" && (
                         <button
                           disabled={pauseMutation.isPending}
-                          onClick={() => pauseMutation.mutate({ enrollmentId: selectedEnrollment.id, reason: "manual" })}
+                          onClick={() => pauseMutation.mutate({ enrollmentId: selectedEnrollment.id })}
                           className="flex w-full items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
                         >
                           <span>{pauseMutation.isPending ? "Pausing..." : "Pause sequence (human takeover)"}</span>
@@ -644,11 +666,11 @@ export default function LeadNurturing() {
                         </button>
                       )}
                       <button
-                        disabled={pauseMutation.isPending}
-                        onClick={() => pauseMutation.mutate({ enrollmentId: selectedEnrollment.id, reason: "manual" })}
+                        disabled={endMutation.isPending}
+                        onClick={() => endMutation.mutate({ enrollmentId: selectedEnrollment.id, reason: "manual" })}
                         className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white disabled:opacity-50"
                       >
-                        <span>End sequence manually</span>
+                        <span>{endMutation.isPending ? "Ending..." : "End sequence manually"}</span>
                         <span className="text-slate-400">→</span>
                       </button>
                     </div>
@@ -860,6 +882,7 @@ export default function LeadNurturing() {
                     </div>
                   </div>
                   <textarea
+                    ref={textareaRef}
                     key={activeStep.label}
                     className="min-h-[170px] w-full resize-none rounded-2xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-slate-400"
                     value={scriptText || activeStep.script}
@@ -890,7 +913,23 @@ export default function LeadNurturing() {
                   <div className="mb-3 text-sm font-semibold text-slate-900">Personalization tokens</div>
                   <div className="flex flex-wrap gap-2">
                     {["{{first_name}}", "{{service}}", "{{preferred_day_or_this_week}}", "{{slot_1}}", "{{slot_2}}"].map((token) => (
-                      <button key={token} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white">
+                      <button
+                        key={token}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-white"
+                        onClick={() => {
+                          const el = textareaRef.current;
+                          if (!el) { setScriptText((prev) => (prev || activeStep.script) + token); return; }
+                          const start = el.selectionStart ?? 0;
+                          const end = el.selectionEnd ?? 0;
+                          const current = scriptText || activeStep.script;
+                          const next = current.slice(0, start) + token + current.slice(end);
+                          setScriptText(next);
+                          requestAnimationFrame(() => {
+                            el.focus();
+                            el.setSelectionRange(start + token.length, start + token.length);
+                          });
+                        }}
+                      >
                         {token}
                       </button>
                     ))}
@@ -900,8 +939,28 @@ export default function LeadNurturing() {
                 {/* Sticky footer */}
                 <div className="sticky bottom-0 -mx-6 border-t border-slate-200 bg-white/90 px-6 py-4 backdrop-blur">
                   <div className="flex flex-col gap-3 sm:flex-row">
-                    <button className="flex-1 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10">Apply to all leads in this step</button>
-                    <button className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700">Regenerate with AI</button>
+                    <button
+                      className="flex-1 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10 disabled:opacity-50"
+                      disabled={saveScriptMutation.isPending}
+                      onClick={() => {
+                        saveScriptMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
+                        toast.success(`Step ${activeStep.stepNum} script saved — all future sends will use this version`);
+                      }}
+                    >
+                      Apply to all leads in this step
+                    </button>
+                    <button
+                      className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50"
+                      disabled={regenerateMutation.isPending}
+                      onClick={() => regenerateMutation.mutate({
+                        step: activeStep.stepNum,
+                        stepLabel: activeStep.label,
+                        phase: activeStep.phase,
+                        currentScript: scriptText || activeStep.script,
+                      })}
+                    >
+                      {regenerateMutation.isPending ? "Generating..." : "Regenerate with AI"}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -949,7 +1008,12 @@ export default function LeadNurturing() {
                   </div>
                 </div>
 
-                <button className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10">Apply segment filter</button>
+                <button
+                  className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/10"
+                  onClick={() => { setActivePanel(null); toast.success(`Showing leads in "${activeSegment}" segment`); }}
+                >
+                  Apply segment filter
+                </button>
               </div>
             )}
           </aside>

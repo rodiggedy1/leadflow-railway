@@ -14,8 +14,9 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { nurtureEnrollments, conversationSessions, nurtureStepScripts } from "../drizzle/schema";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
-import { enrollLead, resumeEnrollment, endEnrollment } from "./nurtureSequence";
+import { enrollLead, resumeEnrollment, endEnrollment, pauseEnrollment } from "./nurtureSequence";
 import { NURTURE_STEPS } from "./nurtureSequence";
+import { invokeLLM } from "./_core/llm";
 
 export const nurtureRouter = router({
   /** KPI stats for the header cards */
@@ -97,6 +98,22 @@ export const nurtureRouter = router({
         .where(whereClause);
 
       return { rows, total: Number(count) };
+    }),
+
+  /** Manually pause an active enrollment (human takeover) */
+  pause: adminAgentProcedure
+    .input(z.object({ enrollmentId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      const [enrollment] = await db
+        .select({ sessionId: nurtureEnrollments.sessionId })
+        .from(nurtureEnrollments)
+        .where(eq(nurtureEnrollments.id, input.enrollmentId))
+        .limit(1);
+      if (!enrollment) throw new Error("Enrollment not found");
+      await pauseEnrollment(db, enrollment.sessionId);
+      return { success: true };
     }),
 
   /** Resume a paused enrollment (manual re-enroll after human takeover) */
@@ -201,6 +218,32 @@ export const nurtureRouter = router({
         createdAt: session.createdAt,
         messages,
       };
+    }),
+
+  /** Regenerate a step script using AI */
+  regenerateScript: adminAgentProcedure
+    .input(z.object({
+      step: z.number().int().min(1).max(17),
+      stepLabel: z.string(),
+      phase: z.string(),
+      currentScript: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const response = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert SMS copywriter for Maids in Black, a premium home cleaning service in the DC Metro area. Write a single short SMS nurture message for a lead who hasn't booked yet. Rules: max 160 characters, conversational and warm, no emojis unless they feel natural, ends with a soft CTA or question, use {{first_name}} for personalization where appropriate. Return ONLY the SMS text — no explanation, no quotes.`,
+          },
+          {
+            role: "user",
+            content: `Rewrite this nurture step SMS for step ${input.step} ("${input.stepLabel}", ${input.phase}). Current version: "${input.currentScript}". Same intent, fresh wording.`,
+          },
+        ],
+      });
+      const newScript = (response.choices[0]?.message?.content as string ?? "").trim();
+      if (!newScript) throw new Error("LLM returned empty response");
+      return { body: newScript };
     }),
 
   /** Step definitions for the sequence map UI */

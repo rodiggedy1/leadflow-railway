@@ -1273,3 +1273,11 @@
 - [x] Nurture: Wire Lead Nurturing UI lead progression table to real tRPC data (trpc.nurture.enrollments)
 - [x] Nurture: Wire Lead Nurturing UI KPI cards to real tRPC data (trpc.nurture.stats)
 - [x] Auto-pause nurture enrollment when lead sends any inbound reply (webhook)
+- [x] Fix "Pause sequence (human takeover)" — calls trpc.nurture.end instead of a real pause (sets status=paused, not ended)
+- [x] Fix "End sequence manually" — calls same pauseMutation (trpc.nurture.end with reason=manual) — this one is actually correct, just rename the variable
+- [x] Fix "Open full thread" button — no onClick, should navigate to lead drawer in AdminDashboard
+- [x] Fix "New automation rule" button — no onClick, placeholder
+- [x] Fix personalization token buttons — no onClick, should insert token into textarea at cursor
+- [x] Fix "Apply to all leads in this step" button — no onClick, placeholder
+- [x] Fix "Regenerate with AI" button — no onClick, should call LLM to rewrite the script
+- [x] Fix "Apply segment filter" button — no onClick, placeholder
