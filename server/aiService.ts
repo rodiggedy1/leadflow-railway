@@ -62,14 +62,20 @@ export interface QuoteMessageParams {
  * Price is revealed in SMS 2 after the lead replies with a day.
  */
 export async function generateQuoteMessage(params: QuoteMessageParams): Promise<string> {
-  const { leadName } = params;
+  const { leadName, bedrooms, bathrooms, serviceType, price } = params;
   const rawFirst = leadName.split(" ")[0] ?? leadName;
   // Normalize to title case so ROHAN → Rohan, rohan → Rohan
   const firstName = rawFirst.charAt(0).toUpperCase() + rawFirst.slice(1).toLowerCase();
   return getFlowTemplate(
     "flowB_sms1",
     buildFallbackQuoteMessage(firstName),
-    { "{firstName}": firstName }
+    {
+      "{firstName}": firstName,
+      "{bedrooms}": bedrooms ?? "",
+      "{bathrooms}": bathrooms ?? "",
+      "{serviceType}": serviceType ?? "",
+      "{price}": price ?? "",
+    }
   );
 }
 
