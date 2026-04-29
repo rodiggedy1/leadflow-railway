@@ -3,7 +3,7 @@
  * AI Lead Nurturing Engine — KPI cards and lead progression table wired to real tRPC data.
  * Sequence map, activity feed, and automation logic remain illustrative.
  */
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import { trpc } from "@/lib/trpc";
 
