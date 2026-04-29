@@ -106,7 +106,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     label: "Holding a spot",
     scheduledAt: (t) => minutesAfter(t, 50),
     buildMessage: ({ firstName: _ }) =>
-      "I can hold a spot for you, but spots go fast. Want me to check what's open this week?",
+      "Hey \u2014 just a heads up, our afternoon is filling up pretty quickly. If you still want help with the clean, I can hold a spot for you before it gets taken. Want me to reserve one?",
   },
   {
     step: 4,
