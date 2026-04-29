@@ -236,8 +236,8 @@ export async function runNurtureSend(): Promise<{
           // Lead is mid-conversation — hold nurture, check again next tick
           continue;
         }
-        // Pause: human takeover
-        if (session.aiMode === 1) {
+        // Pause: human takeover (aiMode=0 means agent is handling manually)
+        if (session.aiMode === 0) {
           await pauseEnrollment(db, session.id);
           continue;
         }
