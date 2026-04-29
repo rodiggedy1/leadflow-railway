@@ -92,8 +92,9 @@ export async function runNurtureEnrollment(): Promise<{
           sql`${conversationSessions.leadPhone} LIKE '+1%'`,
           // Exclude internal CS-initiated sessions (team members, not leads)
           ne(conversationSessions.leadSource as any, 'cs_initiated'),
-          // Only leads from the last 30 days (prevent re-processing ancient history)
-          gte(conversationSessions.createdAt, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
+          // Only enroll leads created AFTER the go-live cutoff (Apr 29 2026 ~15:00 UTC)
+          // This prevents any historical leads from being enrolled.
+          gte(conversationSessions.createdAt, new Date(1777474800000)),
         )
       )
       .limit(100);
