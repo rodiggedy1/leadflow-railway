@@ -135,66 +135,11 @@ export async function processLeadReplyV2(
     console.error("[Engine] Step 3 (reply) failed:", err);
   }
 
-  // ── DB template overrides for Flow B scripted messages ────────────────────
-  let finalReply = reply;
-
-  if (context.smsFlow === "B" || !context.smsFlow) {
-    const { persistedData } = advance;
-
-    // Price reveal: advancing to SLOT_CHOICE from QUOTE_SENT or AVAILABILITY
-    if (advance.nextStage === "SLOT_CHOICE" &&
-        (context.stage === "QUOTE_SENT" || context.stage === "AVAILABILITY")) {
-      const slot      = persistedData.selectedSlot ?? context.selectedSlot ?? "this week";
-      const bedrooms  = persistedData.bedrooms     ?? context.bedrooms     ?? "?";
-      const bathrooms = persistedData.bathrooms    ?? context.bathrooms    ?? "?";
-      const price     = persistedData.quotedPrice  ?? context.quotedPrice  ?? "?";
-      const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
-      try {
-        const priceReveal = await buildJadePriceReveal({ firstName, bedrooms, bathrooms, price, day: slot, extras: context.extras });
-        // If the lead asked questions, generate a short answer prefix and prepend it
-        // so the question is answered before the price reveal — not silently dropped.
-        if (signals.questions.length > 0) {
-          try {
-            const qaResponse = await invokeLLM({
-              messages: [
-                {
-                  role: "system",
-                  content: `You are Jade, the AI booking assistant for Maids in Black. Answer the following question(s) from a lead in 1 SHORT sentence. Be direct and confident. Use the knowledge base if needed. Do NOT ask a follow-up question — just answer.\n\nKnowledge: Maids in Black teams are fully bonded and insured. All cleaners pass background checks. 100% satisfaction guarantee. Service area: Washington DC Metro (DC, MD, VA). Phone: 202-888-5362.`,
-                },
-                { role: "user", content: signals.questions.join(" ") },
-              ],
-            });
-            const qaContent = qaResponse?.choices?.[0]?.message?.content;
-            if (qaContent && typeof qaContent === "string" && qaContent.trim().length > 0) {
-              finalReply = qaContent.trim() + "\n\n" + priceReveal;
-              console.log("[Engine] Prepended question answer to price reveal.");
-            } else {
-              finalReply = priceReveal;
-            }
-          } catch {
-            finalReply = priceReveal; // fallback: just the price reveal
-          }
-        } else {
-          finalReply = priceReveal;
-        }
-        console.log("[Engine] Overrode price reveal with DB template.");
-      } catch (err) {
-        console.error("[Engine] buildJadePriceReveal failed, using LLM reply:", err);
-      }
-    }
-
-    // Lock-in confirmation: advancing to CONFIRMATION from ADDRESS
-    if (advance.nextStage === "CONFIRMATION" && context.stage === "ADDRESS") {
-      const slot    = persistedData.selectedSlot ?? context.selectedSlot ?? "your slot";
-      const address = persistedData.address      ?? context.address      ?? "your location";
-      try {
-        finalReply = await buildJadeLockIn(slot, address);
-        console.log("[Engine] Overrode lock-in with DB template.");
-      } catch (err) {
-        console.error("[Engine] buildJadeLockIn failed, using LLM reply:", err);
-      }
-    }
-  }
+  // ── No DB template overrides — LLM writes every reply with full context ──────
+  // The LLM has the price, slot, questions, knowledge base, and stage transition
+  // in its prompt. It writes one natural message that covers everything.
+  // DB templates (buildJadePriceReveal, buildJadeLockIn) are no longer used here.
+  const finalReply = reply;
 
   // ── Build StageResult ─────────────────────────────────────────────────────
   const { persistedData } = advance;

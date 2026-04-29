@@ -133,19 +133,37 @@ function buildNextAskInstruction(
     case "AVAILABILITY":
       return `Ask when they'd like to schedule. Use this format: "Got it, [briefly echo what they need]. When were you hoping to schedule that so we can see how fast we can get you taken care of?"`;
 
-    case "SLOT_CHOICE":
+    case "SLOT_CHOICE": {
+      const priceDisplay = price ? `$${price}` : null;
+      const recurringDisplay = price ? `$${Math.round(parseInt(price, 10) * 0.85)}` : null;
       if (ctx.smsFlow === "B") {
-        // Flow B: reveal price when giving slot options
-        return `Reveal the price and offer 9am or 1pm on ${slot ?? "the day they mentioned"}. Use this format:
-"Perfect. We handle a lot of [X] bed / [Y] bath homes — no problem at all.\\n\\nJust so you know upfront: we bring all our own supplies and get everything done in one visit. Kitchens, bathrooms, floors, surfaces — the works. 🧹\\n\\nFor a home like yours, most clients land around $${price ?? "[PRICE]"}. That covers everything, no hidden fees or surprises.\\n\\nI've got ${slot ?? "[DAY]"} at 9am or 1pm — which one should I lock in?"`;
+        return [
+          `The lead gave a day (${slot ?? "this week"}) and you are now revealing the price and offering 9am or 1pm.`,
+          `Write a warm, natural SMS that:`,
+          `1. Answers any questions the lead asked (if any) — directly and confidently in 1 sentence`,
+          `2. Confirms you handle their home size (${persisted.bedrooms ?? ctx.bedrooms ?? "their size"} bed / ${persisted.bathrooms ?? ctx.bathrooms ?? "their size"} bath) — no problem`,
+          `3. Mentions the price: one-time ${priceDisplay ?? "(use pricing table)"}, or ${recurringDisplay ?? "15% less"} on a recurring plan`,
+          `4. Mentions everything is included — supplies, equipment, background-checked team, satisfaction guarantee`,
+          `5. Offers 9am or 1pm on ${slot ?? "the day they mentioned"} and asks which to lock in`,
+          `Keep it natural and warm. Do NOT use a rigid template. Adapt the order if the lead asked a question — answer it first.`,
+        ].join("\n");
       }
       return `Offer 9am or 1pm on ${slot ?? "the selected day"}. Ask which works.`;
+    }
 
     case "ADDRESS":
       return `The slot is confirmed (${slot ?? "their chosen slot"}). Ask for their home address.`;
 
-    case "CONFIRMATION":
-      return `Slot and address are confirmed. Ask if they want a call now or in a few minutes. Use this format: "Perfect — I've reserved ${slot ?? "your slot"} for you at ${address ?? "your address"}. ✅\\nAnything I should pass to the team? (pets, gate code, anything like that)\\n\\nWe'll do a quick 60-sec call to confirm details — should I call now or in a few minutes?"`;
+    case "CONFIRMATION": {
+      return [
+        `Slot and address are confirmed. Write a warm, natural SMS that:`,
+        `1. Answers any questions the lead asked (if any) — directly and confidently in 1 sentence`,
+        `2. Confirms the booking: ${slot ?? "their slot"} at ${address ?? "their address"}`,
+        `3. Asks if there's anything to pass to the team (pets, gate code, special instructions)`,
+        `4. Mentions a quick 60-second call to confirm details — asks if they want it now or in a few minutes`,
+        `Keep it natural. Do NOT use a rigid template. If the lead asked a question, answer it first.`,
+      ].join("\n");
+    }
 
     case "CALL_SCHEDULED":
       if (persisted.callPreference === "now") {

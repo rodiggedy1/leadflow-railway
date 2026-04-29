@@ -1296,3 +1296,5 @@
 - [x] Fix $0 price bug: add dollar-sign prefixed substitution key for ${price} in aiService.ts
 - [x] Fix doubled "Perfect. Perfect" in flowB_sms2 DB template — removed bad saved template text
 - [x] Fix insurance question ignored: when DB template override fires, prepend question answer before price reveal
+- [x] Remove DB template overrides (buildJadePriceReveal, buildJadeLockIn) from engine — LLM now writes every reply with full context including price, slot, questions, knowledge base
+- [x] Rewrite SLOT_CHOICE and CONFIRMATION reply instructions as rich context goals, not rigid scripted templates
