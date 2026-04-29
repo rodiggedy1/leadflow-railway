@@ -88,7 +88,7 @@ export default function LeadNurturing() {
     label: "Holding a spot",
     time: "+53 min",
     phase: "Phase 1 · Speed-to-Lead",
-    script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week?",
+    script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week or tomorrow?",
     stepNum: 3,
   });
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
@@ -163,8 +163,8 @@ export default function LeadNurturing() {
       steps: [
         { stepNum: 1, label: "Instant response", time: "0 min", status: "done", script: "Hey {{first_name}}, this is Madison from Maids in Black 👋 Just got your request for {{service}}. What day were you hoping to get this done?" },
         { stepNum: 2, label: "Nudge", time: "+12 min", status: "done", script: "Just checking — we may be able to help with {{service}} this week. Did you have a day in mind?" },
-        { stepNum: 3, label: "Holding a spot", time: "+53 min", status: "active", script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week?" },
-        { stepNum: 4, label: "Urgency", time: "+2.5 hrs", status: "queued", script: "Heads up — openings this week are filling up fast. Want me to check what's left before they're gone?" },
+        { stepNum: 3, label: "Holding a spot", time: "+50 min", status: "active", script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week or tomorrow?" },
+        { stepNum: 4, label: "Urgency", time: "+2.5 hrs", status: "queued", script: "Heads up — openings this week are filling up. Want me to check what's left before they're gone?" },
         { stepNum: 5, label: "Soft reset", time: "7:15 pm", status: "queued", script: "No worries if today got busy — happens to everyone. I can check what's open tomorrow or later this week if that works better?" },
       ],
     },
@@ -178,7 +178,7 @@ export default function LeadNurturing() {
       steps: [
         { stepNum: 6, label: "Fresh start", time: "9:00 am", status: "queued", script: "Morning {{first_name}} — still need the cleaning done? I've got the schedule in front of me." },
         { stepNum: 7, label: "Simple CTA", time: "1:30 pm", status: "queued", script: "Would morning or evening work better if we can fit you in?" },
-        { stepNum: 8, label: "Last call", time: "6:00 pm", status: "queued", script: "Last message for today — we're almost full this week. Want me to grab you one of the last spots?" },
+        { stepNum: 8, label: "Last call", time: "6:00 pm", status: "queued", script: "Last message for today — almost full this week. Want me to grab you one of the last spots?" },
         { stepNum: 9, label: "Value reminder", time: "Day 3", status: "queued", script: "Just so you know — we bring everything and handle the full home in one visit. No prep needed on your end. Want me to check times?" },
       ],
     },

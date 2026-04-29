@@ -106,7 +106,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     label: "Holding a spot",
     scheduledAt: (t) => minutesAfter(t, 50),
     buildMessage: ({ firstName: _ }) =>
-      "I can hold a spot for you, but spots go fast. Want me to check what's open this week?",
+      "I can hold a spot for you, but spots go fast. Want me to check what's open this week or tomorrow?",
   },
   {
     step: 4,
@@ -114,7 +114,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     label: "Urgency",
     scheduledAt: (t) => hoursAfter(t, 2.5),
     buildMessage: () =>
-      "Heads up — openings this week are filling up fast. Want me to check what's left before they're gone?",
+      "Heads up — openings this week are filling up. Want me to check what's left before they're gone?",
   },
   {
     step: 5,
@@ -152,7 +152,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     // Day 2 evening — 6 PM ET
     scheduledAt: (t) => etTime(t, 1, 18, 0),
     buildMessage: () =>
-      "Last message for today — we're almost full this week. Want me to grab you one of the last spots?",
+      "Last message for today — almost full this week. Want me to grab you one of the last spots?",
   },
   {
     step: 9,
@@ -305,7 +305,8 @@ export async function enrollLead(
 
   const ctx = buildNurtureContext(session);
   const firstStep = STEP_MAP.get(3)!;
-  const nextSendAt = firstStep.scheduledAt(session.createdAt);
+  // Calculate from now so stale leads don't get a past-due nextSendAt on enrollment
+  const nextSendAt = firstStep.scheduledAt(new Date());
 
   const [result] = await db.insert(nurtureEnrollments).values({
     sessionId: session.id,
