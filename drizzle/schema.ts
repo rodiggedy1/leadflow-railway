@@ -2099,6 +2099,8 @@ export const nurtureEnrollments = mysqlTable("nurture_enrollments", {
   endReason: varchar("endReason", { length: 32 }),
   /** UTC timestamp when status was set to done */
   endedAt: timestamp("endedAt"),
+  /** Revenue captured at booking time (session.bookedAmount or parsed quotedPrice). NULL if not booked via sequence. */
+  bookedRevenue: int("bookedRevenue"),
   /** Last step that was successfully sent */
   lastStepSent: int("lastStepSent"),
   /** UTC timestamp of last successful send */

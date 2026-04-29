@@ -1281,3 +1281,7 @@
 - [x] Fix "Apply to all leads in this step" button — no onClick, placeholder
 - [x] Fix "Regenerate with AI" button — no onClick, should call LLM to rewrite the script
 - [x] Fix "Apply segment filter" button — no onClick, placeholder
+- [ ] Add bookedRevenue column to nurture_enrollments schema
+- [ ] Update endEnrollment to capture session estimatedValue when reason=booked
+- [ ] Update stats query to return bookedCount and bookedRevenue
+- [ ] Replace KPI cards: "Active leads in sequence" → "Booked in sequence", "Completed sequence" → "Booking revenue from sequence"

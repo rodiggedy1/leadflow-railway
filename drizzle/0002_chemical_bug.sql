@@ -1,0 +1,1 @@
+ALTER TABLE `nurture_enrollments` ADD `bookedRevenue` int;

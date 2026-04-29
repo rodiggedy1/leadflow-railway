@@ -22,7 +22,7 @@ export const nurtureRouter = router({
   /** KPI stats for the header cards */
   stats: adminAgentProcedure.query(async () => {
     const db = await getDb();
-    if (!db) return { active: 0, paused: 0, done: 0, total: 0 };
+    if (!db) return { active: 0, paused: 0, done: 0, total: 0, bookedCount: 0, bookedRevenue: 0 };
 
     const rows = await db
       .select({
@@ -32,7 +32,7 @@ export const nurtureRouter = router({
       .from(nurtureEnrollments)
       .groupBy(nurtureEnrollments.status);
 
-    const result = { active: 0, paused: 0, done: 0, total: 0 };
+    const result = { active: 0, paused: 0, done: 0, total: 0, bookedCount: 0, bookedRevenue: 0 };
     for (const r of rows) {
       const count = Number(r.count);
       if (r.status === "active") result.active = count;
@@ -40,6 +40,22 @@ export const nurtureRouter = router({
       else if (r.status === "done") result.done = count;
       result.total += count;
     }
+
+    // Booked count + revenue
+    const bookedRows = await db
+      .select({
+        bookedAmount: conversationSessions.bookedAmount,
+        quotedPrice: conversationSessions.quotedPrice,
+      })
+      .from(nurtureEnrollments)
+      .innerJoin(conversationSessions, eq(nurtureEnrollments.sessionId, conversationSessions.id))
+      .where(eq(nurtureEnrollments.endReason, "booked"));
+    result.bookedCount = bookedRows.length;
+    result.bookedRevenue = bookedRows.reduce((sum, r) => {
+      const val = r.bookedAmount ?? (r.quotedPrice ? parseInt(r.quotedPrice.replace(/[^0-9]/g, ""), 10) : 0);
+      return sum + (isNaN(val) ? 0 : val);
+    }, 0);
+
     return result;
   }),
 

@@ -288,15 +288,15 @@ export default function LeadNurturing() {
 
               <div className="flex flex-wrap items-center gap-3">
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500">Active leads in sequence</div>
+                  <div className="text-xs font-medium text-slate-500">Booked in sequence</div>
                   <div className="mt-1 text-2xl font-semibold tracking-tight">
-                    {statsLoading ? <span className="text-slate-300">—</span> : activeCount}
+                    {statsLoading ? <span className="text-slate-300">—</span> : (stats?.bookedCount ?? 0)}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                  <div className="text-xs font-medium text-slate-500">Completed sequence</div>
+                  <div className="text-xs font-medium text-slate-500">Booking revenue from sequence</div>
                   <div className="mt-1 text-2xl font-semibold tracking-tight">
-                    {statsLoading ? <span className="text-slate-300">—</span> : doneCount}
+                    {statsLoading ? <span className="text-slate-300">—</span> : `$${(stats?.bookedRevenue ?? 0).toLocaleString()}`}
                   </div>
                 </div>
                 <button
