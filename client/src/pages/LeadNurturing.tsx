@@ -848,9 +848,7 @@ export default function LeadNurturing() {
                         className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                         disabled={saveScriptMutation.isPending}
                         onClick={() => {
-                          if (activeStep.stepNum >= 3) {
-                            saveScriptMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
-                          }
+                          saveScriptMutation.mutate({ step: activeStep.stepNum, body: scriptText || activeStep.script });
                         }}
                       >
                         {saveScriptMutation.isPending ? "Saving..." : "Save changes"}
