@@ -4708,9 +4708,13 @@ export default function AdminDashboard() {
                                     document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
                                   }, 80);
                                 } else if (item.key === "nurture_paused") {
-                                  window.location.href = "/admin/nurture";
+                                  window.location.href = "/admin/lead-nurturing";
                                 } else if (item.key === "overdue_followups") {
-                                  window.location.href = "/admin/follow-ups";
+                                  setActiveTab("leads");
+                                  setStageFilter("FOLLOW_UP_SCHEDULED");
+                                  setTimeout(() => {
+                                    document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 80);
                                 }
                               };
                               const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "overdue_followups";
