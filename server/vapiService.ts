@@ -723,7 +723,12 @@ export async function handleCreateLead(args: {
         extrasJson ? `Add-ons: ${selectedExtras?.join(", ")}` : null,
         slot !== "To be confirmed" ? `Preferred date: ${slot}` : null,
       ].filter(Boolean).join("\n");
-      messages.push({ role: "system", content: callNote, ts: Date.now() });
+      // Push a synthetic inbound message FIRST so the sort key (lastCustomerReplyAt)
+      // treats this AI call as customer-initiated activity and surfaces the lead to
+      // the top of the leads list. Role "user" is intentional — the customer called in.
+      const callTs = Date.now();
+      messages.push({ role: "user", content: "[Inbound AI call]", ts: callTs - 1 });
+      messages.push({ role: "system", content: callNote, ts: callTs });
 
       await db
         .update(conversationSessions)
