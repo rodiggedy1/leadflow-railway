@@ -1316,3 +1316,8 @@
 - [x] Replace attention widget with real-data animated panel (unresponded leads, unhandled, paused nurture, overdue follow-ups)
 - [x] Click-through on attention items: Unresponded → leads filtered AWAITING_REPLY, Unhandled → leads filtered UNHANDLED, Nurture paused → /admin/nurture, Overdue follow-ups → /admin/follow-ups
 - [x] Clear filter pill shown when AWAITING_REPLY synthetic filter is active in leads table
+- [ ] Fix handleCreateLead: deduplicate by phone, merge into existing session, add ai_call source label + timeline event
+- [ ] Fix source label: show 'AI Call' instead of 'inbound' for leadSource=voice sessions
+- [ ] Fix agent login: quoted amount update not saving
+- [x] Fix Vapi handleCreateLead duplicate sessions — dedup by phone, merge into existing session, add ai_call source label
+- [x] Fix agent quoted amount not updating — sync bookedAmountInput from freshSession after save

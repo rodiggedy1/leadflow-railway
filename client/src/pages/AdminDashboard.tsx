@@ -846,8 +846,11 @@ function getSourceBadge(leadSource: string | null): React.ReactElement {
   if (leadSource === "email") {
     return <span className={`${SOURCE_PILL} bg-sky-100 text-sky-700`}>Google Ads</span>;
   }
+  if (leadSource === "ai_call") {
+    return <span className={`${SOURCE_PILL} bg-violet-100 text-violet-700`}>AI Call</span>;
+  }
   if (leadSource === "voice" || leadSource === "phone") {
-    return <span className={`${SOURCE_PILL} bg-zinc-100 text-zinc-700`}>Inbound</span>;
+    return <span className={`${SOURCE_PILL} bg-zinc-100 text-zinc-700`}>Voice</span>;
   }
   if (leadSource === "reactivation") {
     return <span className={`${SOURCE_PILL} bg-purple-100 text-purple-700`}>Campaign</span>;

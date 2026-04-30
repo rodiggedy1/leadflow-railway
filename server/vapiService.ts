@@ -20,7 +20,7 @@ import { calculatePrice, SERVICE_MULTIPLIERS } from "./engine/pricing";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
 import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages, fieldMgmtCalls } from "../drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, ne, or } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
 
@@ -691,13 +691,75 @@ export async function handleCreateLead(args: {
     // Normalize phone to E.164
     const normalizedPhone = phone.startsWith("+") ? phone : `+1${phone.replace(/\D/g, "")}`;
 
-    // Insert a new quote lead
     const db = await getDb();
     if (!db) throw new Error("Database not available");
     const extrasJson = selectedExtras && selectedExtras.length > 0
       ? JSON.stringify(selectedExtras)
       : null;
+    const slot = preferredDate ?? "To be confirmed";
 
+    // ── Deduplication: check for existing non-DONE session for this phone ────
+    const [existingSession] = await db
+      .select()
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, normalizedPhone),
+          ne(conversationSessions.stage, "DONE" as any)
+        )
+      )
+      .limit(1);
+
+    if (existingSession) {
+      // ── Merge: update existing session with AI call data ──────────────────
+      // Append a system event to the message history so the timeline shows the call
+      let messages: { role: string; content: string; ts?: number }[] = [];
+      try { messages = JSON.parse(existingSession.messageHistory || "[]"); } catch { messages = []; }
+      const callNote = [
+        `[AI CALL — Vapi]`,
+        `Quoted: $${quotedPrice}`,
+        `Service: ${serviceType} | ${bedrooms} / ${bathrooms}`,
+        address ? `Address: ${address}` : null,
+        extrasJson ? `Add-ons: ${selectedExtras?.join(", ")}` : null,
+        slot !== "To be confirmed" ? `Preferred date: ${slot}` : null,
+      ].filter(Boolean).join("\n");
+      messages.push({ role: "system", content: callNote, ts: Date.now() });
+
+      await db
+        .update(conversationSessions)
+        .set({
+          leadName: name || existingSession.leadName,
+          quotedPrice: quotedPrice.toString(),
+          serviceType,
+          bedrooms,
+          bathrooms,
+          address: address ?? existingSession.address,
+          selectedSlot: slot,
+          extras: extrasJson ?? existingSession.extras,
+          leadSource: "ai_call",
+          messageHistory: JSON.stringify(messages),
+          // Move to QUOTE_SENT if currently in an earlier stage
+          stage: ["UNHANDLED", "WIDGET_SIZING", "AVAILABILITY"].includes(existingSession.stage as string)
+            ? "QUOTE_SENT"
+            : existingSession.stage,
+        })
+        .where(eq(conversationSessions.id, existingSession.id));
+
+      const sessionId = existingSession.id;
+      console.log(`[Vapi] Merged AI call into existing session ${sessionId} for ${normalizedPhone}`);
+
+      // Alert team
+      const extrasLine = selectedExtras && selectedExtras.length > 0 ? `\nAdd-ons: ${selectedExtras.join(", ")}` : "";
+      const alertMsg = `📞 AI Call (existing lead) - Maids in Black\n\nName: ${name}\nPhone: ${normalizedPhone}\nService: ${serviceType}\nSize: ${bedrooms} / ${bathrooms}\nQuote: $${quotedPrice}${extrasLine}\n(Merged into existing session ${sessionId})`;
+      const CS_SUPPORT_NUMBER = "+12028885362";
+      const SECONDARY_ALERT_NUMBER = "+13029816191";
+      sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err => console.error("[Vapi] CS alert SMS failed:", err));
+      sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err => console.error("[Vapi] Secondary alert SMS failed:", err));
+
+      return { success: true, sessionId, message: `Existing lead updated. Session ID: ${sessionId}` };
+    }
+
+    // ── New lead: insert quoteLeads + conversationSession ────────────────────
     const [leadResult] = await db.insert(quoteLeads).values({
       name,
       email: email ?? null,
@@ -711,8 +773,6 @@ export async function handleCreateLead(args: {
 
     const leadId = (leadResult as { insertId: number }).insertId;
 
-    // Create a conversation session in QUOTE_SENT stage
-    const slot = preferredDate ?? "To be confirmed";
     const [sessionResult] = await db.insert(conversationSessions).values({
       leadPhone: normalizedPhone,
       leadName: name,
@@ -724,32 +784,23 @@ export async function handleCreateLead(args: {
       address: address ?? null,
       selectedSlot: slot,
       quoteLeadId: leadId,
-      leadSource: "voice",
+      leadSource: "ai_call",
       messageHistory: "[]",
       extras: extrasJson,
     });
 
     const sessionId = (sessionResult as { insertId: number }).insertId;
 
-    console.log(`[Vapi] Lead created: sessionId=${sessionId}, phone=${normalizedPhone}, price=$${quotedPrice}`);
-    // ── Team alert SMS ────────────────────────────────────────────────────────
-    const extrasLine = selectedExtras && selectedExtras.length > 0
-      ? `\nAdd-ons: ${selectedExtras.join(", ")}`
-      : "";
-    const alertMsg = `New Voice Lead - Maids in Black\n\nName: ${name}\nPhone: ${normalizedPhone}\nService: ${serviceType}\nSize: ${bedrooms} / ${bathrooms}\nQuote: $${quotedPrice}${extrasLine}`;
+    console.log(`[Vapi] New lead created: sessionId=${sessionId}, phone=${normalizedPhone}, price=$${quotedPrice}`);
+
+    const extrasLine = selectedExtras && selectedExtras.length > 0 ? `\nAdd-ons: ${selectedExtras.join(", ")}` : "";
+    const alertMsg = `📞 New AI Call Lead - Maids in Black\n\nName: ${name}\nPhone: ${normalizedPhone}\nService: ${serviceType}\nSize: ${bedrooms} / ${bathrooms}\nQuote: $${quotedPrice}${extrasLine}`;
     const CS_SUPPORT_NUMBER = "+12028885362";
     const SECONDARY_ALERT_NUMBER = "+13029816191";
-    sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err =>
-      console.error("[Vapi] CS alert SMS failed:", err)
-    );
-    sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err =>
-      console.error("[Vapi] Secondary alert SMS failed:", err)
-    );
-    return {
-      success: true,
-      sessionId,
-      message: `Lead saved successfully. Session ID: ${sessionId}`,
-    };
+    sendSms({ to: CS_SUPPORT_NUMBER, content: alertMsg }).catch(err => console.error("[Vapi] CS alert SMS failed:", err));
+    sendSms({ to: SECONDARY_ALERT_NUMBER, content: alertMsg }).catch(err => console.error("[Vapi] Secondary alert SMS failed:", err));
+
+    return { success: true, sessionId, message: `Lead saved successfully. Session ID: ${sessionId}` };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[Vapi] createLead failed:", msg);

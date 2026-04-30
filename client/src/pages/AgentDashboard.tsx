@@ -484,6 +484,15 @@ export function ConversationDrawer({
     }
   }, [freshSession?.messageHistory]);
 
+  // Sync bookedAmountInput when freshSession updates (e.g. after a save)
+  useEffect(() => {
+    if (freshSession && freshSession.bookedAmount !== undefined) {
+      setBookedAmountInput(
+        freshSession.bookedAmount !== null ? String(freshSession.bookedAmount) : ""
+      );
+    }
+  }, [freshSession?.bookedAmount]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [localMessages]);
@@ -1335,8 +1344,8 @@ export function ConversationDrawer({
                 </Button>
               </div>
               <p className="text-xs text-green-600 mt-1">
-                {session.bookedAmount !== null && session.bookedAmount !== undefined
-                  ? `Set to $${session.bookedAmount} — also updates the lead row`
+                {(freshSession?.bookedAmount ?? session.bookedAmount) !== null && (freshSession?.bookedAmount ?? session.bookedAmount) !== undefined
+                  ? `Set to $${freshSession?.bookedAmount ?? session.bookedAmount} — also updates the lead row`
                   : computeTotalQuote(session.quotedPrice, session.extras)
                     ? `Using quoted price: $${computeTotalQuote(session.quotedPrice, session.extras)}`
                     : "Enter amount to set the price for this lead"
