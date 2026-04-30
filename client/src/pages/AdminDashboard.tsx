@@ -3299,6 +3299,10 @@ export default function AdminDashboard() {
     enabled: hasSession,
   });
 
+  const { data: attentionData, isLoading: attentionLoading } = trpc.leads.attentionItems.useQuery(undefined, {
+    refetchInterval: 60_000,
+    enabled: hasSession,
+  });
   const { data: visitorStats } = trpc.leads.visitorStats.useQuery(dateRange, {
     refetchInterval: 60000,
     enabled: hasSession,
@@ -4605,46 +4609,106 @@ export default function AdminDashboard() {
 
               {/* ── Right sidebar ──────────────────────────────────────────── */}
               <div className="space-y-6">
-                {/* Executive summary */}
-                <Card className="rounded-[30px] border-0 bg-zinc-950 text-white shadow-[0_10px_40px_rgba(0,0,0,0.15)]">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm text-white/60">Executive summary</div>
-                        <div className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">What needs attention now</div>
-                      </div>
-                      <div className="rounded-2xl bg-white/10 p-3">
-                        <Sparkles className="h-5 w-5" />
+                {/* Executive summary — real-data attention panel */}
+                {(() => {
+                  const severity = attentionData?.overallSeverity ?? "ok";
+                  const items = attentionData?.items ?? [];
+                  const isUrgent = severity === "urgent";
+                  const isWarning = severity === "warning";
+                  // Icon per item key
+                  const itemIcon = (key: string) => {
+                    if (key === "unresponded") return <MessageSquare className="h-3.5 w-3.5" />;
+                    if (key === "unhandled") return <AlertTriangle className="h-3.5 w-3.5" />;
+                    if (key === "nurture_paused") return <Inbox className="h-3.5 w-3.5" />;
+                    if (key === "overdue_followups") return <Clock3 className="h-3.5 w-3.5" />;
+                    return <CircleAlert className="h-3.5 w-3.5" />;
+                  };
+                  const severityDot = (s: string) => {
+                    if (s === "urgent") return "bg-red-400";
+                    if (s === "warning") return "bg-amber-400";
+                    return "bg-emerald-400";
+                  };
+                  return (
+                    <div
+                      className={`rounded-[30px] bg-zinc-950 text-white shadow-[0_10px_40px_rgba(0,0,0,0.15)] transition-all duration-700 ${
+                        isUrgent
+                          ? "ring-2 ring-red-500/60 shadow-[0_0_32px_rgba(239,68,68,0.25)] animate-pulse"
+                          : isWarning
+                          ? "ring-2 ring-amber-400/50 shadow-[0_0_24px_rgba(251,191,36,0.18)]"
+                          : ""
+                      }`}
+                    >
+                      <div className="p-5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-sm text-white/60">Executive summary</div>
+                            <div className="mt-1 text-[22px] font-semibold tracking-[-0.03em]">What needs attention now</div>
+                          </div>
+                          <div className={`rounded-2xl p-3 transition-colors ${
+                            isUrgent ? "bg-red-500/20" : isWarning ? "bg-amber-400/20" : "bg-white/10"
+                          }`}>
+                            {isUrgent ? (
+                              <Flame className="h-5 w-5 text-red-400" />
+                            ) : isWarning ? (
+                              <AlertTriangle className="h-5 w-5 text-amber-400" />
+                            ) : (
+                              <Sparkles className="h-5 w-5" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-5 space-y-2.5">
+                          {attentionLoading ? (
+                            <div className="flex items-center gap-2 text-white/40 text-sm py-4">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Loading attention items...
+                            </div>
+                          ) : items.length === 0 ? (
+                            <div className="rounded-2xl bg-white/6 p-4 text-sm text-white/60">No data available</div>
+                          ) : (
+                            items.map(item => (
+                              <div
+                                key={item.key}
+                                className={`rounded-2xl p-4 transition-colors ${
+                                  item.severity === "urgent"
+                                    ? "bg-red-500/15 border border-red-500/20"
+                                    : item.severity === "warning"
+                                    ? "bg-amber-400/10 border border-amber-400/20"
+                                    : "bg-white/6"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 mb-1.5">
+                                  <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${severityDot(item.severity)}`} />
+                                  <div className={`flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] font-medium ${
+                                    item.severity === "urgent" ? "text-red-400" :
+                                    item.severity === "warning" ? "text-amber-400" :
+                                    "text-white/45"
+                                  }`}>
+                                    {itemIcon(item.key)}
+                                    {item.label}
+                                    {item.count > 0 && (
+                                      <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                        item.severity === "urgent" ? "bg-red-500/30 text-red-300" :
+                                        item.severity === "warning" ? "bg-amber-400/30 text-amber-300" :
+                                        "bg-white/10 text-white/50"
+                                      }`}>{item.count}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-sm font-medium leading-5 text-white/90">{item.detail}</div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                        {!attentionLoading && severity === "ok" && (
+                          <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-400/80">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            All systems clear
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="mt-6 space-y-3">
-                      <div className="rounded-2xl bg-white/6 p-4">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/45">Best opportunity</div>
-                        <div className="mt-2 font-medium text-sm leading-6">
-                          {filtered.filter(s => s.stage === "QUOTE_SENT").length > 0
-                            ? `${filtered.filter(s => s.stage === "QUOTE_SENT").length} leads have received quotes and are waiting for follow-up.`
-                            : "No active quote-sent leads right now."}
-                        </div>
-                      </div>
-                      <div className="rounded-2xl bg-white/6 p-4">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/45">Biggest risk</div>
-                        <div className="mt-2 font-medium text-sm leading-6">
-                          {(stats?.byStage?.["UNHANDLED"] ?? 0) > 0
-                            ? `${stats?.byStage?.["UNHANDLED"]} unhandled lead${(stats?.byStage?.["UNHANDLED"] ?? 0) !== 1 ? "s" : ""} need immediate attention.`
-                            : "No unhandled leads — great work!"}
-                        </div>
-                      </div>
-                      <div className="rounded-2xl bg-white/6 p-4">
-                        <div className="text-xs uppercase tracking-[0.18em] text-white/45">Fastest win</div>
-                        <div className="mt-2 font-medium text-sm leading-6">
-                          {filtered.filter(s => s.stage === "FOLLOW_UP_SCHEDULED").length > 0
-                            ? `${filtered.filter(s => s.stage === "FOLLOW_UP_SCHEDULED").length} follow-up${filtered.filter(s => s.stage === "FOLLOW_UP_SCHEDULED").length !== 1 ? "s" : ""} scheduled — reach out before they go cold.`
-                            : "No follow-ups scheduled — consider booking some."}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                  );
+                })()}
 
                 {/* Today's operational pulse */}
                 <Card className="rounded-[30px] border-black/5 bg-white">

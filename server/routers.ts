@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -3803,6 +3803,134 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
+
+    /**
+     * leads.attentionItems — real-data attention panel for the executive summary widget.
+     * Returns 4 metrics with severity levels (urgent | warning | ok) computed from live DB data.
+     * No LLM involved — pure DB queries. Designed to refresh every 60s.
+     */
+    attentionItems: adminAgentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return { items: [], overallSeverity: "ok" as const };
+
+      const now = Date.now();
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const FOUR_HOURS_MS = 4 * ONE_HOUR_MS;
+
+      // ── 1. Unresponded leads ──────────────────────────────────────────────────
+      // A lead is "unresponded" when the last message in their history is role:"user"
+      // (customer spoke last) and the session is not booked/closed.
+      // We fetch all active sessions and compute this in JS to avoid complex JSON SQL.
+      const activeSessions = await db
+        .select({
+          id: conversationSessions.id,
+          stage: conversationSessions.stage,
+          messageHistory: conversationSessions.messageHistory,
+          aiMode: conversationSessions.aiMode,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            sql`${conversationSessions.stage} NOT IN ('BOOKED','COMPLETED','CLOSED','LOST','COLD')`,
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound','cs-inbound-cleaner','cs_initiated','hiring_interview','review'))`,
+          )
+        )
+        .limit(500);
+
+      let unrespondedUrgent = 0;  // > 4h
+      let unrespondedWarning = 0; // 1–4h
+      for (const s of activeSessions) {
+        try {
+          const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+          if (history.length === 0) continue;
+          const last = history[history.length - 1];
+          if (last.role !== "user" && last.role !== "customer") continue; // AI replied last
+          const age = last.ts ? now - last.ts : 0;
+          if (age > FOUR_HOURS_MS) unrespondedUrgent++;
+          else if (age > ONE_HOUR_MS) unrespondedWarning++;
+        } catch { /* skip malformed */ }
+      }
+
+      // ── 2. Unhandled leads ────────────────────────────────────────────────────
+      const [unhandledRow] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.stage, "UNHANDLED"));
+      const unhandledCount = Number(unhandledRow?.count ?? 0);
+
+      // ── 3. Paused nurture enrollments (lead replied, needs human decision) ───
+      const [pausedNurtureRow] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(nurtureEnrollments)
+        .where(
+          and(
+            eq(nurtureEnrollments.status, "paused"),
+            isNull(nurtureEnrollments.deletedAt),
+          )
+        );
+      const pausedNurtureCount = Number(pausedNurtureRow?.count ?? 0);
+
+      // ── 4. Overdue follow-ups ─────────────────────────────────────────────────
+      const [overdueRow] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(followUps)
+        .where(
+          and(
+            isNull(followUps.completedAt),
+            lte(followUps.dueAt, now),
+          )
+        );
+      const overdueFollowUpsCount = Number(overdueRow?.count ?? 0);
+
+      // ── Build items ───────────────────────────────────────────────────────────
+      type Severity = "urgent" | "warning" | "ok";
+      const items: Array<{ key: string; label: string; count: number; detail: string; severity: Severity }> = [
+        {
+          key: "unresponded",
+          label: "Unresponded leads",
+          count: unrespondedUrgent + unrespondedWarning,
+          detail: unrespondedUrgent > 0
+            ? `${unrespondedUrgent} lead${unrespondedUrgent !== 1 ? "s" : ""} waiting 4+ hours for a reply`
+            : unrespondedWarning > 0
+            ? `${unrespondedWarning} lead${unrespondedWarning !== 1 ? "s" : ""} waiting 1–4 hours for a reply`
+            : "All leads have been responded to",
+          severity: unrespondedUrgent > 0 ? "urgent" : unrespondedWarning > 0 ? "warning" : "ok",
+        },
+        {
+          key: "unhandled",
+          label: "Unhandled leads",
+          count: unhandledCount,
+          detail: unhandledCount > 0
+            ? `${unhandledCount} lead${unhandledCount !== 1 ? "s" : ""} need immediate attention`
+            : "No unhandled leads — great work!",
+          severity: unhandledCount > 0 ? "urgent" : "ok",
+        },
+        {
+          key: "nurture_paused",
+          label: "Nurture paused",
+          count: pausedNurtureCount,
+          detail: pausedNurtureCount > 0
+            ? `${pausedNurtureCount} nurture sequence${pausedNurtureCount !== 1 ? "s" : ""} paused — lead replied, needs human decision`
+            : "All nurture sequences running smoothly",
+          severity: pausedNurtureCount > 0 ? "warning" : "ok",
+        },
+        {
+          key: "overdue_followups",
+          label: "Overdue follow-ups",
+          count: overdueFollowUpsCount,
+          detail: overdueFollowUpsCount > 0
+            ? `${overdueFollowUpsCount} follow-up${overdueFollowUpsCount !== 1 ? "s" : ""} past due`
+            : "No overdue follow-ups",
+          severity: overdueFollowUpsCount > 0 ? "urgent" : "ok",
+        },
+      ];
+
+      const overallSeverity: Severity =
+        items.some(i => i.severity === "urgent") ? "urgent" :
+        items.some(i => i.severity === "warning") ? "warning" : "ok";
+
+      return { items, overallSeverity };
+    }),
   }),
   /**
    * agents — agent auth + lead action procedures..
