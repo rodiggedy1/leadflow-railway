@@ -1315,3 +1315,4 @@
 - [x] Fix nurture cron duplicate send (Miranda Berry case) — add optimistic claim guard: atomic UPDATE WHERE status='active' AND nextStep=current before sending, skip if 0 rows affected (Cloud Run multi-instance race)
 - [x] Replace attention widget with real-data animated panel (unresponded leads, unhandled, paused nurture, overdue follow-ups)
 - [x] Click-through on attention items: Unresponded → leads filtered AWAITING_REPLY, Unhandled → leads filtered UNHANDLED, Nurture paused → /admin/nurture, Overdue follow-ups → /admin/follow-ups
+- [x] Clear filter pill shown when AWAITING_REPLY synthetic filter is active in leads table

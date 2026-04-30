@@ -3949,7 +3949,7 @@ export default function AdminDashboard() {
                         <CardTitle className="text-[26px] tracking-[-0.03em]">Lead command center</CardTitle>
                         <p className="mt-1 text-sm text-zinc-500">Cleaner hierarchy, stronger emphasis, faster decision-making.</p>
                       </div>
-                      <div className="flex flex-nowrap items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {(["all", "BOOKED", "QUOTE_SENT", "FOLLOW_UP_SCHEDULED", "UNHANDLED", "COLD"] as const).map((stage) => (
                           <button
                             key={stage}
@@ -3963,6 +3963,19 @@ export default function AdminDashboard() {
                             {stage === "all" ? "All" : STAGE_CONFIG[stage as Stage]?.label ?? stage}
                           </button>
                         ))}
+                        {/* Clear pill — shown when a synthetic/attention-driven filter is active */}
+                        {stageFilter === "AWAITING_REPLY" && (
+                          <span className="inline-flex items-center gap-1 rounded-xl bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                            Filtered: Unresponded
+                            <button
+                              onClick={() => setStageFilter("all")}
+                              className="ml-0.5 rounded-full p-0.5 hover:bg-amber-200 transition"
+                              aria-label="Clear filter"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
