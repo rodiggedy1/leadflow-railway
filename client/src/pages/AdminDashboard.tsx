@@ -1772,15 +1772,31 @@ function ConversationDrawer({
                         )}
                         {/* System event pill */}
                         {isSystem ? (
-                          <div className="flex justify-center my-1">
-                            <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">
-                              {msg.content.split(/(https?:\/\/\S+|thmtk\.com\/\S+|[a-z0-9-]+\.com\/\S+)/gi).map((part, pi) =>
-                                /^(https?:\/\/|thmtk\.com\/|[a-z0-9-]+\.com\/)/i.test(part)
-                                  ? <a key={pi} href={part.startsWith("http") ? part : `https://${part}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-500 hover:text-blue-700 break-all">{part}</a>
-                                  : part
-                              )}
-                            </span>
-                          </div>
+                          msg.content.startsWith("[AI CALL") ? (
+                            /* AI Call timeline event */
+                            <div className="flex justify-center my-3">
+                              <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-2.5 max-w-xs w-full text-center">
+                                <div className="flex items-center justify-center gap-1.5 mb-1">
+                                  <span className="text-violet-600 text-sm">&#128222;</span>
+                                  <span className="text-xs font-semibold text-violet-700 uppercase tracking-wide">AI Call</span>
+                                  {timeLabel && <span className="text-xs text-violet-400 ml-1">{timeLabel}</span>}
+                                </div>
+                                <div className="text-xs text-violet-600 whitespace-pre-line leading-relaxed">
+                                  {msg.content.replace(/^\[AI CALL[^\]]*\]\n?/, "")}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex justify-center my-1">
+                              <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-3 py-1">
+                                {msg.content.split(/(https?:\/\/\S+|thmtk\.com\/\S+|[a-z0-9-]+\.com\/\S+)/gi).map((part, pi) =>
+                                  /^(https?:\/\/|thmtk\.com\/|[a-z0-9-]+\.com\/)/i.test(part)
+                                    ? <a key={pi} href={part.startsWith("http") ? part : `https://${part}`} target="_blank" rel="noopener noreferrer" className="underline text-blue-500 hover:text-blue-700 break-all">{part}</a>
+                                    : part
+                                )}
+                              </span>
+                            </div>
+                          )
                         ) : isOutbound ? (
                           /* ── Outbound ── */
                           <div className="flex items-end gap-2 justify-end">

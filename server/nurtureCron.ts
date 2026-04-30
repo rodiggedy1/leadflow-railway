@@ -308,12 +308,26 @@ export async function runNurtureSend(): Promise<{
           : { success: true, error: null };
 
         if (!smsResult.success) {
-          console.error(
-            `[NurtureSend] SMS failed for enrollment ${enrollment.id} step ${enrollment.nextStep}:`,
-            smsResult.error
-          );
-          errors++;
-          // Don't advance — retry on next tick
+          const errStr = smsResult.error ?? "";
+          const isOptedOut =
+            errStr.includes("opted out") ||
+            errStr.includes("Opted Out") ||
+            errStr.includes("0201400");
+          if (isOptedOut) {
+            // Permanently suppress — soft-delete so the cron never retries
+            console.warn(
+              `[NurtureSend] Lead opted out — suppressing enrollment ${enrollment.id} (session ${enrollment.sessionId})`
+            );
+            await endEnrollment(db, enrollment.id, "opted_out");
+            ended++;
+          } else {
+            console.error(
+              `[NurtureSend] SMS failed for enrollment ${enrollment.id} step ${enrollment.nextStep}:`,
+              smsResult.error
+            );
+            errors++;
+            // Don't advance — retry on next tick
+          }
           continue;
         }
 

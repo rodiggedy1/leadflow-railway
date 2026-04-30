@@ -1321,3 +1321,5 @@
 - [ ] Fix agent login: quoted amount update not saving
 - [x] Fix Vapi handleCreateLead duplicate sessions — dedup by phone, merge into existing session, add ai_call source label
 - [x] Fix agent quoted amount not updating — sync bookedAmountInput from freshSession after save
+- [x] Auto-suppress opted-out leads: soft-delete nurture enrollment on first 400 opted-out error
+- [x] Render AI_CALL_UPDATE as violet AI Call card in lead drawer conversation timeline
