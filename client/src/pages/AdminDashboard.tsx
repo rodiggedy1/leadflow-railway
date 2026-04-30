@@ -3398,7 +3398,21 @@ export default function AdminDashboard() {
 
   const filtered = useMemo(() => {
     return sessions.filter(s => {
-      const matchesStage = stageFilter === "all" || s.stage === stageFilter;
+      // AWAITING_REPLY is a synthetic filter: last message in history is from the customer (role:"user")
+      // and the session is not booked/closed.
+      let matchesStage: boolean;
+      if (stageFilter === "AWAITING_REPLY") {
+        try {
+          const hist: Array<{ role: string }> = JSON.parse((s as any).messageHistory ?? "[]");
+          const lastRole = hist.length > 0 ? hist[hist.length - 1].role : null;
+          const closedStages = ["BOOKED", "COMPLETED", "CLOSED", "LOST", "COLD"];
+          matchesStage = (lastRole === "user" || lastRole === "customer") && !closedStages.includes(s.stage ?? "");
+        } catch {
+          matchesStage = false;
+        }
+      } else {
+        matchesStage = stageFilter === "all" || s.stage === stageFilter;
+      }
       const matchesAgent =
         agentFilter === "all" ||
         (agentFilter === "unassigned" && !s.assignedAgentId) ||
@@ -3722,7 +3736,7 @@ export default function AdminDashboard() {
         )}
         {activeTab === "leads" && <>
         {/* ── New Leads Page Design ─────────────────────────────────────────── */}
-        <div className="bg-[#f6f5f2] text-zinc-900" style={{ minHeight: "calc(100vh - 200px)" }}>
+        <div id="leads-table-section" className="bg-[#f6f5f2] text-zinc-900" style={{ minHeight: "calc(100vh - 200px)" }}>
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_280px]">
               {/* ── Left column ─────────────────────────────────────────────── */}
@@ -4665,16 +4679,39 @@ export default function AdminDashboard() {
                           ) : items.length === 0 ? (
                             <div className="rounded-2xl bg-white/6 p-4 text-sm text-white/60">No data available</div>
                           ) : (
-                            items.map(item => (
-                              <div
+                            items.map(item => {
+                              // Determine navigation action per item key
+                              const handleAttentionClick = () => {
+                                if (item.key === "unresponded") {
+                                  setActiveTab("leads");
+                                  setStageFilter("AWAITING_REPLY");
+                                  setTimeout(() => {
+                                    document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 80);
+                                } else if (item.key === "unhandled") {
+                                  setActiveTab("leads");
+                                  setStageFilter("UNHANDLED");
+                                  setTimeout(() => {
+                                    document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 80);
+                                } else if (item.key === "nurture_paused") {
+                                  window.location.href = "/admin/nurture";
+                                } else if (item.key === "overdue_followups") {
+                                  window.location.href = "/admin/follow-ups";
+                                }
+                              };
+                              const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "overdue_followups";
+                              return (
+                              <button
                                 key={item.key}
-                                className={`rounded-2xl p-4 transition-colors ${
+                                onClick={isClickable ? handleAttentionClick : undefined}
+                                className={`w-full text-left rounded-2xl p-4 transition-all ${
                                   item.severity === "urgent"
                                     ? "bg-red-500/15 border border-red-500/20"
                                     : item.severity === "warning"
                                     ? "bg-amber-400/10 border border-amber-400/20"
                                     : "bg-white/6"
-                                }`}
+                                } ${isClickable ? "cursor-pointer hover:brightness-110 hover:scale-[1.01] active:scale-[0.99]" : "cursor-default"}`}
                               >
                                 <div className="flex items-center gap-2 mb-1.5">
                                   <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${severityDot(item.severity)}`} />
@@ -4693,10 +4730,14 @@ export default function AdminDashboard() {
                                       }`}>{item.count}</span>
                                     )}
                                   </div>
+                                  {isClickable && (
+                                    <ChevronRight className="ml-auto h-3.5 w-3.5 text-white/30 flex-shrink-0" />
+                                  )}
                                 </div>
                                 <div className="text-sm font-medium leading-5 text-white/90">{item.detail}</div>
-                              </div>
-                            ))
+                              </button>
+                              );
+                            })
                           )}
                         </div>
                         {!attentionLoading && severity === "ok" && (
