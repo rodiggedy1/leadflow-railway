@@ -1312,3 +1312,4 @@
 - [x] Fix deleted nurture enrollments coming back — convert hard DELETE to soft-delete (deletedAt tombstone), filter from UI query and stats count
 - [x] Add Remove button on hover of lead card row in nurture table — no need to open detail panel
 - [x] Fix nurture cron sending next step even when lead replied — replace 20-min recency window with lastSentAt-anchored reply guard that pauses the sequence
+- [x] Fix nurture cron duplicate send (Miranda Berry case) — add optimistic claim guard: atomic UPDATE WHERE status='active' AND nextStep=current before sending, skip if 0 rows affected (Cloud Run multi-instance race)

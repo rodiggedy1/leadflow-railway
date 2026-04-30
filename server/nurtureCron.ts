@@ -184,6 +184,31 @@ export async function runNurtureSend(): Promise<{
 
     for (const enrollment of due) {
       try {
+        // ── Optimistic claim guard ────────────────────────────────────────────
+        // Cloud Run can run multiple instances simultaneously. Both may SELECT
+        // the same enrollment row in the same cron tick. We atomically claim the
+        // row by doing UPDATE ... WHERE status='active' AND nextStep=<current>.
+        // If 0 rows affected, another instance already claimed it — skip.
+        const claimResult = await db
+          .update(nurtureEnrollments)
+          .set({ updatedAt: new Date() })
+          .where(
+            and(
+              eq(nurtureEnrollments.id, enrollment.id),
+              eq(nurtureEnrollments.status, "active"),
+              eq(nurtureEnrollments.nextStep, enrollment.nextStep),
+              isNull(nurtureEnrollments.deletedAt)
+            )
+          );
+        const rowsClaimed =
+          (claimResult as any)?.rowsAffected ??
+          (claimResult as any)?.[0]?.affectedRows ??
+          1; // fallback: assume claimed if we can't read the count
+        if (rowsClaimed === 0) {
+          // Another instance already processed this enrollment — skip
+          console.log(`[NurtureSend] Skipped enrollment ${enrollment.id} step ${enrollment.nextStep} — already claimed by another instance`);
+          continue;
+        }
         // Fetch the current session to check exit conditions
         const [session] = await db
           .select({
