@@ -1334,3 +1334,4 @@
 - [x] Fix agent quoted amount not updating — sync bookedAmountInput from freshSession after save
 - [x] Auto-suppress opted-out leads: soft-delete nurture enrollment on first 400 opted-out error
 - [x] Render AI_CALL_UPDATE as violet AI Call card in lead drawer conversation timeline
+- [x] Field Management test harness: fire each step to a test phone number and show pass/fail results in the Workflow tab

@@ -499,6 +499,59 @@ async function buildAndSendTestStep(
       ].join("\n");
       break;
 
+    case "checkin_call_attempt_1":
+    case "checkin_call_attempt_2":
+    case "checkin_call_attempt_3": {
+      // VAPI call — not an SMS. Place the actual call to TEST_PHONE.
+      const attemptNum = step === "checkin_call_attempt_1" ? 1 : step === "checkin_call_attempt_2" ? 2 : 3;
+      const callResult = await placeNoCheckinEscalationCallWithReason({
+        cleanerName: job.cleanerName ?? "Test Cleaner",
+        customerName: job.customerName ?? "Test Client",
+        jobAddress: address,
+        scheduledTime: timeStr,
+        cleanerJobId: job.id,
+        step,
+        cleanerPhone: TEST_PHONE,
+      });
+      return {
+        success: callResult.success,
+        smsSent: `[VAPI Call] T-${58 - (attemptNum - 1) * 2}min check-in call attempt ${attemptNum} → ${TEST_PHONE}`,
+        recipientPhone: TEST_PHONE,
+        errorDetail: callResult.success ? undefined : (callResult.reason ?? "VAPI call failed"),
+      };
+    }
+    case "post_start_call_1":
+    case "post_start_call_2": {
+      const callResult = await placeNoCheckinEscalationCallWithReason({
+        cleanerName: job.cleanerName ?? "Test Cleaner",
+        customerName: job.customerName ?? "Test Client",
+        jobAddress: address,
+        scheduledTime: timeStr,
+        cleanerJobId: job.id,
+        step,
+        cleanerPhone: TEST_PHONE,
+      });
+      return {
+        success: callResult.success,
+        smsSent: `[VAPI Call] ${step === "post_start_call_1" ? "T+0–5min" : "T+10–15min"} post-start call → ${TEST_PHONE}`,
+        recipientPhone: TEST_PHONE,
+        errorDetail: callResult.success ? undefined : (callResult.reason ?? "VAPI call failed"),
+      };
+    }
+    case "post_start_cs_alert":
+      msg = [
+        `🚨 OVERDUE — No Check-In`,
+        `Cleaner: ${job.cleanerName ?? "Unknown"}`,
+        `Client: ${job.customerName ?? "Unknown"} at ${address}`,
+        `Scheduled: ${timeStr}`,
+        ``,
+        `Job started ~5 min ago. No status received. Please call the cleaner immediately.`,
+      ].join("\n");
+      break;
+    case "post_start_noshow_flag":
+      // This step posts a Command Chat card — send an SMS summary to TEST_PHONE for test purposes
+      msg = `[Test] post_start_noshow_flag — In production this posts a Command Chat card (quickAction: possible_noshow) for ${job.cleanerName ?? "Unknown"} / ${job.customerName ?? "Unknown"} at ${address}.`;
+      break;
     default:
       msg = `[Test] Step: ${step} — no message template defined.`;
   }

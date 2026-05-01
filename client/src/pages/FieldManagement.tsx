@@ -951,15 +951,22 @@ function JobCard({ job }: { job: JobWithTimeline }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ALL_STEPS: { value: string; label: string; recipient: string }[] = [
-  { value: "pre_job_reminder",    label: "Pre-Job Reminder",        recipient: "Cleaner" },
-  { value: "client_pre_job",      label: "Pre-Job Notification",    recipient: "Client" },
-  { value: "client_on_the_way",   label: "On the Way Notification", recipient: "Client" },
-  { value: "client_running_late", label: "Running Late Alert",       recipient: "Client" },
-  { value: "arrived_checkin",     label: "Arrival Check-In",        recipient: "Cleaner" },
-  { value: "mid_job_nudge",       label: "Mid-Job Nudge",           recipient: "Cleaner" },
-  { value: "completion_flow",     label: "Completion Checklist",    recipient: "Cleaner" },
-  { value: "exception_sms",       label: "No Check-In Alert",       recipient: "Cleaner" },
-  { value: "noshow_alert",        label: "No-Show CS Alert",        recipient: "CS" },
+  { value: "pre_job_reminder",         label: "Pre-Job Reminder (T-2hr)",          recipient: "Cleaner" },
+  { value: "client_pre_job",           label: "Pre-Job Notification",              recipient: "Client" },
+  { value: "checkin_call_attempt_1",   label: "T-58min Check-In Call (Attempt 1)", recipient: "Cleaner VAPI" },
+  { value: "checkin_call_attempt_2",   label: "T-56min Check-In Call (Attempt 2)", recipient: "Cleaner VAPI" },
+  { value: "checkin_call_attempt_3",   label: "T-54min Check-In Call (Attempt 3)", recipient: "Cleaner VAPI" },
+  { value: "exception_sms",            label: "Exception SMS (T-30min)",           recipient: "Cleaner" },
+  { value: "noshow_alert",             label: "No-Show Alert (T-10min)",           recipient: "CS SMS + Chat" },
+  { value: "post_start_call_1",        label: "Post-Start Call 1 (T+0–5min)",      recipient: "Cleaner VAPI" },
+  { value: "post_start_cs_alert",      label: "Post-Start CS Alert (T+5–10min)",   recipient: "CS SMS + Chat" },
+  { value: "post_start_call_2",        label: "Post-Start Call 2 (T+10–15min)",    recipient: "Cleaner VAPI" },
+  { value: "post_start_noshow_flag",   label: "Post-Start No-Show Flag (T+10–15min)", recipient: "Chat Card" },
+  { value: "client_on_the_way",        label: "On the Way Notification",           recipient: "Client" },
+  { value: "client_running_late",      label: "Running Late Alert",                recipient: "Client" },
+  { value: "arrived_checkin",          label: "Arrival Check-In",                  recipient: "Cleaner" },
+  { value: "mid_job_nudge",            label: "Mid-Job Nudge",                     recipient: "Cleaner" },
+  { value: "completion_flow",          label: "Completion Checklist",              recipient: "Cleaner" },
 ];
 
 const STATUS_SIM_BUTTONS: { status: string; label: string; color: string }[] = [
