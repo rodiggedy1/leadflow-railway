@@ -56,8 +56,8 @@ import { toast } from "sonner";
 // WORKFLOW TAB TYPES & DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
-type TriggerKind = "time" | "keyword" | "status" | "exception" | "no-show";
-type ActionKind = "sms" | "sms-client" | "call" | "sms+call" | "cs-alert";
+type TriggerKind = "time" | "keyword" | "status" | "exception" | "no-show" | "post-start";
+type ActionKind = "sms" | "sms-client" | "call" | "sms+call" | "cs-alert" | "vapi-call" | "vapi+cs";
 
 interface WorkflowStep {
   id: number;
@@ -76,7 +76,8 @@ interface WorkflowStep {
   isClientFacing?: boolean;
 }
 
-const WORKFLOW: WorkflowStep[] = [
+// Cleaner-facing workflow steps
+const WORKFLOW_CLEANERS: WorkflowStep[] = [
   {
     id: 1,
     phase: "Pre-Job",
@@ -93,6 +94,25 @@ const WORKFLOW: WorkflowStep[] = [
       },
     ],
     notes: ["Sent 2 hours before job start."],
+  },
+  {
+    id: 10,
+    phase: "Pre-Job",
+    label: "T-58min Check-In Call — Cleaner",
+    triggerKind: "time",
+    triggerDescription: "58 minutes before job start (3 attempts, 2 min apart)",
+    actionKind: "vapi-call",
+    messages: [
+      {
+        role: "call",
+        content: "Please check in for your next job now to avoid payment penalties and so your client knows what is going on.",
+        note: "Automated VAPI outbound call to the cleaner's phone. 3 attempts placed 2 minutes apart. Stops as soon as the cleaner checks in between attempts.",
+      },
+    ],
+    notes: [
+      "Fires at T-58min, T-56min, and T-54min — stops early if cleaner checks in.",
+      "Each attempt is deduplicated via tryClaimStep so it never fires twice for the same window.",
+    ],
   },
   {
     id: 2,
@@ -260,6 +280,103 @@ const WORKFLOW: WorkflowStep[] = [
       "CS team is responsible for calling the cleaner to confirm status and calling the client to set expectations.",
     ],
   },
+  {
+    id: 11,
+    phase: "Post-Start",
+    label: "Post-Start Escalation — No Check-In",
+    triggerKind: "post-start",
+    triggerDescription: "Job start time has passed with no check-in received",
+    actionKind: "vapi+cs",
+    isException: true,
+    messages: [
+      {
+        role: "call",
+        content: "Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
+        note: "T+0 to T+5 min: VAPI outbound call to the cleaner (post_start_call_1). Stops if cleaner checks in.",
+      },
+      {
+        role: "cs-alert",
+        content: "🚨 POST-START NO CHECK-IN\n\nCleaner: {{cleaner_name}}\nJob: {{client_name}} at {{address}}\nStarted: {{job_time}}\n\nNo check-in received after job start. First VAPI call placed. Monitoring.",
+        note: "T+5 to T+10 min: CS alert SMS + ops board card posted (post_start_cs_alert).",
+      },
+      {
+        role: "call",
+        content: "[Second call] Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
+        note: "T+10 to T+15 min: Second VAPI call to cleaner (post_start_call_2) + ops board no-show flag card (post_start_noshow_flag). No message to client at any point.",
+      },
+    ],
+    notes: [
+      "No customer SMS at any point in this escalation.",
+      "All steps deduplicated via tryClaimStep — safe to run every 5 min.",
+      "Stops immediately if cleaner checks in between any step.",
+    ],
+  },
+];
+
+// Client-facing workflow steps
+const WORKFLOW_CLIENTS: WorkflowStep[] = [
+  {
+    id: 1,
+    phase: "Pre-Job",
+    label: "Pre-Job Notification — Client",
+    triggerKind: "time",
+    triggerDescription: "2 hours before job start (floor: 7:30 AM ET)",
+    actionKind: "sms-client",
+    isClientFacing: true,
+    messages: [
+      {
+        role: "client-sms",
+        content:
+          "Hey {{client_name}} — you're all set for your home cleaning today at {{time}} \ud83d\ude0a\n\nYou can follow your cleaning here: {{tracking_link}}\n\nWe'll update this in real time if anything changes, including arrival timing.",
+        note: "Sent to the CLIENT at T-2hrs. If T-2hrs falls before 7:30 AM ET, held until 7:30 AM ET. {{tracking_link}} is the live job tracker URL.",
+      },
+    ],
+    notes: [
+      "Never sends before 7:30 AM ET, even if the job starts at 8 AM or earlier.",
+      "Tracking link is unique per job and shows live cleaner status.",
+    ],
+  },
+  {
+    id: 2,
+    phase: "On the Way",
+    label: "Client \"On the Way\" Notification",
+    triggerKind: "status",
+    triggerDescription: "Cleaner taps \"On the Way\" in app",
+    actionKind: "sms-client",
+    isClientFacing: true,
+    messages: [
+      {
+        role: "client-sms",
+        content:
+          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. \ud83d\ude97\n\nTrack their arrival in real time here: {{tracking_link}}\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
+        note: "Sent to the CLIENT. {{client_name}}, {{address}}, {{eta}}, and {{tracking_link}} are pulled from the job record.",
+      },
+    ],
+    notes: [
+      "Fires immediately when the cleaner's app status changes to On the Way.",
+      "ETA is calculated from the cleaner's selected ETA option in the app.",
+    ],
+  },
+  {
+    id: 3,
+    phase: "Running Late",
+    label: "Running Late — Client Notification",
+    triggerKind: "status",
+    triggerDescription: "Cleaner taps \"Running Late\" in app",
+    actionKind: "sms-client",
+    isClientFacing: true,
+    messages: [
+      {
+        role: "client-sms",
+        content:
+          "Hey {{client_name}} — quick heads up, the team is running about {{delay}} behind.\n\nYou can follow their updated arrival here: {{tracking_link}}\n\nReally appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. \ud83d\ude4f",
+        note: "{{delay}} is the number of minutes late (e.g. \"30 minutes\"). {{tracking_link}} is the live tracker URL. Fires once per job.",
+      },
+    ],
+    notes: [
+      "Fires once per job — if the cleaner taps Running Late multiple times, only the first triggers the SMS.",
+    ],
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,20 +385,22 @@ const WORKFLOW: WorkflowStep[] = [
 
 function TriggerBadge({ kind }: { kind: TriggerKind }) {
   const map: Record<TriggerKind, { label: string; className: string }> = {
-    time:      { label: "Time-based",    className: "bg-blue-50 text-blue-700 border-blue-200" },
-    keyword:   { label: "Keyword",       className: "bg-purple-50 text-purple-700 border-purple-200" },
-    status:    { label: "Status Change", className: "bg-green-50 text-green-700 border-green-200" },
-    exception: { label: "Exception",     className: "bg-red-50 text-red-700 border-red-200" },
-    "no-show": { label: "No-Show",       className: "bg-rose-50 text-rose-700 border-rose-200" },
+    time:         { label: "Time-based",    className: "bg-blue-50 text-blue-700 border-blue-200" },
+    keyword:      { label: "Keyword",       className: "bg-purple-50 text-purple-700 border-purple-200" },
+    status:       { label: "Status Change", className: "bg-green-50 text-green-700 border-green-200" },
+    exception:    { label: "Exception",     className: "bg-red-50 text-red-700 border-red-200" },
+    "no-show":    { label: "No-Show",       className: "bg-rose-50 text-rose-700 border-rose-200" },
+    "post-start": { label: "Post-Start",    className: "bg-orange-50 text-orange-700 border-orange-200" },
   };
   const { label, className } = map[kind];
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-medium border rounded-full px-2.5 py-0.5 ${className}`}>
-      {kind === "time"      && <Clock className="w-3 h-3" />}
-      {kind === "keyword"   && <MessageSquare className="w-3 h-3" />}
-      {kind === "status"    && <Zap className="w-3 h-3" />}
-      {kind === "exception" && <AlertTriangle className="w-3 h-3" />}
-      {kind === "no-show"   && <UserX className="w-3 h-3" />}
+      {kind === "time"         && <Clock className="w-3 h-3" />}
+      {kind === "keyword"      && <MessageSquare className="w-3 h-3" />}
+      {kind === "status"       && <Zap className="w-3 h-3" />}
+      {kind === "exception"    && <AlertTriangle className="w-3 h-3" />}
+      {kind === "no-show"      && <UserX className="w-3 h-3" />}
+      {kind === "post-start"   && <Timer className="w-3 h-3" />}
       {label}
     </span>
   );
@@ -289,11 +408,13 @@ function TriggerBadge({ kind }: { kind: TriggerKind }) {
 
 function ActionBadge({ kind }: { kind: ActionKind }) {
   const map: Record<ActionKind, { label: string; className: string }> = {
-    "sms":       { label: "SMS → Cleaner", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-    "sms-client":{ label: "SMS → Client",  className: "bg-sky-50 text-sky-700 border-sky-200" },
-    "call":      { label: "Auto-Call",     className: "bg-orange-50 text-orange-700 border-orange-200" },
-    "sms+call":  { label: "SMS + Call",    className: "bg-amber-50 text-amber-700 border-amber-200" },
-    "cs-alert":  { label: "CS Alert",      className: "bg-rose-50 text-rose-700 border-rose-200" },
+    "sms":        { label: "SMS → Cleaner",  className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+    "sms-client": { label: "SMS → Client",   className: "bg-sky-50 text-sky-700 border-sky-200" },
+    "call":       { label: "Auto-Call",      className: "bg-orange-50 text-orange-700 border-orange-200" },
+    "sms+call":   { label: "SMS + Call",     className: "bg-amber-50 text-amber-700 border-amber-200" },
+    "cs-alert":   { label: "CS Alert",       className: "bg-rose-50 text-rose-700 border-rose-200" },
+    "vapi-call":  { label: "VAPI Call",      className: "bg-violet-50 text-violet-700 border-violet-200" },
+    "vapi+cs":    { label: "VAPI Call + CS", className: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200" },
   };
   const { label, className } = map[kind];
   return (
@@ -302,6 +423,8 @@ function ActionBadge({ kind }: { kind: ActionKind }) {
       {kind === "sms-client" && <MessageSquare className="w-3 h-3" />}
       {kind === "call"       && <Phone className="w-3 h-3" />}
       {kind === "sms+call"   && <PhoneCall className="w-3 h-3" />}
+      {kind === "vapi-call"  && <PhoneCall className="w-3 h-3" />}
+      {kind === "vapi+cs"    && <PhoneCall className="w-3 h-3" />}
       {kind === "cs-alert"   && <AlertTriangle className="w-3 h-3" />}
       {label}
     </span>
@@ -1116,6 +1239,102 @@ function LogTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// WORKFLOW TAB — TWO SUB-TABS: CLEANERS / CLIENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+function WorkflowStepList({ steps }: { steps: WorkflowStep[] }) {
+  return (
+    <div className="space-y-4">
+      {[...steps].sort((a, b) => a.id - b.id).map((step, idx) => (
+        <div key={step.id}>
+          <StepCard step={step} />
+          {idx < steps.length - 1 && (
+            <div className="flex justify-center my-1">
+              <ArrowDown className="w-4 h-4 text-gray-300" />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkflowTab() {
+  const [subTab, setSubTab] = useState<"cleaners" | "clients">("cleaners");
+
+  return (
+    <>
+      {/* Sub-tab switcher */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+        <button
+          onClick={() => setSubTab("cleaners")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            subTab === "cleaners"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Cleaners
+        </button>
+        <button
+          onClick={() => setSubTab("clients")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            subTab === "clients"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Clients
+        </button>
+      </div>
+
+      {subTab === "cleaners" && (
+        <>
+          {/* Legend */}
+          <div className="mb-6 flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-gray-500 font-medium">Triggers:</span>
+            <TriggerBadge kind="time" />
+            <TriggerBadge kind="status" />
+            <TriggerBadge kind="exception" />
+            <TriggerBadge kind="no-show" />
+            <TriggerBadge kind="post-start" />
+            <span className="text-xs text-gray-400 mx-1">|</span>
+            <span className="text-xs text-gray-500 font-medium">Actions:</span>
+            <ActionBadge kind="sms" />
+            <ActionBadge kind="vapi-call" />
+            <ActionBadge kind="sms+call" />
+            <ActionBadge kind="cs-alert" />
+            <ActionBadge kind="vapi+cs" />
+          </div>
+          <WorkflowStepList steps={WORKFLOW_CLEANERS.filter(s => !s.isClientFacing)} />
+          <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+            <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+            <div className="text-sm text-amber-800">
+              <strong>Automation status:</strong> Kill switch is currently OFF. Flip <code>FIELD_MGMT_ENABLED = true</code> in <code>server/fieldMgmtEngine.ts</code> to go live.
+            </div>
+          </div>
+        </>
+      )}
+
+      {subTab === "clients" && (
+        <>
+          {/* Legend */}
+          <div className="mb-6 flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-gray-500 font-medium">Triggers:</span>
+            <TriggerBadge kind="time" />
+            <TriggerBadge kind="status" />
+            <span className="text-xs text-gray-400 mx-1">|</span>
+            <span className="text-xs text-gray-500 font-medium">Actions:</span>
+            <ActionBadge kind="sms-client" />
+          </div>
+          <WorkflowStepList steps={WORKFLOW_CLIENTS} />
+        </>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1257,42 +1476,7 @@ export default function FieldManagement() {
         {activeTab === "tower" && <ControlTowerTab />}
 
         {activeTab === "workflow" && (
-          <>
-            {/* Legend */}
-            <div className="mb-6 flex flex-wrap gap-2 items-center">
-              <span className="text-xs text-gray-500 font-medium">Triggers:</span>
-              <TriggerBadge kind="time" />
-              <TriggerBadge kind="status" />
-              <TriggerBadge kind="exception" />
-              <TriggerBadge kind="no-show" />
-              <span className="text-xs text-gray-400 mx-1">|</span>
-              <span className="text-xs text-gray-500 font-medium">Actions:</span>
-              <ActionBadge kind="sms" />
-              <ActionBadge kind="sms-client" />
-              <ActionBadge kind="sms+call" />
-              <ActionBadge kind="cs-alert" />
-            </div>
-
-            <div className="space-y-4">
-              {[...WORKFLOW].sort((a, b) => a.id - b.id).map((step, idx) => (
-                <div key={step.id}>
-                  <StepCard step={step} />
-                  {idx < WORKFLOW.length - 1 && (
-                    <div className="flex justify-center my-1">
-                      <ArrowDown className="w-4 h-4 text-gray-300" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-              <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
-              <div className="text-sm text-amber-800">
-                <strong>Automation status:</strong> Kill switch is currently OFF. Flip <code>FIELD_MGMT_ENABLED = true</code> in <code>server/fieldMgmtEngine.ts</code> to go live.
-              </div>
-            </div>
-          </>
+          <WorkflowTab />
         )}
 
         {activeTab === "log" && <LogTab />}
