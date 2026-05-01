@@ -15,9 +15,227 @@ import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQues
 import { resolveExtras } from "../shared/extras";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { getFlowTemplate } from "./settingsRouter";
-import { buildPricingSummary, PRICING_TABLE } from "./engine/pricing";
+import { buildPricingSummary, PRICING_TABLE, calculatePrice, calculateRecurringPrice, RECURRING_DISCOUNTS } from "./engine/pricing";
 
 // ─── Brand System Prompt ──────────────────────────────────────────────────────
+// ─── Layer 1: get_price Tool Call ─────────────────────────────────────────────
+/**
+ * The LLM is given this tool so it NEVER calculates prices itself.
+ * When the lead asks any pricing question, the model calls get_price().
+ * We execute the function locally (deterministic, from pricing.ts) and feed
+ * the result back. The model then formats the message around the verified number.
+ */
+const GET_PRICE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "get_price",
+    description: "Look up the exact price for a cleaning service. ALWAYS call this tool when you need to mention any dollar amount. NEVER calculate or estimate prices yourself.",
+    parameters: {
+      type: "object",
+      properties: {
+        bedrooms: {
+          type: "string",
+          description: "Number of bedrooms, e.g. '2 Bedrooms', '1 Bedroom', 'Studio'",
+        },
+        bathrooms: {
+          type: "string",
+          description: "Number of bathrooms, e.g. '2 Bathrooms', '1.5 Bathrooms'",
+        },
+        serviceType: {
+          type: "string",
+          description: "Service type: 'Standard Cleaning', 'Deep Cleaning', 'Move-In/Move-Out', 'Post-Construction Cleaning'",
+        },
+        frequency: {
+          type: "string",
+          enum: ["one_time", "weekly", "biweekly", "monthly"],
+          description: "Frequency: one_time for a single clean, or weekly/biweekly/monthly for recurring",
+        },
+      },
+      required: ["bedrooms", "bathrooms", "serviceType", "frequency"],
+      additionalProperties: false,
+    },
+  },
+};
+
+/**
+ * Executes the get_price tool call locally using the deterministic pricing engine.
+ * Returns a human-readable string like "$209/clean (15% off for bi-weekly)".
+ */
+function executePriceTool(args: {
+  bedrooms: string;
+  bathrooms: string;
+  serviceType: string;
+  frequency: "one_time" | "weekly" | "biweekly" | "monthly";
+}): string {
+  const { bedrooms, bathrooms, serviceType, frequency } = args;
+  const basePrice = calculatePrice(bedrooms, bathrooms, serviceType);
+  if (frequency === "one_time") {
+    return `$${basePrice} (one-time ${serviceType})`;
+  }
+  const freqKey = frequency as keyof typeof RECURRING_DISCOUNTS;
+  const discountedPrice = calculateRecurringPrice(basePrice, freqKey);
+  const pct = RECURRING_DISCOUNTS[freqKey].pct;
+  const label = RECURRING_DISCOUNTS[freqKey].label;
+  return `$${discountedPrice}/clean (${pct}% off for ${label} recurring — base was $${basePrice})`;
+}
+
+/**
+ * Two-pass LLM invocation with get_price tool support.
+ *
+ * Pass 1: LLM receives the messages + the get_price tool.
+ *   - If the model calls get_price, we execute it locally and do Pass 2.
+ *   - If the model replies directly (no tool call), we return that text.
+ *
+ * Pass 2: We append the tool result and call the LLM again for the final text.
+ *
+ * This ensures the LLM NEVER calculates prices — it only formats verified numbers.
+ */
+async function invokeLLMWithPriceTool(
+  messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; name?: string }>,
+  fallbackBedrooms?: string | null,
+  fallbackBathrooms?: string | null,
+  fallbackServiceType?: string,
+): Promise<string> {
+  // Pass 1: offer the tool
+  const pass1 = await invokeLLM({
+    messages,
+    tools: [GET_PRICE_TOOL],
+    toolChoice: "auto",
+  });
+
+  const pass1Message = pass1.choices?.[0]?.message;
+  const toolCalls = pass1Message?.tool_calls;
+
+  // No tool call — model replied directly (conversational, no price needed)
+  if (!toolCalls || toolCalls.length === 0) {
+    const text = typeof pass1Message?.content === "string" ? pass1Message.content.trim() : "";
+    return text;
+  }
+
+  // Execute all tool calls (usually just one)
+  const toolResultMessages: Array<{ role: "tool"; content: string; tool_call_id: string; name: string }> = [];
+  for (const tc of toolCalls) {
+    let result: string;
+    try {
+      const rawArgs = JSON.parse(tc.function.arguments) as {
+        bedrooms?: string;
+        bathrooms?: string;
+        serviceType?: string;
+        frequency?: string;
+      };
+      // Fall back to context values if the model omitted them
+      const resolvedArgs = {
+        bedrooms: rawArgs.bedrooms ?? fallbackBedrooms ?? "2 Bedrooms",
+        bathrooms: rawArgs.bathrooms ?? fallbackBathrooms ?? "2 Bathrooms",
+        serviceType: rawArgs.serviceType ?? fallbackServiceType ?? "Standard Cleaning",
+        frequency: (rawArgs.frequency ?? "one_time") as "one_time" | "weekly" | "biweekly" | "monthly",
+      };
+      result = executePriceTool(resolvedArgs);
+    } catch (err) {
+      result = "Price lookup failed — use the pricing table in the system context.";
+    }
+    toolResultMessages.push({
+      role: "tool",
+      content: result,
+      tool_call_id: tc.id,
+      name: tc.function.name,
+    });
+  }
+
+  // Pass 2: feed tool results back and get the final reply
+  const pass2Messages = [
+    ...messages,
+    // The assistant's tool-call turn (content may be null — normalize to empty string)
+    {
+      role: "assistant" as const,
+      content: typeof pass1Message?.content === "string" ? pass1Message.content : "",
+      tool_calls: toolCalls,
+    },
+    ...toolResultMessages,
+  ];
+
+  const pass2 = await invokeLLM({ messages: pass2Messages as any });
+  const finalContent = pass2.choices?.[0]?.message?.content;
+  return typeof finalContent === "string" ? finalContent.trim() : "";
+}
+
+// ─── Layer 2: Post-generation Price Validator ──────────────────────────────────
+/**
+ * Builds the complete set of valid dollar amounts for a given lead.
+ * Any price the AI mentions MUST appear in this set.
+ *
+ * Includes:
+ * - One-time price for the lead's home + service
+ * - All three recurring tier prices (weekly, biweekly, monthly)
+ * - Standard cleaning prices (for when serviceType has a surcharge)
+ * - Common add-on amounts ($0, $30 bath add-on, $60 surcharge)
+ *
+ * Returns null if home size is unknown (validation is skipped).
+ */
+function buildValidPriceSet(
+  bedrooms: string | null | undefined,
+  bathrooms: string | null | undefined,
+  serviceType: string,
+  quotedPrice: string,
+): Set<number> | null {
+  if (!bedrooms || !bathrooms) return null;
+
+  const oneTime = calculatePrice(bedrooms, bathrooms, serviceType);
+  const weekly = calculateRecurringPrice(oneTime, "weekly");
+  const biweekly = calculateRecurringPrice(oneTime, "biweekly");
+  const monthly = calculateRecurringPrice(oneTime, "monthly");
+
+  // Also allow standard cleaning prices (no surcharge) so context mentions are valid
+  const standardOneTime = calculatePrice(bedrooms, bathrooms, "Standard Cleaning");
+  const standardWeekly = calculateRecurringPrice(standardOneTime, "weekly");
+  const standardBiweekly = calculateRecurringPrice(standardOneTime, "biweekly");
+  const standardMonthly = calculateRecurringPrice(standardOneTime, "monthly");
+
+  // Allow the quoted price as-is (may be a manually set override)
+  const quoted = parseInt(quotedPrice, 10);
+
+  return new Set([
+    oneTime, weekly, biweekly, monthly,
+    standardOneTime, standardWeekly, standardBiweekly, standardMonthly,
+    // Surcharges and add-ons that may legitimately appear in a reply
+    0, 30, 60,
+    ...(isNaN(quoted) ? [] : [quoted]),
+  ]);
+}
+
+/**
+ * Scans a generated SMS reply for dollar amounts and verifies each one is in
+ * the valid price set for this lead.
+ *
+ * Returns true if all prices are valid (or if validation cannot be performed).
+ * Returns false if any price is invalid — the caller should retry or fall back.
+ */
+function validatePriceInReply(
+  text: string,
+  bedrooms: string | null | undefined,
+  bathrooms: string | null | undefined,
+  serviceType: string,
+  quotedPrice: string,
+): boolean {
+  const validSet = buildValidPriceSet(bedrooms, bathrooms, serviceType, quotedPrice);
+  if (!validSet) return true; // can't validate without home size — pass through
+
+  // Extract all $NNN patterns from the text
+  const matches = text.match(/\$(\d+)/g) ?? [];
+  if (matches.length === 0) return true; // no prices mentioned — nothing to validate
+
+  for (const match of matches) {
+    const amount = parseInt(match.replace("$", ""), 10);
+    if (!validSet.has(amount)) {
+      console.warn(
+        `[PriceValidator] INVALID price $${amount} in reply. Valid set: [${Array.from(validSet).sort((a, b) => a - b).join(", ")}]. Reply: "${text.slice(0, 120)}"`
+      );
+      return false;
+    }
+  }
+  return true;
+}
+
 
 const BRAND_SYSTEM_PROMPT = `You are Jade, the AI assistant for Maids in Black, a professional home cleaning service serving the Washington DC Metro Area (DC, MD, VA).
 
@@ -312,50 +530,51 @@ Instructions:
     ? buildPricingSummary(bedrooms, bathrooms, serviceType)
     : PRICING_TABLE;
 
-  try {
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT },
-        ...recentHistory,
-        {
-          role: "user",
-          content: `The lead sent an off-script reply that doesn't match what we expected.
-
+  // Build the messages array once — reused for retry if validation fails
+  const offScriptMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: BRAND_SYSTEM_PROMPT },
+    ...recentHistory,
+    {
+      role: "user",
+      content: `The lead sent an off-script reply that doesn't match what we expected.
 Lead name: ${firstName}
 Current stage: ${stage}
 Quoted price: $${quotedPrice}
 Service: ${serviceType}${extrasContext ? `\nSelected add-ons: ${extrasContext}` : ""}
 Lead's message: "${leadReply}"
-
 --- PRICING REFERENCE ---
 ${pricingBlock}
 --- END PRICING REFERENCE ---
-
-CRITICAL PRICING RULE: NEVER calculate, estimate, or guess prices. ONLY use the EXACT dollar amounts shown in the PRICING REFERENCE above. If the lead asks about recurring plans (weekly, bi-weekly, monthly), read the exact price from the PRICING REFERENCE — do NOT multiply, subtract, or derive any number yourself.
-
+CRITICAL PRICING RULE: Use the get_price tool when you need to mention any dollar amount. If the lead asks about recurring plans (weekly, bi-weekly, monthly), call get_price with the correct frequency — do NOT calculate or estimate prices yourself.
 Instructions:
 1. Respond naturally to their message in 1-2 sentences max
 2. If they asked a question about a selected add-on, confirm we will take care of it
-3. If they asked a pricing question, answer it using ONLY the exact prices from the PRICING REFERENCE above
+3. If they asked a pricing question, call the get_price tool to get the exact amount, then include it in your reply
 4. End your reply by gently steering back: ${nextAction}
 5. Keep total reply under 200 characters
 6. Do NOT repeat information already sent`,
-        },
-      ],
-    });
+    },
+  ];
 
-    const content = response.choices?.[0]?.message?.content;
-    const text = typeof content === "string" ? content.trim() : "";
+  // Layer 1 + Layer 2: tool call + post-generation validation, with one retry
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await invokeLLMWithPriceTool(offScriptMessages, bedrooms, bathrooms, serviceType);
+      if (!text) break;
 
-    if (text) {
+      // Layer 2: validate every dollar amount in the reply
+      if (!validatePriceInReply(text, bedrooms, bathrooms, serviceType, quotedPrice)) {
+        console.warn(`[AI] handleOffScriptReply price validation failed on attempt ${attempt + 1} — ${attempt < 1 ? "retrying" : "falling back"}`);
+        continue; // retry
+      }
+
       return { reply: text, shouldAdvanceStage: false, isWrongPath: false };
+    } catch (err) {
+      console.error("[AI] handleOffScriptReply failed:", err);
+      break;
     }
-
-    return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false, isWrongPath: false };
-  } catch (err) {
-    console.error("[AI] handleOffScriptReply failed:", err);
-    return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false, isWrongPath: false };
   }
+  return { reply: buildFallbackOffScript(nextAction), shouldAdvanceStage: false, isWrongPath: false };
 }
 
 // ─── Objection Handler ────────────────────────────────────────────────────────
@@ -396,27 +615,32 @@ export async function handleObjection(
     ? `\n\n--- PRICING REFERENCE ---\n${pricingBlock}\n--- END PRICING REFERENCE ---\n\nCRITICAL PRICING RULE: NEVER calculate, estimate, or guess prices. ONLY use the EXACT dollar amounts shown in the PRICING REFERENCE above.`
     : "";
 
-  try {
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `Handle this sales objection for lead ${firstName}. Keep reply under 200 characters.\n\n${objectionPrompts[objectionType]}${pricingSection}`,
-        },
-      ],
-    });
+  const objectionMessages: Array<{ role: "system" | "user"; content: string }> = [
+    { role: "system", content: BRAND_SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `Handle this sales objection for lead ${firstName}. Keep reply under 200 characters.\n\n${objectionPrompts[objectionType]}${pricingSection}\n\nIf you need to mention a price, call the get_price tool to get the exact amount.`,
+    },
+  ];
 
-    const content = response.choices?.[0]?.message?.content;
-    const text = typeof content === "string" ? content.trim() : "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await invokeLLMWithPriceTool(objectionMessages, ctx.bedrooms, ctx.bathrooms, ctx.serviceType);
+      if (!text) break;
 
-    if (text) {
+      // Layer 2: validate every dollar amount in the reply
+      if (!validatePriceInReply(text, ctx.bedrooms, ctx.bathrooms, ctx.serviceType, ctx.quotedPrice)) {
+        console.warn(`[AI] handleObjection price validation failed on attempt ${attempt + 1} — ${attempt < 1 ? "retrying" : "falling back"}`);
+        continue;
+      }
+
       // For future_booking, advance the stage so the lead is tagged correctly
       const nextStage = objectionType === "future_booking" ? "FUTURE_BOOKING" : null;
       return { reply: text, nextStage };
+    } catch (err) {
+      console.error("[AI] handleObjection failed:", err);
+      break;
     }
-  } catch (err) {
-    console.error("[AI] handleObjection failed:", err);
   }
 
   // Fallback responses per objection type
