@@ -8,7 +8,7 @@ export const systemRouter = router({
     .query(async () => {
       const widgetUrl = "https://leadflowqf-caerhauj.manus.space/api/widget.js";
       try {
-        const res = await fetch(widgetUrl, { signal: AbortSignal.timeout(8000) });
+        const res = await fetch(widgetUrl, { signal: AbortSignal.timeout(3000) });
         if (!res.ok) {
           return { ok: false, version: null, error: `HTTP ${res.status}`, checkedAt: new Date() };
         }
@@ -35,7 +35,7 @@ export const systemRouter = router({
       try {
         const res = await fetch("https://api.openphone.com/v1/webhooks", {
           headers: { "Authorization": apiKey },
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(3000),
         });
         if (!res.ok) {
           return { ok: false, status: "error", url: null, error: `OpenPhone API ${res.status}`, checkedAt: new Date() };
