@@ -1283,7 +1283,7 @@ function WorkflowTab() {
           <div className="mt-8 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
             <div className="text-sm text-amber-800">
-              <strong>Automation status:</strong> Kill switch is currently OFF. Flip <code>FIELD_MGMT_ENABLED = true</code> in <code>server/fieldMgmtEngine.ts</code> to go live.
+              <strong>Automation status:</strong> <span className="text-green-700 font-semibold">LIVE</span> — All steps are active. <code>FIELD_MGMT_ENABLED = true</code>. Step deduplication is enforced via DB unique constraint on <code>(cleanerJobId, step)</code>.
             </div>
           </div>
         </>

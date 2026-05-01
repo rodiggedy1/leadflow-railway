@@ -1410,6 +1410,15 @@ export const fieldMgmtSteps = [
   "exception_call",
   "noshow_alert",
   "noshow_call",
+  // T-58min VAPI check-in call attempts (3 attempts, 2 min apart)
+  "checkin_call_attempt_1",
+  "checkin_call_attempt_2",
+  "checkin_call_attempt_3",
+  // Post-start escalation steps
+  "post_start_call_1",
+  "post_start_cs_alert",
+  "post_start_call_2",
+  "post_start_noshow_flag",
 ] as const;
 
 export type FieldMgmtStep = (typeof fieldMgmtSteps)[number];
