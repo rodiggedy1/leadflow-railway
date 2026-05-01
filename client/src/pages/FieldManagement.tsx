@@ -121,24 +121,19 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
     label: "Exception Escalation — Cleaner Not Responding",
     triggerKind: "exception",
     triggerDescription:
-      "30 minutes before job start AND no \"On the Way\" status OR no check-in received",
-    actionKind: "sms+call",
+      "25–35 minutes before job start AND no \"On the Way\", \"Arrived\", or \"In Progress\" status",
+    actionKind: "sms",
     isException: true,
     messages: [
       {
         role: "outbound",
         content: "Hey — we haven't received your check-in. Is everything okay?\n{{magic_link}}",
-        note: "Step 1: SMS to the cleaner fires first. {{magic_link}} is their personal one-tap login link.",
-      },
-      {
-        role: "call",
-        content: "Auto-call placed to cleaner if no reply within 10 minutes.",
-        note: "Step 2: If no response to the SMS, an automated call to the cleaner is triggered.",
+        note: "SMS sent directly to the cleaner. {{magic_link}} is their personal one-tap login link. No CS alert, no call — SMS only.",
       },
     ],
     notes: [
-      "Also triggers if job is marked complete but no photos have been uploaded within 30 minutes.",
-      "Escalation goes: SMS → wait 10 min → auto-call → alert CS team if still no response.",
+      "SMS goes to the cleaner only. No automated call, no Command Chat card at this stage.",
+      "Deduplicated via tryClaimStep (step: exception_sms) — fires once per job.",
     ],
   },
   {
@@ -155,12 +150,13 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
         role: "cs-alert",
         content:
           "🚨 NO-SHOW ALERT\n\nCleaner: {{cleaner_name}}\nJob: {{client_name}} at {{address}}\nScheduled: {{job_time}}\n\nNo \"On the Way\" or \"Arrived\" status received. Please call the cleaner immediately and notify the client.",
-        note: "Posts a card to Command Chat. CS team sees it in the chat window and must call the cleaner and notify the client.",
+        note: "SMS sent to CS phone number (CS_ALERT_NUMBER) AND a card posted to Command Chat (quickAction: noshow_alert). No message to cleaner or client.",
       },
     ],
     notes: [
-      "This is a CS team alert — no automated message goes to the cleaner or client at this stage.",
-      "CS team is responsible for calling the cleaner to confirm status and calling the client to set expectations.",
+      "Fires 5–15 minutes before job start. Triggers window: job starting in 5–15 min with no on_the_way or arrived status.",
+      "Two things happen: SMS to CS team phone + card in Command Chat. CS must then call the cleaner and notify the client.",
+      "No automated message goes to the cleaner or client from this step.",
     ],
   },
   {
@@ -179,13 +175,18 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
       },
       {
         role: "cs-alert",
-        content: "🚨 POST-START NO CHECK-IN\n\nCleaner: {{cleaner_name}}\nJob: {{client_name}} at {{address}}\nStarted: {{job_time}}\n\nNo check-in received after job start. First VAPI call placed. Monitoring.",
-        note: "T+5 to T+10 min: Card posted to Command Chat + ops board card (post_start_cs_alert). Not an SMS.",
+        content: "🚨 OVERDUE — No Check-In\n\nCleaner: {{cleaner_name}}\nClient: {{client_name}} at {{address}}\nScheduled: {{job_time}}\n\nJob started {{minutes}} min ago. No status received. Please call the cleaner immediately.",
+        note: "T+5 to T+10 min: SMS sent to CS phone number (CS_ALERT_NUMBER) AND a card posted to Command Chat (quickAction: post_start_overdue). Both happen.",
       },
       {
         role: "call",
         content: "[Second call] Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
-        note: "T+10 to T+15 min: Second VAPI call to cleaner (post_start_call_2) + ops board no-show flag card (post_start_noshow_flag). No message to client at any point.",
+        note: "T+10 to T+15 min: Second VAPI outbound call to the cleaner (post_start_call_2).",
+      },
+      {
+        role: "cs-alert",
+        content: "⚠️ Possible No-Show — {{cleaner_name}} still has not checked in. Job started {{minutes}} min ago for {{client_name}} at {{address}} ({{job_time}}).",
+        note: "T+10 to T+15 min: Command Chat card only (quickAction: possible_noshow). No SMS at this step.",
       },
     ],
     notes: [
