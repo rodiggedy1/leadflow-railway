@@ -1786,3 +1786,231 @@ async function placeCheckinCall(
     await recordStep({ cleanerJobId, step, success: false, recipientPhone: normalizedPhone, errorDetail: msg });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST-START ESCALATION
+// Fires after the job start time has passed with no check-in.
+//
+// Step 1 — post_start_call_1  (T+0 to T+5 min window)
+//   VAPI call to cleaner: "Your job has started and we have not received your
+//   check-in. Please respond immediately or your assignment may be cancelled
+//   and a penalty charged."
+//
+// Step 2 — post_start_cs_alert  (T+5 to T+10 min window)
+//   SMS to CS team: high-urgency overdue alert.
+//   + ops board card posted to CommandChat.
+//
+// Step 3 — post_start_call_2  (T+10 to T+15 min window)
+//   Second VAPI call to cleaner (same script).
+//
+// Step 4 — post_start_noshow_flag  (T+10 to T+15 min window)
+//   "Possible no-show" flag posted to ops board.
+//
+// All steps are idempotent via tryClaimStep.
+// All steps stop immediately if the cleaner checks in between runs.
+// No customer SMS is sent at any point.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function runPostStartEscalation(): Promise<{ checked: number; acted: number; errors: number }> {
+  const db = await getDb();
+  if (!db) return { checked: 0, acted: 0, errors: 0 };
+
+  const now = new Date();
+  // Window: job started between 0 and 15 minutes ago
+  const windowStart = new Date(now.getTime() - 15 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime());
+
+  const jobs = await db
+    .select({
+      id:              cleanerJobs.id,
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName:     cleanerJobs.cleanerName,
+      customerName:    cleanerJobs.customerName,
+      jobAddress:      cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobStatus:       cleanerJobs.jobStatus,
+      bookingStatus:   cleanerJobs.bookingStatus,
+      cleanerPhone:    cleanerProfiles.phone,
+    })
+    .from(cleanerJobs)
+    .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+    .where(
+      and(
+        inArray(cleanerJobs.bookingStatus, ["assigned", "new"]),
+        sql`${cleanerJobs.serviceDateTime} IS NOT NULL`
+      )
+    );
+
+  let acted = 0;
+  let errors = 0;
+  let jobIndex = 0;
+
+  for (const job of jobs) {
+    if (!job.serviceDateTime) continue;
+    const serviceTime = parseServiceDateTime(job.serviceDateTime);
+    if (!serviceTime) continue;
+    const serviceMs = serviceTime.getTime();
+
+    // Only jobs whose start time falls within the 0–15 min window
+    if (serviceMs < windowStart.getTime() || serviceMs > windowEnd.getTime()) continue;
+
+    // Skip if cleaner has already checked in
+    if (
+      job.jobStatus === "on_the_way" ||
+      job.jobStatus === "arrived"    ||
+      job.jobStatus === "in_progress" ||
+      job.jobStatus === "completed"
+    ) continue;
+
+    const minutesPast = Math.floor((now.getTime() - serviceMs) / 60000);
+    const timeStr = formatTimeET(serviceTime);
+    const cleanerName = job.cleanerName ?? "Unknown";
+    const cleanerPhone = job.cleanerPhone ?? undefined;
+    const jobIdForCall = job.id;
+    const staggerMs = jobIndex * 30 * 1000;
+    jobIndex++;
+
+    // ── Step 1: T+0 to T+5 — VAPI call to cleaner ──────────────────────────
+    if (minutesPast >= 0 && minutesPast < 5) {
+      const claimed = await tryClaimStep({
+        cleanerJobId: jobIdForCall,
+        step: "post_start_call_1",
+        recipientPhone: cleanerPhone ?? CS_ALERT_NUMBER,
+      });
+      if (claimed && cleanerPhone) {
+        acted++;
+        sleep(staggerMs)
+          .then(() =>
+            placeCheckinCall(
+              jobIdForCall,
+              cleanerName,
+              cleanerPhone,
+              "Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
+              "post_start_call_1"
+            )
+          )
+          .catch((err) => {
+            errors++;
+            console.error(`[FieldMgmt] post_start_call_1 failed for job ${jobIdForCall}:`, err);
+          });
+      }
+    }
+
+    // ── Step 2: T+5 to T+10 — CS alert SMS + ops board card ────────────────
+    if (minutesPast >= 5 && minutesPast < 10) {
+      const msg = [
+        `🚨 OVERDUE — No Check-In`,
+        `Cleaner: ${cleanerName}`,
+        `Client: ${job.customerName ?? "Unknown"}`,
+        `Address: ${job.jobAddress ?? "Unknown"}`,
+        `Scheduled: ${timeStr}`,
+        ``,
+        `Job started ${minutesPast} min ago. No status received. Please call the cleaner immediately.`,
+      ].join("\n");
+
+      const claimed = await tryClaimStep({
+        cleanerJobId: jobIdForCall,
+        step: "post_start_cs_alert",
+        smsSent: msg,
+        recipientPhone: CS_ALERT_NUMBER,
+      });
+      if (claimed) {
+        acted++;
+        const result = await sendSms({ to: CS_ALERT_NUMBER, content: msg });
+        if (result.success) {
+          console.log(`[FieldMgmt] Post-start CS alert sent for job ${jobIdForCall} (${cleanerName})`);
+          // Post to ops board
+          try {
+            await db.insert(opsChatMessages).values({
+              channel: "command",
+              from: "System",
+              authorName: "System",
+              authorRole: "system",
+              body: `🚨 OVERDUE — ${cleanerName} has not checked in. Job started ${minutesPast} min ago${job.customerName ? ` for ${job.customerName}` : ""} (${timeStr})`,
+              metadata: JSON.stringify({
+                cleanerJobId: jobIdForCall,
+                cleanerName,
+                customerName: job.customerName,
+                timeStr,
+                minutesPast,
+              }),
+              cleanerJobId: jobIdForCall,
+              quickAction: "post_start_overdue",
+            } as any);
+            const { broadcastOpsUpdate } = await import("./sseBroadcast");
+            broadcastOpsUpdate("new_message");
+          } catch (e) {
+            console.error(`[FieldMgmt] Failed to post post_start_cs_alert ops card for job ${jobIdForCall}:`, e);
+          }
+        } else {
+          errors++;
+          console.error(`[FieldMgmt] post_start_cs_alert SMS failed for job ${jobIdForCall}`);
+        }
+      }
+    }
+
+    // ── Step 3: T+10 to T+15 — Second VAPI call to cleaner ─────────────────
+    if (minutesPast >= 10 && minutesPast < 15) {
+      const claimed = await tryClaimStep({
+        cleanerJobId: jobIdForCall,
+        step: "post_start_call_2",
+        recipientPhone: cleanerPhone ?? CS_ALERT_NUMBER,
+      });
+      if (claimed && cleanerPhone) {
+        acted++;
+        sleep(staggerMs)
+          .then(() =>
+            placeCheckinCall(
+              jobIdForCall,
+              cleanerName,
+              cleanerPhone,
+              "Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
+              "post_start_call_2"
+            )
+          )
+          .catch((err) => {
+            errors++;
+            console.error(`[FieldMgmt] post_start_call_2 failed for job ${jobIdForCall}:`, err);
+          });
+      }
+    }
+
+    // ── Step 4: T+10 to T+15 — Possible no-show flag on ops board ──────────
+    if (minutesPast >= 10 && minutesPast < 15) {
+      const claimed = await tryClaimStep({
+        cleanerJobId: jobIdForCall,
+        step: "post_start_noshow_flag",
+        recipientPhone: CS_ALERT_NUMBER,
+      });
+      if (claimed) {
+        acted++;
+        try {
+          await db.insert(opsChatMessages).values({
+            channel: "command",
+            from: "System",
+            authorName: "System",
+            authorRole: "system",
+            body: `⚠️ Possible No-Show — ${cleanerName} still has not checked in. Job started ${minutesPast} min ago${job.customerName ? ` for ${job.customerName}` : ""} at ${job.jobAddress ?? "Unknown"} (${timeStr})`,
+            metadata: JSON.stringify({
+              cleanerJobId: jobIdForCall,
+              cleanerName,
+              customerName: job.customerName,
+              timeStr,
+              minutesPast,
+              flag: "possible_noshow",
+            }),
+            cleanerJobId: jobIdForCall,
+            quickAction: "possible_noshow",
+          } as any);
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message");
+          console.log(`[FieldMgmt] Possible no-show flag posted for job ${jobIdForCall} (${cleanerName})`);
+        } catch (e) {
+          errors++;
+          console.error(`[FieldMgmt] Failed to post post_start_noshow_flag ops card for job ${jobIdForCall}:`, e);
+        }
+      }
+    }
+  }
+
+  return { checked: jobs.length, acted, errors };
+}

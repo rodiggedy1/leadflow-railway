@@ -36,6 +36,7 @@ import {
   runExceptionHandling,
   runNoShowEscalation,
   runCheckinCalls,
+  runPostStartEscalation,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
@@ -362,13 +363,14 @@ export function startInternalCron(): void {
   cron.schedule("0 */5 6-22 * * *", async () => {
     if (!FIELD_MGMT_ENABLED) return;
     try {
-      const [reminders, clientPreJob, nudges, exceptions, noshow, checkinCalls] = await Promise.all([
+      const [reminders, clientPreJob, nudges, exceptions, noshow, checkinCalls, postStart] = await Promise.all([
         runPreJobReminders(),
         runClientPreJobNotifications(),
         runMidJobNudges(),
         runExceptionHandling(),
         runNoShowEscalation(),
         runCheckinCalls(),
+        runPostStartEscalation(),
       ]);
       const summary = [
         `reminders: ${reminders.sent}/${reminders.checked}`,
@@ -377,8 +379,9 @@ export function startInternalCron(): void {
         `exceptions: ${exceptions.sent}/${exceptions.checked}`,
         `noshow: ${noshow.sent}/${noshow.checked}`,
         `checkinCalls: ${checkinCalls.called}/${checkinCalls.checked}`,
+        `postStart: ${postStart.acted}/${postStart.checked}`,
       ].join(", ");
-      const didWork = reminders.sent + clientPreJob.sent + nudges.sent + exceptions.sent + noshow.sent + checkinCalls.called > 0;
+      const didWork = reminders.sent + clientPreJob.sent + nudges.sent + exceptions.sent + noshow.sent + checkinCalls.called + postStart.acted > 0;
       if (didWork) console.log(`[InternalCron] FieldMgmt — ${summary}`);
       await recordHeartbeat("field-mgmt", summary, didWork);
     } catch (err) {
