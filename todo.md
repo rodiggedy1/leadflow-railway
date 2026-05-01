@@ -21,6 +21,7 @@
 - [x] Write vitest unit tests for validatePriceInReply and buildValidPriceSet (regression test for price hallucination guard) — 24 tests covering both layers, all home sizes, retry logic, and edge cases
 - [x] Extend Layer 1 (tool call) + Layer 2 (validator) to handlePostBookingReply — added bedrooms/bathrooms to PostBookingContext, both call sites (conversationEngine.ts + routers.ts simulator)
 - [x] Add respondedAt column + markHandled mutation + Mark as Handled button on lead cards (remove from unresponded without closing) — self-healing: auto-reappears if customer texts again
+- [x] Move widgetHealth + webhookHealth + syncHealth to independent delayed polling (5s/7s/9s staggered delays, 60s interval) — never blocks main page load batch
 - [ ] Show net pay on job card itself (next to cleaner name, without opening panel)
 - [ ] Include applied custom rule totals in weekly pay summary
 - [ ] Add note field when toggling a custom rule on (audit trail)

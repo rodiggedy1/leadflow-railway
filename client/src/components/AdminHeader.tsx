@@ -44,14 +44,26 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+// ── Delayed-enable hook — prevents health checks from joining the initial page-load batch.
+// Returns false for the first `delayMs` milliseconds, then flips to true.
+function useDelayedEnable(delayMs = 5000): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setReady(true), delayMs);
+    return () => clearTimeout(id);
+  }, [delayMs]);
+  return ready;
+}
+
 // ── Widget health badge ───────────────────────────────────────────────────
 export function WidgetHealthBadge({ enabled = false }: { enabled?: boolean }) {
+  const delayedReady = useDelayedEnable(5000);
   const { data, isFetching, refetch } = trpc.system.widgetHealth.useQuery(undefined, {
-    refetchInterval: 5 * 60 * 1000,
-    staleTime: 4 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    staleTime: 55 * 1000,
     retry: false,
     throwOnError: false,
-    enabled,
+    enabled: enabled && delayedReady,
   });
   if (!data && isFetching) {
     return (
@@ -90,12 +102,13 @@ export function WidgetHealthBadge({ enabled = false }: { enabled?: boolean }) {
 
 // ── OpenPhone Webhook health badge ───────────────────────────────────────
 export function WebhookHealthBadge({ enabled = false }: { enabled?: boolean }) {
+  const delayedReady = useDelayedEnable(7000);
   const { data, isFetching, refetch } = trpc.system.webhookHealth.useQuery(undefined, {
-    refetchInterval: 5 * 60 * 1000,
-    staleTime: 4 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    staleTime: 55 * 1000,
     retry: false,
     throwOnError: false,
-    enabled,
+    enabled: enabled && delayedReady,
   });
   if (!data && isFetching) {
     return (
@@ -134,12 +147,13 @@ export function WebhookHealthBadge({ enabled = false }: { enabled?: boolean }) {
 
 // ── Sync Health badge ────────────────────────────────────────────────────────
 export function SyncHealthBadge({ enabled = false }: { enabled?: boolean }) {
+  const delayedReady = useDelayedEnable(9000);
   const { data, isFetching, refetch } = trpc.syncHealth.getSummary.useQuery(undefined, {
-    refetchInterval: 5 * 60 * 1000,
-    staleTime: 4 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    staleTime: 55 * 1000,
     retry: false,
     throwOnError: false,
-    enabled,
+    enabled: enabled && delayedReady,
   });
 
   if (!data && isFetching) {
