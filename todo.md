@@ -15,6 +15,7 @@
 
 ## Pending
 
+- [x] Fix AI pricing hallucination — inject locked PRICING_TABLE into handleOffScriptReply and handleObjection in aiService.ts; add bedrooms/bathrooms to OffScriptContext and all 10 call sites in conversationEngine.ts + routers.ts simulator
 - [ ] Show net pay on job card itself (next to cleaner name, without opening panel)
 - [ ] Include applied custom rule totals in weekly pay summary
 - [ ] Add note field when toggling a custom rule on (audit trail)

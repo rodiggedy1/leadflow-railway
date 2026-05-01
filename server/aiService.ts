@@ -15,6 +15,7 @@ import { getNextAvailableSlots, formatAvailabilityQuestion, formatSlotChoiceQues
 import { resolveExtras } from "../shared/extras";
 import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { getFlowTemplate } from "./settingsRouter";
+import { buildPricingSummary, PRICING_TABLE } from "./engine/pricing";
 
 // ─── Brand System Prompt ──────────────────────────────────────────────────────
 
@@ -168,6 +169,10 @@ export interface OffScriptContext {
   leadName: string;
   quotedPrice: string;
   serviceType: string;
+  /** Bedrooms from the lead's quote — used to build a precise pricing summary */
+  bedrooms?: string | null;
+  /** Bathrooms from the lead's quote — used to build a precise pricing summary */
+  bathrooms?: string | null;
   selectedSlot?: string | null;
   messageHistory: Array<{ role: "assistant" | "user"; content: string }>;
   leadReply: string;
@@ -248,7 +253,7 @@ Return false for:
  * Falls back to a safe generic response if AI fails.
  */
 export async function handleOffScriptReply(ctx: OffScriptContext): Promise<OffScriptResult> {
-  const { stage, leadName, quotedPrice, serviceType, selectedSlot, messageHistory, leadReply, extrasContext } = ctx;
+  const { stage, leadName, quotedPrice, serviceType, bedrooms, bathrooms, selectedSlot, messageHistory, leadReply, extrasContext } = ctx;
   const firstName = leadName.split(" ")[0] ?? leadName;
 
   // ── Step 1: Classify — is this person NOT a new booking lead? ────────────────
@@ -300,6 +305,13 @@ Instructions:
     content: m.content,
   }));
 
+  // Build a precise pricing summary for this lead's home size, or fall back to the
+  // full pricing table if bedrooms/bathrooms are not available. This is the single
+  // source of truth — the LLM MUST NOT calculate or estimate any prices.
+  const pricingBlock = (bedrooms && bathrooms)
+    ? buildPricingSummary(bedrooms, bathrooms, serviceType)
+    : PRICING_TABLE;
+
   try {
     const response = await invokeLLM({
       messages: [
@@ -315,10 +327,16 @@ Quoted price: $${quotedPrice}
 Service: ${serviceType}${extrasContext ? `\nSelected add-ons: ${extrasContext}` : ""}
 Lead's message: "${leadReply}"
 
+--- PRICING REFERENCE ---
+${pricingBlock}
+--- END PRICING REFERENCE ---
+
+CRITICAL PRICING RULE: NEVER calculate, estimate, or guess prices. ONLY use the EXACT dollar amounts shown in the PRICING REFERENCE above. If the lead asks about recurring plans (weekly, bi-weekly, monthly), read the exact price from the PRICING REFERENCE — do NOT multiply, subtract, or derive any number yourself.
+
 Instructions:
 1. Respond naturally to their message in 1-2 sentences max
 2. If they asked a question about a selected add-on, confirm we will take care of it
-3. If they asked a question, answer it briefly (or say our team will cover it on the call)
+3. If they asked a pricing question, answer it using ONLY the exact prices from the PRICING REFERENCE above
 4. End your reply by gently steering back: ${nextAction}
 5. Keep total reply under 200 characters
 6. Do NOT repeat information already sent`,
@@ -354,12 +372,18 @@ export interface ObjectionResult {
  */
 export async function handleObjection(
   objectionType: ObjectionType,
-  ctx: { leadName: string; quotedPrice: string; serviceType: string }
+  ctx: { leadName: string; quotedPrice: string; serviceType: string; bedrooms?: string | null; bathrooms?: string | null }
 ): Promise<ObjectionResult> {
   const firstName = ctx.leadName.split(" ")[0] ?? ctx.leadName;
 
+  // Build a precise pricing summary for this lead's home size so the LLM can quote
+  // accurate recurring prices when handling price_too_high objections.
+  const pricingBlock = (ctx.bedrooms && ctx.bathrooms)
+    ? buildPricingSummary(ctx.bedrooms, ctx.bathrooms, ctx.serviceType)
+    : PRICING_TABLE;
+
   const objectionPrompts: Record<ObjectionType, string> = {
-    price_too_high: `The lead thinks the price of $${ctx.quotedPrice} is too high. Acknowledge their concern, briefly justify the value (professional team, insured, satisfaction guarantee), and offer to discuss options on the confirmation call. End with the availability question.`,
+    price_too_high: `The lead thinks the price of $${ctx.quotedPrice} is too high. Acknowledge their concern, briefly justify the value (professional team, insured, satisfaction guarantee), and mention that recurring plans (bi-weekly or monthly) are available at a lower rate — use ONLY the exact recurring prices from the PRICING REFERENCE below. End with the availability question.`,
     not_available: `The lead said the offered dates don't work. Acknowledge this, tell them we have other openings and our team can find a time that works, and ask them to share what days/times work best for them.`,
     need_to_think: `The lead said they need to think about it. Acknowledge this warmly, create gentle urgency (slots fill up), and ask if they'd like to tentatively hold a spot.`,
     already_have_cleaner: `The lead mentioned they already have a cleaner. Acknowledge this, briefly differentiate Maids in Black (insured, professional, satisfaction guarantee), and offer a first-clean trial at the quoted price.`,
@@ -367,13 +391,18 @@ export async function handleObjection(
     other: `The lead sent an unclear or unexpected message. Respond warmly and ask how you can help them get their home cleaned.`,
   };
 
+  // Only inject pricing block for price-related objections
+  const pricingSection = objectionType === "price_too_high"
+    ? `\n\n--- PRICING REFERENCE ---\n${pricingBlock}\n--- END PRICING REFERENCE ---\n\nCRITICAL PRICING RULE: NEVER calculate, estimate, or guess prices. ONLY use the EXACT dollar amounts shown in the PRICING REFERENCE above.`
+    : "";
+
   try {
     const response = await invokeLLM({
       messages: [
         { role: "system", content: BRAND_SYSTEM_PROMPT },
         {
           role: "user",
-          content: `Handle this sales objection for lead ${firstName}. Keep reply under 200 characters.\n\n${objectionPrompts[objectionType]}`,
+          content: `Handle this sales objection for lead ${firstName}. Keep reply under 200 characters.\n\n${objectionPrompts[objectionType]}${pricingSection}`,
         },
       ],
     });

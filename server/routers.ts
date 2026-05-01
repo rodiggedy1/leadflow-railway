@@ -5044,7 +5044,7 @@ Your job: fill in the following message template using the booking details provi
         })
       )
       .mutation(async ({ input }) => {
-        const { message, history, leadName, serviceType, quotedPrice, extras, stage, selectedSlot } = input;
+        const { message, history, leadName, serviceType, quotedPrice, extras, stage, selectedSlot, bedrooms, bathrooms } = input;
         const extrasContext = extras.length > 0 ? extras.join(", ") : null;
 
         let reply: string;
@@ -5067,6 +5067,8 @@ Your job: fill in the following message template using the booking details provi
             leadName,
             quotedPrice,
             serviceType,
+            bedrooms,
+            bathrooms,
             selectedSlot,
             messageHistory: history,
             leadReply: message,
