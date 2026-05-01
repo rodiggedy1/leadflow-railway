@@ -22,6 +22,7 @@
 - [x] Extend Layer 1 (tool call) + Layer 2 (validator) to handlePostBookingReply — added bedrooms/bathrooms to PostBookingContext, both call sites (conversationEngine.ts + routers.ts simulator)
 - [x] Add respondedAt column + markHandled mutation + Mark as Handled button on lead cards (remove from unresponded without closing) — self-healing: auto-reappears if customer texts again
 - [x] Move widgetHealth + webhookHealth + syncHealth to independent delayed polling (5s/7s/9s staggered delays, 60s interval) — never blocks main page load batch
+- [x] Add T-58min VAPI check-in call to cleaner (3 attempts, 2 min apart, re-checks status between each) — "Please check in for your next job now to avoid payment penalties and so your client knows what is going on."
 - [ ] Show net pay on job card itself (next to cleaner name, without opening panel)
 - [ ] Include applied custom rule totals in weekly pay summary
 - [ ] Add note field when toggling a custom rule on (audit trail)

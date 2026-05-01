@@ -1584,3 +1584,205 @@ async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
     console.error(`[FieldMgmt] Assignment SMS FAILED for job ${job.id}:`, result.error);
   }
 }
+
+// ── Step 8: T-58min Check-In Call (3 attempts, 2 min apart) ──────────────────
+/**
+ * Runs every 5 minutes. Finds jobs starting in 53–63 minutes where:
+ * - Cleaner has NOT set on_the_way, arrived, in_progress, or completed
+ * - No checkin_call_attempt_1 has been fired yet
+ * Places up to 3 VAPI calls to the cleaner, 2 minutes apart.
+ * Re-checks job status before each subsequent attempt — stops if cleaner checks in.
+ */
+export async function runCheckinCalls(): Promise<{ checked: number; called: number; errors: number }> {
+  if (!FIELD_MGMT_ENABLED) return { checked: 0, called: 0, errors: 0 };
+  const db = await getDb();
+  if (!db) return { checked: 0, called: 0, errors: 0 };
+  const now = Date.now();
+  // Window: jobs starting 53–63 minutes from now (±5 min around T-58)
+  const windowStart = new Date(now + 53 * 60 * 1000);
+  const windowEnd = new Date(now + 63 * 60 * 1000);
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName: cleanerJobs.cleanerName,
+      customerName: cleanerJobs.customerName,
+      jobAddress: cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobStatus: cleanerJobs.jobStatus,
+      bookingStatus: cleanerJobs.bookingStatus,
+      cleanerPhone: cleanerProfiles.phone,
+    })
+    .from(cleanerJobs)
+    .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+    .where(
+      and(
+        inArray(cleanerJobs.bookingStatus, ["assigned", "new"]),
+        sql`${cleanerJobs.serviceDateTime} IS NOT NULL`
+      )
+    );
+
+  let called = 0;
+  let errors = 0;
+  let jobIndex = 0; // stagger calls 30s apart across multiple jobs
+
+  for (const job of jobs) {
+    if (!job.serviceDateTime) continue;
+    const serviceTime = parseServiceDateTime(job.serviceDateTime);
+    if (!serviceTime) continue;
+    const serviceMs = serviceTime.getTime();
+    if (serviceMs < windowStart.getTime() || serviceMs > windowEnd.getTime()) continue;
+
+    // Skip if cleaner already on the way or further
+    if (
+      job.jobStatus === "on_the_way" ||
+      job.jobStatus === "arrived" ||
+      job.jobStatus === "in_progress" ||
+      job.jobStatus === "completed"
+    ) continue;
+
+    if (!job.cleanerPhone) {
+      console.warn(`[FieldMgmt] T-58 check-in call: no phone for cleaner on job ${job.id} — skipping`);
+      continue;
+    }
+
+    // Dedup guard: only fire if attempt 1 hasn't been claimed yet
+    const alreadyFired = await stepAlreadyFired(job.id, "checkin_call_attempt_1");
+    if (alreadyFired) continue;
+
+    const timeStr = formatTimeET(serviceTime);
+    const script = `Please check in for your next job now to avoid payment penalties and so your client knows what is going on.`;
+
+    const jobIdForCall = job.id;
+    const cleanerNameForCall = job.cleanerName ?? "Unknown";
+    const cleanerPhoneForCall = job.cleanerPhone;
+    const staggerMs = jobIndex * 30 * 1000;
+    jobIndex++;
+
+    // Fire all 3 attempts asynchronously (non-blocking, staggered)
+    sleep(staggerMs)
+      .then(async () => {
+        // ── Attempt 1 ──
+        const claimed1 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_attempt_1", recipientPhone: cleanerPhoneForCall });
+        if (!claimed1) return;
+        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_attempt_1");
+        called++;
+
+        // Wait 2 minutes, re-check status
+        await sleep(2 * 60 * 1000);
+        const stillNeeded1 = await isCheckinStillNeeded(jobIdForCall);
+        if (!stillNeeded1) return;
+
+        // ── Attempt 2 ──
+        const claimed2 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_attempt_2", recipientPhone: cleanerPhoneForCall });
+        if (!claimed2) return;
+        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_attempt_2");
+
+        // Wait 2 more minutes, re-check status
+        await sleep(2 * 60 * 1000);
+        const stillNeeded2 = await isCheckinStillNeeded(jobIdForCall);
+        if (!stillNeeded2) return;
+
+        // ── Attempt 3 ──
+        const claimed3 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_attempt_3", recipientPhone: cleanerPhoneForCall });
+        if (!claimed3) return;
+        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_attempt_3");
+      })
+      .catch((err) => {
+        errors++;
+        console.error(`[FieldMgmt] T-58 check-in call chain failed for job ${jobIdForCall}:`, err);
+      });
+  }
+
+  return { checked: jobs.length, called, errors };
+}
+
+/** Re-queries the DB to check if the cleaner still hasn't checked in. */
+async function isCheckinStillNeeded(cleanerJobId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const rows = await db
+    .select({ jobStatus: cleanerJobs.jobStatus })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const status = rows[0]?.jobStatus;
+  return status !== "on_the_way" && status !== "arrived" && status !== "in_progress" && status !== "completed";
+}
+
+/** Places a single VAPI check-in call to the cleaner with the given script. */
+async function placeCheckinCall(
+  cleanerJobId: number,
+  cleanerName: string,
+  cleanerPhone: string,
+  script: string,
+  step: string
+): Promise<void> {
+  if (!ENV.vapiPrivateKey) {
+    console.warn("[FieldMgmt] VAPI_PRIVATE_KEY not set — skipping check-in call");
+    return;
+  }
+  if (!isWithinEscalationHours()) {
+    console.log("[FieldMgmt] Outside escalation hours — skipping check-in call");
+    return;
+  }
+  const normalizedPhone = cleanerPhone.startsWith("+") ? cleanerPhone : `+1${cleanerPhone.replace(/\D/g, "")}`;
+  if (normalizedPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
+    console.error("[FieldMgmt] Self-call protection — refusing to call VAPI outbound number");
+    return;
+  }
+  const payload = {
+    phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
+    customer: { number: normalizedPhone },
+    assistant: {
+      name: "CheckInReminder",
+      firstMessage: script,
+      model: {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        messages: [{
+          role: "system",
+          content: "You are a brief automated notification system. You have already delivered your message. If the person says anything, simply say 'Got it, thank you.' and end the call.",
+        }],
+      },
+      voice: {
+        provider: "11labs",
+        voiceId: "EXAVITQu4vr4xnSDxMaL",
+        stability: 0.5,
+        similarityBoost: 0.75,
+        style: 0.3,
+        useSpeakerBoost: true,
+      },
+      maxDurationSeconds: 20,
+    },
+  };
+  try {
+    const result = await vapiPost("/call", payload) as { id?: string };
+    const vapiCallId = result?.id ?? null;
+    console.log(`[FieldMgmt] Check-in call (${step}) placed to ${cleanerName} (${normalizedPhone}) for job ${cleanerJobId}. VAPI ID: ${vapiCallId ?? "unknown"}`);
+    if (vapiCallId) {
+      const db = await getDb();
+      if (db) {
+        await db.insert(fieldMgmtCalls).values({
+          cleanerJobId,
+          step,
+          vapiCallId,
+          calledPhone: normalizedPhone,
+          outcome: "no_answer",
+          durationSeconds: 0,
+          transcript: null,
+          summary: null,
+          endedReason: null,
+          recordingUrl: null,
+        }).catch((err: unknown) => {
+          console.error("[FieldMgmt] Failed to insert fieldMgmtCalls row:", err);
+        });
+      }
+    }
+    await recordStep({ cleanerJobId, step, success: true, recipientPhone: normalizedPhone });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[FieldMgmt] Check-in call (${step}) FAILED for job ${cleanerJobId}:`, msg);
+    await recordStep({ cleanerJobId, step, success: false, recipientPhone: normalizedPhone, errorDetail: msg });
+  }
+}
