@@ -1251,6 +1251,17 @@ function ConversationDrawer({
     onError: (e) => toast.error(e.message),
   });
 
+  // Mark as handled — removes from unresponded queue without closing the lead
+  const markHandledMutation = trpc.leads.markHandled.useMutation({
+    onSuccess: () => {
+      toast.success("Marked as handled");
+      utils.leads.list.invalidate();
+      utils.leads.attentionItems.invalidate();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // Call logs (agent-logged)
   const { data: callLogs } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
   // OpenPhone call recordings
@@ -2418,6 +2429,13 @@ function ConversationDrawer({
               >
                 <span>&#129302;</span> Hand back to AI
               </button>
+              <button
+                onClick={() => markHandledMutation.mutate({ sessionId: session.id })}
+                disabled={markHandledMutation.isPending}
+                className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-100 transition-colors disabled:opacity-50"
+              >
+                <span>&#10003;</span> Mark as handled
+              </button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <button className="flex items-center gap-2 py-3 px-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-colors">
@@ -3422,10 +3440,15 @@ export default function AdminDashboard() {
       let matchesStage: boolean;
       if (stageFilter === "AWAITING_REPLY") {
         try {
-          const hist: Array<{ role: string }> = JSON.parse((s as any).messageHistory ?? "[]");
-          const lastRole = hist.length > 0 ? hist[hist.length - 1].role : null;
+          const hist: Array<{ role: string; ts?: number }> = JSON.parse((s as any).messageHistory ?? "[]");
+          const lastMsg = hist.length > 0 ? hist[hist.length - 1] : null;
+          const lastRole = lastMsg?.role ?? null;
           const closedStages = ["BOOKED", "COMPLETED", "CLOSED", "LOST", "COLD"];
-          matchesStage = (lastRole === "user" || lastRole === "customer") && !closedStages.includes(s.stage ?? "");
+          const isUnresponded = (lastRole === "user" || lastRole === "customer") && !closedStages.includes(s.stage ?? "");
+          // Exclude if agent already marked handled AND no new customer message since
+          const respondedAt = (s as any).respondedAt as number | null | undefined;
+          const isHandled = respondedAt && lastMsg?.ts && lastMsg.ts <= respondedAt;
+          matchesStage = isUnresponded && !isHandled;
         } catch {
           matchesStage = false;
         }

@@ -366,6 +366,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * Stored as plain text from the lead's reply. "all good" is stored as-is.
    */
   specialNotes: text("specialNotes"),
+  /**
+   * Unix ms timestamp set when an agent manually marks this lead as "handled".
+   * Excludes the session from the unresponded attention queue until the customer
+   * sends a new message with a timestamp newer than this value.
+   */
+  respondedAt: bigint("respondedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

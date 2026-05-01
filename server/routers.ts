@@ -1189,6 +1189,24 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.markHandled — mark a lead as "handled" so it no longer appears in the
+     * unresponded attention queue. Self-healing: if the customer sends a new message
+     * after this timestamp, the lead automatically reappears.
+     */
+    markHandled: publicProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(conversationSessions)
+          .set({ respondedAt: Date.now() })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
      * leads.deleteLead — permanently delete a lead and all associated call logs.
      * Admin only.
      */
@@ -3827,6 +3845,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           stage: conversationSessions.stage,
           messageHistory: conversationSessions.messageHistory,
           aiMode: conversationSessions.aiMode,
+          respondedAt: conversationSessions.respondedAt,
         })
         .from(conversationSessions)
         .where(
@@ -3845,6 +3864,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           if (history.length === 0) continue;
           const last = history[history.length - 1];
           if (last.role !== "user" && last.role !== "customer") continue; // AI replied last
+          // Skip if agent already marked this as handled AND no new customer message since
+          if (s.respondedAt && last.ts && last.ts <= s.respondedAt) continue;
           const age = last.ts ? now - last.ts : 0;
           if (age > FOUR_HOURS_MS) unrespondedUrgent++;
           else if (age > ONE_HOUR_MS) unrespondedWarning++;
