@@ -155,7 +155,7 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
         role: "cs-alert",
         content:
           "🚨 NO-SHOW ALERT\n\nCleaner: {{cleaner_name}}\nJob: {{client_name}} at {{address}}\nScheduled: {{job_time}}\n\nNo \"On the Way\" or \"Arrived\" status received. Please call the cleaner immediately and notify the client.",
-        note: "Sent to the CS team via SMS alert. CS must then call the cleaner and proactively contact the client.",
+        note: "Posts a card to Command Chat. CS team sees it in the chat window and must call the cleaner and notify the client.",
       },
     ],
     notes: [
@@ -180,7 +180,7 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
       {
         role: "cs-alert",
         content: "🚨 POST-START NO CHECK-IN\n\nCleaner: {{cleaner_name}}\nJob: {{client_name}} at {{address}}\nStarted: {{job_time}}\n\nNo check-in received after job start. First VAPI call placed. Monitoring.",
-        note: "T+5 to T+10 min: CS alert SMS + ops board card posted (post_start_cs_alert).",
+        note: "T+5 to T+10 min: Card posted to Command Chat + ops board card (post_start_cs_alert). Not an SMS.",
       },
       {
         role: "call",
@@ -351,9 +351,9 @@ function ActionBadge({ kind }: { kind: ActionKind }) {
     "sms-client": { label: "SMS → Client",   className: "bg-sky-50 text-sky-700 border-sky-200" },
     "call":       { label: "Auto-Call",      className: "bg-orange-50 text-orange-700 border-orange-200" },
     "sms+call":   { label: "SMS + Call",     className: "bg-amber-50 text-amber-700 border-amber-200" },
-    "cs-alert":   { label: "CS Alert",       className: "bg-rose-50 text-rose-700 border-rose-200" },
-    "vapi-call":  { label: "VAPI Call",      className: "bg-violet-50 text-violet-700 border-violet-200" },
-    "vapi+cs":    { label: "VAPI Call + CS", className: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200" },
+    "cs-alert":   { label: "→ Command Chat",        className: "bg-rose-50 text-rose-700 border-rose-200" },
+    "vapi-call":  { label: "VAPI Call",               className: "bg-violet-50 text-violet-700 border-violet-200" },
+    "vapi+cs":    { label: "VAPI + Command Chat",      className: "bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200" },
   };
   const { label, className } = map[kind];
   return (
@@ -384,10 +384,47 @@ function MessageBubble({
   const isCsAlert   = role === "cs-alert";
   const isAutoReply = role === "auto-response";
 
+  // CS Alert renders as a Command Chat card — matching the actual ops chat card style
+  if (isCsAlert) {
+    // Parse the content: first line is the title (e.g. "🚨 NO-SHOW ALERT"), rest is body
+    const lines = content.split("\n").filter(Boolean);
+    const titleLine = lines[0] ?? "";
+    const bodyLines = lines.slice(1).join("\n").trim();
+    return (
+      <div className="rounded-2xl border border-red-100 bg-red-50 overflow-hidden shadow-sm">
+        {/* Card header — mimics the Command Chat alert card header */}
+        <div className="px-3.5 pt-3 pb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base leading-none shrink-0">🚨</span>
+            <p className="text-sm font-bold text-red-800 leading-tight truncate">
+              {titleLine.replace(/^🚨\s*/, "")}
+            </p>
+          </div>
+          <span className="text-[10px] font-semibold text-red-400 shrink-0 uppercase tracking-wide">Command Chat</span>
+        </div>
+        {/* Card body */}
+        {bodyLines && (
+          <div className="px-3.5 pb-3">
+            <pre className="whitespace-pre-wrap font-sans text-xs text-red-700 leading-relaxed">
+              {bodyLines}
+            </pre>
+          </div>
+        )}
+        {/* Footer note */}
+        {note && (
+          <div className="px-3.5 pb-3 pt-0 border-t border-red-100 mt-1">
+            <p className="text-xs text-gray-400 italic flex items-start gap-1 pt-2">
+              <Info className="w-3 h-3 mt-0.5 shrink-0" />
+              {note}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const bubbleClass = isClient
     ? "bg-sky-50 border-sky-200"
-    : isCsAlert
-    ? "bg-rose-50 border-rose-200"
     : isCall
     ? "bg-orange-50 border-orange-200"
     : isAutoReply
@@ -396,8 +433,6 @@ function MessageBubble({
 
   const labelClass = isClient
     ? "text-sky-600"
-    : isCsAlert
-    ? "text-rose-600"
     : isCall
     ? "text-orange-600"
     : isAutoReply
@@ -406,8 +441,6 @@ function MessageBubble({
 
   const roleLabel = isClient
     ? "SMS to Client"
-    : isCsAlert
-    ? "CS Team Alert"
     : isCall
     ? "Auto-Call"
     : isAutoReply
