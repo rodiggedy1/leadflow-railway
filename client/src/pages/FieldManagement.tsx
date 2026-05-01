@@ -76,7 +76,8 @@ interface WorkflowStep {
   isClientFacing?: boolean;
 }
 
-// Cleaner-facing workflow steps
+// Cleaner-facing workflow steps — ordered chronologically by when they fire during the job day.
+// IDs control display sort order. Exceptions are grouped at the end in time order.
 const WORKFLOW_CLEANERS: WorkflowStep[] = [
   {
     id: 1,
@@ -96,7 +97,7 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
     notes: ["Sent 2 hours before job start."],
   },
   {
-    id: 10,
+    id: 2,
     phase: "Pre-Job",
     label: "T-58min Check-In Call — Cleaner",
     triggerKind: "time",
@@ -115,125 +116,7 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
     ],
   },
   {
-    id: 2,
-    phase: "Pre-Job",
-    label: "Pre-Job Notification — Client",
-    triggerKind: "time",
-    triggerDescription: "2 hours before job start (floor: 7:30 AM ET)",
-    actionKind: "sms-client",
-    isClientFacing: true,
-    messages: [
-      {
-        role: "client-sms",
-        content:
-          "Hey {{client_name}} — you're all set for your home cleaning today at {{time}} 😊\n\nYou can follow your cleaning here: {{tracking_link}}\n\nWe'll update this in real time if anything changes, including arrival timing.",
-        note: "Sent to the CLIENT at T-2hrs. If T-2hrs falls before 7:30 AM ET, held until 7:30 AM ET. {{tracking_link}} is the live job tracker URL.",
-      },
-    ],
-    notes: [
-      "Never sends before 7:30 AM ET, even if the job starts at 8 AM or earlier.",
-      "Tracking link is unique per job and shows live cleaner status.",
-    ],
-  },
-  {
     id: 3,
-    phase: "On the Way",
-    label: "Client \"On the Way\" Notification",
-    triggerKind: "status",
-    triggerDescription: "Cleaner taps \"On the Way\" in app",
-    actionKind: "sms-client",
-    isClientFacing: true,
-    messages: [
-      {
-        role: "client-sms",
-        content:
-          "Hi {{client_name}}! Your Maids in Black team is on the way and will arrive at {{address}} around {{eta}}. 🚗\n\nTrack their arrival in real time here: {{tracking_link}}\n\nThe best way to make sure everything is perfect is to take a quick look before they head out. A quick 1 minute walkthrough really helps.\nFeel free to point anything out — they're happy to fix it on the spot.\n\nIf you have any last-minute notes, reply here.",
-        note: "Sent to the CLIENT. {{client_name}}, {{address}}, {{eta}}, and {{tracking_link}} are pulled from the job record.",
-      },
-    ],
-    notes: [
-      "Fires immediately when the cleaner's app status changes to On the Way.",
-      "ETA is calculated from the cleaner's selected ETA option in the app.",
-    ],
-  },
-  {
-    id: 4,
-    phase: "Running Late",
-    label: "Running Late — Client Notification",
-    triggerKind: "status",
-    triggerDescription: "Cleaner taps \"Running Late\" in app",
-    actionKind: "sms-client",
-    isClientFacing: true,
-    messages: [
-      {
-        role: "client-sms",
-        content:
-          "Hey {{client_name}} — quick heads up, the team is running about {{delay}} behind.\n\nYou can follow their updated arrival here: {{tracking_link}}\n\nReally appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏",
-        note: "{{delay}} is the number of minutes late (e.g. \"30 minutes\"). {{tracking_link}} is the live tracker URL. Fires once per job.",
-      },
-    ],
-    notes: [
-      "Fires once per job — if the cleaner taps Running Late multiple times, only the first triggers the SMS.",
-    ],
-  },
-  {
-    id: 5,
-    phase: "Arrival",
-    label: "Arrival Check-In",
-    triggerKind: "status",
-    triggerDescription: "Cleaner selects \"ARRIVED\" in app",
-    actionKind: "sms",
-    messages: [
-      {
-        role: "auto-response",
-        content:
-          "You're checked in ✅\n\nBefore starting:\nTake photos of anything broken or pre-existing damage — this protects you from being blamed.\n{{magic_link}}",
-        note: "Instant auto-reply the moment the status is received. {{magic_link}} is the cleaner's personal one-tap login link.",
-      },
-    ],
-    notes: ["If the cleaner uses the app check-in instead of texting, the same auto-response fires."],
-  },
-  {
-    id: 6,
-    phase: "Mid-Job",
-    label: "Mid-Job Nudge",
-    triggerKind: "time",
-    triggerDescription: "45–60 minutes after check-in / arrival",
-    actionKind: "sms",
-    messages: [
-      {
-        role: "outbound",
-        content:
-          "Quick check — everything going smoothly?\n\nRemember:\n• Kitchens + bathrooms = highest priority\n• Don't miss floors + surfaces\n\nLog in and double check your notes + checklist.\n{{magic_link}}\n\nReply if any issues.",
-      },
-    ],
-    notes: [
-      "Optional step — can be toggled off per cleaner or per job type.",
-      "Timer starts from the arrival check-in timestamp, not the scheduled start time.",
-    ],
-  },
-  {
-    id: 7,
-    phase: "Completion",
-    label: "Completion Flow",
-    triggerKind: "status",
-    triggerDescription: "Cleaner marks job \"Completed\" in app",
-    actionKind: "sms",
-    messages: [
-      {
-        role: "outbound",
-        content:
-          "Before leaving:\n\n1. Upload photos + double check notes + checklist\n2. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.\n{{magic_link}}",
-        note: "{{magic_link}} is the cleaner's personal one-tap login link — tapping it opens their portal directly with no password needed.",
-      },
-    ],
-    notes: [
-      "Mandatory — fires for every completed job, no exceptions.",
-      "Photo upload is required before the job is marked fully closed in the system.",
-    ],
-  },
-  {
-    id: 8,
     phase: "Exception",
     label: "Exception Escalation — Cleaner Not Responding",
     triggerKind: "exception",
@@ -259,7 +142,7 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
     ],
   },
   {
-    id: 9,
+    id: 4,
     phase: "No-Show",
     label: "No-Show / Late Escalation",
     triggerKind: "no-show",
@@ -281,7 +164,7 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
     ],
   },
   {
-    id: 11,
+    id: 5,
     phase: "Post-Start",
     label: "Post-Start Escalation — No Check-In",
     triggerKind: "post-start",
@@ -309,6 +192,62 @@ const WORKFLOW_CLEANERS: WorkflowStep[] = [
       "No customer SMS at any point in this escalation.",
       "All steps deduplicated via tryClaimStep — safe to run every 5 min.",
       "Stops immediately if cleaner checks in between any step.",
+    ],
+  },
+  {
+    id: 6,
+    phase: "Arrival",
+    label: "Arrival Check-In",
+    triggerKind: "status",
+    triggerDescription: "Cleaner selects \"ARRIVED\" in app",
+    actionKind: "sms",
+    messages: [
+      {
+        role: "auto-response",
+        content:
+          "You're checked in ✅\n\nBefore starting:\nTake photos of anything broken or pre-existing damage — this protects you from being blamed.\n{{magic_link}}",
+        note: "Instant auto-reply the moment the status is received. {{magic_link}} is the cleaner's personal one-tap login link.",
+      },
+    ],
+    notes: ["If the cleaner uses the app check-in instead of texting, the same auto-response fires."],
+  },
+  {
+    id: 7,
+    phase: "Mid-Job",
+    label: "Mid-Job Nudge",
+    triggerKind: "time",
+    triggerDescription: "45–60 minutes after check-in / arrival",
+    actionKind: "sms",
+    messages: [
+      {
+        role: "outbound",
+        content:
+          "Quick check — everything going smoothly?\n\nRemember:\n• Kitchens + bathrooms = highest priority\n• Don't miss floors + surfaces\n\nLog in and double check your notes + checklist.\n{{magic_link}}\n\nReply if any issues.",
+      },
+    ],
+    notes: [
+      "Optional step — can be toggled off per cleaner or per job type.",
+      "Timer starts from the arrival check-in timestamp, not the scheduled start time.",
+    ],
+  },
+  {
+    id: 8,
+    phase: "Completion",
+    label: "Completion Flow",
+    triggerKind: "status",
+    triggerDescription: "Cleaner marks job \"Completed\" in app",
+    actionKind: "sms",
+    messages: [
+      {
+        role: "outbound",
+        content:
+          "Before leaving:\n\n1. Upload photos + double check notes + checklist\n2. Confirm:\n   • All rooms completed\n   • Trash removed\n   • Lights off / doors locked\n   • Walk the client around and ask for a review\n\nReply DONE when finished.\n{{magic_link}}",
+        note: "{{magic_link}} is the cleaner's personal one-tap login link — tapping it opens their portal directly with no password needed.",
+      },
+    ],
+    notes: [
+      "Mandatory — fires for every completed job, no exceptions.",
+      "Photo upload is required before the job is marked fully closed in the system.",
     ],
   },
 ];
