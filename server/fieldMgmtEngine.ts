@@ -148,12 +148,6 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
     return { success: false, reason: "VAPI_PRIVATE_KEY is not configured" };
   }
 
-  // ── Operating hours guard (7 AM – 6 PM ET) ────────────────────────────────────────────
-  if (!isWithinEscalationHours()) {
-    console.log("[FieldMgmt] Outside escalation call hours (7am–6pm ET) — skipping call");
-    return { success: false, reason: "Outside call hours (7 AM – 6 PM ET). Try again during operating hours." };
-  }
-
   const { cleanerName, customerName, jobAddress, scheduledTime, cleanerJobId, step, cleanerPhone } = params;
 
   // ── Determine the call target ─────────────────────────────────────────────
@@ -1720,10 +1714,6 @@ async function placeCheckinCall(
 ): Promise<void> {
   if (!ENV.vapiPrivateKey) {
     console.warn("[FieldMgmt] VAPI_PRIVATE_KEY not set — skipping check-in call");
-    return;
-  }
-  if (!isWithinEscalationHours()) {
-    console.log("[FieldMgmt] Outside escalation hours — skipping check-in call");
     return;
   }
   const normalizedPhone = cleanerPhone.startsWith("+") ? cleanerPhone : `+1${cleanerPhone.replace(/\D/g, "")}`;
