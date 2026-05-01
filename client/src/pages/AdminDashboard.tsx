@@ -136,7 +136,7 @@ import SmsComposeBox from "@/components/SmsComposeBox";
 import MessageDateSeparator, { formatMsgDate, isDifferentDay } from "@/components/MessageDateSeparator";
 import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
-import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge, QualityWidget } from "@/components/AdminHeader";
+import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge } from "@/components/AdminHeader";
 import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
 import CallGuide from "@/components/CallGuide";
 import PipelineBoard from "@/components/PipelineBoard";
@@ -4862,8 +4862,6 @@ export default function AdminDashboard() {
 
       {/* ── Sticky footer bar: Quality, Recap, AI Simulator ── */}
       <div className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-center gap-3 py-2 px-4 bg-white/80 backdrop-blur border-t border-gray-100">
-        {isAdmin && <QualityWidget enabled={isAdmin} />}
-
         {/* AI Simulator shortcut */}
         <button
           onClick={() => setShowSimulator(v => !v)}
