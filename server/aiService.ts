@@ -714,6 +714,10 @@ export interface PostBookingContext {
   leadName: string;
   quotedPrice: string;
   serviceType: string;
+  /** Bedrooms from the lead's quote — used by the price validator */
+  bedrooms?: string | null;
+  /** Bathrooms from the lead's quote — used by the price validator */
+  bathrooms?: string | null;
   selectedSlot?: string | null;
   address?: string | null;
   messageHistory: Array<{ role: "assistant" | "user"; content: string }>;
@@ -727,7 +731,7 @@ export interface PostBookingContext {
  * concerns about the call, or anything else the lead sends.
  */
 export async function handlePostBookingReply(ctx: PostBookingContext): Promise<string> {
-  const { stage, leadName, quotedPrice, serviceType, selectedSlot, address, messageHistory, leadReply, extrasContext } = ctx;
+  const { stage, leadName, quotedPrice, serviceType, bedrooms, bathrooms, selectedSlot, address, messageHistory, leadReply, extrasContext } = ctx;
   const firstName = leadName.split(" ")[0] ?? leadName;
 
   const bookingContext = [
@@ -745,14 +749,12 @@ export async function handlePostBookingReply(ctx: PostBookingContext): Promise<s
     content: m.content,
   }));
 
-  try {
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: BRAND_SYSTEM_PROMPT },
-        ...recentHistory,
-        {
-          role: "user",
-          content: `The lead has replied after their booking was confirmed. Respond naturally and helpfully.
+  const postBookingMessages = [
+    { role: "system" as const, content: BRAND_SYSTEM_PROMPT },
+    ...recentHistory,
+    {
+      role: "user" as const,
+      content: `The lead has replied after their booking was confirmed. Respond naturally and helpfully.
 
 Lead name: ${firstName}
 Service: ${serviceType} — $${quotedPrice}
@@ -766,16 +768,26 @@ Instructions:
 3. If they ask about timing/arrival, give a warm reassurance that the team will confirm details on the call
 4. If they have a question about their add-ons, confirm we have them noted
 5. Keep reply under 200 characters
-6. Do NOT ask them to re-book or repeat the booking flow`,
-        },
-      ],
-    });
+6. Do NOT ask them to re-book or repeat the booking flow
+7. If you need to mention a price, call the get_price tool — NEVER calculate or estimate prices yourself`,
+    },
+  ];
 
-    const content = response.choices?.[0]?.message?.content;
-    const text = typeof content === "string" ? content.trim() : "";
-    if (text) return text;
-  } catch (err) {
-    console.error("[AI] handlePostBookingReply failed:", err);
+  // Layer 1 + Layer 2: tool call + post-generation validation, with one retry
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const text = await invokeLLMWithPriceTool(postBookingMessages, bedrooms, bathrooms, serviceType);
+      if (!text) break;
+      // Layer 2: validate every dollar amount in the reply
+      if (!validatePriceInReply(text, bedrooms, bathrooms, serviceType, quotedPrice)) {
+        console.warn(`[AI] handlePostBookingReply price validation failed on attempt ${attempt + 1} — ${attempt < 1 ? "retrying" : "falling back"}`);
+        continue; // retry
+      }
+      return text;
+    } catch (err) {
+      console.error("[AI] handlePostBookingReply failed:", err);
+      break;
+    }
   }
 
   // Fallback — still much better than the old static message

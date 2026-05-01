@@ -1023,6 +1023,8 @@ async function _processLeadReplyCore(
       leadName: context.leadName,
       quotedPrice: context.quotedPrice,
       serviceType: context.serviceType,
+      bedrooms: context.bedrooms,
+      bathrooms: context.bathrooms,
       selectedSlot: context.selectedSlot,
       address: context.address,
       messageHistory: context.messageHistory,

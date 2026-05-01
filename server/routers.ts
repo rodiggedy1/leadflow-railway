@@ -5055,6 +5055,8 @@ Your job: fill in the following message template using the booking details provi
             leadName,
             quotedPrice,
             serviceType,
+            bedrooms,
+            bathrooms,
             selectedSlot,
             address: null,
             messageHistory: history,

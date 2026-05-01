@@ -18,6 +18,8 @@
 - [x] Fix AI pricing hallucination — inject locked PRICING_TABLE into handleOffScriptReply and handleObjection in aiService.ts; add bedrooms/bathrooms to OffScriptContext and all 10 call sites in conversationEngine.ts + routers.ts simulator
 - [x] Add Layer 1: get_price tool call in handleOffScriptReply + handleObjection — LLM never calculates prices, calls deterministic pricing engine via tool call instead
 - [x] Add Layer 2: post-generation price validator — scans every outbound SMS for $NNN, rejects any amount not in the valid set for this lead, retries once then falls back to hardcoded string
+- [x] Write vitest unit tests for validatePriceInReply and buildValidPriceSet (regression test for price hallucination guard) — 24 tests covering both layers, all home sizes, retry logic, and edge cases
+- [x] Extend Layer 1 (tool call) + Layer 2 (validator) to handlePostBookingReply — added bedrooms/bathrooms to PostBookingContext, both call sites (conversationEngine.ts + routers.ts simulator)
 - [ ] Show net pay on job card itself (next to cleaner name, without opening panel)
 - [ ] Include applied custom rule totals in weekly pay summary
 - [ ] Add note field when toggling a custom rule on (audit trail)
