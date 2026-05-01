@@ -3532,11 +3532,6 @@ export default function AdminDashboard() {
         onCallGuide={() => setShowCallGuide(true)}
         rightExtra={
           <>
-            {unhandledCount > 0 && activeTab === "leads" && (
-              <span className="inline-flex items-center gap-1 bg-red-100 text-red-700 border border-red-200 text-xs font-semibold px-3 py-1.5 rounded-full">
-                ⚠ {unhandledCount} need{unhandledCount === 1 ? "s" : ""} review
-              </span>
-            )}
             {activeTab === "leads" && (
               <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="gap-2">
                 <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`} />
