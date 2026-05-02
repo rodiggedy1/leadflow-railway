@@ -2129,6 +2129,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const callClientRunningLateMutation = trpc.fieldMgmt.callClientRunningLate.useMutation();
   const [callingClientJobId, setCallingClientJobId] = useState<number | null>(null);
   const [clientCallDone, setClientCallDone] = useState<Set<number>>(new Set());
+  // Confirmation dialog state for "Call Client (Running Late)"
+  const [callConfirmState, setCallConfirmState] = useState<{
+    cleanerJobId: number;
+    clientName: string | null;
+    etaLabel: string | null;
+    detectedFromSms: boolean;
+    smsText: string | null;
+  } | null>(null);
+
+  async function executeCallClientRunningLate(cleanerJobId: number) {
+    setCallConfirmState(null);
+    setCallingClientJobId(cleanerJobId);
+    try {
+      await callClientRunningLateMutation.mutateAsync({ cleanerJobId });
+      setClientCallDone(prev => new Set(prev).add(cleanerJobId));
+    } catch (err: any) {
+      alert(err?.message ?? "Failed to call client");
+    } finally {
+      setCallingClientJobId(null);
+    }
+  }
 
   const chatPrefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
   const chatConvertMutation = trpc.opsChat.convertChatMessageToIssue.useMutation();
@@ -3077,6 +3098,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const isStaleEta = cs.status === "on_the_way" && etaTs && etaTs < Date.now();
                   const isUrgent = cs.status === "issue_at_property" || cs.status === "running_late";
                   const isCompleted = cs.status === "completed";
+                  // Detect auto-detected-from-SMS cards
+                  const detectedFromSms = !!(cs as any).detectedFromSms;
+                  const smsText: string | null = (cs as any).smsText ?? null;
                   const arrivalLine = etaTs && etaTs > Date.now()
                     ? `Arrives: ${new Date(etaTs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
                     : cs.etaLabel ? `ETA: ${cs.etaLabel}` : null;
@@ -3087,6 +3111,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     arrivalLine,
                     isStaleEta ? `⚠️ ETA passed — check in` : null,
                     cs.issueNote ? `Issue: ${cs.issueNote}` : null,
+                    detectedFromSms && smsText ? `SMS: "${smsText}"` : null,
                   ].filter(Boolean) as string[];
                   const cardBg = isUrgent
                     ? "bg-red-50 border-red-100 hover:bg-red-100"
@@ -3112,6 +3137,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 <span className="font-normal"> — {cs.label}</span>
                               </span>
                               {isStaleEta && <span className="text-[10px] text-amber-500 shrink-0">⚠️</span>}
+                              {/* Amber badge for auto-detected SMS cards */}
+                              {detectedFromSms && (
+                                <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-700 border border-amber-300 leading-none">
+                                  📱 via SMS
+                                </span>
+                              )}
                             </div>
                             <span className="text-[10px] text-slate-400 shrink-0">{fmt12(cs.ts)}</span>
                           </div>
@@ -3129,18 +3160,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               ) : (
                                 <button
                                   disabled={callingClientJobId === cs.cleanerJobId}
-                                  onClick={async (e) => {
+                                  onClick={(e) => {
                                     e.stopPropagation();
                                     if (!cs.cleanerJobId) return;
-                                    setCallingClientJobId(cs.cleanerJobId);
-                                    try {
-                                      await callClientRunningLateMutation.mutateAsync({ cleanerJobId: cs.cleanerJobId });
-                                      setClientCallDone(prev => new Set(prev).add(cs.cleanerJobId!));
-                                    } catch (err: any) {
-                                      alert(err?.message ?? "Failed to call client");
-                                    } finally {
-                                      setCallingClientJobId(null);
-                                    }
+                                    // Open confirmation dialog instead of calling immediately
+                                    setCallConfirmState({
+                                      cleanerJobId: cs.cleanerJobId,
+                                      clientName: cs.customerName ?? null,
+                                      etaLabel: cs.etaLabel ?? null,
+                                      detectedFromSms,
+                                      smsText,
+                                    });
                                   }}
                                   className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
                                 >
@@ -3155,9 +3185,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           )}
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-[220px] space-y-0.5 text-xs">
+                      <TooltipContent side="right" className="max-w-[240px] space-y-0.5 text-xs">
                         {tooltipLines.map((line, i) => (
-                          <p key={i} className={i === 0 ? "font-semibold" : "text-slate-300"}>{line}</p>
+                          <p key={i} className={i === 0 ? "font-semibold" : i === tooltipLines.length - 1 && detectedFromSms ? "text-amber-300 italic" : "text-slate-300"}>{line}</p>
                         ))}
                       </TooltipContent>
                     </Tooltip>
@@ -4844,6 +4874,73 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Call Client (Running Late) Confirmation Dialog ──────────────────────── */}
+      {callConfirmState && (
+        <Dialog open onOpenChange={(o) => { if (!o) setCallConfirmState(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <span className="text-lg">📞</span> Confirm: Call Client
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="space-y-3 py-1">
+              {/* Who will be called */}
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Client</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {callConfirmState.clientName ?? "(name not on file)"}
+                </p>
+              </div>
+
+              {/* ETA that will be read out */}
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">ETA the call will give</p>
+                <p className="text-sm font-semibold text-slate-800">
+                  {callConfirmState.etaLabel
+                    ? <span className="text-red-600">{callConfirmState.etaLabel}</span>
+                    : <span className="text-slate-400 italic">No ETA — call will say &ldquo;running a little late&rdquo;</span>
+                  }
+                </p>
+              </div>
+
+              {/* What the call will say */}
+              <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 space-y-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-widest text-blue-400">Message that will be delivered</p>
+                <p className="text-[12px] text-slate-700 leading-relaxed italic">
+                  &ldquo;Hi{callConfirmState.clientName ? ` ${callConfirmState.clientName.split(" ")[0]}` : ""}, this is a quick heads-up from Maid in Black — your cleaning team is running a little late
+                  {callConfirmState.etaLabel ? ` and will arrive around ${callConfirmState.etaLabel}` : ""}.
+                  We apologize for the delay and appreciate your patience. If you have any questions, feel free to call us back.&rdquo;
+                </p>
+              </div>
+
+              {/* Source badge for SMS-detected cards */}
+              {callConfirmState.detectedFromSms && callConfirmState.smsText && (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 space-y-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-amber-500">📱 Auto-detected from cleaner SMS</p>
+                  <p className="text-[11px] text-amber-700 italic">&ldquo;{callConfirmState.smsText}&rdquo;</p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2">
+              <button
+                onClick={() => setCallConfirmState(null)}
+                className="flex-1 rounded-xl border border-slate-200 bg-white text-slate-700 text-sm font-semibold py-2 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeCallClientRunningLate(callConfirmState.cleanerJobId)}
+                className="flex-1 rounded-xl bg-red-600 text-white text-sm font-semibold py-2 hover:bg-red-700 transition"
+              >
+                📞 Call Now
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

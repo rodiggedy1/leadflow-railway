@@ -1168,6 +1168,9 @@ export const opsChatRouter = router({
           issueNote,
           cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
           ts: r.jobStatusChangedAt ?? (r.createdAt ? new Date(r.createdAt).getTime() : now),
+          // SMS auto-detection fields
+          detectedFromSms: !!(meta.detectedFromSms as boolean | undefined),
+          smsText: (meta.smsText as string | null) ?? null,
         };
       });
 

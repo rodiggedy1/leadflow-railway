@@ -1344,3 +1344,5 @@
 - [x] Running Late — Call Client flow: Command Chat card gets a "Call Client" button; VAPI calls client with running late script (ETA if available); voicemail fallback; SMS fallback if no answer; cleaner gets confirmation SMS
 - [x] Add "Test Call Client (Running Late)" button to Field Management test panel
 - [x] Inbound SMS running-late detection: when a known cleaner texts the ops line with a running-late/ETA message, auto-detect it and post the existing Running Late Command Chat card so staff can click to notify the client
+- [x] Add amber "via SMS" badge on auto-detected running-late cards in Command Chat, with original cleaner SMS text on hover tooltip
+- [x] Add confirmation dialog before placing Call Client (running late) — show client name, ETA, and exact message that will be delivered
