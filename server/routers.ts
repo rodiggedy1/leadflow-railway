@@ -1247,6 +1247,41 @@ export const appRouter = router({
       }),
 
     /**
+     * leads.bulkDeleteLeads — permanently delete multiple leads and their call logs.
+     * Admin only.
+     */
+    bulkDeleteLeads: adminAgentProcedure
+      .input(z.object({ sessionIds: z.array(z.number().int().positive()).min(1).max(200) }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const { sessionIds } = input;
+        // Delete related call logs first (FK constraint)
+        await db.delete(leadCallLogs).where(inArray(leadCallLogs.sessionId, sessionIds));
+        // Delete the sessions
+        await db.delete(conversationSessions).where(inArray(conversationSessions.id, sessionIds));
+        // Remove hot lead cards from the command channel tray
+        try {
+          const hotLeadMsgs = await db
+            .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+            .from(opsChatMessages)
+            .where(eq(opsChatMessages.quickAction, "new_lead"));
+          const toDelete = hotLeadMsgs
+            .filter(m => {
+              try { return sessionIds.includes(JSON.parse(m.metadata ?? "{}").sessionId); }
+              catch { return false; }
+            })
+            .map(m => m.id);
+          if (toDelete.length > 0) {
+            await db.delete(opsChatMessages).where(inArray(opsChatMessages.id, toDelete));
+          }
+        } catch (err) {
+          console.error("[bulkDeleteLeads] Failed to remove hot lead cards:", err);
+        }
+        return { deleted: sessionIds.length };
+      }),
+
+    /**
      * leads.revenueAttribution — full revenue attribution report.
      * Powers the Revenue Attribution Dashboard.
      * Returns:

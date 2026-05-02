@@ -3260,6 +3260,9 @@ export default function AdminDashboard() {
   const [showCallGuide, setShowCallGuide] = useState(false);
   const [showFollowUpsModal, setShowFollowUpsModal] = useState(false);
   const [showCompletedCallbacks, setShowCompletedCallbacks] = useState(false);
+  // Bulk selection for leads table
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
   const { data: callbackList, refetch: refetchCallbacks } = trpc.voice.listCallbacks.useQuery(
     { includeCompleted: showCompletedCallbacks },
     { enabled: activeTab === "callbacks" }
@@ -3391,6 +3394,18 @@ export default function AdminDashboard() {
 
   // ── Activity feed → open drawer by session ID ────────────────────────────────
   const trpcUtils = trpc.useUtils();
+  const bulkDeleteMutation = trpc.leads.bulkDeleteLeads.useMutation({
+    onSuccess: (data) => {
+      toast.success(`${data.deleted} lead${data.deleted === 1 ? '' : 's'} deleted`);
+      setSelectedIds(new Set());
+      setBulkDeleteConfirmOpen(false);
+      trpcUtils.leads.list.invalidate();
+      trpcUtils.leads.stats.invalidate();
+      trpcUtils.leads.attentionItems.invalidate();
+      trpcUtils.opsChat.getCommandChatData.invalidate();
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const bookLeadMutation = trpc.leads.agentUpdateStage.useMutation({
     onSuccess: () => {
       trpcUtils.leads.list.invalidate();
@@ -4282,7 +4297,22 @@ export default function AdminDashboard() {
                               </div>
                             ) : (
                               <>
-                                <div className="grid grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] gap-3 border-b border-black/5 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                                <div className="grid grid-cols-[32px_1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] gap-3 border-b border-black/5 px-6 py-4 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+                                  {/* Select-all checkbox */}
+                                  <div className="flex items-center">
+                                    <input
+                                      type="checkbox"
+                                      className="h-4 w-4 rounded border-zinc-300 accent-zinc-900 cursor-pointer"
+                                      checked={filtered.length > 0 && filtered.every(s => selectedIds.has(s.id))}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedIds(new Set(filtered.map(s => s.id)));
+                                        } else {
+                                          setSelectedIds(new Set());
+                                        }
+                                      }}
+                                    />
+                                  </div>
                                   <div>Lead</div>
                                   <div>Source</div>
                                   <div>Service</div>
@@ -4303,15 +4333,34 @@ export default function AdminDashboard() {
                                     })();
                                     const total = computeTotalQuote(session.quotedPrice ?? null, session.extras ?? null);
                                     const isSelected = selectedLeadPanel?.id === session.id;
+                                    const isChecked = selectedIds.has(session.id);
                                     return (
-                                      <button
+                                      <div
                                         key={session.id}
-                                        onClick={() => {
-                                          setSelectedLeadPanel(session);
-                                          if (leadsCollapsed) setLeadsCollapsed(false);
-                                        }}
-                                        className={`grid w-full grid-cols-[1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] items-center gap-3 px-6 py-4 text-left transition hover:bg-zinc-50 ${isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        className={`grid w-full grid-cols-[32px_1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] items-center gap-3 px-6 py-4 transition hover:bg-zinc-50 ${isChecked ? "bg-blue-50/60" : isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
                                       >
+                                        {/* Row checkbox */}
+                                        <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                                          <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-zinc-300 accent-zinc-900 cursor-pointer"
+                                            checked={isChecked}
+                                            onChange={(e) => {
+                                              const next = new Set(selectedIds);
+                                              if (e.target.checked) next.add(session.id);
+                                              else next.delete(session.id);
+                                              setSelectedIds(next);
+                                            }}
+                                          />
+                                        </div>
+                                        {/* Clickable area for opening drawer */}
+                                        <button
+                                          className="contents text-left"
+                                          onClick={() => {
+                                            setSelectedLeadPanel(session);
+                                            if (leadsCollapsed) setLeadsCollapsed(false);
+                                          }}
+                                        >
                                         {/* Lead name + phone + badges */}
                                         <div className="min-w-0">
                                           <div className="flex items-center gap-3">
@@ -4388,7 +4437,8 @@ export default function AdminDashboard() {
                                             })()}
                                           </div>
                                         </div>
-                                      </button>
+                                        </button>
+                                      </div>
                                     );
                                   })}
                                 </div>
@@ -4945,6 +4995,51 @@ export default function AdminDashboard() {
         open={showFollowUpsModal}
         onClose={() => setShowFollowUpsModal(false)}
       />
+
+      {/* Floating bulk-action bar — appears when rows are checked */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-2xl bg-zinc-900 px-5 py-3 shadow-2xl border border-white/10">
+          <span className="text-sm font-medium text-white">
+            {selectedIds.size} lead{selectedIds.size === 1 ? '' : 's'} selected
+          </span>
+          <button
+            className="text-xs text-zinc-400 hover:text-white transition"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </button>
+          <div className="w-px h-4 bg-white/20" />
+          <button
+            className="flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 transition px-3 py-1.5 text-sm font-semibold text-white"
+            onClick={() => setBulkDeleteConfirmOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
+        </div>
+      )}
+
+      {/* Bulk delete confirmation dialog */}
+      <AlertDialog open={bulkDeleteConfirmOpen} onOpenChange={setBulkDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} lead{selectedIds.size === 1 ? '' : 's'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete {selectedIds.size === 1 ? 'this lead' : `these ${selectedIds.size} leads`} and all associated data. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-500"
+              onClick={() => bulkDeleteMutation.mutate({ sessionIds: Array.from(selectedIds) })}
+            >
+              {bulkDeleteMutation.isPending ? 'Deleting…' : `Delete ${selectedIds.size} lead${selectedIds.size === 1 ? '' : 's'}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Conversation drawer */}
       {selectedSession && (
         <ConversationDrawer
