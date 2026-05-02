@@ -1420,7 +1420,7 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
  *
  * Returns { success, method: 'vapi' | 'sms_fallback' | 'failed', error? }
  */
-export async function callClientRunningLate(cleanerJobId: number, opts?: { testMode?: boolean }): Promise<{
+export async function callClientRunningLate(cleanerJobId: number, opts?: { testMode?: boolean; etaOverrideMs?: number }): Promise<{
   success: boolean;
   method: "vapi" | "sms_fallback" | "failed";
   error?: string;
@@ -1429,6 +1429,15 @@ export async function callClientRunningLate(cleanerJobId: number, opts?: { testM
   if (!opts?.testMode && !await isJobAssigned(cleanerJobId)) return { success: false, method: "failed", error: "Job is not assigned" };
   const db = await getDb();
   if (!db) return { success: false, method: "failed", error: "DB unavailable" };
+
+  // If staff corrected the ETA in the confirmation dialog, persist it before building the script
+  if (opts?.etaOverrideMs) {
+    await db
+      .update(cleanerJobs)
+      .set({ etaTimestamp: opts.etaOverrideMs })
+      .where(eq(cleanerJobs.id, cleanerJobId))
+      .catch(err => console.error("[callClientRunningLate] etaOverride update failed:", err));
+  }
 
   // Fetch job details
   const jobRows = await db

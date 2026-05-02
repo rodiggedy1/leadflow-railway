@@ -2137,12 +2137,43 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     detectedFromSms: boolean;
     smsText: string | null;
   } | null>(null);
+  // Editable ETA time string in the confirmation dialog ("HH:MM" 24h, or "" for no ETA)
+  const [editedEtaTime, setEditedEtaTime] = useState<string>("");
+
+  /** Convert a "HH:MM" 24h string to a Unix ms timestamp for today (ET). Returns null if blank/invalid. */
+  function etaTimeStringToMs(timeStr: string): number | null {
+    if (!timeStr) return null;
+    const [hStr, mStr] = timeStr.split(":");
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    const now = new Date();
+    const eta = new Date(now);
+    eta.setHours(h, m, 0, 0);
+    // If the time is in the past by more than 1 hour, skip
+    if (eta.getTime() < now.getTime() - 60 * 60 * 1000) return null;
+    return eta.getTime();
+  }
+
+  /** Format a "HH:MM" 24h string as a human-readable 12h label for the call script preview. */
+  function etaTimeStringToLabel(timeStr: string): string | null {
+    const ms = etaTimeStringToMs(timeStr);
+    if (!ms) return null;
+    return new Date(ms).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/New_York",
+    });
+  }
 
   async function executeCallClientRunningLate(cleanerJobId: number) {
+    const etaOverrideMs = etaTimeStringToMs(editedEtaTime) ?? undefined;
     setCallConfirmState(null);
+    setEditedEtaTime("");
     setCallingClientJobId(cleanerJobId);
     try {
-      await callClientRunningLateMutation.mutateAsync({ cleanerJobId });
+      await callClientRunningLateMutation.mutateAsync({ cleanerJobId, etaOverrideMs });
       setClientCallDone(prev => new Set(prev).add(cleanerJobId));
     } catch (err: any) {
       alert(err?.message ?? "Failed to call client");
@@ -3171,6 +3202,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                       detectedFromSms,
                                       smsText,
                                     });
+                                    // Pre-fill the editable ETA with the parsed value (24h "HH:MM")
+                                    if (cs.etaLabel) {
+                                      // Parse "3:45 PM" → "15:45" for the time input
+                                      const match = cs.etaLabel.match(/(\d{1,2}):(\d{2})\s*([AP]M)/i);
+                                      if (match) {
+                                        let h = parseInt(match[1], 10);
+                                        const m = match[2];
+                                        const ampm = match[3].toUpperCase();
+                                        if (ampm === "PM" && h < 12) h += 12;
+                                        if (ampm === "AM" && h === 12) h = 0;
+                                        setEditedEtaTime(`${String(h).padStart(2, "0")}:${m}`);
+                                      } else {
+                                        setEditedEtaTime("");
+                                      }
+                                    } else {
+                                      setEditedEtaTime("");
+                                    }
                                   }}
                                   className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
                                 >
@@ -4895,24 +4943,53 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </p>
               </div>
 
-              {/* ETA that will be read out */}
-              <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 space-y-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">ETA the call will give</p>
-                <p className="text-sm font-semibold text-slate-800">
-                  {callConfirmState.etaLabel
-                    ? <span className="text-red-600">{callConfirmState.etaLabel}</span>
-                    : <span className="text-slate-400 italic">No ETA — call will say &ldquo;running a little late&rdquo;</span>
-                  }
-                </p>
+              {/* ETA — editable time input */}
+              <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">ETA the call will give</p>
+                  {editedEtaTime && (
+                    <span className="text-[10px] text-red-600 font-semibold">
+                      {etaTimeStringToLabel(editedEtaTime) ?? ""}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={editedEtaTime}
+                    onChange={(e) => setEditedEtaTime(e.target.value)}
+                    className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                  {editedEtaTime && (
+                    <button
+                      onClick={() => setEditedEtaTime("")}
+                      className="text-[11px] text-slate-400 hover:text-slate-600 transition px-1"
+                      title="Clear ETA"
+                    >
+                      ✕ Clear
+                    </button>
+                  )}
+                </div>
+                {!editedEtaTime && (
+                  <p className="text-[11px] text-slate-400 italic">No ETA — call will say &ldquo;running a little late&rdquo;</p>
+                )}
               </div>
 
-              {/* What the call will say */}
+              {/* What the call will say — live preview based on editedEtaTime */}
               <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 space-y-1.5">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-blue-400">Message that will be delivered</p>
                 <p className="text-[12px] text-slate-700 leading-relaxed italic">
-                  &ldquo;Hi{callConfirmState.clientName ? ` ${callConfirmState.clientName.split(" ")[0]}` : ""}, this is a quick heads-up from Maid in Black — your cleaning team is running a little late
-                  {callConfirmState.etaLabel ? ` and will arrive around ${callConfirmState.etaLabel}` : ""}.
-                  We apologize for the delay and appreciate your patience. If you have any questions, feel free to call us back.&rdquo;
+                  {(() => {
+                    const firstName = callConfirmState.clientName?.split(" ")[0] ?? null;
+                    const etaForPreview = editedEtaTime ? etaTimeStringToLabel(editedEtaTime) : null;
+                    return (
+                      <>
+                        &ldquo;Hi{firstName ? ` ${firstName}` : ""}, this is a quick heads-up from Maid in Black — your cleaning team is running a little late
+                        {etaForPreview ? ` and will arrive around ${etaForPreview}` : ""}.
+                        We apologize for the delay and appreciate your patience. If you have any questions, feel free to call us back.&rdquo;
+                      </>
+                    );
+                  })()}
                 </p>
               </div>
 

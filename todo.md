@@ -1346,3 +1346,4 @@
 - [x] Inbound SMS running-late detection: when a known cleaner texts the ops line with a running-late/ETA message, auto-detect it and post the existing Running Late Command Chat card so staff can click to notify the client
 - [x] Add amber "via SMS" badge on auto-detected running-late cards in Command Chat, with original cleaner SMS text on hover tooltip
 - [x] Add confirmation dialog before placing Call Client (running late) — show client name, ETA, and exact message that will be delivered
+- [x] Add editable ETA field in Call Client confirmation dialog so staff can correct the parsed ETA before calling
