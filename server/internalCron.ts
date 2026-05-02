@@ -43,7 +43,7 @@ import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
 import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
-import { and, eq, isNull, lte, lt, gte, isNotNull } from "drizzle-orm";
+import { and, eq, isNull, lte, lt, gte, isNotNull, desc } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -636,6 +636,77 @@ export function startInternalCron(): void {
     } catch (err) {
       console.error("[InternalCron] VapiRefresh failed:", err);
       await recordHeartbeat("vapi-refresh", `error: ${err instanceof Error ? err.message : String(err)}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Sync watchdog: every hour, 6 AM–10 PM ET ──────────────────────────
+  // Checks whether today-sync-jobs ran in the last 75 minutes.
+  // If not, posts a ⚠️ alert card to Command Chat and notifies the owner.
+  // Deduplicates: only posts one alert per stale window (not every tick).
+  cron.schedule("0 30 6-22 * * *", async () => {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      const STALE_THRESHOLD_MS = 75 * 60 * 1000; // 75 minutes
+      const [lastRow] = await db
+        .select({ ranAt: cronHeartbeats.ranAt })
+        .from(cronHeartbeats)
+        .where(eq(cronHeartbeats.jobName, "today-sync-jobs"))
+        .orderBy(desc(cronHeartbeats.ranAt))
+        .limit(1);
+      const lastRanAt = lastRow?.ranAt ? new Date(lastRow.ranAt).getTime() : 0;
+      const minutesSince = Math.floor((Date.now() - lastRanAt) / 60_000);
+      if (Date.now() - lastRanAt < STALE_THRESHOLD_MS) {
+        // Sync is fresh — no alert needed
+        await recordHeartbeat("sync-watchdog", `ok: last sync ${minutesSince}m ago`, false);
+        return;
+      }
+      // Sync is stale — check if we already posted an alert in the last 2 hours
+      const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+      const recentAlert = await db
+        .select({ id: opsChatMessages.id })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.quickAction as any, "sync_watchdog"),
+          gte(opsChatMessages.createdAt, new Date(Date.now() - TWO_HOURS_MS))
+        ))
+        .limit(1);
+      if (recentAlert.length > 0) {
+        // Already alerted recently — don't spam
+        await recordHeartbeat("sync-watchdog", `stale (${minutesSince}m) but alert already posted`, false);
+        return;
+      }
+      // Post the alert card to Command Chat
+      const lastSyncStr = lastRanAt > 0
+        ? new Date(lastRanAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })
+        : "never";
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        from: "System",
+        authorName: "System",
+        authorRole: "system",
+        body: `⚠️ Sync Alert — Today's schedule has not synced in ${minutesSince} minutes (last sync: ${lastSyncStr}). Jobs added to Launch27 since then may be missing from Field Management. Check the server or trigger a manual sync.`,
+        metadata: JSON.stringify({ minutesSince, lastSyncStr }),
+        quickAction: "sync_watchdog",
+      } as any);
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("new_message");
+      // Also notify the owner via push
+      try {
+        const { notifyOwner } = await import("./_core/notification");
+        await notifyOwner({
+          title: "⚠️ Schedule Sync Alert",
+          content: `Today's schedule has not synced in ${minutesSince} minutes (last sync: ${lastSyncStr}). Jobs added to Launch27 may be missing from Field Management.`,
+        });
+      } catch (notifErr) {
+        console.warn("[InternalCron] SyncWatchdog: owner notification failed (non-fatal):", notifErr);
+      }
+      console.warn(`[InternalCron] SyncWatchdog — STALE: last sync ${minutesSince}m ago (${lastSyncStr}). Alert posted to Command Chat.`);
+      await recordHeartbeat("sync-watchdog", `ALERT: last sync ${minutesSince}m ago (${lastSyncStr})`, true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] SyncWatchdog failed:", msg);
+      await recordHeartbeat("sync-watchdog", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
 
