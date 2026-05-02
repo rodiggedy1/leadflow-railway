@@ -3466,6 +3466,19 @@ export default function AdminDashboard() {
         } catch {
           matchesStage = false;
         }
+      } else if (stageFilter === "UNHANDLED") {
+        // UNHANDLED is also a synthetic filter: show only stage=UNHANDLED leads
+        // that have NOT been marked handled (respondedAt is null, or last customer
+        // message arrived AFTER respondedAt — meaning a new message came in).
+        try {
+          const hist: Array<{ role: string; ts?: number }> = JSON.parse((s as any).messageHistory ?? "[]");
+          const lastCustomerMsg = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
+          const respondedAt = (s as any).respondedAt as number | null | undefined;
+          const isHandled = respondedAt && (!lastCustomerMsg?.ts || lastCustomerMsg.ts <= respondedAt);
+          matchesStage = s.stage === "UNHANDLED" && !isHandled;
+        } catch {
+          matchesStage = s.stage === "UNHANDLED";
+        }
       } else {
         matchesStage = stageFilter === "all" || s.stage === stageFilter;
       }
