@@ -1338,3 +1338,4 @@
 - [x] Remove 8AM-5PM ET business hours guard from VAPI call functions in fieldMgmtEngine.ts
 - [ ] Investigate Owen Sloan not showing in Field Management and cleaner portal for today's jobs
 - [x] Extend today-sync hourly window to start at 6 AM ET (was 7 AM) to catch overnight Launch27 additions
+- [x] Add "Last synced" timestamp to Field Management header showing when last today-sync ran

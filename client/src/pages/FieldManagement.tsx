@@ -1414,6 +1414,56 @@ function FieldManagementLoginScreen({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ── Last Synced Badge ────────────────────────────────────────────────────────
+function LastSyncedBadge() {
+  const { data, isLoading } = trpc.fieldMgmt.getLastSync.useQuery(undefined, {
+    refetchInterval: 60_000, // refresh every minute
+    staleTime: 30_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-1 shrink-0">
+        <RefreshCw className="w-3 h-3 animate-spin" />
+        <span>Checking sync…</span>
+      </div>
+    );
+  }
+
+  if (!data?.ranAt) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-1 shrink-0">
+        <Clock className="w-3 h-3" />
+        <span>Not yet synced today</span>
+      </div>
+    );
+  }
+
+  const ranAt = new Date(data.ranAt);
+  const minutesAgo = Math.floor((Date.now() - ranAt.getTime()) / 60_000);
+  const isStale = minutesAgo > 90; // warn if more than 90 min since last sync
+
+  const timeLabel = minutesAgo < 1
+    ? "just now"
+    : minutesAgo === 1
+    ? "1 min ago"
+    : minutesAgo < 60
+    ? `${minutesAgo} min ago`
+    : ranAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  return (
+    <div
+      className={`flex items-center gap-1.5 text-xs mt-1 shrink-0 ${
+        isStale ? "text-amber-600" : "text-gray-400"
+      }`}
+      title={`Last synced: ${ranAt.toLocaleString()}${data.summary ? ` — ${data.summary}` : ""}`}
+    >
+      <RefreshCw className={`w-3 h-3 ${isStale ? "text-amber-500" : "text-green-500"}`} />
+      <span>Synced {timeLabel}</span>
+    </div>
+  );
+}
+
 export default function FieldManagement() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
   const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower">("board");
@@ -1427,11 +1477,14 @@ export default function FieldManagement() {
         activeTab === "board" || activeTab === "tower" ? "max-w-7xl" : "max-w-3xl"
       }`}>
         {/* Page header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Field Management</h1>
-          <p className="text-gray-500 mt-1 text-sm">
-            Day-of workflow automation and live job communication log.
-          </p>
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Field Management</h1>
+            <p className="text-gray-500 mt-1 text-sm">
+              Day-of workflow automation and live job communication log.
+            </p>
+          </div>
+          <LastSyncedBadge />
         </div>
 
         {/* Tabs */}

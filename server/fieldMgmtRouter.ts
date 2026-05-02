@@ -23,7 +23,7 @@ import { eq, asc, desc, gte, gt, inArray, notInArray, and } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls, cleanerMagicLinkTokens } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls, cleanerMagicLinkTokens, cronHeartbeats } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import {
   parseServiceDateTime,
@@ -1270,4 +1270,23 @@ export const fieldMgmtRouter = router({
 
       return { success: true, alreadyAssigned: false, cleanerName: job.cleanerName, lateSmsFired: lateResult.triggered };
     }),
+
+  /**
+   * Returns the timestamp of the last successful today-sync-jobs run.
+   * Used by the Field Management header to show data freshness.
+   */
+  getLastSync: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { ranAt: null, summary: null };
+    const [row] = await db
+      .select({ ranAt: cronHeartbeats.ranAt, resultSummary: cronHeartbeats.resultSummary })
+      .from(cronHeartbeats)
+      .where(eq(cronHeartbeats.jobName, "today-sync-jobs"))
+      .orderBy(desc(cronHeartbeats.ranAt))
+      .limit(1);
+    return {
+      ranAt: row?.ranAt ?? null,
+      summary: row?.resultSummary ?? null,
+    };
+  }),
 });
