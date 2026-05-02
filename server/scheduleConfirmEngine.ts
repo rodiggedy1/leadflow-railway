@@ -23,6 +23,7 @@ import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
+import { allCleanersConfirmedForDate, postOpsSummary } from "./opsSummaryEngine";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -386,6 +387,18 @@ export async function handleScheduleConfirmReply(
     }
 
     const firstName = cleanerName?.split(" ")[0] ?? "there";
+
+    // Check if ALL cleaners have now confirmed — if so, post the ops summary immediately
+    if (targetDate) {
+      allCleanersConfirmedForDate(targetDate).then((allDone) => {
+        if (allDone) {
+          postOpsSummary(targetDate).catch((err) =>
+            console.error("[ScheduleConfirm] Failed to post ops summary after all confirmed:", err)
+          );
+        }
+      }).catch(() => { /* non-critical */ });
+    }
+
     return {
       responseText: `Got it, ${firstName}! ✅ You're all confirmed for tomorrow. See you then! 🧹`,
       newStage: "SCHEDULE_CONFIRM_DONE",

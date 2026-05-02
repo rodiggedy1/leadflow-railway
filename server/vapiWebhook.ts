@@ -250,6 +250,7 @@ export function registerVapiWebhookRoute(app: Express): void {
                 step: fieldMgmtCalls.step,
                 clientStatusInquirySessionId: fieldMgmtCalls.clientStatusInquirySessionId,
                 calledPhone: fieldMgmtCalls.calledPhone,
+                vapiCallId: fieldMgmtCalls.vapiCallId,
               })
               .from(fieldMgmtCalls)
               .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
@@ -273,6 +274,24 @@ export function registerVapiWebhookRoute(app: Express): void {
                 outcome,
                 cleanerName: cleanerRow?.name ?? null,
               }).catch((err: unknown) => console.error("[Vapi] handleStatusInquiryCallEnd error:", err));
+            }
+
+            if (callRow?.step === "schedule_escalation") {
+              const { handleEscalationCallEnd } = await import("./escalationEngine");
+              const callAssistant = (callObj as Record<string, unknown> | undefined)?.assistant as Record<string, unknown> | undefined;
+              const assistantMetadata = (callAssistant?.metadata as Record<string, unknown> | undefined) ?? {};
+              await handleEscalationCallEnd({
+                vapiCallId: callRow.vapiCallId ?? "",
+                transcript: transcript ?? null,
+                endedReason: endedReason ?? null,
+                metadata: {
+                  cleanerProfileId: assistantMetadata.cleanerProfileId as number | undefined,
+                  cleanerName: assistantMetadata.cleanerName as string | undefined,
+                  cleanerPhone: callRow.calledPhone ?? undefined,
+                  targetDate: assistantMetadata.targetDate as string | undefined,
+                  jobIds: assistantMetadata.jobIds as number[] | undefined,
+                },
+              }).catch((err: unknown) => console.error("[Vapi] handleEscalationCallEnd error:", err));
             }
           }).catch(() => {});
         }

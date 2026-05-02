@@ -1355,3 +1355,8 @@
 - [x] Client status inquiry: detect when client texts asking about job status, call cleaner via VAPI, reply to client with ETA
 - [x] Add CLIENT_STATUS_INQUIRY stage to conversationStages enum + DB
 - [x] Add clientStatusInquirySessionId column to fieldMgmtCalls
+- [ ] Refactor client status inquiry: remove auto-call, post Command Chat card with approval button instead
+- [ ] Add status-inquiry card to CommandChat with Call Cleaner confirmation dialog
+- [ ] Add callCleanerForStatusInquiry tRPC procedure (fires VAPI call + sends ETA reply to client)
+- [x] Daily ops summary card in Command Chat: post when all cleaners confirm or at 7 AM ET fallback
+- [x] 8 PM escalation: VAPI call to unconfirmed cleaners, flag non-responders in Command Chat

@@ -562,6 +562,38 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // ── Daily 7 AM ET: post ops summary if not already posted ─────────────────
+  app.post("/api/cron/ops-summary", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
+    if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const { postOpsSummary } = await import("./opsSummaryEngine");
+      const result = await postOpsSummary();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[cron/ops-summary] Error:", msg);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Daily 8 PM ET: escalation calls to unconfirmed cleaners ─────────────
+  app.post("/api/cron/schedule-escalation", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
+    if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const { runEscalationCalls } = await import("./escalationEngine");
+      const result = await runEscalationCalls();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[cron/schedule-escalation] Error:", msg);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   // ── One-shot: backfill cleanerJobId on existing cleaner_status cards ────────────────
   app.post("/api/cron/backfill-cleaner-job-id", async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;
