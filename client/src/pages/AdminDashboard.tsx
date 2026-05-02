@@ -1267,15 +1267,15 @@ function ConversationDrawer({
 
   // Mark as handled — removes from unresponded queue without closing the lead
   const markHandledMutation = trpc.leads.markHandled.useMutation({
-    onSuccess: () => {
+     onSuccess: () => {
       toast.success("Marked as handled");
       utils.leads.list.invalidate();
+      utils.leads.stats.invalidate();
       utils.leads.attentionItems.invalidate();
       onClose();
     },
     onError: (e) => toast.error(e.message),
   });
-
   // Call logs (agent-logged)
   const { data: callLogs } = trpc.agents.getCallLogs.useQuery({ sessionId: session.id });
   // OpenPhone call recordings
