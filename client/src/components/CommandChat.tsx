@@ -2241,9 +2241,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const h = parseInt(hStr, 10);
     const m = parseInt(mStr, 10);
     if (isNaN(h) || isNaN(m)) return null;
+    // Build timestamp treating input as ET (America/New_York) — avoids server-timezone drift.
     const now = new Date();
-    const eta = new Date(now);
-    eta.setHours(h, m, 0, 0);
+    const etParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(now);
+    const year  = etParts.find(p => p.type === "year")!.value;
+    const month = etParts.find(p => p.type === "month")!.value;
+    const day   = etParts.find(p => p.type === "day")!.value;
+    // Parse "YYYY-MM-DDTHH:MM" as ET by appending the ET offset string.
+    const etOffsetDate = new Date(new Date(`${year}-${month}-${day}T12:00:00`).toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const utcOffsetMs = new Date(`${year}-${month}-${day}T12:00:00`).getTime() - etOffsetDate.getTime();
+    const etMidnightUtc = new Date(`${year}-${month}-${day}T00:00:00`).getTime() - utcOffsetMs;
+    const eta = new Date(etMidnightUtc + h * 3_600_000 + m * 60_000);
     // If the time is in the past by more than 1 hour, skip
     if (eta.getTime() < now.getTime() - 60 * 60 * 1000) return null;
     return eta.getTime();
