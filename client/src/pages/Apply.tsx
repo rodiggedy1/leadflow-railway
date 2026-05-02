@@ -1318,7 +1318,9 @@ function VideoStep({
 }
 
 function ThankYouStep({ candidateId }: { candidateId: number | null }) {
-  const interviewUrl = candidateId ? `/interview/${candidateId}` : null;
+  // In preview mode (?step=done with no real candidateId), use a placeholder so the page renders fully
+  const isPreview = !candidateId && new URLSearchParams(window.location.search).get("step") === "done";
+  const interviewUrl = candidateId ? `/interview/${candidateId}` : (isPreview ? "#" : null);
 
   const questions = [
     "Tell us about your cleaning experience",
@@ -1337,9 +1339,9 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
 
   const hiringSteps = [
     { icon: <CheckCircle2 size={18} />, label: "Application submitted", sub: "Completed", done: true },
-    { icon: <PhoneCall size={18} />, label: "AI interview", sub: "Start now", done: false, cta: true },
+    { icon: <Camera size={18} />, label: "Supplies photo", sub: "Do this now", done: false, cta: true },
+    { icon: <PhoneCall size={18} />, label: "AI interview", sub: "Comes next", done: false },
     { icon: <Phone size={18} />, label: "Real interview", sub: "Comes next", done: false },
-    { icon: <Sparkles size={18} />, label: "Background check", sub: "Comes next", done: false },
   ];
 
   return (
@@ -1361,9 +1363,9 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
               </div>
 
               {/* Headline */}
-              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-3">You're almost done.</h1>
-              <h2 className="text-3xl md:text-4xl font-extrabold leading-tight mb-6" style={{ color: "#94a3b8" }}>Start your 2-minute<br />interview now.</h2>
-              <p className="text-gray-500 text-base mb-8 max-w-lg">We're reviewing candidates today. This quick interview is required to move forward and helps us fast-track strong applicants.</p>
+              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-3">You're in! One last thing.</h1>
+              <h2 className="text-2xl md:text-3xl font-extrabold leading-tight mb-4" style={{ color: "#94a3b8" }}>Send us a photo of your<br />cleaning supplies.</h2>
+              <p className="text-gray-500 text-base mb-8 max-w-lg">Before your interview, we need to see your supplies. It takes 30 seconds and helps us fast-track your application.</p>
 
               {/* CTAs */}
               <div className="flex flex-wrap gap-3 mb-10">
@@ -1399,11 +1401,40 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
                 </button>
               </div>
 
+              {/* Supplies upload CTA */}
+              <div className="rounded-2xl p-5 mb-6" style={{ backgroundColor: "#fffbeb", border: "1.5px solid #fde68a" }}>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#fef3c7" }}>
+                    <Camera size={20} style={{ color: "#d97706" }} />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-bold text-gray-900 text-sm mb-1">📸 Upload a photo of your cleaning supplies</p>
+                    <p className="text-xs text-gray-500 mb-3">Mop, vacuum, cleaning products — whatever you use. A quick phone photo is fine.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href={interviewUrl || "#"}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90"
+                        style={{ backgroundColor: "#d97706" }}
+                      >
+                        <Camera size={14} /> Upload photo now
+                      </a>
+                      <button
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100"
+                        style={{ border: "1.5px solid #e5e7eb", backgroundColor: "#fff" }}
+                        onClick={() => toast.success("Text us your supplies photo anytime — we'll link it to your application.")}
+                      >
+                        Text it instead
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Stats row */}
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { stat: "2 minutes", sub: "Super quick" },
-                  { stat: "5 questions", sub: "Simple answers" },
+                  { stat: "30 seconds", sub: "Super quick" },
+                  { stat: "Any phone", sub: "Just snap a pic" },
                   { stat: "Reviewed today", sub: "Faster decisions" },
                 ].map(({ stat, sub }) => (
                   <div key={stat} className="rounded-xl p-4" style={{ border: "1px solid #e5e7eb", backgroundColor: "#fafafa" }}>
@@ -1411,6 +1442,30 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
                     <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* Wistia video card */}
+            <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+              <div className="px-6 pt-6 pb-4">
+                <p className="text-xs text-gray-400 mb-0.5">From the team</p>
+                <p className="font-bold text-gray-900 text-base">A quick message from our hiring team</p>
+              </div>
+              {/* Wistia embed — replace WISTIA_VIDEO_ID with your real ID */}
+              <div className="relative w-full" style={{ paddingBottom: "56.25%", backgroundColor: "#f1f5f9" }}>
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: "#e2e8f0" }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <path d="M8 5.14v14l11-7-11-7z" fill="#94a3b8" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-gray-400 font-medium">Video coming soon</p>
+                  <p className="text-xs text-gray-300">Replace with Wistia embed code</p>
+                </div>
+                {/* To embed: uncomment and replace WISTIA_VIDEO_ID below */}
+                {/* <script src="https://fast.wistia.com/embed/medias/WISTIA_VIDEO_ID.jsonp" async></script>
+                <script src="https://fast.wistia.com/assets/external/E-v1.js" async></script>
+                <div className="wistia_embed wistia_async_WISTIA_VIDEO_ID absolute inset-0" /> */}
               </div>
             </div>
 
@@ -1495,7 +1550,8 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function Apply() {
-  const [step, setStep] = useState<Step>("welcome");
+  const initialStep: Step = new URLSearchParams(window.location.search).get("step") as Step || "welcome";
+  const [step, setStep] = useState<Step>(initialStep);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [newCandidateId, setNewCandidateId] = useState<number | null>(null);
 
