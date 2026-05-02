@@ -36,7 +36,7 @@ import {
   users,
   quoteLeads,
 } from "../drizzle/schema";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -112,7 +112,7 @@ export const opsChatRouter = router({
         photoSubmitted: cleanerJobs.photoSubmitted,
       })
       .from(cleanerJobs)
-      .where(and(eq(cleanerJobs.jobDate, today)))
+      .where(and(eq(cleanerJobs.jobDate, today), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")))
       .orderBy(cleanerJobs.serviceDateTime);
 
     // Fetch flaggedAt for open flags so the frontend can show escalation timers
@@ -715,7 +715,7 @@ export const opsChatRouter = router({
     const todayJobs = await db
       .select({ id: cleanerJobs.id })
       .from(cleanerJobs)
-      .where(eq(cleanerJobs.jobDate, today));
+      .where(and(eq(cleanerJobs.jobDate, today), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")));
 
     if (todayJobs.length === 0) return [];
 
@@ -939,7 +939,7 @@ export const opsChatRouter = router({
         cleanerProfileId: cleanerJobs.cleanerProfileId,
       })
       .from(cleanerJobs)
-      .where(eq(cleanerJobs.jobDate, today))
+      .where(and(eq(cleanerJobs.jobDate, today), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")))
       .orderBy(cleanerJobs.serviceDateTime);
 
     // Open issue flags for auto-raised issues panel
