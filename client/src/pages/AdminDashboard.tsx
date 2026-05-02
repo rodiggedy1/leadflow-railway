@@ -4337,7 +4337,11 @@ export default function AdminDashboard() {
                                     return (
                                       <div
                                         key={session.id}
-                                        className={`grid w-full grid-cols-[32px_1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] items-center gap-3 px-6 py-4 transition hover:bg-zinc-50 ${isChecked ? "bg-blue-50/60" : isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        className={`grid w-full grid-cols-[32px_1.4fr_1fr_1fr_0.8fr_1fr_1.2fr] items-center gap-3 px-6 py-4 transition hover:bg-zinc-50 cursor-pointer ${isChecked ? "bg-blue-50/60" : isSelected ? "bg-lime-50/60" : isBooked ? "bg-emerald-50/30" : ""}`}
+                                        onClick={() => {
+                                          setSelectedLeadPanel(session);
+                                          if (leadsCollapsed) setLeadsCollapsed(false);
+                                        }}
                                       >
                                         {/* Row checkbox */}
                                         <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
@@ -4353,14 +4357,8 @@ export default function AdminDashboard() {
                                             }}
                                           />
                                         </div>
-                                        {/* Clickable area for opening drawer */}
-                                        <button
-                                          className="contents text-left"
-                                          onClick={() => {
-                                            setSelectedLeadPanel(session);
-                                            if (leadsCollapsed) setLeadsCollapsed(false);
-                                          }}
-                                        >
+                                        {/* Grid cells (no nested button) */}
+                                        <div className="contents">
                                         {/* Lead name + phone + badges */}
                                         <div className="min-w-0">
                                           <div className="flex items-center gap-3">
@@ -4437,7 +4435,7 @@ export default function AdminDashboard() {
                                             })()}
                                           </div>
                                         </div>
-                                        </button>
+                                        </div>
                                       </div>
                                     );
                                   })}

@@ -3271,9 +3271,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   return (
                     <Tooltip key={cs.id} delayDuration={300}>
                       <TooltipTrigger asChild>
-                        <button
+                        <div
+                          role="button"
+                          tabIndex={0}
                           onClick={() => cs.cleanerJobId ? onJumpToJob(cs.cleanerJobId) : undefined}
-                          className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm ${cardBg}`}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') cs.cleanerJobId && onJumpToJob(cs.cleanerJobId); }}
+                          className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm cursor-pointer ${cardBg}`}
                         >
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 min-w-0">
@@ -3347,7 +3350,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               )}
                             </div>
                           )}
-                        </button>
+                        </div>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-[240px] space-y-0.5 text-xs">
                         {tooltipLines.map((line, i) => (
