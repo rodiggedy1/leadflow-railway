@@ -218,15 +218,16 @@ export const appRouter = router({
             // ignore parse errors
           }
 
-          // If the most recent call log is newer than the last SMS, prefer it for display
+          // If the most recent call log is newer than the last SMS, prefer it for display.
+          // NOTE: lastCalledAt is ALWAYS set by staff (outbound calls / call logging) — never
+          // by the customer calling in. It must NOT advance lastCustomerReplyAt because doing
+          // so triggers false "New reply" notifications every time an agent logs a call.
           if (s.lastCalledAt && (!lastActivityAt || s.lastCalledAt > lastActivityAt)) {
             lastActivityText = `Call: ${s.lastCalledByAgentName ?? "agent"}`;
             lastActivityAt = s.lastCalledAt;
             lastActivityType = "call";
-            // Calls are inbound interactions — also update the sort key
-            if (!lastCustomerReplyAt || s.lastCalledAt > lastCustomerReplyAt) {
-              lastCustomerReplyAt = s.lastCalledAt;
-            }
+            // Intentionally NOT updating lastCustomerReplyAt here.
+            // Outbound staff calls are not customer replies and must not trigger the notifier.
           }
 
           return { ...s, lastActivityText, lastActivityAt, lastActivityType, lastCustomerReplyAt };

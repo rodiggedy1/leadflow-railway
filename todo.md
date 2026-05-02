@@ -1369,3 +1369,4 @@
 - [x] Wire 7 PM schedule-confirm nudge cron into internalCron.ts
 - [x] Wire 7 AM ops summary cron into internalCron.ts
 - [x] Wire 8 PM schedule escalation cron into internalCron.ts
+- [x] Bug fix: outbound staff calls (lastCalledByAgentName set) falsely advance lastCustomerReplyAt and trigger phantom reply notifications
