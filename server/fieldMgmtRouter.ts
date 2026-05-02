@@ -23,7 +23,7 @@ import { eq, asc, desc, gte, gt, inArray, notInArray, and } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls, cleanerMagicLinkTokens, cronHeartbeats } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, fieldMgmtLog, fieldMgmtSteps, jobStatusHistory, jobSmsReplies, fieldMgmtCalls, cleanerMagicLinkTokens, cronHeartbeats, opsChatMessages } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import {
   parseServiceDateTime,
@@ -1004,6 +1004,51 @@ export const fieldMgmtRouter = router({
       console.log(
         `[FieldMgmt TEST] simulateStatusChange: job ${input.cleanerJobId}, status ${input.status} → step ${step} → ${result.success ? "OK" : "FAILED"}`
       );
+
+      // Post a Command Chat card for statuses that normally produce one,
+      // so the test panel can exercise the full card → confirm dialog → call flow.
+      const CARD_STATUSES = ["on_the_way", "running_late", "issue_at_property", "arrived", "completed", "in_progress"];
+      if (CARD_STATUSES.includes(input.status)) {
+        try {
+          const STATUS_META: Record<string, { emoji: string; label: string }> = {
+            on_the_way:        { emoji: "🚗", label: "On the way" },
+            arrived:           { emoji: "🟢", label: "Arrived" },
+            in_progress:       { emoji: "🧹", label: "In progress" },
+            running_late:      { emoji: "⏰", label: "Running late" },
+            issue_at_property: { emoji: "🚨", label: "Issue at property" },
+            completed:         { emoji: "✅", label: "Completed" },
+          };
+          const sm = STATUS_META[input.status] ?? { emoji: "🟡", label: input.status };
+          const cleanerName = `[TEST] ${job.cleanerName ?? "Cleaner"}`;
+          const customerPart = job.customerName ? ` — ${job.customerName}` : "";
+          const addressPart = job.jobAddress ? ` (${job.jobAddress})` : "";
+          const body = `${sm.emoji} ${cleanerName} — ${sm.label}${customerPart}${addressPart}`;
+          await db.insert(opsChatMessages).values({
+            channel: "command",
+            cleanerJobId: input.cleanerJobId,
+            authorName: cleanerName,
+            authorRole: "cleaner",
+            body,
+            quickAction: "cleaner_status",
+            metadata: JSON.stringify({
+              cleanerName,
+              status: input.status,
+              label: sm.label,
+              emoji: sm.emoji,
+              cleanerJobId: input.cleanerJobId,
+              customerName: job.customerName ?? null,
+              jobAddress: job.jobAddress ?? null,
+              etaLabel: null,
+              issueNote: input.issueNote ?? null,
+            }),
+          });
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message", { channel: "command" });
+          broadcastOpsUpdate("job_update", { jobId: input.cleanerJobId });
+        } catch (err) {
+          console.error("[simulateStatusChange] Failed to post CommandChat card:", err);
+        }
+      }
 
       return {
         success: result.success,

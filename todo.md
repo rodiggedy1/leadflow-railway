@@ -1347,3 +1347,4 @@
 - [x] Add amber "via SMS" badge on auto-detected running-late cards in Command Chat, with original cleaner SMS text on hover tooltip
 - [x] Add confirmation dialog before placing Call Client (running late) — show client name, ETA, and exact message that will be delivered
 - [x] Add editable ETA field in Call Client confirmation dialog so staff can correct the parsed ETA before calling
+- [x] Fix simulateStatusChange test panel: clicking Running Late now also posts the Command Chat card so the full card→dialog→call flow can be tested
