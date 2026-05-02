@@ -1009,7 +1009,7 @@ export const qualityRouter = router({
       const cjRows = await db
         .select()
         .from(cleanerJobs)
-        .where(eq(cleanerJobs.jobDate, date))
+        .where(and(eq(cleanerJobs.jobDate, date), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
 
       // Get photos and applied custom rules for these cleaner job rows
@@ -1694,7 +1694,7 @@ export const qualityRouter = router({
       return db
         .select()
         .from(cleanerJobs)
-        .where(eq(cleanerJobs.jobDate, input.date))
+        .where(and(eq(cleanerJobs.jobDate, input.date), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.teamName);
     }),
 

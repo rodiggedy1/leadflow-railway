@@ -19,7 +19,7 @@
  */
 
 import { z } from "zod";
-import { eq, asc, desc, gte, gt, inArray, notInArray, and } from "drizzle-orm";
+import { eq, asc, desc, gte, gt, inArray, notInArray, and, ne } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -612,7 +612,7 @@ export const fieldMgmtRouter = router({
         })
         .from(cleanerJobs)
         .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
-        .where(eq(cleanerJobs.jobDate, input.date))
+        .where(and(eq(cleanerJobs.jobDate, input.date), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.cleanerName);
 
       if (jobs.length === 0) return [];
