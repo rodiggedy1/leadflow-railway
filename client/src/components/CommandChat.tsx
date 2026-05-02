@@ -2136,6 +2136,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     etaLabel: string | null;
     detectedFromSms: boolean;
     smsText: string | null;
+    isTestCard: boolean;
   } | null>(null);
   // Editable ETA time string in the confirmation dialog ("HH:MM" 24h, or "" for no ETA)
   const [editedEtaTime, setEditedEtaTime] = useState<string>("");
@@ -2169,11 +2170,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   async function executeCallClientRunningLate(cleanerJobId: number) {
     const etaOverrideMs = etaTimeStringToMs(editedEtaTime) ?? undefined;
+    const testMode = callConfirmState?.isTestCard ?? false;
     setCallConfirmState(null);
     setEditedEtaTime("");
     setCallingClientJobId(cleanerJobId);
     try {
-      await callClientRunningLateMutation.mutateAsync({ cleanerJobId, etaOverrideMs });
+      await callClientRunningLateMutation.mutateAsync({ cleanerJobId, etaOverrideMs, ...(testMode ? { testMode: true } : {}) });
       setClientCallDone(prev => new Set(prev).add(cleanerJobId));
     } catch (err: any) {
       alert(err?.message ?? "Failed to call client");
@@ -3201,6 +3203,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                       etaLabel: cs.etaLabel ?? null,
                                       detectedFromSms,
                                       smsText,
+                                      isTestCard: cs.isTestCard ?? false,
                                     });
                                     // Pre-fill the editable ETA with the parsed value (24h "HH:MM")
                                     if (cs.etaLabel) {
@@ -4935,6 +4938,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </DialogHeader>
 
             <div className="space-y-3 py-1">
+              {/* Test mode banner */}
+              {callConfirmState.isTestCard && (
+                <div className="rounded-xl bg-amber-50 border border-amber-300 px-4 py-2.5 flex items-center gap-2">
+                  <span className="text-base">🧪</span>
+                  <div>
+                    <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide">Test Mode</p>
+                    <p className="text-[11px] text-amber-600">Call will go to <span className="font-semibold">+1 (302) 981-6191</span>, not the real client.</p>
+                  </div>
+                </div>
+              )}
+
               {/* Who will be called */}
               <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 space-y-1.5">
                 <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400">Client</p>

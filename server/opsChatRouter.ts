@@ -1171,6 +1171,8 @@ export const opsChatRouter = router({
           // SMS auto-detection fields
           detectedFromSms: !!(meta.detectedFromSms as boolean | undefined),
           smsText: (meta.smsText as string | null) ?? null,
+          // Test panel flag — call should go to test number, not real client
+          isTestCard: !!(meta.isTestCard as boolean | undefined),
         };
       });
 

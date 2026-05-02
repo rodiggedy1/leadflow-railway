@@ -1040,6 +1040,7 @@ export const fieldMgmtRouter = router({
               jobAddress: job.jobAddress ?? null,
               etaLabel: null,
               issueNote: input.issueNote ?? null,
+              isTestCard: true,
             }),
           });
           const { broadcastOpsUpdate } = await import("./sseBroadcast");
