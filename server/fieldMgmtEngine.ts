@@ -1420,13 +1420,13 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
  *
  * Returns { success, method: 'vapi' | 'sms_fallback' | 'failed', error? }
  */
-export async function callClientRunningLate(cleanerJobId: number): Promise<{
+export async function callClientRunningLate(cleanerJobId: number, opts?: { testMode?: boolean }): Promise<{
   success: boolean;
   method: "vapi" | "sms_fallback" | "failed";
   error?: string;
 }> {
-  if (!FIELD_MGMT_ENABLED) return { success: false, method: "failed", error: "Field management kill switch is off" };
-  if (!await isJobAssigned(cleanerJobId)) return { success: false, method: "failed", error: "Job is not assigned" };
+  if (!FIELD_MGMT_ENABLED && !opts?.testMode) return { success: false, method: "failed", error: "Field management kill switch is off" };
+  if (!opts?.testMode && !await isJobAssigned(cleanerJobId)) return { success: false, method: "failed", error: "Job is not assigned" };
   const db = await getDb();
   if (!db) return { success: false, method: "failed", error: "DB unavailable" };
 
@@ -1448,8 +1448,9 @@ export async function callClientRunningLate(cleanerJobId: number): Promise<{
   const job = jobRows[0];
   if (!job) return { success: false, method: "failed", error: "Job not found" };
 
-  const clientPhone = job.customerPhone;
-  if (!clientPhone) return { success: false, method: "failed", error: "No customer phone on file" };
+  const rawClientPhone = opts?.testMode ? "+13029816191" : job.customerPhone;
+  if (!rawClientPhone) return { success: false, method: "failed", error: "No customer phone on file" };
+  const clientPhone = rawClientPhone;
 
   const clientFirstName = firstName(job.customerName ?? "there");
   const cleanerFirstName = firstName(job.cleanerName ?? "Your team");
@@ -1578,7 +1579,7 @@ export async function callClientRunningLate(cleanerJobId: number): Promise<{
       .from(cleanerProfiles)
       .where(eq(cleanerProfiles.id, job.cleanerProfileId))
       .limit(1);
-    const cleanerPhone = profileRows[0]?.phone;
+    const cleanerPhone = opts?.testMode ? "+13029816191" : profileRows[0]?.phone;
     if (cleanerPhone) {
       const confirmMsg =
         `Hi ${cleanerFirstName} — just a heads up, we've notified your client that you're running late. ` +

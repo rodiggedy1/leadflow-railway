@@ -1276,10 +1276,10 @@ export const fieldMgmtRouter = router({
    * running late. Falls back to SMS if VAPI fails. Texts the cleaner a confirmation.
    */
   callClientRunningLate: agentProcedure
-    .input(z.object({ cleanerJobId: z.number().int().positive() }))
+    .input(z.object({ cleanerJobId: z.number().int().positive(), testMode: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       const { callClientRunningLate } = await import("./fieldMgmtEngine");
-      const result = await callClientRunningLate(input.cleanerJobId);
+      const result = await callClientRunningLate(input.cleanerJobId, { testMode: input.testMode ?? false });
       if (!result.success) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error ?? "Failed to notify client" });
       }

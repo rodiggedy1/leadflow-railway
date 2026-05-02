@@ -1066,7 +1066,7 @@ function TestPanel({ jobId, onDone }: { jobId: number; onDone: () => void }) {
         <p className="text-[10px] text-red-500 mb-2">Places a VAPI call to {TEST_PHONE_DISPLAY} with the running late script. Falls back to SMS if VAPI fails. Also texts cleaner confirmation.</p>
         <button
           disabled={isBusy}
-          onClick={() => callClientRunningLate.mutate({ cleanerJobId: jobId })}
+          onClick={() => callClientRunningLate.mutate({ cleanerJobId: jobId, testMode: true })}
           className="inline-flex items-center gap-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {callClientRunningLate.isPending
