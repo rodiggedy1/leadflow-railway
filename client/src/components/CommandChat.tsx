@@ -2126,6 +2126,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     ),
   [reactionsData]);
   const toggleReactionMutation = trpc.opsChat.toggleReaction.useMutation({ onSuccess: () => refetchReactions() });
+  const callClientRunningLateMutation = trpc.fieldMgmt.callClientRunningLate.useMutation();
+  const [callingClientJobId, setCallingClientJobId] = useState<number | null>(null);
+  const [clientCallDone, setClientCallDone] = useState<Set<number>>(new Set());
+
   const chatPrefillMutation = trpc.opsChat.prefillIssueFromComment.useMutation();
   const chatConvertMutation = trpc.opsChat.convertChatMessageToIssue.useMutation();
   const openChatConvert = useCallback(async (msgId: number, msgBody: string) => {
@@ -3117,6 +3121,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               {cs.etaLabel && <span className="ml-1">· ETA {cs.etaLabel}</span>}
                               {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}
                             </p>
+                          )}
+                          {cs.status === "running_late" && cs.cleanerJobId && (
+                            <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+                              {clientCallDone.has(cs.cleanerJobId) ? (
+                                <span className="text-[10px] text-emerald-600 font-medium">✓ Client notified</span>
+                              ) : (
+                                <button
+                                  disabled={callingClientJobId === cs.cleanerJobId}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!cs.cleanerJobId) return;
+                                    setCallingClientJobId(cs.cleanerJobId);
+                                    try {
+                                      await callClientRunningLateMutation.mutateAsync({ cleanerJobId: cs.cleanerJobId });
+                                      setClientCallDone(prev => new Set(prev).add(cs.cleanerJobId!));
+                                    } catch (err: any) {
+                                      alert(err?.message ?? "Failed to call client");
+                                    } finally {
+                                      setCallingClientJobId(null);
+                                    }
+                                  }}
+                                  className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
+                                >
+                                  {callingClientJobId === cs.cleanerJobId ? (
+                                    <><span className="animate-spin">⟳</span> Calling…</>
+                                  ) : (
+                                    <>📞 Call Client</>
+                                  )}
+                                </button>
+                              )}
+                            </div>
                           )}
                         </button>
                       </TooltipTrigger>

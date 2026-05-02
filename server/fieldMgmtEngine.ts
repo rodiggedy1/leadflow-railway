@@ -1408,6 +1408,188 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
   }
 }
 
+// ── Running Late — Call Client (agent-triggered) ─────────────────────────────
+
+/**
+ * Places a VAPI call to the CLIENT to notify them the team is running late.
+ * Falls back to SMS if VAPI fails or the call is not answered.
+ * After notifying the client, sends a confirmation SMS to the cleaner.
+ *
+ * This is triggered manually by an agent clicking "Call Client" in Command Chat,
+ * NOT automatically — it requires human approval before firing.
+ *
+ * Returns { success, method: 'vapi' | 'sms_fallback' | 'failed', error? }
+ */
+export async function callClientRunningLate(cleanerJobId: number): Promise<{
+  success: boolean;
+  method: "vapi" | "sms_fallback" | "failed";
+  error?: string;
+}> {
+  if (!FIELD_MGMT_ENABLED) return { success: false, method: "failed", error: "Field management kill switch is off" };
+  if (!await isJobAssigned(cleanerJobId)) return { success: false, method: "failed", error: "Job is not assigned" };
+  const db = await getDb();
+  if (!db) return { success: false, method: "failed", error: "DB unavailable" };
+
+  // Fetch job details
+  const jobRows = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      cleanerName: cleanerJobs.cleanerName,
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      delayMinutes: cleanerJobs.delayMinutes,
+      etaTimestamp: cleanerJobs.etaTimestamp,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const job = jobRows[0];
+  if (!job) return { success: false, method: "failed", error: "Job not found" };
+
+  const clientPhone = job.customerPhone;
+  if (!clientPhone) return { success: false, method: "failed", error: "No customer phone on file" };
+
+  const clientFirstName = firstName(job.customerName ?? "there");
+  const cleanerFirstName = firstName(job.cleanerName ?? "Your team");
+
+  // Build ETA string for the call script
+  let etaStr: string | null = null;
+  if (job.etaTimestamp && job.etaTimestamp > Date.now()) {
+    etaStr = new Date(job.etaTimestamp).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "America/New_York",
+    });
+  } else if (job.delayMinutes) {
+    etaStr = `about ${job.delayMinutes} minutes behind schedule`;
+  }
+
+  const etaLine = etaStr
+    ? `They expect to arrive around ${etaStr}.`
+    : `They are on their way and will be there as soon as possible.`;
+
+  // ── VAPI call script ────────────────────────────────────────────────────────
+  const vapiScript =
+    `Hi, may I speak with ${clientFirstName}? ` +
+    `This is Maids in Black calling with a quick update about your cleaning appointment today. ` +
+    `Your cleaning team is running a little behind schedule. ` +
+    `${etaLine} ` +
+    `We sincerely apologize for the inconvenience and really appreciate your patience. ` +
+    `If you have any questions, please don't hesitate to call us back. Thank you and have a wonderful day.`;
+
+  const normalizedClientPhone = clientPhone.startsWith("+") ? clientPhone : `+1${clientPhone.replace(/\D/g, "")}`;
+
+  // Self-call protection
+  if (normalizedClientPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
+    return { success: false, method: "failed", error: "Self-call protection triggered" };
+  }
+
+  let vapiSuccess = false;
+  let vapiCallId: string | null = null;
+
+  if (ENV.vapiPrivateKey) {
+    try {
+      const payload = {
+        phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
+        customer: { number: normalizedClientPhone },
+        assistant: {
+          name: "RunningLateAlert",
+          firstMessage: vapiScript,
+          model: {
+            provider: "openai",
+            model: "gpt-4o-mini",
+            messages: [{
+              role: "system",
+              content:
+                "You are a brief automated notification from Maids in Black. " +
+                "You have already delivered the running late message. " +
+                "If the client asks questions, say: 'I'm an automated message and can't answer questions, but our team will be happy to help. Please call us back at your convenience.' " +
+                "Keep responses very short and end the call politely.",
+            }],
+          },
+          voice: {
+            provider: "11labs",
+            voiceId: "EXAVITQu4vr4xnSDxMaL",
+            stability: 0.5,
+            similarityBoost: 0.75,
+            style: 0.3,
+            useSpeakerBoost: true,
+          },
+          maxDurationSeconds: 40,
+          voicemailDetection: {
+            provider: "twilio",
+            voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"],
+            enabled: true,
+            machineDetectionTimeout: 8,
+          },
+          voicemailMessage: vapiScript,
+        },
+      };
+      const result = await vapiPost("/call", payload) as { id?: string };
+      vapiCallId = result?.id ?? null;
+      vapiSuccess = true;
+      console.log(`[FieldMgmt] Running late client call placed to ${normalizedClientPhone}. VAPI call ID: ${vapiCallId ?? "unknown"}`);
+
+      // Store call record
+      await db.insert(fieldMgmtCalls).values({
+        cleanerJobId,
+        step: "client_running_late_call",
+        vapiCallId: vapiCallId ?? "unknown",
+        calledPhone: normalizedClientPhone,
+        outcome: "no_answer",
+        durationSeconds: 0,
+        transcript: null,
+        summary: null,
+        endedReason: null,
+        recordingUrl: null,
+      }).catch((err: unknown) => {
+        console.error("[FieldMgmt] Failed to insert fieldMgmtCalls row for running late call:", err);
+      });
+    } catch (err) {
+      console.error("[FieldMgmt] VAPI running late call failed:", err);
+      vapiSuccess = false;
+    }
+  }
+
+  // ── SMS fallback if VAPI failed ─────────────────────────────────────────────
+  if (!vapiSuccess) {
+    const smsMsg = [
+      `Hi ${clientFirstName} — quick heads up from Maids in Black.`,
+      ``,
+      `Your cleaning team is running a little behind schedule. ${etaLine}`,
+      ``,
+      `We sincerely apologize for the inconvenience and appreciate your patience!`,
+    ].join("\n");
+    const smsResult = await sendSms({ to: clientPhone, content: smsMsg });
+    if (!smsResult.success) {
+      console.error(`[FieldMgmt] Running late SMS fallback FAILED for job ${cleanerJobId}:`, smsResult.error);
+      return { success: false, method: "failed", error: smsResult.error ?? "SMS failed" };
+    }
+    console.log(`[FieldMgmt] Running late SMS fallback sent to ${clientPhone} for job ${cleanerJobId}`);
+  }
+
+  // ── Confirmation SMS to cleaner ─────────────────────────────────────────────
+  if (job.cleanerProfileId) {
+    const profileRows = await db
+      .select({ phone: cleanerProfiles.phone })
+      .from(cleanerProfiles)
+      .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+      .limit(1);
+    const cleanerPhone = profileRows[0]?.phone;
+    if (cleanerPhone) {
+      const confirmMsg =
+        `Hi ${cleanerFirstName} — just a heads up, we've notified your client that you're running late. ` +
+        `Keep going, they're expecting you. 👍`;
+      await sendSms({ to: cleanerPhone, content: confirmMsg }).catch(() => {});
+    }
+  }
+
+  return { success: true, method: vapiSuccess ? "vapi" : "sms_fallback" };
+}
+
 // ── Late-Assignment SMS Trigger ───────────────────────────────────────────────
 
 /**

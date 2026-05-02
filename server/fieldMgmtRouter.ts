@@ -1272,6 +1272,21 @@ export const fieldMgmtRouter = router({
     }),
 
   /**
+   * Agent-triggered: place a VAPI call to the client to notify them the team is
+   * running late. Falls back to SMS if VAPI fails. Texts the cleaner a confirmation.
+   */
+  callClientRunningLate: agentProcedure
+    .input(z.object({ cleanerJobId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const { callClientRunningLate } = await import("./fieldMgmtEngine");
+      const result = await callClientRunningLate(input.cleanerJobId);
+      if (!result.success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error ?? "Failed to notify client" });
+      }
+      return { method: result.method };
+    }),
+
+  /**
    * Returns the timestamp of the last successful today-sync-jobs run.
    * Used by the Field Management header to show data freshness.
    */

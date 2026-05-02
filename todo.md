@@ -1341,3 +1341,4 @@
 - [x] Add "Last synced" timestamp to Field Management header showing when last today-sync ran
 - [x] Sync watchdog: hourly cron posts Command Chat alert card + owner notification when today-sync has not run in 75+ min during business hours
 - [x] Add sync_watchdog card type to Command Chat UI with amber border, sync icon, and dismiss button
+- [x] Running Late — Call Client flow: Command Chat card gets a "Call Client" button; VAPI calls client with running late script (ETA if available); voicemail fallback; SMS fallback if no answer; cleaner gets confirmation SMS
