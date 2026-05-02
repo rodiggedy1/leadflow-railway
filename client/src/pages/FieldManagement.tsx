@@ -1014,7 +1014,19 @@ function TestPanel({ jobId, onDone }: { jobId: number; onDone: () => void }) {
     },
   });
 
-  const isBusy = fireStep.isPending || simulateStatus.isPending;
+  const callClientRunningLate = trpc.fieldMgmt.callClientRunningLate.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Client called via ${data.method === "vapi" ? "VAPI" : "SMS fallback"} → ${TEST_PHONE_DISPLAY}`, {
+        description: "Running late notification sent. Cleaner confirmation SMS also fired.",
+      });
+      onDone();
+    },
+    onError: (err) => {
+      toast.error("Call client failed", { description: err.message });
+    },
+  });
+
+  const isBusy = fireStep.isPending || simulateStatus.isPending || callClientRunningLate.isPending;
 
   return (
     <div className="mt-4 border-t border-dashed border-amber-200 pt-4">
@@ -1046,6 +1058,23 @@ function TestPanel({ jobId, onDone }: { jobId: number; onDone: () => void }) {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Call Client — Running Late test */}
+      <div className="mb-3 border border-red-100 rounded-lg p-2.5 bg-red-50">
+        <p className="text-xs text-red-700 font-medium mb-1.5">📞 Test: Call Client (Running Late)</p>
+        <p className="text-[10px] text-red-500 mb-2">Places a VAPI call to {TEST_PHONE_DISPLAY} with the running late script. Falls back to SMS if VAPI fails. Also texts cleaner confirmation.</p>
+        <button
+          disabled={isBusy}
+          onClick={() => callClientRunningLate.mutate({ cleanerJobId: jobId })}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold bg-red-600 hover:bg-red-700 text-white rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {callClientRunningLate.isPending
+            ? <Loader2 className="w-3 h-3 animate-spin" />
+            : <Phone className="w-3 h-3" />
+          }
+          {callClientRunningLate.isPending ? "Calling…" : "Call Client (Running Late)"}
+        </button>
       </div>
 
       {/* Fire individual step */}
