@@ -237,10 +237,43 @@ export function registerVapiWebhookRoute(app: Express): void {
 
           getDb().then(async (db) => {
             if (!db) return;
-            await db.update(fieldMgmtCalls)
+
+            // Update fieldMgmtCalls row with outcome/transcript
+            const [updatedCall] = await db.update(fieldMgmtCalls)
               .set({ outcome, durationSeconds, transcript, summary, recordingUrl, endedReason: endedReason ?? null })
               .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
-              .catch(() => {}); // no-op if not a field mgmt call
+              .catch(() => [null]) as any;
+
+            // If this was a client_status_inquiry call, send the ETA reply to the client
+            const [callRow] = await db
+              .select({
+                step: fieldMgmtCalls.step,
+                clientStatusInquirySessionId: fieldMgmtCalls.clientStatusInquirySessionId,
+                calledPhone: fieldMgmtCalls.calledPhone,
+              })
+              .from(fieldMgmtCalls)
+              .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
+              .limit(1)
+              .catch(() => []);
+
+            if (callRow?.step === "client_status_inquiry" && callRow?.clientStatusInquirySessionId) {
+              const { handleStatusInquiryCallEnd } = await import("./clientStatusInquiryEngine");
+              // Look up cleaner name from the called phone
+              const digits = callRow.calledPhone.replace(/[^\d]/g, "").slice(-10);
+              const [cleanerRow] = await db
+                .select({ name: (await import("../drizzle/schema")).cleanerProfiles.name })
+                .from((await import("../drizzle/schema")).cleanerProfiles)
+                .where(eq((await import("../drizzle/schema")).cleanerProfiles.phone, digits))
+                .limit(1)
+                .catch(() => []);
+              await handleStatusInquiryCallEnd({
+                db,
+                sessionId: callRow.clientStatusInquirySessionId,
+                transcript: transcript ?? null,
+                outcome,
+                cleanerName: cleanerRow?.name ?? null,
+              }).catch((err: unknown) => console.error("[Vapi] handleStatusInquiryCallEnd error:", err));
+            }
           }).catch(() => {});
         }
 

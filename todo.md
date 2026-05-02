@@ -1352,3 +1352,6 @@
 - [x] Daily 5 PM ET schedule confirmation SMS: send each cleaner team their next-day jobs (time, client, address) and track confirmation replies
 - [x] 7 PM ET follow-up nudge for unconfirmed cleaners who haven't replied to the 5 PM schedule SMS
 - [x] Field Management day view: show ✅/⏳ confirmation badge per cleaner card
+- [x] Client status inquiry: detect when client texts asking about job status, call cleaner via VAPI, reply to client with ETA
+- [x] Add CLIENT_STATUS_INQUIRY stage to conversationStages enum + DB
+- [x] Add clientStatusInquirySessionId column to fieldMgmtCalls

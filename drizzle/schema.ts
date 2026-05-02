@@ -165,6 +165,14 @@ export const conversationStages = [
    */
   "SCHEDULE_CONFIRM_SENT",
   "SCHEDULE_CONFIRM_DONE",
+  /**
+   * CLIENT_STATUS_INQUIRY → Client texted asking about job status.
+   * System texted "checking with your team" and placed a VAPI call to the cleaner.
+   * Waiting for the call to complete so we can reply with the ETA.
+   * CLIENT_STATUS_INQUIRY_DONE → ETA reply sent to client. Terminal stage.
+   */
+  "CLIENT_STATUS_INQUIRY",
+  "CLIENT_STATUS_INQUIRY_DONE",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -1509,6 +1517,10 @@ export type InsertJobSmsReply = typeof jobSmsReplies.$inferInsert;
 // duration, and transcript in the job detail panel.
 export const fieldMgmtCalls = mysqlTable("field_mgmt_calls", {
   id: int("id").autoincrement().primaryKey(),
+  /** When step='client_status_inquiry', links back to the client's conversationSessions row
+   * so the end-of-call webhook knows who to reply to.
+   * Column already added via direct SQL migration. */
+  clientStatusInquirySessionId: int("clientStatusInquirySessionId"),
   /** Link to cleanerJobs.id */
   cleanerJobId: int("cleanerJobId").notNull(),
   /** Which step triggered this call: "exception_call" | "noshow_call" */
