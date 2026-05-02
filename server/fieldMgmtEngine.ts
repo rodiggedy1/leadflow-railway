@@ -1426,7 +1426,10 @@ export async function callClientRunningLate(cleanerJobId: number, opts?: { testM
   error?: string;
 }> {
   if (!FIELD_MGMT_ENABLED && !opts?.testMode) return { success: false, method: "failed", error: "Field management kill switch is off" };
-  if (!opts?.testMode && !await isJobAssigned(cleanerJobId)) return { success: false, method: "failed", error: "Job is not assigned" };
+  // NOTE: isJobAssigned check intentionally omitted here.
+  // A cleaner who has already set their status to "running_late" is actively working the job
+  // regardless of bookingStatus (which may be "new" for jobs synced before the assignment
+  // step completes in Launch27). Blocking the call in that state is wrong.
   const db = await getDb();
   if (!db) return { success: false, method: "failed", error: "DB unavailable" };
 

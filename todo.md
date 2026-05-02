@@ -1370,3 +1370,4 @@
 - [x] Wire 7 AM ops summary cron into internalCron.ts
 - [x] Wire 8 PM schedule escalation cron into internalCron.ts
 - [x] Bug fix: outbound staff calls (lastCalledByAgentName set) falsely advance lastCustomerReplyAt and trigger phantom reply notifications
+- [x] Bug fix: Call Client on running-late card fails with "job not assigned" when bookingStatus is 'new'
