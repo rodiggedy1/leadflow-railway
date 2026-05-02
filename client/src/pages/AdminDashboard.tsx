@@ -138,6 +138,7 @@ import SourceBreakdownChart from "@/components/SourceBreakdownChart";
 import KanbanBoard from "@/components/KanbanBoard";
 import AdminHeader, { WidgetHealthBadge, WebhookHealthBadge, SyncHealthBadge } from "@/components/AdminHeader";
 import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
+import FollowUpsModal from "@/components/FollowUpsModal";
 import CallGuide from "@/components/CallGuide";
 import PipelineBoard from "@/components/PipelineBoard";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
@@ -3257,6 +3258,7 @@ export default function AdminDashboard() {
   });
   const [showSimulator, setShowSimulator] = useState(false);
   const [showCallGuide, setShowCallGuide] = useState(false);
+  const [showFollowUpsModal, setShowFollowUpsModal] = useState(false);
   const [showCompletedCallbacks, setShowCompletedCallbacks] = useState(false);
   const { data: callbackList, refetch: refetchCallbacks } = trpc.voice.listCallbacks.useQuery(
     { includeCompleted: showCompletedCallbacks },
@@ -4784,13 +4786,9 @@ export default function AdminDashboard() {
                                     document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
                                   }, 80);
                                 } else if (item.key === "nurture_paused") {
-                                  window.location.href = "/admin/lead-nurturing";
+                                  window.location.href = "/admin/lead-nurturing?filter=paused";
                                 } else if (item.key === "overdue_followups") {
-                                  setActiveTab("leads");
-                                  setStageFilter("FOLLOW_UP_SCHEDULED");
-                                  setTimeout(() => {
-                                    document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-                                  }, 80);
+                                  setShowFollowUpsModal(true);
                                 }
                               };
                               const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "overdue_followups";
@@ -4910,6 +4908,11 @@ export default function AdminDashboard() {
         </button>
       </div>
 
+      {/* Follow-ups modal — opened from Overdue Follow-ups attention card */}
+      <FollowUpsModal
+        open={showFollowUpsModal}
+        onClose={() => setShowFollowUpsModal(false)}
+      />
       {/* Conversation drawer */}
       {selectedSession && (
         <ConversationDrawer

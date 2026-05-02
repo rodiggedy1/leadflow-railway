@@ -96,7 +96,12 @@ export default function LeadNurturing() {
     script: "I can hold a spot for you, but spots go fast. Want me to check what's open this week or tomorrow?",
     stepNum: 3,
   });
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const f = params.get("filter");
+    if (f === "paused" || f === "active" || f === "done" || f === "all") return f;
+    return "active";
+  });
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<number | null>(null);
 
   // ── Script editor state ─────────────────────────────────────────────────
