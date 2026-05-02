@@ -3937,15 +3937,6 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           severity: unhandledCount > 0 ? "urgent" : "ok",
         },
         {
-          key: "nurture_paused",
-          label: "Nurture paused",
-          count: pausedNurtureCount,
-          detail: pausedNurtureCount > 0
-            ? `${pausedNurtureCount} nurture sequence${pausedNurtureCount !== 1 ? "s" : ""} paused — lead replied, needs human decision`
-            : "All nurture sequences running smoothly",
-          severity: pausedNurtureCount > 0 ? "warning" : "ok",
-        },
-        {
           key: "overdue_followups",
           label: "Overdue follow-ups",
           count: overdueFollowUpsCount,

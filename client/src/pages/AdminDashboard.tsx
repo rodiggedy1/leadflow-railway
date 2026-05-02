@@ -3481,6 +3481,17 @@ export default function AdminDashboard() {
         } catch {
           matchesStage = s.stage === "UNHANDLED";
         }
+      } else if (stageFilter === "OVERDUE_FOLLOWUPS") {
+        // OVERDUE_FOLLOWUPS synthetic filter: show leads with a followUpDate in the past
+        // and followUpSent = 0 (not yet sent/dismissed).
+        const followUpDate = (s as any).followUpDate as string | null | undefined;
+        const followUpSent = (s as any).followUpSent as number | null | undefined;
+        if (!followUpDate) {
+          matchesStage = false;
+        } else {
+          const today = new Date().toISOString().slice(0, 10);
+          matchesStage = followUpDate <= today && !followUpSent;
+        }
       } else {
         matchesStage = stageFilter === "all" || s.stage === stageFilter;
       }
@@ -4048,6 +4059,18 @@ export default function AdminDashboard() {
                             <button
                               onClick={() => setStageFilter("all")}
                               className="ml-0.5 rounded-full p-0.5 hover:bg-rose-200 transition"
+                              aria-label="Clear filter"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )}
+                        {stageFilter === "OVERDUE_FOLLOWUPS" && (
+                          <span className="inline-flex items-center gap-1 rounded-xl bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700">
+                            Filtered: Overdue Follow-ups
+                            <button
+                              onClick={() => setStageFilter("all")}
+                              className="ml-0.5 rounded-full p-0.5 hover:bg-orange-200 transition"
                               aria-label="Clear filter"
                             >
                               <X className="h-3 w-3" />
@@ -4788,7 +4811,11 @@ export default function AdminDashboard() {
                                 } else if (item.key === "nurture_paused") {
                                   window.location.href = "/admin/lead-nurturing?filter=paused";
                                 } else if (item.key === "overdue_followups") {
-                                  setShowFollowUpsModal(true);
+                                  setActiveTab("leads");
+                                  setStageFilter("OVERDUE_FOLLOWUPS");
+                                  setTimeout(() => {
+                                    document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 80);
                                 }
                               };
                               const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "overdue_followups";
