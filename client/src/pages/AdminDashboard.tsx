@@ -1154,6 +1154,20 @@ function ConversationDrawer({
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const smsComposeRef = useRef<HTMLTextAreaElement>(null);
+  // On mount: immediately fetch fresh session data so the drawer never shows stale messages.
+  // The sessions list polls every 30s, so a reply that arrived just before opening would be
+  // missing from the prop. getById always returns the latest row from the DB.
+  useEffect(() => {
+    utils.leads.getById.fetch({ id: session.id }).then((fresh) => {
+      if (fresh?.messageHistory) {
+        try {
+          const freshMsgs: { role: string; content: string; ts?: number }[] = JSON.parse(fresh.messageHistory);
+          setLocalMessages(withFallbackTs(freshMsgs, session.createdAt, (fresh as any).updatedAt ?? session.updatedAt));
+        } catch { /* ignore parse errors */ }
+      }
+    }).catch(() => { /* non-fatal — drawer still shows cached data */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id]);
   // Auto-scroll to bottom on first mount (skip past the AI banner)
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
