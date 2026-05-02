@@ -7,7 +7,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts } from "../drizzle/schema";
 import { randomBytes } from "crypto";
@@ -122,7 +122,9 @@ export const cleanerRouter = router({
         .where(
           and(
             eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
-            eq(cleanerJobs.jobDate, input.date)
+            eq(cleanerJobs.jobDate, input.date),
+            ne(cleanerJobs.bookingStatus, "rescheduled"),
+            ne(cleanerJobs.bookingStatus, "cancelled")
           )
         )
         .orderBy(cleanerJobs.serviceDateTime);
