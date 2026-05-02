@@ -3874,11 +3874,20 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       }
 
       // ── 2. Unhandled leads ────────────────────────────────────────────────────
-      const [unhandledRow] = await db
-        .select({ count: sql<number>`COUNT(*)` })
+      // A lead is "truly unhandled" only if respondedAt is NULL, or the last
+      // customer message arrived AFTER respondedAt (new message since last handled).
+      const unhandledRows = await db
+        .select({ respondedAt: conversationSessions.respondedAt, messageHistory: conversationSessions.messageHistory })
         .from(conversationSessions)
         .where(eq(conversationSessions.stage, "UNHANDLED"));
-      const unhandledCount = Number(unhandledRow?.count ?? 0);
+      const unhandledCount = unhandledRows.filter(row => {
+        if (!row.respondedAt) return true; // never marked handled
+        try {
+          const hist: Array<{ role: string; ts?: number }> = JSON.parse(row.messageHistory ?? "[]");
+          const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
+          return lastCustomer?.ts ? lastCustomer.ts > row.respondedAt : false;
+        } catch { return false; }
+      }).length;
 
       // ── 3. Paused nurture enrollments (lead replied, needs human decision) ───
       const [pausedNurtureRow] = await db
