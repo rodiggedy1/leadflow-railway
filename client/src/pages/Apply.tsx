@@ -1383,40 +1383,6 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
                 </div>
               </div>
 
-              {/* CTAs */}
-              <div className="flex flex-wrap gap-3 mb-10">
-                {interviewUrl ? (
-                  <a
-                    href={interviewUrl}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: "#0f172a" }}
-                  >
-                    <span className="w-5 h-5 rounded-full border-2 border-white flex items-center justify-center">
-                      <span className="w-2 h-2 rounded-full bg-white" />
-                    </span>
-                    Start 2-minute interview
-                  </a>
-                ) : (
-                  <button
-                    disabled
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold text-sm opacity-60 cursor-not-allowed"
-                    style={{ backgroundColor: "#0f172a" }}
-                  >
-                    <Loader2 size={15} className="animate-spin" />
-                    Preparing interview...
-                  </button>
-                )}
-                <button
-                  className="px-6 py-3 rounded-xl text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100"
-                  style={{ border: "1.5px solid #e5e7eb", backgroundColor: "#fff" }}
-                  onClick={() => {
-                    toast.success("Interview link sent! Check your messages when you're ready.");
-                  }}
-                >
-                  Do it later by text
-                </button>
-              </div>
-
               {/* Supplies upload CTA */}
               <div className="rounded-2xl p-5 mb-6" style={{ backgroundColor: "#fffbeb", border: "1.5px solid #fde68a" }}>
                 <div className="flex items-start gap-4">
