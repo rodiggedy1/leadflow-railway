@@ -1350,3 +1350,5 @@
 - [x] Fix simulateStatusChange test panel: clicking Running Late now also posts the Command Chat card so the full card→dialog→call flow can be tested
 - [x] Fix [TEST] card: pass testMode:true to callClientRunningLate so call goes to test number not real client
 - [x] Daily 5 PM ET schedule confirmation SMS: send each cleaner team their next-day jobs (time, client, address) and track confirmation replies
+- [x] 7 PM ET follow-up nudge for unconfirmed cleaners who haven't replied to the 5 PM schedule SMS
+- [x] Field Management day view: show ✅/⏳ confirmation badge per cleaner card

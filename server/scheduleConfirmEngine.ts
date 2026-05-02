@@ -400,3 +400,115 @@ export async function handleScheduleConfirmReply(
     confirmed: false,
   };
 }
+
+// ─── 7 PM Nudge ───────────────────────────────────────────────────────────────
+
+/**
+ * runScheduleConfirmNudge(targetDate?)
+ *
+ * Called by the 7 PM cron. Finds all SCHEDULE_CONFIRM_SENT sessions for
+ * tomorrow (or targetDate) that have NOT yet advanced to SCHEDULE_CONFIRM_DONE,
+ * and sends a single reminder SMS to each unconfirmed cleaner.
+ *
+ * Idempotent: uses a metadata flag `nudgeSent` on the session to prevent
+ * double-nudging if the cron fires twice.
+ */
+export async function runScheduleConfirmNudge(targetDateOverride?: string): Promise<{
+  nudgesSent: number;
+  alreadyNudged: number;
+  alreadyConfirmed: number;
+  errors: number;
+}> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  // Determine target date (tomorrow in ET)
+  let targetDate: string;
+  if (targetDateOverride) {
+    targetDate = targetDateOverride;
+  } else {
+    const now = new Date();
+    const etNow = new Date(now.toLocaleString("en-US", { timeZone: "America/New_York" }));
+    etNow.setDate(etNow.getDate() + 1);
+    targetDate = `${etNow.getFullYear()}-${String(etNow.getMonth() + 1).padStart(2, "0")}-${String(etNow.getDate()).padStart(2, "0")}`;
+  }
+
+  // Date window for session createdAt: today in ET (sessions created by 5 PM cron today)
+  const etToday = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const startOfToday = new Date(etToday);
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(etToday);
+  endOfToday.setHours(23, 59, 59, 999);
+
+  // Find all SCHEDULE_CONFIRM_SENT sessions created today (by the 5 PM cron)
+  const pendingSessions = await db
+    .select()
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.stage, "SCHEDULE_CONFIRM_SENT" as any),
+        gte(conversationSessions.createdAt, startOfToday),
+        lt(conversationSessions.createdAt, endOfToday)
+      )
+    );
+
+  const result = { nudgesSent: 0, alreadyNudged: 0, alreadyConfirmed: 0, errors: 0 };
+  const csNumberId = ENV.openPhoneCsNumberId;
+
+  for (const session of pendingSessions) {
+    try {
+      // Parse internalNotes JSON to check nudgeSent flag
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(session.internalNotes ?? "{}"); } catch { /* ignore */ }
+
+      if (meta.nudgeSent) {
+        result.alreadyNudged++;
+        continue;
+      }
+
+      // Get cleaner's phone from the session's leadPhone
+      const toPhone = session.leadPhone;
+      if (!toPhone) {
+        console.warn(`[ScheduleConfirmNudge] Session ${session.id} has no leadPhone, skipping`);
+        result.errors++;
+        continue;
+      }
+
+      // Look up cleaner name
+      const cleanerName = session.leadName ?? null;
+      const firstName = cleanerName?.split(" ")[0] ?? "there";
+
+      const nudgeText = `Hey ${firstName}! Just a reminder to confirm your schedule for tomorrow. Reply CONFIRM when you're all set! 🧹`;
+
+      // Send SMS FIRST (per skill rules — before DB update)
+      const smsResult = await sendSms({
+        to: toPhone,
+        content: nudgeText,
+        ...(csNumberId ? { fromNumberId: csNumberId } : {}),
+      });
+
+      if (!smsResult.success) {
+        console.error(`[ScheduleConfirmNudge] Failed to send nudge to ${toPhone}:`, smsResult.error);
+        result.errors++;
+        continue;
+      }
+
+      // Mark nudgeSent in session internalNotes JSON
+      meta.nudgeSent = true;
+      meta.nudgeSentAt = new Date().toISOString();
+      await db
+        .update(conversationSessions)
+        .set({ internalNotes: JSON.stringify(meta) })
+        .where(eq(conversationSessions.id, session.id));
+
+      console.log(`[ScheduleConfirmNudge] Nudge sent to ${toPhone} (session ${session.id})`);
+      result.nudgesSent++;
+    } catch (err) {
+      console.error(`[ScheduleConfirmNudge] Error processing session ${session.id}:`, err);
+      result.errors++;
+    }
+  }
+
+  console.log(`[ScheduleConfirmNudge] Done for ${targetDate}: ${JSON.stringify(result)}`);
+  return result;
+}

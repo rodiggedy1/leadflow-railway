@@ -775,6 +775,8 @@ type JobWithTimeline = {
   totalSteps: number;
   /** Pre-embedded timeline — no extra query needed */
   timeline: TimelineEvent[];
+  /** 1 = cleaner confirmed their schedule for this day, 0 = not yet */
+  scheduleConfirmed?: number;
 };
 
 function JobCard({ job }: { job: JobWithTimeline }) {
@@ -822,6 +824,22 @@ function JobCard({ job }: { job: JobWithTimeline }) {
               {job.teamName && job.teamName !== job.cleanerName && (
                 <span className="text-xs text-gray-400">({job.teamName})</span>
               )}
+              {/* Schedule confirmation badge — only shown after 5 PM cron has run */}
+              {job.scheduleConfirmed === 1 ? (
+                <span
+                  title="Cleaner confirmed their schedule"
+                  className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200"
+                >
+                  ✅ Confirmed
+                </span>
+              ) : job.scheduleConfirmed === 0 ? (
+                <span
+                  title="Awaiting schedule confirmation from cleaner"
+                  className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+                >
+                  ⏳ Pending
+                </span>
+              ) : null}
             </div>
             <div className="flex items-center gap-1.5">
               <JobStatusBadge status={job.jobStatus} />

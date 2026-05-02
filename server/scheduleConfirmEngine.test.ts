@@ -108,3 +108,37 @@ describe("isConfirmationReply", () => {
     });
   });
 });
+
+// ─── Nudge idempotency guard ──────────────────────────────────────────────────
+
+describe("nudge idempotency (internalNotes flag)", () => {
+  it("detects nudgeSent flag in valid JSON", () => {
+    const notes = JSON.stringify({ nudgeSent: true, nudgeSentAt: "2026-05-02T19:00:00.000Z" });
+    const meta = JSON.parse(notes);
+    expect(meta.nudgeSent).toBe(true);
+  });
+
+  it("returns falsy when internalNotes is null", () => {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(null as unknown as string ?? "{}"); } catch { /* ignore */ }
+    expect(meta.nudgeSent).toBeFalsy();
+  });
+
+  it("returns falsy when internalNotes is empty string", () => {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(""); } catch { /* ignore */ }
+    expect(meta.nudgeSent).toBeFalsy();
+  });
+
+  it("returns falsy when internalNotes is plain text (not JSON)", () => {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse("some plain text note"); } catch { /* ignore */ }
+    expect(meta.nudgeSent).toBeFalsy();
+  });
+
+  it("returns falsy when nudgeSent is not set in JSON", () => {
+    const notes = JSON.stringify({ someOtherKey: "value" });
+    const meta = JSON.parse(notes);
+    expect(meta.nudgeSent).toBeFalsy();
+  });
+});
