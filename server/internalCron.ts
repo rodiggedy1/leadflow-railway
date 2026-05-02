@@ -253,10 +253,12 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Today's schedule sync: every 60 min, 7 AM–8 PM ET ──────────────────────
+  // ── Today's schedule sync: every 60 min, 6 AM–8 PM ET ──────────────────────
   // Re-syncs today's bookings hourly to catch reschedules, cancellations, and
   // new bookings added during the day. Same logic as nightly sync, today's date.
-  cron.schedule("0 0 7-20 * * *", async () => {
+  // Starts at 6 AM (was 7 AM) to catch jobs added to Launch27 overnight after
+  // the midnight nightly sync — prevents missing jobs in the morning window.
+  cron.schedule("0 0 6-20 * * *", async () => {
     const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
     const yyyy = etNow.getFullYear();
     const mm = String(etNow.getMonth() + 1).padStart(2, "0");

@@ -1336,3 +1336,5 @@
 - [x] Render AI_CALL_UPDATE as violet AI Call card in lead drawer conversation timeline
 - [x] Field Management test harness: fire each step to a test phone number and show pass/fail results in the Workflow tab
 - [x] Remove 8AM-5PM ET business hours guard from VAPI call functions in fieldMgmtEngine.ts
+- [ ] Investigate Owen Sloan not showing in Field Management and cleaner portal for today's jobs
+- [x] Extend today-sync hourly window to start at 6 AM ET (was 7 AM) to catch overnight Launch27 additions
