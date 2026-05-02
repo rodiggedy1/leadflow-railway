@@ -1740,6 +1740,19 @@ async function handleCsInboundMessage(msg: any) {
     }
   }
 
+  // ── Running-late SMS detection (cleaner bypassed the app) ─────────────────
+  // If a known cleaner texts the ops line with an ETA / running-late message,
+  // post the same Command Chat card that the app would have posted so staff
+  // can click "📞 Call Client" without the cleaner needing to tap the button.
+  if (isCleaner && inboundText.trim()) {
+    tryDetectCleanerRunningLate({
+      db,
+      fromPhoneDigits,
+      cleanerName: resolvedName ?? "Cleaner",
+      inboundText,
+    }).catch(err => console.error("[CS] tryDetectCleanerRunningLate error:", err));
+  }
+
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
   // Find the most recent matching session for this phone.
@@ -1914,6 +1927,204 @@ async function handleCsInboundMessage(msg: any) {
       console.warn("[CS] syncCsOutboundMessages error:", err)
     );
   }
+}
+
+// ── Running-late SMS detection helper ────────────────────────────────────────
+
+/**
+ * Patterns that indicate a cleaner is running late or giving an ETA.
+ * Covers the real messages found in 90-day data analysis:
+ *   "Yes l be there 4:45"
+ *   "Hello we there around 12:30"
+ *   "I be there 9;00"
+ *   "Running a little late, be there by 2pm"
+ *   "On my way, will arrive around 3:30"
+ */
+const RUNNING_LATE_PATTERNS: RegExp[] = [
+  /running\s+(?:a\s+(?:little|bit)\s+)?late/i,
+  /(?:be|get)\s+there\s+(?:at|around|by|@)?\s*\d/i,
+  /(?:arrive|arriving|arrival)\s+(?:at|around|by|@)?\s*\d/i,
+  /(?:there|arrive)\s+(?:at|around|by|@)?\s*\d{1,2}[:\s;]\d{2}/i,
+  /(?:on\s+my\s+way|omw).*\d{1,2}[:\s;]\d{2}/i,
+  /(?:will\s+be|i'?ll\s+be)\s+(?:there|at)\s+(?:at|around|by|@)?\s*\d/i,
+  /(?:delayed|delay|stuck|traffic|running\s+behind)/i,
+  /\b(?:be\s+there|there)\s+(?:at|by|around|@)?\s*\d{1,2}\s*(?:am|pm)/i,
+];
+
+/**
+ * Parse a rough ETA time from a free-text message.
+ * Returns Unix ms timestamp (today's date + parsed time) or null.
+ */
+function parseEtaFromText(text: string): { etaMs: number | null; etaLabel: string | null } {
+  // Match patterns like 4:45, 4;45, 4 45, 4pm, 4:45pm, 12:30
+  const timeMatch = text.match(
+    /\b(\d{1,2})[:\s;](\d{2})\s*([ap]m)?\b|\b(\d{1,2})\s*([ap]m)\b/i
+  );
+  if (!timeMatch) return { etaMs: null, etaLabel: null };
+
+  let hours: number;
+  let minutes: number;
+  let ampm: string | undefined;
+
+  if (timeMatch[1] !== undefined) {
+    // HH:MM format
+    hours = parseInt(timeMatch[1], 10);
+    minutes = parseInt(timeMatch[2], 10);
+    ampm = timeMatch[3]?.toLowerCase();
+  } else {
+    // HH am/pm format
+    hours = parseInt(timeMatch[4], 10);
+    minutes = 0;
+    ampm = timeMatch[5]?.toLowerCase();
+  }
+
+  if (isNaN(hours) || isNaN(minutes)) return { etaMs: null, etaLabel: null };
+
+  // Normalize to 24h
+  if (ampm === "pm" && hours < 12) hours += 12;
+  if (ampm === "am" && hours === 12) hours = 0;
+  // Heuristic: if no am/pm and hour is 1–6, assume pm (cleaners work afternoons)
+  if (!ampm && hours >= 1 && hours <= 6) hours += 12;
+
+  const now = new Date();
+  const eta = new Date(now);
+  eta.setHours(hours, minutes, 0, 0);
+
+  // If the parsed time is more than 1 hour in the past, skip (likely a mistake)
+  if (eta.getTime() < now.getTime() - 60 * 60 * 1000) return { etaMs: null, etaLabel: null };
+
+  const etaLabel = eta.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "America/New_York",
+  });
+
+  return { etaMs: eta.getTime(), etaLabel };
+}
+
+/**
+ * Checks if an inbound CS message from a known cleaner looks like a running-late
+ * or ETA message. If so, finds their active job for today and posts the same
+ * Command Chat card the app would have posted — so staff can click "📞 Call Client".
+ *
+ * Idempotent: skips if the job already has a running_late card posted today.
+ */
+async function tryDetectCleanerRunningLate({
+  db,
+  fromPhoneDigits,
+  cleanerName,
+  inboundText,
+}: {
+  db: Awaited<ReturnType<typeof import("./db").getDb>>;
+  fromPhoneDigits: string;
+  cleanerName: string;
+  inboundText: string;
+}): Promise<void> {
+  if (!db) return;
+
+  // 1. Check if the text matches any running-late pattern
+  const isRunningLate = RUNNING_LATE_PATTERNS.some(re => re.test(inboundText));
+  if (!isRunningLate) return;
+
+  // 2. Find the cleaner's profile
+  const [profile] = await db
+    .select({ id: cleanerProfiles.id })
+    .from(cleanerProfiles)
+    .where(eq(cleanerProfiles.phone, fromPhoneDigits))
+    .limit(1);
+  if (!profile) return;
+
+  // 3. Find today's active job for this cleaner
+  const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD
+  const [job] = await db
+    .select({
+      id: cleanerJobs.id,
+      cleanerName: cleanerJobs.cleanerName,
+      customerName: cleanerJobs.customerName,
+      jobAddress: cleanerJobs.jobAddress,
+      jobStatus: cleanerJobs.jobStatus,
+    })
+    .from(cleanerJobs)
+    .where(
+      and(
+        eq(cleanerJobs.cleanerProfileId, profile.id),
+        eq(cleanerJobs.jobDate, todayET),
+      )
+    )
+    .orderBy(desc(cleanerJobs.id))
+    .limit(1);
+
+  if (!job) {
+    console.log(`[CS RunningLate] No today's job found for cleaner ${cleanerName} (${fromPhoneDigits})`);
+    return;
+  }
+
+  // 4. Idempotency: skip if we already posted a running_late card for this job today
+  const [existingCard] = await db
+    .select({ id: opsChatMessages.id })
+    .from(opsChatMessages)
+    .where(
+      and(
+        eq(opsChatMessages.cleanerJobId, job.id),
+        eq(opsChatMessages.quickAction, "cleaner_status"),
+        sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.status')) = 'running_late'`,
+        gte(opsChatMessages.createdAt, new Date(new Date().setHours(0, 0, 0, 0)))
+      )
+    )
+    .limit(1);
+
+  if (existingCard) {
+    console.log(`[CS RunningLate] Card already posted for job ${job.id} — skipping duplicate`);
+    return;
+  }
+
+  // 5. Parse ETA from the message text
+  const { etaMs, etaLabel } = parseEtaFromText(inboundText);
+
+  // 6. Update the job status to running_late
+  await db
+    .update(cleanerJobs)
+    .set({
+      jobStatus: "running_late",
+      ...(etaMs ? { etaTimestamp: etaMs } : {}),
+    })
+    .where(eq(cleanerJobs.id, job.id))
+    .catch(err => console.error("[CS RunningLate] Failed to update jobStatus:", err));
+
+  // 7. Post the Command Chat card (same shape as cleanerRouter.updateJobStatus)
+  const etaPart = etaLabel ? ` · ETA ${etaLabel}` : "";
+  const customerPart = job.customerName ? ` — ${job.customerName}` : "";
+  const addressPart = job.jobAddress ? ` (${job.jobAddress})` : "";
+  const body = `⏰ ${cleanerName} — Running late${customerPart}${addressPart}${etaPart} · via SMS`;
+
+  await db.insert(opsChatMessages).values({
+    channel: "command",
+    cleanerJobId: job.id,
+    authorName: cleanerName,
+    authorRole: "cleaner",
+    body,
+    quickAction: "cleaner_status",
+    metadata: JSON.stringify({
+      cleanerName,
+      status: "running_late",
+      label: "Running late",
+      emoji: "⏰",
+      cleanerJobId: job.id,
+      customerName: job.customerName ?? null,
+      jobAddress: job.jobAddress ?? null,
+      etaLabel: etaLabel ?? null,
+      issueNote: null,
+      detectedFromSms: true,
+      smsText: inboundText.slice(0, 200),
+    }),
+  });
+
+  const { broadcastOpsUpdate } = await import("./sseBroadcast");
+  broadcastOpsUpdate("new_message", { channel: "command" });
+  broadcastOpsUpdate("job_update", { jobId: job.id });
+
+  console.log(`[CS RunningLate] ✅ Card posted for ${cleanerName} job ${job.id}${etaLabel ? ` (ETA ${etaLabel})` : ""} — detected from SMS: "${inboundText.slice(0, 80)}"`);
 }
 
 /**

@@ -1343,3 +1343,4 @@
 - [x] Add sync_watchdog card type to Command Chat UI with amber border, sync icon, and dismiss button
 - [x] Running Late — Call Client flow: Command Chat card gets a "Call Client" button; VAPI calls client with running late script (ETA if available); voicemail fallback; SMS fallback if no answer; cleaner gets confirmation SMS
 - [x] Add "Test Call Client (Running Late)" button to Field Management test panel
+- [x] Inbound SMS running-late detection: when a known cleaner texts the ops line with a running-late/ETA message, auto-detect it and post the existing Running Late Command Chat card so staff can click to notify the client
