@@ -3481,16 +3481,21 @@ export default function AdminDashboard() {
         } catch {
           matchesStage = s.stage === "UNHANDLED";
         }
-      } else if (stageFilter === "OVERDUE_FOLLOWUPS") {
-        // OVERDUE_FOLLOWUPS synthetic filter: show leads with a followUpDate in the past
-        // and followUpSent = 0 (not yet sent/dismissed).
-        const followUpDate = (s as any).followUpDate as string | null | undefined;
-        const followUpSent = (s as any).followUpSent as number | null | undefined;
-        if (!followUpDate) {
+      } else if (stageFilter === "HOT_LEADS") {
+        // HOT_LEADS synthetic filter: active leads where the customer sent a message
+        // within the last 72 hours (still thinking about booking).
+        const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
+        const closedStages = ["BOOKED", "COMPLETED", "CLOSED", "LOST", "COLD"];
+        if (closedStages.includes(s.stage ?? "")) {
           matchesStage = false;
         } else {
-          const today = new Date().toISOString().slice(0, 10);
-          matchesStage = followUpDate <= today && !followUpSent;
+          try {
+            const hist: Array<{ role: string; ts?: number }> = JSON.parse((s as any).messageHistory ?? "[]");
+            const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
+            matchesStage = !!lastCustomer?.ts && (Date.now() - lastCustomer.ts) <= SEVENTY_TWO_HOURS_MS;
+          } catch {
+            matchesStage = false;
+          }
         }
       } else {
         matchesStage = stageFilter === "all" || s.stage === stageFilter;
@@ -4065,9 +4070,9 @@ export default function AdminDashboard() {
                             </button>
                           </span>
                         )}
-                        {stageFilter === "OVERDUE_FOLLOWUPS" && (
+                        {stageFilter === "HOT_LEADS" && (
                           <span className="inline-flex items-center gap-1 rounded-xl bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-700">
-                            Filtered: Overdue Follow-ups
+                            Filtered: Hot Leads
                             <button
                               onClick={() => setStageFilter("all")}
                               className="ml-0.5 rounded-full p-0.5 hover:bg-orange-200 transition"
@@ -4748,7 +4753,7 @@ export default function AdminDashboard() {
                     if (key === "unresponded") return <MessageSquare className="h-3.5 w-3.5" />;
                     if (key === "unhandled") return <AlertTriangle className="h-3.5 w-3.5" />;
                     if (key === "nurture_paused") return <Inbox className="h-3.5 w-3.5" />;
-                    if (key === "overdue_followups") return <Clock3 className="h-3.5 w-3.5" />;
+                    if (key === "hot_leads") return <Flame className="h-3.5 w-3.5" />;
                     return <CircleAlert className="h-3.5 w-3.5" />;
                   };
                   const severityDot = (s: string) => {
@@ -4810,15 +4815,15 @@ export default function AdminDashboard() {
                                   }, 80);
                                 } else if (item.key === "nurture_paused") {
                                   window.location.href = "/admin/lead-nurturing?filter=paused";
-                                } else if (item.key === "overdue_followups") {
+                                } else if (item.key === "hot_leads") {
                                   setActiveTab("leads");
-                                  setStageFilter("OVERDUE_FOLLOWUPS");
+                                  setStageFilter("HOT_LEADS");
                                   setTimeout(() => {
                                     document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
                                   }, 80);
                                 }
                               };
-                              const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "overdue_followups";
+                              const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "hot_leads";
                               return (
                               <button
                                 key={item.key}

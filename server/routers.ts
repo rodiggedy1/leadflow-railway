@@ -3901,17 +3901,24 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         );
       const pausedNurtureCount = Number(pausedNurtureRow?.count ?? 0);
 
-      // ── 4. Overdue follow-ups ─────────────────────────────────────────────────
-      const [overdueRow] = await db
-        .select({ count: sql<number>`COUNT(*)` })
-        .from(followUps)
-        .where(
-          and(
-            isNull(followUps.completedAt),
-            lte(followUps.dueAt, now),
-          )
-        );
-      const overdueFollowUpsCount = Number(overdueRow?.count ?? 0);
+      // ── 4. Hot leads ──────────────────────────────────────────────────────────
+      // A lead is "hot" when:
+      //   - stage is not terminal (not BOOKED/COMPLETED/CLOSED/LOST/COLD)
+      //   - the customer sent their last message within the past 72 hours
+      //   - the lead has not been booked yet
+      // Reuse activeSessions (already fetched above).
+      const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
+      let hotLeadsCount = 0;
+      for (const s of activeSessions) {
+        try {
+          const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+          // Find the most recent customer message
+          const lastCustomer = [...history].reverse().find(m => m.role === "user" || m.role === "customer");
+          if (!lastCustomer?.ts) continue;
+          const age = now - lastCustomer.ts;
+          if (age <= SEVENTY_TWO_HOURS_MS) hotLeadsCount++;
+        } catch { /* skip malformed */ }
+      }
 
       // ── Build items ───────────────────────────────────────────────────────────
       type Severity = "urgent" | "warning" | "ok";
@@ -3937,13 +3944,13 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           severity: unhandledCount > 0 ? "urgent" : "ok",
         },
         {
-          key: "overdue_followups",
-          label: "Overdue follow-ups",
-          count: overdueFollowUpsCount,
-          detail: overdueFollowUpsCount > 0
-            ? `${overdueFollowUpsCount} follow-up${overdueFollowUpsCount !== 1 ? "s" : ""} past due`
-            : "No overdue follow-ups",
-          severity: overdueFollowUpsCount > 0 ? "urgent" : "ok",
+          key: "hot_leads",
+          label: "Hot leads",
+          count: hotLeadsCount,
+          detail: hotLeadsCount > 0
+            ? `${hotLeadsCount} lead${hotLeadsCount !== 1 ? "s" : ""} active in the last 72 hours`
+            : "No hot leads right now",
+          severity: hotLeadsCount > 0 ? "warning" : "ok",
         },
       ];
 
