@@ -398,6 +398,11 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               ))}
             </div>
 
+            {/* Earnings callout */}
+            <div className="rounded-xl px-4 py-3 mb-5" style={{ background: "rgba(255,255,255,0.08)" }}>
+              <p className="text-sm font-semibold text-white">Cleaners in your city earn over <span className="font-extrabold">$1,000/week</span></p>
+            </div>
+
             {/* CTA */}
             <button
               onClick={onNext}
