@@ -3874,20 +3874,20 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       }
 
       // ── 2. Unhandled leads ────────────────────────────────────────────────────
-      // A lead is "truly unhandled" only if respondedAt is NULL, or the last
-      // customer message arrived AFTER respondedAt (new message since last handled).
-      const unhandledRows = await db
-        .select({ respondedAt: conversationSessions.respondedAt, messageHistory: conversationSessions.messageHistory })
-        .from(conversationSessions)
-        .where(eq(conversationSessions.stage, "UNHANDLED"));
-      const unhandledCount = unhandledRows.filter(row => {
-        if (!row.respondedAt) return true; // never marked handled
+      // Reuse activeSessions (already fetched above). A session counts as unhandled
+      // only if stage === UNHANDLED AND (respondedAt is null OR last customer message
+      // arrived AFTER respondedAt — meaning a new message came in since handled).
+      let unhandledCount = 0;
+      for (const s of activeSessions) {
+        if (s.stage !== "UNHANDLED") continue;
         try {
-          const hist: Array<{ role: string; ts?: number }> = JSON.parse(row.messageHistory ?? "[]");
-          const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
-          return lastCustomer?.ts ? lastCustomer.ts > row.respondedAt : false;
-        } catch { return false; }
-      }).length;
+          const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+          const lastCustomer = [...history].reverse().find(m => m.role === "user" || m.role === "customer");
+          if (!s.respondedAt) { unhandledCount++; continue; } // never marked handled
+          // If last customer message arrived AFTER respondedAt, it's a new unhandled message
+          if (lastCustomer?.ts && lastCustomer.ts > s.respondedAt) unhandledCount++;
+        } catch { unhandledCount++; } // malformed — count it to be safe
+      }
 
       // ── 3. Paused nurture enrollments (lead replied, needs human decision) ───
       const [pausedNurtureRow] = await db

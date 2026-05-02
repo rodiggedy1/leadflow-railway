@@ -4040,6 +4040,18 @@ export default function AdminDashboard() {
                             </button>
                           </span>
                         )}
+                        {stageFilter === "UNHANDLED" && (
+                          <span className="inline-flex items-center gap-1 rounded-xl bg-rose-100 px-2.5 py-1 text-xs font-medium text-rose-700">
+                            Filtered: Unhandled
+                            <button
+                              onClick={() => setStageFilter("all")}
+                              className="ml-0.5 rounded-full p-0.5 hover:bg-rose-200 transition"
+                              aria-label="Clear filter"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="mt-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
