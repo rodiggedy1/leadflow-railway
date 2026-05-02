@@ -2250,11 +2250,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const year  = etParts.find(p => p.type === "year")!.value;
     const month = etParts.find(p => p.type === "month")!.value;
     const day   = etParts.find(p => p.type === "day")!.value;
-    // Parse "YYYY-MM-DDTHH:MM" as ET by appending the ET offset string.
-    const etOffsetDate = new Date(new Date(`${year}-${month}-${day}T12:00:00`).toLocaleString("en-US", { timeZone: "America/New_York" }));
-    const utcOffsetMs = new Date(`${year}-${month}-${day}T12:00:00`).getTime() - etOffsetDate.getTime();
-    const etMidnightUtc = new Date(`${year}-${month}-${day}T00:00:00`).getTime() - utcOffsetMs;
-    const eta = new Date(etMidnightUtc + h * 3_600_000 + m * 60_000);
+    // Find the ET UTC offset by comparing a known UTC noon to what ET wall clock shows.
+    const noonUtc = new Date(`${year}-${month}-${day}T12:00:00Z`);
+    const etNoonParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    }).formatToParts(noonUtc);
+    const etNoonH = parseInt(etNoonParts.find(p => p.type === "hour")!.value, 10);
+    // etOffsetHours = how many hours ET is behind UTC (e.g. 4 for EDT, 5 for EST)
+    const etOffsetHours = 12 - etNoonH;
+    // Build the target UTC timestamp: ET wall clock time + offset = UTC
+    const etMidnightUtc = Date.UTC(
+      parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10)
+    );
+    const eta = new Date(etMidnightUtc + (h + etOffsetHours) * 3_600_000 + m * 60_000);
     // If the time is in the past by more than 1 hour, skip
     if (eta.getTime() < now.getTime() - 60 * 60 * 1000) return null;
     return eta.getTime();
