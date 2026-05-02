@@ -3378,6 +3378,27 @@ Respond ONLY with valid JSON, no markdown:
       });
       return { ok: true, newIssueKey: issueKey };
     }),
+
+  /**
+   * dismissSystemCard — delete a system-generated ops chat message by ID.
+   * Used by the UI to dismiss alert cards like sync_watchdog.
+   * Only allows deletion of messages with authorRole = 'system'.
+   */
+  dismissSystemCard: opsChatProcedure
+    .input(z.object({ messageId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [msg] = await db
+        .select({ id: opsChatMessages.id, authorRole: opsChatMessages.authorRole })
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.messageId))
+        .limit(1);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      if (msg.authorRole !== "system") throw new TRPCError({ code: "FORBIDDEN", message: "Can only dismiss system messages" });
+      await db.delete(opsChatMessages).where(eq(opsChatMessages.id, input.messageId));
+      return { success: true };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

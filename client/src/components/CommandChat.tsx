@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -863,6 +863,7 @@ type MessageListProps = {
   setResolveIssueNote: (v: string) => void;
   setResolveIssueNoteText: (v: string) => void;
   setResolveIssueOpen: (v: boolean) => void;
+  dismissSystemCard: (messageId: number) => void;
 };
 
 const MessageList = memo(function MessageList({
@@ -893,6 +894,7 @@ const MessageList = memo(function MessageList({
   setResolveIssueNote,
   setResolveIssueNoteText,
   setResolveIssueOpen,
+  dismissSystemCard,
 }: MessageListProps) {
   return (
     <>
@@ -1585,6 +1587,44 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Sync watchdog alert card (amber, dismissible) ─────────────────
+                if (msg.quickAction === "sync_watchdog") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const minutesSince = (meta.minutesSince as number | null) ?? null;
+                  const lastSyncStr = (meta.lastSyncStr as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-amber-400 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500">
+                          <RefreshCw className="h-3 w-3 text-amber-100" />
+                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">Sync Alert</span>
+                          <span className="ml-auto text-[10px] text-amber-200">{fmtMsgTime(msg.createdAt)}</span>
+                          <button
+                            className="ml-1 text-amber-200 hover:text-white transition-colors"
+                            title="Dismiss"
+                            onClick={() => {
+                              dismissSystemCard(msg.id);
+                            }}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="px-3 py-2.5 bg-amber-50">
+                          <p className="text-sm font-semibold text-slate-900">
+                            Schedule sync overdue{minutesSince ? ` — ${minutesSince} min since last sync` : ""}
+                          </p>
+                          {lastSyncStr && (
+                            <p className="text-xs text-amber-700 mt-0.5">Last sync: {lastSyncStr}</p>
+                          )}
+                          <p className="text-xs text-slate-500 mt-1">
+                            Jobs added to Launch27 since the last sync may be missing from Field Management.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Skip cleaner_status cards — rendered in sidebar instead
                 if (msg.quickAction === "cleaner_status") return null;
                 // ── Default bubble ─────────────────────────────────────────────────────
@@ -1951,6 +1991,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Typing indicator ───────────────────────────────────────────────────────────
   const { typers: cmdTypers, onKeyPress: onCmdKeyPress, onBlur: onCmdBlur } = useTypingIndicator("command");
 
+  const dismissSystemCardMutation = trpc.opsChat.dismissSystemCard.useMutation({
+    onSuccess: () => {
+      utils.opsChat.getCommandChatData.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
+  });
   const claimLeadMutation = trpc.opsChat.claimLead.useMutation({
     onSuccess: (res) => {
       if (!res.success && 'alreadyClaimedBy' in res) {
@@ -3668,6 +3714,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setResolveIssueNote={setResolveIssueNote}
           setResolveIssueNoteText={setResolveIssueNoteText}
           setResolveIssueOpen={setResolveIssueOpen}
+          dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
         />
         </div>{/* end relative wrapper */}
         {chatConvertModal && (
