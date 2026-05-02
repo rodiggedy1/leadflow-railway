@@ -379,25 +379,23 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
               backgroundImage: "radial-gradient(ellipse at 50% 0%, rgba(37,99,235,0.05) 0%, transparent 70%)",
             }}
           >
-            <h2 className="text-2xl font-extrabold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>Earn money this week as a residential cleaner!</h2>
+            <h2 className="text-2xl font-extrabold text-white mb-1" style={{ letterSpacing: "-0.02em" }}>Join the area's top cleaning team.</h2>
+            <p className="text-sm mb-5 leading-relaxed" style={{ color: "rgba(255,255,255,0.45)" }}>
+              Takes about 4 minutes.
+            </p>
 
             {/* What to expect */}
             <div className="flex flex-col gap-3 mb-7">
               {[
-                { icon: "💰", text: "Set your own pay rate" },
-                { icon: "📅", text: "Get paid weekly" },
+                { icon: "✅", text: "Basic contact info" },
+                { icon: "📋", text: "Work requirements" },
+                { icon: "🎤", text: "Quick AI interview" },
               ].map(item => (
                 <div key={item.text} className="flex items-center gap-3">
                   <span className="text-base leading-none">{item.icon}</span>
                   <span className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>{item.text}</span>
                 </div>
               ))}
-            </div>
-
-            {/* Earnings callout */}
-            <div className="rounded-xl px-4 py-3 mb-5" style={{ background: "rgba(255,255,255,0.08)" }}>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.45)" }}>Cleaners in your city earn over</p>
-              <p className="text-3xl font-extrabold text-white" style={{ letterSpacing: "-0.03em" }}>$1,000<span className="text-lg font-semibold" style={{ color: "rgba(255,255,255,0.6)" }}>/week</span></p>
             </div>
 
             {/* CTA */}
