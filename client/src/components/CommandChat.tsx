@@ -1625,6 +1625,99 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Ops Summary card (daily schedule overview) ─────────────────────
+                if (msg.quickAction === "ops_summary") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const totalJobs = (meta.totalJobs as number) ?? 0;
+                  const confirmed = (meta.confirmed as number) ?? 0;
+                  const unconfirmed = (meta.unconfirmed as number) ?? 0;
+                  const missingPhone = (meta.missingPhone as number) ?? 0;
+                  const gaps = (meta.gaps as number) ?? 0;
+                  const confirmedNames = (meta.confirmedNames as string[]) ?? [];
+                  const unconfirmedNames = (meta.unconfirmedNames as string[]) ?? [];
+                  const allGood = unconfirmed === 0 && missingPhone === 0 && gaps === 0;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[82%] rounded-xl overflow-hidden border border-slate-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700">
+                          <ClipboardList className="h-3 w-3 text-slate-200" />
+                          <span className="text-[10px] font-semibold text-slate-200 uppercase tracking-widest">Ops Summary</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-white">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm font-semibold text-slate-900">{totalJobs} job{totalJobs !== 1 ? "s" : ""} tomorrow</span>
+                            {allGood && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">All confirmed 🎉</span>}
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            {confirmed > 0 && (
+                              <span className="flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                                <CheckCircle2 className="h-3 w-3" />
+                                {confirmed} confirmed{confirmedNames.length > 0 ? `: ${confirmedNames.join(", ")}` : ""}
+                              </span>
+                            )}
+                            {unconfirmed > 0 && (
+                              <span className="flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                                <TriangleAlert className="h-3 w-3" />
+                                {unconfirmed} unconfirmed{unconfirmedNames.length > 0 ? `: ${unconfirmedNames.join(", ")}` : ""}
+                              </span>
+                            )}
+                            {missingPhone > 0 && (
+                              <span className="flex items-center gap-1 text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5">
+                                <PhoneOff className="h-3 w-3" />
+                                {missingPhone} no phone
+                              </span>
+                            )}
+                            {gaps > 0 && (
+                              <span className="flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                                <TriangleAlert className="h-3 w-3" />
+                                {gaps} unassigned
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── Escalation flag card (unconfirmed after 8 PM call) ────────────────
+                if (msg.quickAction === "schedule_escalation_flag") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const cleanerName = (meta.cleanerName as string) ?? "Unknown cleaner";
+                  const cleanerPhone = (meta.cleanerPhone as string) ?? null;
+                  const jobCount = Array.isArray(meta.jobIds) ? (meta.jobIds as unknown[]).length : 0;
+                  const reason = (meta.reason as string) ?? "no_answer";
+                  const isNoAnswer = reason === "no_answer";
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-red-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
+                          <PhoneOff className="h-3 w-3 text-red-100" />
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">
+                            {isNoAnswer ? "No Answer" : "Call Failed"}
+                          </span>
+                          <span className="ml-auto text-[10px] text-red-300">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-red-50">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {cleanerName} — schedule unconfirmed
+                          </p>
+                          <p className="text-xs text-red-700 mt-0.5">
+                            {isNoAnswer ? "Did not answer" : "Call failed"} after 8 PM escalation call
+                            {jobCount > 0 ? ` · ${jobCount} job${jobCount !== 1 ? "s" : ""} tomorrow` : ""}
+                          </p>
+                          {cleanerPhone && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              📞 Call manually: {cleanerPhone}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Skip cleaner_status cards — rendered in sidebar instead
                 if (msg.quickAction === "cleaner_status") return null;
                 // ── Default bubble ─────────────────────────────────────────────────────

@@ -245,6 +245,34 @@ async function postEscalationCard(
   targetDate: string,
   reason: "no_answer" | "call_failed"
 ) {
+  // Idempotency guard: don't post a second flag card for the same cleaner+date
+  // (VAPI can deliver duplicate end-of-call-report events)
+  const existingCards = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+    .from(opsChatMessages)
+    .where(
+      and(
+        eq(opsChatMessages.channel, "command"),
+        eq(opsChatMessages.quickAction, "schedule_escalation_flag" as any)
+      )
+    )
+    .limit(20)
+    .catch(() => []);
+
+  const alreadyPosted = existingCards.some((row) => {
+    try {
+      const meta = JSON.parse(row.metadata ?? "{}");
+      return meta.cleanerProfileId === cleaner.profileId && meta.targetDate === targetDate;
+    } catch {
+      return false;
+    }
+  });
+
+  if (alreadyPosted) {
+    console.log(`[Escalation] Skipping duplicate flag card for ${cleaner.name} (${targetDate})`);
+    return;
+  }
+
   const dateLabel = formatDateLabel(targetDate);
   const emoji = reason === "no_answer" ? "📵" : "⚠️";
   const reasonLabel = reason === "no_answer" ? "Did not answer" : "Call failed";
@@ -449,7 +477,7 @@ export async function handleEscalationCallEnd(params: {
     jobIds,
   };
 
-  await postEscalationCard(db, cleaner, targetDate, noAnswer ? "no_answer" : "no_answer");
+  await postEscalationCard(db, cleaner, targetDate, noAnswer ? "no_answer" : "call_failed");
 }
 
 // ─── Exported pure helpers for unit testing ───────────────────────────────────

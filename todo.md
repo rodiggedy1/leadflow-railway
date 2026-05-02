@@ -1360,3 +1360,7 @@
 - [ ] Add callCleanerForStatusInquiry tRPC procedure (fires VAPI call + sends ETA reply to client)
 - [x] Daily ops summary card in Command Chat: post when all cleaners confirm or at 7 AM ET fallback
 - [x] 8 PM escalation: VAPI call to unconfirmed cleaners, flag non-responders in Command Chat
+- [x] Bug fix: escalationEngine broken ternary — "not confirmed but answered" should pass "call_failed" not "no_answer"
+- [x] Bug fix: postEscalationCard duplicate-card guard — check for existing flag card before inserting
+- [x] Feature: styled CommandChat card renderer for ops_summary quickAction
+- [x] Feature: styled CommandChat card renderer for schedule_escalation_flag quickAction
