@@ -159,6 +159,12 @@ export const conversationStages = [
   "FLOWC_DATE",
   "FLOWC_NOTES",
   "FLOWC_QUOTE_SENT",
+  /**
+   * SCHEDULE_CONFIRM_SENT → Daily 5 PM schedule SMS sent to cleaner team, waiting for "CONFIRM" reply.
+   * SCHEDULE_CONFIRM_DONE → Cleaner replied to confirm (or flow timed out). Terminal stage.
+   */
+  "SCHEDULE_CONFIRM_SENT",
+  "SCHEDULE_CONFIRM_DONE",
 ] as const;
 
 export type ConversationStage = (typeof conversationStages)[number];
@@ -1108,6 +1114,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   customerComplaint: text("customerComplaint"),
   /** Whether the −$20 complaint charge has been applied to this job's pay (1 = yes) */
   complaintChargeApplied: int("complaintChargeApplied").default(0).notNull(),
+  /** Whether the cleaner team confirmed their schedule for this job via SMS (1 = confirmed, 0 = not yet) */
+  scheduleConfirmed: int("scheduleConfirmed").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [index("idx_cleaner_jobs_job_date").on(t.jobDate)]);

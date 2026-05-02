@@ -504,6 +504,7 @@ export function registerWebhookRoutes(app: Express) {
           || s.stage === "REVIEW_REBOOKING_REQUESTED" || s.stage === "REVIEW_REBOOKING_DONE"
           || s.stage === "REACTIVATION" || s.stage === "REACTIVATION_TIME"
           || s.stage === "INTERVIEW_LINK_SENT" || s.stage === "INTERVIEW_NUDGE_1" || s.stage === "INTERVIEW_NUDGE_2"
+          || s.stage === "SCHEDULE_CONFIRM_SENT"
       );
       // INTERVIEW_LINK_SENT / NUDGE sessions are for hiring candidates, not customers.
       // If a newer active lead session exists (created after the interview session), the
@@ -759,7 +760,51 @@ export function registerWebhookRoutes(app: Express) {
       //   return;
       // }
 
-      // ── QUALITY_RATING: Post-job 1-5 star rating flow ───────────────────────────
+           // ── SCHEDULE_CONFIRM: Daily schedule confirmation reply from cleaner ───────────
+      if (session.stage === "SCHEDULE_CONFIRM_SENT") {
+        const { handleScheduleConfirmReply } = await import("./scheduleConfirmEngine");
+        // Parse the target date from the session's message history (the outbound SMS was sent for a specific date)
+        // The session was created with leadSource = "schedule_confirm" and the date is encoded in the outbound text
+        // We look it up from the most recent SCHEDULE_CONFIRM_SENT session's createdAt to derive the target date
+        const sessionCreated = new Date(session.createdAt);
+        // The cron fires at 5 PM ET for tomorrow's jobs — derive target date from session creation time
+        const etCreated = new Date(sessionCreated.toLocaleString("en-US", { timeZone: "America/New_York" }));
+        etCreated.setDate(etCreated.getDate() + 1);
+        const targetDate = `${etCreated.getFullYear()}-${String(etCreated.getMonth() + 1).padStart(2, "0")}-${String(etCreated.getDate()).padStart(2, "0")}`;
+
+        const confirmResult = await handleScheduleConfirmReply(
+          session.id,
+          fromPhone,
+          inboundText,
+          session.leadName ?? null,
+          targetDate
+        );
+        console.log(`[Webhook] ScheduleConfirm: ${session.stage} → ${confirmResult.newStage}. Confirmed: ${confirmResult.confirmed}. Reply: "${confirmResult.responseText}"`);
+
+        // Send SMS FIRST — before DB update (per skill rules)
+        const csNumberId = ENV.openPhoneCsNumberId;
+        const confirmSmsResult = await sendSms({
+          to: fromPhone,
+          content: confirmResult.responseText,
+          ...(csNumberId ? { fromNumberId: csNumberId } : {}),
+        });
+        if (!confirmSmsResult.success) {
+          console.error(`[Webhook] Failed to send schedule confirm reply to ${fromPhone}:`, confirmSmsResult.error);
+        }
+
+        history.push({ role: "assistant", content: confirmResult.responseText, ts: Date.now() });
+        if (history.length > 20) history = history.slice(-20);
+        await db
+          .update(conversationSessions)
+          .set({
+            stage: confirmResult.newStage as any,
+            messageHistory: JSON.stringify(history),
+          })
+          .where(eq(conversationSessions.id, session.id));
+        return;
+      }
+
+      // ── QUALITY_RATING: Post-job 1-5 star rating flow ─────────────────────
       if (session.stage === "QUALITY_RATING_REQUESTED" || session.stage === "QUALITY_MISSED_FOLLOWUP") {
         const ratingResult = await handleRatingReply(session.id, fromPhone, inboundText, session.stage);
         console.log(`[Webhook] Quality rating stage: ${session.stage} → ${ratingResult.newStage}. Reply: "${ratingResult.responseText}"`);
