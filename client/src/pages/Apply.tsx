@@ -1365,7 +1365,23 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
               {/* Headline */}
               <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight mb-3">You're in! One last thing.</h1>
               <h2 className="text-2xl md:text-3xl font-extrabold leading-tight mb-4" style={{ color: "#94a3b8" }}>Send us a photo of your<br />cleaning supplies.</h2>
-              <p className="text-gray-500 text-base mb-8 max-w-lg">Before your interview, we need to see your supplies. It takes 30 seconds and helps us fast-track your application.</p>
+              <p className="text-gray-500 text-base mb-6 max-w-lg">Before your interview, we need to see your supplies. It takes 30 seconds and helps us fast-track your application.</p>
+
+              {/* Wistia video — inline under headline */}
+              <div className="rounded-2xl overflow-hidden mb-8" style={{ border: "1px solid #e5e7eb" }}>
+                {/* Replace WISTIA_VIDEO_ID with your real Wistia video ID */}
+                <div className="relative w-full" style={{ paddingBottom: "56.25%", backgroundColor: "#f1f5f9" }}>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: "#e2e8f0" }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <path d="M8 5.14v14l11-7-11-7z" fill="#94a3b8" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-400 font-medium">Video placeholder</p>
+                    <p className="text-xs text-gray-300">Replace with Wistia embed</p>
+                  </div>
+                </div>
+              </div>
 
               {/* CTAs */}
               <div className="flex flex-wrap gap-3 mb-10">
@@ -1442,30 +1458,6 @@ function ThankYouStep({ candidateId }: { candidateId: number | null }) {
                     <p className="text-xs text-gray-400 mt-0.5">{sub}</p>
                   </div>
                 ))}
-              </div>
-            </div>
-
-            {/* Wistia video card */}
-            <div className="bg-white rounded-2xl overflow-hidden" style={{ border: "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <div className="px-6 pt-6 pb-4">
-                <p className="text-xs text-gray-400 mb-0.5">From the team</p>
-                <p className="font-bold text-gray-900 text-base">A quick message from our hiring team</p>
-              </div>
-              {/* Wistia embed — replace WISTIA_VIDEO_ID with your real ID */}
-              <div className="relative w-full" style={{ paddingBottom: "56.25%", backgroundColor: "#f1f5f9" }}>
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: "#e2e8f0" }}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                      <path d="M8 5.14v14l11-7-11-7z" fill="#94a3b8" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-gray-400 font-medium">Video coming soon</p>
-                  <p className="text-xs text-gray-300">Replace with Wistia embed code</p>
-                </div>
-                {/* To embed: uncomment and replace WISTIA_VIDEO_ID below */}
-                {/* <script src="https://fast.wistia.com/embed/medias/WISTIA_VIDEO_ID.jsonp" async></script>
-                <script src="https://fast.wistia.com/assets/external/E-v1.js" async></script>
-                <div className="wistia_embed wistia_async_WISTIA_VIDEO_ID absolute inset-0" /> */}
               </div>
             </div>
 
