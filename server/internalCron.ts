@@ -42,6 +42,9 @@ import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
+import { runScheduleConfirmSend, runScheduleConfirmNudge } from "./scheduleConfirmEngine";
+import { postOpsSummary } from "./opsSummaryEngine";
+import { runEscalationCalls } from "./escalationEngine";
 import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
 import { and, eq, isNull, lte, lt, gte, isNotNull, desc } from "drizzle-orm";
 
@@ -710,6 +713,72 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Daily 7 AM ET: ops summary card ────────────────────────────────────────
+  // Posts the daily ops summary to Command Chat (confirmed / unconfirmed / unassigned).
+  // Fires immediately when all cleaners confirm; this 7 AM cron is the fallback.
+  cron.schedule("0 0 7 * * *", async () => {
+    console.log("[InternalCron] Running OpsSummary (7 AM fallback)...");
+    try {
+      const result = await postOpsSummary();
+      const summary = `posted: ${result.posted}, date: ${result.date}, confirmed: ${result.confirmed}, unconfirmed: ${result.unconfirmed}`;
+      console.log(`[InternalCron] OpsSummary — ${summary}`);
+      await recordHeartbeat("ops-summary", summary, result.posted);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] OpsSummary failed:", msg);
+      await recordHeartbeat("ops-summary", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Daily 5 PM ET: schedule confirmation SMS to cleaners ────────────────────
+  // Sends "please confirm your schedule for tomorrow" SMS to all cleaners with jobs.
+  cron.schedule("0 0 17 * * *", async () => {
+    console.log("[InternalCron] Running ScheduleConfirmSend (5 PM)...");
+    try {
+      const result = await runScheduleConfirmSend();
+      const summary = `teamsSent: ${result.teamsSent}, teamsFailed: ${result.teamsFailed}, missingPhone: ${result.teamsMissingPhone}`;
+      console.log(`[InternalCron] ScheduleConfirmSend — ${summary}`);
+      await recordHeartbeat("schedule-confirm-send", summary, result.teamsSent > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] ScheduleConfirmSend failed:", msg);
+      await recordHeartbeat("schedule-confirm-send", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Daily 7 PM ET: schedule confirmation nudge to still-unconfirmed cleaners ─
+  // Re-sends confirmation request to cleaners who haven't replied since the 5 PM SMS.
+  cron.schedule("0 0 19 * * *", async () => {
+    console.log("[InternalCron] Running ScheduleConfirmNudge (7 PM)...");
+    try {
+      const result = await runScheduleConfirmNudge();
+      const summary = `nudgesSent: ${result.nudgesSent}, alreadyConfirmed: ${result.alreadyConfirmed}, alreadyNudged: ${result.alreadyNudged}, errors: ${result.errors}`;
+      console.log(`[InternalCron] ScheduleConfirmNudge — ${summary}`);
+      await recordHeartbeat("schedule-confirm-nudge", summary, result.nudgesSent > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] ScheduleConfirmNudge failed:", msg);
+      await recordHeartbeat("schedule-confirm-nudge", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Daily 8 PM ET: escalation VAPI calls to unconfirmed cleaners ────────────
+  // Places automated calls to any cleaner who still hasn't confirmed by 8 PM.
+  // Flags non-responders in Command Chat for manual follow-up.
+  cron.schedule("0 0 20 * * *", async () => {
+    console.log("[InternalCron] Running ScheduleEscalation (8 PM)...");
+    try {
+      const result = await runEscalationCalls();
+      const summary = `called: ${result.called}, skipped: ${result.skipped}, errors: ${result.errors}`;
+      console.log(`[InternalCron] ScheduleEscalation — ${summary}`);
+      await recordHeartbeat("schedule-escalation", summary, result.called > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] ScheduleEscalation failed:", msg);
+      await recordHeartbeat("schedule-escalation", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
@@ -722,4 +791,8 @@ export function startInternalCron(): void {
   console.log(`  - FieldMgmt:          every 5 min 6AM-10PM ET (ENABLED=${FIELD_MGMT_ENABLED})`);
   console.log("  - MetricsAiAlerts:    every hour (all 5 ranges)");
   console.log("  - VapiRefresh:        every hour at :30 (system prompt time context)");
+  console.log("  - OpsSummary:         7 AM ET daily (fallback; also fires when all cleaners confirm)");
+  console.log("  - ScheduleConfirm:    5 PM ET daily");
+  console.log("  - ScheduleConfirmNudge: 7 PM ET daily");
+  console.log("  - ScheduleEscalation: 8 PM ET daily");
 }

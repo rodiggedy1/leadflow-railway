@@ -1365,3 +1365,7 @@
 - [x] Feature: styled CommandChat card renderer for ops_summary quickAction
 - [x] Feature: styled CommandChat card renderer for schedule_escalation_flag quickAction
 - [x] Bug fix: lead drawer shows stale messages when opened right after a reply notification fires (on-mount getById fetch)
+- [x] Wire 5 PM schedule-confirm cron into internalCron.ts
+- [x] Wire 7 PM schedule-confirm nudge cron into internalCron.ts
+- [x] Wire 7 AM ops summary cron into internalCron.ts
+- [x] Wire 8 PM schedule escalation cron into internalCron.ts
