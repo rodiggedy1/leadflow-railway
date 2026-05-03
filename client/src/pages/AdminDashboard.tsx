@@ -1401,7 +1401,7 @@ function ConversationDrawer({
     onSuccess: () => { refetchNurture(); toast.success("Enrolled in nurture"); },
     onError: (e) => toast.error(e.message),
   });
-  const [nurtureEnrollStep, setNurtureEnrollStep] = React.useState<string>("3");
+  const [nurtureEnrollStep, setNurtureEnrollStep] = useState<string>("3");
   const suggestions: Record<string, string> = {
     lockDate: `Hey ${firstName} — totally makes sense. We're already filling early May, so I can tentatively hold a spot now and adjust if needed. Want me to grab something before it fills up?`,
     softCheckIn: `Hey ${firstName} — just checking in! Want me to send over a couple openings that would work well for you?`,
