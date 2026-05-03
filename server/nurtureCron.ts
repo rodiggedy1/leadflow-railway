@@ -16,6 +16,7 @@ import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
 import { eq, and, lte, gte, isNull, isNotNull, ne, lt, inArray, notInArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
+import { normalizePhone } from "./routers";
 import { sendSms } from "./openphone";
 import {
   enrollLead,
@@ -265,13 +266,17 @@ export async function runNurtureSend(): Promise<{
         }
         // No aiMode pause — enrollment only pauses on: book, manual pause from UI, or STOP reply
 
-        // Skip send if lead still has no phone — keep enrollment active, retry next tick
-        const currentPhone = session.leadPhone ?? enrollment.leadPhone;
+        // Normalize the session phone to E.164 (+1XXXXXXXXXX) before the validity check.
+        // Thumbtack and some form leads store phones as "443-202-3031" (no +1 prefix) or
+        // as a placeholder "thumbtack-XXXXXXXXX". normalizePhone converts valid US numbers
+        // to E.164; non-US / placeholder strings pass through unchanged and fail the +1 check.
+        const rawPhone = session.leadPhone ?? enrollment.leadPhone;
+        const currentPhone = rawPhone ? normalizePhone(rawPhone) : null;
         if (!currentPhone || !currentPhone.startsWith('+1')) {
-          // Update enrollment phone if it appeared since enrollment
+          // Phone still missing or non-US — keep enrollment active, retry next tick
           continue;
         }
-        // Sync phone onto enrollment record if it was missing at enrollment time
+        // Sync normalized phone onto enrollment record if it was missing or different at enrollment time
         if (enrollment.leadPhone !== currentPhone) {
           await db.update(nurtureEnrollments).set({ leadPhone: currentPhone }).where(eq(nurtureEnrollments.id, enrollment.id));
         }

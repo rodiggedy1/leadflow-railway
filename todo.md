@@ -1377,3 +1377,4 @@
 - [x] Nurture: active/paused badge on lead list cards
 - [x] Nurture: status strip + skip/pause/resume controls in lead drawer conversation tab
 - [x] Nurture: shared nurtureUtils.ts (getStepLabel, getPhaseName, formatNextSendAt)
+- [x] Nurture: normalize session phone in cron before +1 check (fixes leads stored as '443-202-3031' format)
