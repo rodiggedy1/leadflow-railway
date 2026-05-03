@@ -16,7 +16,7 @@ import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
 import { eq, and, lte, gte, isNull, isNotNull, ne, lt, inArray, notInArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { normalizePhone } from "./routers";
+import { normalizePhone, isValidUSPhone } from "./routers";
 import { sendSms } from "./openphone";
 import {
   enrollLead,
@@ -266,16 +266,18 @@ export async function runNurtureSend(): Promise<{
         }
         // No aiMode pause — enrollment only pauses on: book, manual pause from UI, or STOP reply
 
-        // Normalize the session phone to E.164 (+1XXXXXXXXXX) before the validity check.
-        // Thumbtack and some form leads store phones as "443-202-3031" (no +1 prefix) or
-        // as a placeholder "thumbtack-XXXXXXXXX". normalizePhone converts valid US numbers
-        // to E.164; non-US / placeholder strings pass through unchanged and fail the +1 check.
+        // Validate the session phone before attempting to send.
+        // isValidUSPhone checks for exactly 10 US digits (area code + exchange both >= 2XX),
+        // which correctly rejects Thumbtack placeholders ("thumbtack-XXXXXXXXX"),
+        // Bark placeholders ("bark-sms-XXXXXXXXX"), and any other non-US strings —
+        // while accepting real phones in any format: "443-202-3031", "(443) 202-3031", "+14432023031".
         const rawPhone = session.leadPhone ?? enrollment.leadPhone;
-        const currentPhone = rawPhone ? normalizePhone(rawPhone) : null;
-        if (!currentPhone || !currentPhone.startsWith('+1')) {
-          // Phone still missing or non-US — keep enrollment active, retry next tick
+        if (!rawPhone || !isValidUSPhone(rawPhone)) {
+          // Phone still missing or not a real US number — keep enrollment active, retry next tick
           continue;
         }
+        // Normalize to E.164 for the actual send
+        const currentPhone = normalizePhone(rawPhone);
         // Sync normalized phone onto enrollment record if it was missing or different at enrollment time
         if (enrollment.leadPhone !== currentPhone) {
           await db.update(nurtureEnrollments).set({ leadPhone: currentPhone }).where(eq(nurtureEnrollments.id, enrollment.id));
