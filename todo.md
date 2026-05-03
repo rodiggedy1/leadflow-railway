@@ -1372,3 +1372,8 @@
 - [x] Bug fix: outbound staff calls (lastCalledByAgentName set) falsely advance lastCustomerReplyAt and trigger phantom reply notifications
 - [x] Bug fix: Call Client on running-late card fails with "job not assigned" when bookingStatus is 'new'
 - [x] Bug fix: rescheduled jobs still show in today's schedule view after sync
+- [x] Nurture: bySession procedure in nurtureRouter.ts (returns enrollment + nextMessageBody)
+- [x] Nurture: nurtureStatus/nurtureNextStep/nurtureNextSendAt batch lookup in leads.list
+- [x] Nurture: active/paused badge on lead list cards
+- [x] Nurture: status strip + skip/pause/resume controls in lead drawer conversation tab
+- [x] Nurture: shared nurtureUtils.ts (getStepLabel, getPhaseName, formatNextSendAt)

@@ -14,7 +14,7 @@ import { z } from "zod";
 import { getDb } from "./db";
 import { nurtureEnrollments, conversationSessions, nurtureStepScripts } from "../drizzle/schema";
 import { eq, and, desc, sql, inArray, isNull } from "drizzle-orm";
-import { enrollLead, resumeEnrollment, endEnrollment, pauseEnrollment } from "./nurtureSequence";
+import { enrollLead, resumeEnrollment, endEnrollment, pauseEnrollment, buildNurtureContext, STEP_MAP } from "./nurtureSequence";
 import { NURTURE_STEPS } from "./nurtureSequence";
 import { invokeLLM } from "./_core/llm";
 
@@ -375,5 +375,71 @@ export const nurtureRouter = router({
       });
       if (!result.success) throw new Error(result.error ?? "SMS failed");
       return { ok: true };
+    }),
+
+  /**
+   * bySession — returns the active/paused enrollment for a given session, plus
+   * the rendered next message body (with custom script override if present).
+   * Used by the lead drawer to show nurture status inline.
+   */
+  bySession: adminAgentProcedure
+    .input(z.object({ sessionId: z.number().int() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { enrollment: null, nextMessageBody: null };
+
+      // Find active or paused enrollment for this session
+      const [enrollment] = await db
+        .select({
+          id: nurtureEnrollments.id,
+          status: nurtureEnrollments.status,
+          nextStep: nurtureEnrollments.nextStep,
+          nextSendAt: nurtureEnrollments.nextSendAt,
+          lastStepSent: nurtureEnrollments.lastStepSent,
+          leadFirstName: nurtureEnrollments.leadFirstName,
+          serviceType: nurtureEnrollments.serviceType,
+        })
+        .from(nurtureEnrollments)
+        .where(
+          and(
+            eq(nurtureEnrollments.sessionId, input.sessionId),
+            isNull(nurtureEnrollments.deletedAt),
+            sql`${nurtureEnrollments.status} IN ('active', 'paused')`
+          )
+        )
+        .limit(1);
+
+      if (!enrollment) return { enrollment: null, nextMessageBody: null };
+
+      // Build the next message body (check for custom script override first)
+      const step = STEP_MAP.get(enrollment.nextStep);
+      let nextMessageBody: string | null = null;
+      if (step) {
+        const [customScript] = await db
+          .select({ body: nurtureStepScripts.body })
+          .from(nurtureStepScripts)
+          .where(eq(nurtureStepScripts.step, enrollment.nextStep))
+          .limit(1);
+        const ctx = buildNurtureContext({
+          leadName: enrollment.leadFirstName,
+          serviceType: enrollment.serviceType,
+        });
+        nextMessageBody = customScript
+          ? customScript.body
+              .replace(/\{\{first_name\}\}/gi, ctx.firstName)
+              .replace(/\{\{service\}\}/gi, ctx.serviceType)
+          : step.buildMessage(ctx);
+      }
+
+      return {
+        enrollment: {
+          id: enrollment.id,
+          status: enrollment.status,
+          nextStep: enrollment.nextStep,
+          nextSendAt: enrollment.nextSendAt,
+          lastStepSent: enrollment.lastStepSent,
+        },
+        nextMessageBody,
+      };
     }),
 });

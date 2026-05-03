@@ -356,7 +356,41 @@ export const appRouter = router({
           })();
         }
 
-        return enriched;
+        // ── Batch nurture status lookup ──────────────────────────────────────
+        // Attach nurtureStatus / nurtureNextStep / nurtureNextSendAt to each
+        // session that has an active or paused enrollment, so the lead list
+        // can render the nurture badge without per-row queries.
+        const sessionIds = enriched.map(s => s.id);
+        const nurtureMap = new Map<number, { nurtureStatus: 'active' | 'paused'; nurtureNextStep: number; nurtureNextSendAt: Date | null }>();
+        if (sessionIds.length > 0) {
+          const nurtureRows = await db
+            .select({
+              sessionId: nurtureEnrollments.sessionId,
+              status: nurtureEnrollments.status,
+              nextStep: nurtureEnrollments.nextStep,
+              nextSendAt: nurtureEnrollments.nextSendAt,
+            })
+            .from(nurtureEnrollments)
+            .where(
+              and(
+                inArray(nurtureEnrollments.sessionId, sessionIds),
+                isNull(nurtureEnrollments.deletedAt),
+                sql`${nurtureEnrollments.status} IN ('active', 'paused')`
+              )
+            );
+          for (const row of nurtureRows) {
+            nurtureMap.set(row.sessionId, {
+              nurtureStatus: row.status as 'active' | 'paused',
+              nurtureNextStep: row.nextStep,
+              nurtureNextSendAt: row.nextSendAt,
+            });
+          }
+        }
+        const withNurture = enriched.map(s => {
+          const n = nurtureMap.get(s.id);
+          return n ? { ...s, ...n } : s;
+        });
+        return withNurture;
       }),
     stats: publicProcedure
       .input(

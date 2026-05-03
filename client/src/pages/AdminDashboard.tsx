@@ -107,6 +107,9 @@ import {
   Flame,
   PanelRight,
   Inbox,
+  SkipForward,
+  Pause,
+  Play,
 } from "lucide-react";
 import {
   Dialog,
@@ -141,6 +144,7 @@ import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import CallGuide from "@/components/CallGuide";
 import PipelineBoard from "@/components/PipelineBoard";
+import { getStepLabel, getPhaseName, formatNextSendAt } from "@/lib/nurtureUtils";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
 /**
  * Slide-in toast stack that appears from the bottom-right when leads have
@@ -1349,8 +1353,26 @@ function ConversationDrawer({
     },
     onError: (e) => toast.error(e.message),
   });
+
   // Suggestion templates based on lead context
   const firstName = session.leadName?.split(" ")[0] ?? "there";
+  // ── Nurture controls ─────────────────────────────────────────────────────
+  const { data: nurtureData, refetch: refetchNurture } = trpc.nurture.bySession.useQuery(
+    { sessionId: session.id },
+    { staleTime: 30_000 }
+  );
+  const nurturePauseMutation = trpc.nurture.pause.useMutation({
+    onSuccess: () => { refetchNurture(); toast.success("Nurture paused"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const nurtureResumeMutation = trpc.nurture.resume.useMutation({
+    onSuccess: () => { refetchNurture(); toast.success("Nurture resumed"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const nurtureSkipMutation = trpc.nurture.skipStep.useMutation({
+    onSuccess: () => { refetchNurture(); toast.success("Skipped to next step"); },
+    onError: (e) => toast.error(e.message),
+  });
   const suggestions: Record<string, string> = {
     lockDate: `Hey ${firstName} — totally makes sense. We're already filling early May, so I can tentatively hold a spot now and adjust if needed. Want me to grab something before it fills up?`,
     softCheckIn: `Hey ${firstName} — just checking in! Want me to send over a couple openings that would work well for you?`,
@@ -1973,6 +1995,65 @@ function ConversationDrawer({
                     </div>
                   </div>
                 )}
+                {/* Nurture status strip */}
+                {nurtureData?.enrollment && (() => {
+                  const enr = nurtureData.enrollment;
+                  return (
+                    <div className="mx-3 mb-2 rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 flex items-center gap-3">
+                      <Zap className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-violet-700">
+                            {enr.status === 'active' ? 'Nurture active' : enr.status === 'paused' ? 'Nurture paused' : `Nurture ${enr.status}`}
+                          </span>
+                          <span className="text-xs text-violet-500">&middot;</span>
+                          <span className="text-xs text-violet-600">{getStepLabel(enr.nextStep)}</span>
+                          {enr.status === 'active' && enr.nextSendAt && (
+                            <>
+                              <span className="text-xs text-violet-400">&middot;</span>
+                              <span className="text-xs text-violet-400">{formatNextSendAt(enr.nextSendAt)}</span>
+                            </>
+                          )}
+                        </div>
+                        {nurtureData.nextMessageBody && (
+                          <p className="text-xs text-violet-600/80 mt-0.5 truncate">{nurtureData.nextMessageBody}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {enr.status === 'active' && (
+                          <>
+                            <button
+                              onClick={() => nurtureSkipMutation.mutate({ enrollmentId: enr.id })}
+                              disabled={nurtureSkipMutation.isPending}
+                              title="Skip to next step"
+                              className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
+                            >
+                              {nurtureSkipMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <SkipForward className="w-3 h-3" />}
+                            </button>
+                            <button
+                              onClick={() => nurturePauseMutation.mutate({ enrollmentId: enr.id })}
+                              disabled={nurturePauseMutation.isPending}
+                              title="Pause nurture"
+                              className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
+                            >
+                              {nurturePauseMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pause className="w-3 h-3" />}
+                            </button>
+                          </>
+                        )}
+                        {enr.status === 'paused' && (
+                          <button
+                            onClick={() => nurtureResumeMutation.mutate({ sessionId: session.id })}
+                            disabled={nurtureResumeMutation.isPending}
+                            title="Resume nurture"
+                            className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
+                          >
+                            {nurtureResumeMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {/* Toolbar: note icon + AI toggle + Send */}
                 <div className="flex items-center gap-2 px-3 pb-3 pt-1">
                   {/* Note icon — amber when note exists */}
@@ -4377,6 +4458,18 @@ export default function AdminDashboard() {
                                                 {recInfo?.hasTranscript && (
                                                   <Badge variant="outline" className="rounded-full bg-white text-xs px-2 py-0.5">
                                                     <FileText className="mr-1 h-3 w-3" /> Transcript
+                                                  </Badge>
+                                                )}
+                                                {(session as { nurtureStatus?: string }).nurtureStatus === 'active' && (
+                                                  <Badge className="rounded-full text-xs px-2 py-0.5 bg-violet-100 text-violet-700 border-violet-200 border font-medium">
+                                                    <Zap className="mr-1 h-3 w-3" />
+                                                    Nurture · {getStepLabel((session as { nurtureNextStep?: number }).nurtureNextStep ?? 3)}
+                                                  </Badge>
+                                                )}
+                                                {(session as { nurtureStatus?: string }).nurtureStatus === 'paused' && (
+                                                  <Badge className="rounded-full text-xs px-2 py-0.5 bg-zinc-100 text-zinc-500 border-zinc-200 border font-medium">
+                                                    <Pause className="mr-1 h-3 w-3" />
+                                                    Paused
                                                   </Badge>
                                                 )}
                                               </div>
