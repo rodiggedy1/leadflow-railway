@@ -1167,6 +1167,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           }).catch(() => {});
           // End any active/paused nurture enrollment immediately — do not wait for the next send tick
           getDb().then(async (db) => {
+            if (!db) return;
             try {
               const { inArray, eq, and, isNull } = await import("drizzle-orm");
               const { nurtureEnrollments } = await import("../drizzle/schema");
