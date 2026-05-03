@@ -796,13 +796,27 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
       }
     }
     if (mismatches.length === 0 && l27BookingIds.size > 0) {
-      // All good — post a green Sync OK card after every clean sync
+      // Post a green Sync OK card after every clean sync — deduplicate within 5 min to avoid duplicates
+      // if the sync function is called multiple times in quick succession (e.g. batch processing)
       Promise.resolve().then(async () => {
         try {
           const { getDb } = await import("./db");
           const { opsChatMessages } = await import("../drizzle/schema");
           const dbConn = await getDb();
           if (!dbConn) return;
+          const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+          const recent = await dbConn
+            .select({ id: opsChatMessages.id })
+            .from(opsChatMessages)
+            .where(
+              and(
+                eq(opsChatMessages.channel, "command"),
+                eq(opsChatMessages.quickAction as any, "sync_ok"),
+                gte(opsChatMessages.createdAt, fiveMinAgo)
+              )
+            )
+            .limit(1);
+          if (recent.length > 0) return; // already posted this sync run
           await dbConn.insert(opsChatMessages).values({
             channel: "command",
             authorName: "System",
