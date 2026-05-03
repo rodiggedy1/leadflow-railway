@@ -806,6 +806,10 @@ type DrawerSession = {
   lastJobPrice: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
+  // Nurture fields — optional, populated from leads.list batch query
+  nurtureStatus?: 'active' | 'paused';
+  nurtureNextStep?: number;
+  nurtureNextSendAt?: Date | string | null;
 };
 
 /** Returns a flag emoji + language label for non-English sessions */
@@ -1359,7 +1363,27 @@ function ConversationDrawer({
   // ── Nurture controls ─────────────────────────────────────────────────────
   const { data: nurtureData, refetch: refetchNurture } = trpc.nurture.bySession.useQuery(
     { sessionId: session.id },
-    { staleTime: 30_000 }
+    {
+      staleTime: 30_000,
+      // Show status strip instantly using data already fetched by the leads list,
+      // while the full query (with message body preview) loads in the background.
+      placeholderData: session.nurtureStatus
+        ? {
+            enrollment: {
+              id: 0,
+              status: session.nurtureStatus as 'active' | 'paused' | 'done',
+              nextStep: session.nurtureNextStep ?? 1,
+              // nextSendAt must be Date (non-nullable per tRPC inferred type);
+              // use a far-future sentinel when unknown so the strip renders immediately
+              nextSendAt: session.nurtureNextSendAt
+                ? new Date(session.nurtureNextSendAt as string)
+                : new Date(Date.now() + 86_400_000),
+              lastStepSent: null as number | null,
+            },
+            nextMessageBody: null as string | null,
+          }
+        : undefined,
+    }
   );
   const nurturePauseMutation = trpc.nurture.pause.useMutation({
     onSuccess: () => { refetchNurture(); toast.success("Nurture paused"); },

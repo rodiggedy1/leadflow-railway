@@ -1380,3 +1380,5 @@
 - [x] Nurture: normalize session phone in cron before +1 check (fixes leads stored as '443-202-3031' format)
 - [x] Normalize phone on write in updateLeadPhone (calls normalizePhone() before saving to DB)
 - [x] Nurture: replace startsWith(+1) guard with isValidUSPhone() — correctly rejects Thumbtack/Bark placeholders that normalize to fake 13-digit +1 numbers
+- [x] Nurture drawer: merge bySession into single LEFT JOIN (one DB round-trip)
+- [x] Nurture drawer: placeholderData from leads list for instant status strip on open

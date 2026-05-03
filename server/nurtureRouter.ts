@@ -388,8 +388,8 @@ export const nurtureRouter = router({
       const db = await getDb();
       if (!db) return { enrollment: null, nextMessageBody: null };
 
-      // Find active or paused enrollment for this session
-      const [enrollment] = await db
+      // Single query: enrollment + custom script override via LEFT JOIN (one round-trip)
+      const [row] = await db
         .select({
           id: nurtureEnrollments.id,
           status: nurtureEnrollments.status,
@@ -398,8 +398,13 @@ export const nurtureRouter = router({
           lastStepSent: nurtureEnrollments.lastStepSent,
           leadFirstName: nurtureEnrollments.leadFirstName,
           serviceType: nurtureEnrollments.serviceType,
+          customScriptBody: nurtureStepScripts.body,
         })
         .from(nurtureEnrollments)
+        .leftJoin(
+          nurtureStepScripts,
+          eq(nurtureStepScripts.step, nurtureEnrollments.nextStep)
+        )
         .where(
           and(
             eq(nurtureEnrollments.sessionId, input.sessionId),
@@ -409,23 +414,18 @@ export const nurtureRouter = router({
         )
         .limit(1);
 
-      if (!enrollment) return { enrollment: null, nextMessageBody: null };
+      if (!row) return { enrollment: null, nextMessageBody: null };
 
-      // Build the next message body (check for custom script override first)
-      const step = STEP_MAP.get(enrollment.nextStep);
+      // Build the next message body from the joined result — no second round-trip
+      const step = STEP_MAP.get(row.nextStep);
       let nextMessageBody: string | null = null;
       if (step) {
-        const [customScript] = await db
-          .select({ body: nurtureStepScripts.body })
-          .from(nurtureStepScripts)
-          .where(eq(nurtureStepScripts.step, enrollment.nextStep))
-          .limit(1);
         const ctx = buildNurtureContext({
-          leadName: enrollment.leadFirstName,
-          serviceType: enrollment.serviceType,
+          leadName: row.leadFirstName,
+          serviceType: row.serviceType,
         });
-        nextMessageBody = customScript
-          ? customScript.body
+        nextMessageBody = row.customScriptBody
+          ? row.customScriptBody
               .replace(/\{\{first_name\}\}/gi, ctx.firstName)
               .replace(/\{\{service\}\}/gi, ctx.serviceType)
           : step.buildMessage(ctx);
@@ -433,11 +433,11 @@ export const nurtureRouter = router({
 
       return {
         enrollment: {
-          id: enrollment.id,
-          status: enrollment.status,
-          nextStep: enrollment.nextStep,
-          nextSendAt: enrollment.nextSendAt,
-          lastStepSent: enrollment.lastStepSent,
+          id: row.id,
+          status: row.status,
+          nextStep: row.nextStep,
+          nextSendAt: row.nextSendAt,
+          lastStepSent: row.lastStepSent,
         },
         nextMessageBody,
       };
