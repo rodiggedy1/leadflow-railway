@@ -66,11 +66,21 @@ describe("hasReplyAfterLastSend", () => {
     expect(hasReplyAfterLastSend(history, lastSentAt)).toBe(false);
   });
 
-  it("returns true when lastSentAt is null and any user message exists", () => {
+  /**
+   * KEY BEHAVIOR CHANGE: when lastSentAt is null (no nurture step sent yet),
+   * the function now returns false regardless of message history.
+   * A lead replying to the initial AI intake message should NOT pause the
+   * nurture sequence before it has even started sending.
+   */
+  it("returns false when lastSentAt is null, even if user messages exist", () => {
     const history = JSON.stringify([
       { role: "user", content: "hi", ts: NOW - 5 * 60 * 1000 },
     ]);
-    expect(hasReplyAfterLastSend(history, null)).toBe(true);
+    expect(hasReplyAfterLastSend(history, null)).toBe(false);
+  });
+
+  it("returns false when lastSentAt is null and messageHistory is null", () => {
+    expect(hasReplyAfterLastSend(null, null)).toBe(false);
   });
 
   it("returns false when lastSentAt is null and no user messages exist", () => {

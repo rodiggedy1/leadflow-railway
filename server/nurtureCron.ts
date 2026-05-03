@@ -445,19 +445,23 @@ function parseMessageHistory(json: string | null): any[] {
  *
  * Returns true if the lead has sent at least one inbound message whose
  * timestamp is AFTER lastSentAt (the time the last nurture step was sent).
- * When lastSentAt is null (no step sent yet), any inbound message triggers a pause.
+ * When lastSentAt is null (no nurture step has been sent yet), we do NOT
+ * pause — the lead may have replied to the initial AI intake message, which
+ * is not a nurture message and should not block the sequence from starting.
  */
 export function hasReplyAfterLastSend(
   messageHistoryJson: string | null,
   lastSentAt: Date | null
 ): boolean {
+  // No nurture step sent yet — cannot have replied "after" a send that never happened.
+  if (!lastSentAt) return false;
   const history = parseMessageHistory(messageHistoryJson);
-  const lastSentMs = lastSentAt ? lastSentAt.getTime() : 0;
+  const lastSentMs = lastSentAt.getTime();
   return history.some((msg: any) => {
     if (msg.role !== "user") return false;
     const ts = msg.ts ?? msg.timestamp ?? msg.createdAt;
     if (!ts) return false;
-    return lastSentMs === 0 ? true : new Date(ts).getTime() > lastSentMs;
+    return new Date(ts).getTime() > lastSentMs;
   });
 }
 
