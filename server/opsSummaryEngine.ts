@@ -20,7 +20,7 @@
  * prevent duplicate posts.
  */
 
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, lt, or } from "drizzle-orm";
 import { getDb } from "./db";
 import {
   cleanerJobs,
@@ -111,10 +111,7 @@ export async function allCleanersConfirmedForDate(targetDate: string): Promise<b
     .where(
       profileIds.length === 1
         ? eq(cleanerProfiles.id, profileIds[0])
-        : (() => {
-            const { or } = require("drizzle-orm");
-            return or(...profileIds.map((id: number) => eq(cleanerProfiles.id, id)));
-          })()
+        : or(...profileIds.map((id: number) => eq(cleanerProfiles.id, id)))
     );
 
   const phoneMap = new Map(profiles.map((p) => [p.id, p.phone]));
@@ -229,10 +226,7 @@ async function buildSummaryData(
       .where(
         profileIds.length === 1
           ? eq(cleanerProfiles.id, profileIds[0])
-          : (() => {
-              const { or } = require("drizzle-orm");
-              return or(...profileIds.map((id: number) => eq(cleanerProfiles.id, id)));
-            })()
+          : or(...profileIds.map((id: number) => eq(cleanerProfiles.id, id)))
       );
     phoneMap = new Map(profiles.map((p) => [p.id, p.phone ?? null]));
   }

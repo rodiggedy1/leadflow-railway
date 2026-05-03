@@ -18,7 +18,7 @@
  *      - Returns the reply text to send back.
  */
 
-import { and, eq, gte, lt } from "drizzle-orm";
+import { and, eq, gte, lt, or } from "drizzle-orm";
 import { getDb } from "./db";
 import { cleanerJobs, cleanerProfiles, conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
@@ -224,11 +224,7 @@ export async function runScheduleConfirmSend(targetDate?: string): Promise<Sched
     .where(
       profileIds.length === 1
         ? eq(cleanerProfiles.id, profileIds[0])
-        : // Use OR for multiple IDs
-          ((): any => {
-            const { or } = require("drizzle-orm");
-            return or(...profileIds.map((id) => eq(cleanerProfiles.id, id)));
-          })()
+        : or(...profileIds.map((id) => eq(cleanerProfiles.id, id)))
     );
 
   const phoneMap = new Map(profiles.map((p) => [p.id, p.phone]));
