@@ -1,0 +1,1 @@
+ALTER TABLE `job_sms_replies` ADD `deliveryStatus` varchar(16);

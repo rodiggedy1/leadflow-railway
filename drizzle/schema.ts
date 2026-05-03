@@ -1453,6 +1453,10 @@ export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
   smsSent: text("smsSent"),
   /** Recipient phone (cleaner or client) */
   recipientPhone: varchar("recipientPhone", { length: 30 }),
+  /** OpenPhone message ID returned on send — used to match delivery webhook events */
+  openPhoneMessageId: varchar("openPhoneMessageId", { length: 128 }),
+  /** Delivery status updated by webhook: sent | delivered | failed */
+  deliveryStatus: varchar("deliveryStatus", { length: 16 }),
   firedAt: timestamp("firedAt").defaultNow().notNull(),
 }, (table) => ({
   /** DB-level dedup: only one log row per (job, step). If two cron ticks race,
@@ -1502,6 +1506,8 @@ export const jobSmsReplies = mysqlTable("job_sms_replies", {
   body: text("body").notNull(),
   /** OpenPhone message ID for idempotency */
   openPhoneMessageId: varchar("openPhoneMessageId", { length: 128 }),
+  /** Delivery status for outbound messages: sent | delivered | failed */
+  deliveryStatus: varchar("deliveryStatus", { length: 16 }),
   /** When the message was received */
   receivedAt: timestamp("receivedAt").defaultNow().notNull(),
 }, (table) => ({

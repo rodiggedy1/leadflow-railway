@@ -1182,7 +1182,8 @@ export const fieldMgmtRouter = router({
           senderType: "system",
           senderPhone: input.to,
           body: input.body,
-          // openPhoneMessageId left null — MySQL unique index allows multiple NULLs
+          openPhoneMessageId: result.messageId ?? null,
+          deliveryStatus: "sent",
         });
       }
       return { success: true };

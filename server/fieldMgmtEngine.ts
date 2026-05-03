@@ -293,6 +293,8 @@ export async function tryClaimStep(params: {
   step: string;
   smsSent?: string;
   recipientPhone?: string;
+  openPhoneMessageId?: string | null;
+  deliveryStatus?: string;
 }): Promise<boolean> {
   const db = await getDb();
   if (!db) return false; // safe default: don't fire if DB is down
@@ -315,6 +317,8 @@ export async function tryClaimStep(params: {
       success: 1, // optimistic — update to 0 on failure via updateStepOutcome
       smsSent: params.smsSent ?? null,
       recipientPhone: params.recipientPhone ?? null,
+      openPhoneMessageId: params.openPhoneMessageId ?? null,
+      deliveryStatus: params.deliveryStatus ?? null,
       firedAt: new Date(),
     }).onDuplicateKeyUpdate({ set: { cleanerJobId: params.cleanerJobId } }); // no-op race guard
     // Re-verify: if another concurrent call inserted first, the row already existed above
@@ -339,6 +343,22 @@ export async function updateStepOutcome(cleanerJobId: number, step: string, succ
       .where(and(eq(fieldMgmtLog.cleanerJobId, cleanerJobId), eq(fieldMgmtLog.step, step as any)));
   } catch (err) {
     console.error(`[FieldMgmt] updateStepOutcome failed for step ${step} job ${cleanerJobId}:`, err);
+  }
+}
+
+/**
+ * Store the OpenPhone message ID and initial delivery status on a claimed step.
+ * Call this after sendSms returns successfully, to enable delivery tracking.
+ */
+export async function updateStepMessageId(cleanerJobId: number, step: string, messageId: string, deliveryStatus = "sent"): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.update(fieldMgmtLog)
+      .set({ openPhoneMessageId: messageId, deliveryStatus })
+      .where(and(eq(fieldMgmtLog.cleanerJobId, cleanerJobId), eq(fieldMgmtLog.step, step as any)));
+  } catch (err) {
+    console.error(`[FieldMgmt] updateStepMessageId failed for step ${step} job ${cleanerJobId}:`, err);
   }
 }
 
@@ -584,6 +604,7 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
 
   if (result.success) {
     console.log(`[FieldMgmt] Client on-the-way SMS sent to ${clientPhone} for job ${cleanerJobId}`);
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "client_on_the_way", result.messageId);
   } else {
     await updateStepOutcome(cleanerJobId, "client_on_the_way", false, result.error);
     console.error(`[FieldMgmt] Client on-the-way SMS FAILED for job ${cleanerJobId}:`, result.error);
@@ -1227,6 +1248,7 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
 
   if (result.success) {
     console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${cleanerJobId}`);
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "client_pre_job", result.messageId);
   } else {
     await updateStepOutcome(cleanerJobId, "client_pre_job", false, result.error);
     console.error(`[FieldMgmt] Client pre-job SMS FAILED for job ${cleanerJobId}:`, result.error);
@@ -1390,6 +1412,7 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
 
   if (result.success) {
     console.log(`[FieldMgmt] Running late SMS sent to ${clientPhone} for job ${cleanerJobId}`);
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "client_running_late", result.messageId);
   } else {
     await updateStepOutcome(cleanerJobId, "client_running_late", false, result.error);
     console.error(`[FieldMgmt] Running late SMS FAILED for job ${cleanerJobId}:`, result.error);

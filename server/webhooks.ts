@@ -96,6 +96,19 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
+      // Handle delivery status updates for outbound SMS
+      if (event?.type === "message.delivered" || event?.type === "message.updated") {
+        const msgObj = event?.data?.object;
+        const messageId: string | undefined = msgObj?.id;
+        const status: string | undefined = msgObj?.status; // "delivered", "failed", "undelivered"
+        if (messageId && status) {
+          handleSmsDeliveryUpdate(messageId, status).catch((e: unknown) =>
+            console.error("[Webhook] handleSmsDeliveryUpdate error:", e)
+          );
+        }
+        return;
+      }
+
       // Only handle inbound SMS messages
       if (event?.type !== "message.received") {
         // Log unhandled event types so we can see what OpenPhone actually sends
@@ -2664,5 +2677,33 @@ async function handleCallSummaryCompleted(event: any): Promise<void> {
     console.log(`[CallStatus] call.summary.completed cleared on-call for ${agent.name} (callId=${callId})`);
     const { broadcastOpsUpdate } = await import("./sseBroadcast");
     broadcastOpsUpdate("agent_status");
+  }
+}
+
+/**
+ * Handle SMS delivery status updates from OpenPhone.
+ * Matches by openPhoneMessageId in both jobSmsReplies and fieldMgmtLog,
+ * then updates deliveryStatus to "delivered", "failed", or "undelivered".
+ */
+async function handleSmsDeliveryUpdate(messageId: string, status: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // Normalize status to our internal values
+  const deliveryStatus = status === "delivered" ? "delivered" : (status === "failed" || status === "undelivered") ? "failed" : status;
+  try {
+    // Update jobSmsReplies (manual outbound SMS from sendJobSms)
+    const { jobSmsReplies: jsr } = await import("../drizzle/schema");
+    const { fieldMgmtLog: fml } = await import("../drizzle/schema");
+    const { eq: eqFn } = await import("drizzle-orm");
+    await db.update(jsr)
+      .set({ deliveryStatus } as any)
+      .where(eqFn(jsr.openPhoneMessageId, messageId));
+    // Update fieldMgmtLog (automated client SMS)
+    await db.update(fml)
+      .set({ deliveryStatus } as any)
+      .where(eqFn(fml.openPhoneMessageId, messageId));
+    console.log(`[Webhook] SMS delivery update: messageId=${messageId} status=${deliveryStatus}`);
+  } catch (err) {
+    console.error("[Webhook] handleSmsDeliveryUpdate DB error:", err);
   }
 }

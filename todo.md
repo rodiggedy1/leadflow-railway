@@ -1385,3 +1385,5 @@
 - [x] Nurture: add startStep param to enrollLead and enroll procedure
 - [x] Nurture: add Enroll UI with step picker to lead drawer nurture strip
 - [x] Show outbound SMS to clients in Client Ops Chat thread — automated SMS (pre-job, on-the-way, running-late) shown as blue "SMS → Client" bubbles; manual SMS (sendJobSms) shown as violet "SMS → Client (Manual)" bubbles; both right-aligned and visually distinct from internal ops messages
+- [x] SMS delivery status on outbound bubbles — store OpenPhone message ID on send, update deliveryStatus via webhook (sent/delivered/failed), show indicator on bubble
+- [x] Show client phone number as subtitle in job detail header in Ops Chat

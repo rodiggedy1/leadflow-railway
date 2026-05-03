@@ -476,7 +476,7 @@ function avatarColor(name: string): string {
 }
 
 function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onReply, onScrollToMsg, reactions, onReact, senderPhotoMap, senderStatusMap }: {
-  msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null };
+  msg: { id: string; ts: number; from: string; role: string; body: string; source: string; mediaUrl?: string | null; quickAction?: string | null; metadata?: string | null; replyToId?: number | null; replyToBody?: string | null; replyToAuthor?: string | null; deliveryStatus?: string | null };
   callerName: string;
   /** Pass true when the message was sent by the current user — overrides internal msg.from === callerName check */
   isMine?: boolean;
@@ -548,6 +548,29 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
             <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
             <p className="text-xs mt-1 opacity-60 text-right">{timeStr}</p>
           </div>
+          {/* Delivery status indicator */}
+          {(() => {
+            const ds = (msg as any).deliveryStatus;
+            if (!ds || ds === "sent") return (
+              <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                Sent
+              </span>
+            );
+            if (ds === "delivered") return (
+              <span className="text-[10px] text-emerald-600 flex items-center gap-0.5 font-medium">
+                <CheckCheck className="h-3 w-3" />
+                Delivered
+              </span>
+            );
+            if (ds === "failed") return (
+              <span className="text-[10px] text-red-500 flex items-center gap-0.5 font-medium">
+                <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+                Failed
+              </span>
+            );
+            return null;
+          })()}
         </div>
       </div>
     );
@@ -2928,6 +2951,15 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <div className="mb-4">
                 <p className="text-xs text-slate-400 mb-0.5">Client</p>
                 <p className="text-base font-bold text-slate-900">{jobDetail.job.client}</p>
+                {jobDetail.job.customerPhone && (
+                  <a
+                    href={`tel:${jobDetail.job.customerPhone}`}
+                    className="text-xs text-slate-500 hover:text-blue-600 transition-colors mt-0.5 inline-flex items-center gap-1"
+                  >
+                    <Phone className="h-3 w-3" />
+                    {jobDetail.job.customerPhone}
+                  </a>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-4">

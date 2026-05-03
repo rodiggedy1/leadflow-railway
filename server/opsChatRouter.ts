@@ -323,6 +323,7 @@ export const opsChatRouter = router({
         replyToBody?: string | null;
         replyToAuthor?: string | null;
         source: "ops" | "sms";
+        deliveryStatus?: string | null;
       };
 
       const thread: ThreadMessage[] = [];
@@ -348,10 +349,11 @@ export const opsChatRouter = router({
         thread.push({
           id: `sms-${s.id}`,
           ts: s.receivedAt.getTime(),
-          from: s.senderType === "cleaner" ? (profile?.name ?? "Cleaner") : (job.customerName ?? "Client"),
+          from: s.senderType === "cleaner" ? (profile?.name ?? "Cleaner") : s.senderType === "system" ? "System (Manual SMS)" : (job.customerName ?? "Client"),
           role: s.senderType,
           body: s.body,
           source: "sms",
+          deliveryStatus: (s as any).deliveryStatus ?? null,
         });
       }
 
@@ -371,6 +373,7 @@ export const opsChatRouter = router({
           role: "system_outbound",
           body: f.smsSent,
           source: "sms",
+          deliveryStatus: (f as any).deliveryStatus ?? null,
         });
       }
 
