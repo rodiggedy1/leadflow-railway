@@ -285,7 +285,8 @@ export async function enrollLead(
     leadName?: string | null;
     serviceType?: string | null;
     createdAt: Date;
-  }
+  },
+  startStep = 3
 ): Promise<number | null> {
   // Check for existing active or paused enrollment
   const existing = await db
@@ -301,7 +302,8 @@ export async function enrollLead(
   }
 
   const ctx = buildNurtureContext(session);
-  const firstStep = STEP_MAP.get(3)!;
+  const resolvedStep = STEP_MAP.has(startStep) ? startStep : 3;
+  const firstStep = STEP_MAP.get(resolvedStep)!;
   // Calculate from now so stale leads don't get a past-due nextSendAt on enrollment
   const nextSendAt = firstStep.scheduledAt(new Date());
 
@@ -311,7 +313,7 @@ export async function enrollLead(
     leadFirstName: ctx.firstName,
     serviceType: ctx.serviceType,
     leadCreatedAt: session.createdAt,
-    nextStep: 3,
+    nextStep: resolvedStep,
     nextSendAt,
     status: "active",
   });

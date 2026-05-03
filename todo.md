@@ -1382,3 +1382,5 @@
 - [x] Nurture: replace startsWith(+1) guard with isValidUSPhone() — correctly rejects Thumbtack/Bark placeholders that normalize to fake 13-digit +1 numbers
 - [x] Nurture drawer: merge bySession into single LEFT JOIN (one DB round-trip)
 - [x] Nurture drawer: placeholderData from leads list for instant status strip on open
+- [x] Nurture: add startStep param to enrollLead and enroll procedure
+- [x] Nurture: add Enroll UI with step picker to lead drawer nurture strip

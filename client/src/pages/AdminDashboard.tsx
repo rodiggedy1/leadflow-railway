@@ -1397,6 +1397,11 @@ function ConversationDrawer({
     onSuccess: () => { refetchNurture(); toast.success("Skipped to next step"); },
     onError: (e) => toast.error(e.message),
   });
+  const nurtureEnrollMutation = trpc.nurture.enroll.useMutation({
+    onSuccess: () => { refetchNurture(); toast.success("Enrolled in nurture"); },
+    onError: (e) => toast.error(e.message),
+  });
+  const [nurtureEnrollStep, setNurtureEnrollStep] = React.useState<string>("3");
   const suggestions: Record<string, string> = {
     lockDate: `Hey ${firstName} — totally makes sense. We're already filling early May, so I can tentatively hold a spot now and adjust if needed. Want me to grab something before it fills up?`,
     softCheckIn: `Hey ${firstName} — just checking in! Want me to send over a couple openings that would work well for you?`,
@@ -2078,6 +2083,42 @@ function ConversationDrawer({
                     </div>
                   );
                 })()}
+                {/* Nurture enroll strip — shown when no active/paused enrollment */}
+                {!nurtureData?.enrollment && (
+                  <div className="mx-3 mb-2 rounded-lg border border-violet-100 bg-violet-50/40 px-3 py-2 flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                    <span className="text-xs text-violet-500 font-medium shrink-0">Enroll in nurture</span>
+                    <Select value={nurtureEnrollStep} onValueChange={setNurtureEnrollStep}>
+                      <SelectTrigger className="h-6 text-xs border-violet-200 bg-white text-violet-700 flex-1 min-w-0 max-w-[180px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3">Step 3 · Holding a spot</SelectItem>
+                        <SelectItem value="4">Step 4 · Urgency</SelectItem>
+                        <SelectItem value="5">Step 5 · Soft reset</SelectItem>
+                        <SelectItem value="6">Step 6 · Fresh start</SelectItem>
+                        <SelectItem value="7">Step 7 · Simple CTA</SelectItem>
+                        <SelectItem value="8">Step 8 · Last call</SelectItem>
+                        <SelectItem value="9">Step 9 · Value reminder</SelectItem>
+                        <SelectItem value="10">Step 10 · Circle back</SelectItem>
+                        <SelectItem value="11">Step 11 · Timing opener</SelectItem>
+                        <SelectItem value="12">Step 12 · First-time offer</SelectItem>
+                        <SelectItem value="13">Step 13 · Still need help?</SelectItem>
+                        <SelectItem value="14">Step 14 · Convenience reframe</SelectItem>
+                        <SelectItem value="15">Step 15 · Trust signal</SelectItem>
+                        <SelectItem value="16">Step 16 · Schedule gap fill</SelectItem>
+                        <SelectItem value="17">Step 17 · Breakup text</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <button
+                      onClick={() => nurtureEnrollMutation.mutate({ sessionId: session.id, startStep: parseInt(nurtureEnrollStep, 10) })}
+                      disabled={nurtureEnrollMutation.isPending}
+                      className="h-6 px-2.5 text-xs font-medium rounded bg-violet-600 text-white hover:bg-violet-700 transition-colors disabled:opacity-40 shrink-0"
+                    >
+                      {nurtureEnrollMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Enroll"}
+                    </button>
+                  </div>
+                )}
                 {/* Toolbar: note icon + AI toggle + Send */}
                 <div className="flex items-center gap-2 px-3 pb-3 pt-1">
                   {/* Note icon — amber when note exists */}

@@ -160,7 +160,7 @@ export const nurtureRouter = router({
 
   /** Manually enroll a specific session */
   enroll: adminAgentProcedure
-    .input(z.object({ sessionId: z.number().int() }))
+    .input(z.object({ sessionId: z.number().int(), startStep: z.number().int().min(3).max(17).optional().default(3) }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("DB unavailable");
@@ -188,7 +188,7 @@ export const nurtureRouter = router({
           session.createdAt instanceof Date
             ? session.createdAt
             : new Date(session.createdAt),
-      });
+      }, input.startStep);
 
       return { success: true, enrollmentId };
     }),
