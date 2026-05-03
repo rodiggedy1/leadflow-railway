@@ -1172,10 +1172,6 @@ export function computeClientPreJobSendTime(serviceTime: Date): Date {
  */
 export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
-
-  // RULE: Never send client SMS for unassigned jobs
-  if (!await isJobAssigned(cleanerJobId)) return;
-
   const db = await getDb();
   if (!db) return;
 
@@ -1351,10 +1347,6 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
  */
 export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
-
-  // RULE: Never send client SMS for unassigned jobs
-  if (!await isJobAssigned(cleanerJobId)) return;
-
   const db = await getDb();
   if (!db) return;
 
