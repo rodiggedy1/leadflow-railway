@@ -517,6 +517,42 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
     return [msg.mediaUrl];
   })();
 
+  // ── outbound SMS to client (system_outbound = automation, system = manual) ──────────────────────
+  if (msg.role === "system_outbound" || msg.role === "system") {
+    const isManual = msg.role === "system";
+    const label = isManual ? "SMS → Client (Manual)" : `SMS → Client`;
+    const senderLabel = msg.from;
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[72%] flex flex-col items-end gap-0.5">
+          {/* Badge */}
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+              isManual
+                ? "bg-violet-100 text-violet-700 border border-violet-200"
+                : "bg-blue-50 text-blue-600 border border-blue-200"
+            )}>
+              <svg className="h-2.5 w-2.5" viewBox="0 0 20 20" fill="currentColor"><path d="M2 3a1 1 0 011-1h14a1 1 0 011 1v10a1 1 0 01-1 1H6l-4 4V3z"/></svg>
+              {label}
+            </span>
+          </div>
+          {/* Bubble */}
+          <div className={cn(
+            "rounded-2xl rounded-br-sm px-4 py-3",
+            isManual
+              ? "bg-violet-600 text-white"
+              : "bg-blue-600 text-white"
+          )}>
+            <p className="text-[10px] font-semibold mb-1 opacity-70">{senderLabel}</p>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>
+            <p className="text-xs mt-1 opacity-60 text-right">{timeStr}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── issue_resolved card ────────────────────────────────────────────────────────────────────────
   if (msg.quickAction === "issue_resolved") {
     let meta: Record<string, unknown> = {};

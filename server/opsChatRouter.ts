@@ -355,6 +355,30 @@ export const opsChatRouter = router({
         });
       }
 
+      // Add outbound SMS sent to client from the automation engine (fieldMgmtLog)
+      const CLIENT_FACING_STEPS = new Set(["client_pre_job", "client_on_the_way", "client_running_late"]);
+      const STEP_LABELS: Record<string, string> = {
+        client_pre_job: "Pre-Job Reminder",
+        client_on_the_way: "On the Way",
+        client_running_late: "Running Late",
+      };
+      for (const f of fmLog) {
+        if (!f.smsSent || !CLIENT_FACING_STEPS.has(f.step)) continue;
+        thread.push({
+          id: `fmlog-${f.id}`,
+          ts: f.firedAt.getTime(),
+          from: `System (${STEP_LABELS[f.step] ?? f.step})`,
+          role: "system_outbound",
+          body: f.smsSent,
+          source: "sms",
+        });
+      }
+
+      // Add manual outbound SMS (senderType="system") from jobSmsReplies
+      // (these are logged by sendJobSms in fieldMgmtRouter)
+      // They are already included in smsReplies above since we fetch all rows,
+      // so no extra loop needed — the role "system" will be handled by the frontend.
+
       thread.sort((a, b) => a.ts - b.ts);
 
       return {

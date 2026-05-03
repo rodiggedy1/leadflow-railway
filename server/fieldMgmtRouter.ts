@@ -1174,14 +1174,17 @@ export const fieldMgmtRouter = router({
       if (!result.success) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error ?? "SMS send failed" });
       }
-      // Log it as an outbound step
-      await recordStep({
-        cleanerJobId: input.cleanerJobId,
-        step: "manual_sms",
-        success: true,
-        smsSent: input.body,
-        recipientPhone: input.to,
-      });
+      // Log to jobSmsReplies so it appears in the ops chat thread
+      const db = await getDb();
+      if (db) {
+        await db.insert(jobSmsReplies).values({
+          cleanerJobId: input.cleanerJobId,
+          senderType: "system",
+          senderPhone: input.to,
+          body: input.body,
+          // openPhoneMessageId left null — MySQL unique index allows multiple NULLs
+        });
+      }
       return { success: true };
     }),
 
