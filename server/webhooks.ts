@@ -46,7 +46,7 @@ import { registerBarkWebhookRoute } from "./barkWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { getSetting } from "./settingsRouter";
-import { pauseEnrollment } from "./nurtureSequence";
+import { pauseEnrollment, endEnrollment } from "./nurtureSequence";
 import { ENV } from "./_core/env";
 import { scoreAndCacheStatusById } from "./csStatusScorer";
 
@@ -1164,6 +1164,25 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
             title: `🎉 Booking confirmed: ${session.leadName ?? fromPhone}`,
             body: `Slot: ${result.extractedData?.selectedSlot ?? session.selectedSlot ?? "TBD"}`,
             meta: { sessionId: session.id, leadPhone: fromPhone, leadName: session.leadName, selectedSlot: result.extractedData?.selectedSlot ?? session.selectedSlot },
+          }).catch(() => {});
+          // End any active/paused nurture enrollment immediately — do not wait for the next send tick
+          getDb().then(async (db) => {
+            try {
+              const { inArray, eq, and, isNull } = await import("drizzle-orm");
+              const { nurtureEnrollments } = await import("../drizzle/schema");
+              const [enrollment] = await db
+                .select({ id: nurtureEnrollments.id })
+                .from(nurtureEnrollments)
+                .where(and(
+                  eq(nurtureEnrollments.sessionId, session.id),
+                  inArray(nurtureEnrollments.status, ["active", "paused"]),
+                  isNull(nurtureEnrollments.deletedAt)
+                ))
+                .limit(1);
+              if (enrollment) await endEnrollment(db, enrollment.id, "booked");
+            } catch (err) {
+              console.error("[Webhook] Failed to end nurture enrollment on BOOKED transition:", err);
+            }
           }).catch(() => {});
         }
       }
