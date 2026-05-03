@@ -777,20 +777,50 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
   } catch (staleErr) {
     errors.push(`Stale cleanup error: ${staleErr instanceof Error ? staleErr.message : String(staleErr)}`);
   }
-  // ── Mismatch detection: bookings in L27 but not in DB ──
+  // ── Integrity check: L27 count vs DB count ──────────────────────────────────
+  // After every sync, count unique booking IDs in L27 vs unique booking IDs in the DB
+  // for this date (excluding cancelled). If they don't match, alert the owner immediately
+  // with the exact missing bookings so nothing silently falls through.
   const mismatches: string[] = [];
   try {
-    const dbRows = await db.select({ bookingId: cleanerJobs.bookingId }).from(cleanerJobs).where(eq(cleanerJobs.jobDate, dateStr));
+    const dbRows = await db
+      .select({ bookingId: cleanerJobs.bookingId })
+      .from(cleanerJobs)
+      .where(and(eq(cleanerJobs.jobDate, dateStr), ne(cleanerJobs.bookingStatus, "cancelled")));
+    // Use unique booking IDs (a booking with 2 teams = 2 DB rows but 1 L27 booking)
     const dbBookingIds = new Set(dbRows.map((r) => r.bookingId));
+    const l27BookingIds = new Set(bookings.map((b) => b.id));
     for (const booking of bookings) {
-      if (!dbBookingIds.has(booking.id) && errors.some((e) => e.startsWith(`Booking ${booking.id}`))) {
-        // Already captured as an error
-      } else if (!dbBookingIds.has(booking.id)) {
-        mismatches.push(`L27 booking ${booking.id} (${booking.fullName}) not in DB after sync`);
+      if (!dbBookingIds.has(booking.id)) {
+        mismatches.push(`MISSING: L27 booking ${booking.id} (${booking.fullName}, status=${booking.bookingStatus}) not in DB after sync`);
       }
     }
+    if (mismatches.length > 0) {
+      const alertMsg = [
+        `⚠️ Sync integrity failure for ${dateStr}:`,
+        `L27 has ${l27BookingIds.size} bookings, DB has ${dbBookingIds.size} unique booking IDs.`,
+        `Missing (${mismatches.length}):`,
+        ...mismatches,
+      ].join("\n");
+      console.error(`[TodaySync] ${alertMsg}`);
+      // Fire-and-forget owner notification — never block the sync
+      import("./activityLogger").then(({ logActivity }) =>
+        logActivity({
+          eventType: "sync_integrity_failure",
+          title: `⚠️ Sync mismatch ${dateStr}: ${mismatches.length} job(s) missing`,
+          body: alertMsg,
+          meta: { date: dateStr, l27Count: l27BookingIds.size, dbCount: dbBookingIds.size, missing: mismatches },
+        }).catch(() => {})
+      ).catch(() => {});
+      import("./_core/notification").then(({ notifyOwner }) =>
+        notifyOwner({
+          title: `⚠️ Sync mismatch ${dateStr}: ${mismatches.length} job(s) missing from LeadFlow`,
+          content: alertMsg,
+        }).catch(() => {})
+      ).catch(() => {});
+    }
   } catch (mmErr) {
-    errors.push(`Mismatch check error: ${mmErr instanceof Error ? mmErr.message : String(mmErr)}`);
+    errors.push(`Integrity check error: ${mmErr instanceof Error ? mmErr.message : String(mmErr)}`);
   }
   // ── Phone normalization pass ────────────────────────────────────────────────
   // Attempt to fix any phoneInvalid=1 rows (non-fatal, dynamic import avoids circular dep).

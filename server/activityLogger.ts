@@ -22,7 +22,8 @@ export type ActivityEventType =
   | "booking"
   | "new_lead"
   | "followup_due"
-  | "lead_lost";
+  | "lead_lost"
+  | "sync_integrity_failure";
 
 export interface LogActivityOptions {
   eventType: ActivityEventType;
