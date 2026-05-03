@@ -1710,6 +1710,41 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Cron Error card (red, dismissible) ──────────────────────────────
+                if (msg.quickAction === "cron_error") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const jobName = (meta.jobName as string | null) ?? "unknown";
+                  const errorMsg = (meta.errorMsg as string | null) ?? msg.body ?? "";
+                  const ranAt = (meta.ranAt as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-red-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
+                          <AlertTriangle className="h-3 w-3 text-red-100" />
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">Cron Failed</span>
+                          <span className="ml-auto text-[10px] text-red-200">{fmtMsgTime(msg.createdAt)}</span>
+                          <button
+                            className="ml-1 text-red-200 hover:text-white transition-colors"
+                            title="Dismiss"
+                            onClick={() => dismissSystemCard(msg.id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="px-3 py-2 bg-red-50">
+                          <p className="text-sm font-semibold text-slate-900">{jobName}</p>
+                          <p className="text-xs text-red-700 mt-0.5 break-words">{errorMsg}</p>
+                          {ranAt && (
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              {new Date(ranAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Ops Summary card (daily schedule overview) ─────────────────────
                 if (msg.quickAction === "ops_summary") {
                   let meta: Record<string, unknown> = {};

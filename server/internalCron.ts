@@ -58,6 +58,71 @@ async function recordHeartbeat(jobName: string, resultSummary: string, didWork: 
       didWork: didWork ? 1 : 0,
       ranAt: new Date(),
     });
+    // If this is an error, post a red card to Command Chat so it's never silent.
+    // Deduplicate within 30 minutes per job so repeated failures don't spam.
+    if (resultSummary.startsWith("error:")) {
+      try {
+        const THIRTY_MIN_MS = 30 * 60 * 1000;
+        const recentCutoff = new Date(Date.now() - THIRTY_MIN_MS);
+        const existing = await db
+          .select({ id: opsChatMessages.id })
+          .from(opsChatMessages)
+          .where(
+            and(
+              eq(opsChatMessages.quickAction as any, "cron_error"),
+              gte(opsChatMessages.createdAt, recentCutoff)
+            )
+          )
+          .limit(1);
+        // Only check for same job within the window
+        const existingForJob = existing.length > 0
+          ? await db
+              .select({ id: opsChatMessages.id })
+              .from(opsChatMessages)
+              .where(
+                and(
+                  eq(opsChatMessages.quickAction as any, "cron_error"),
+                  gte(opsChatMessages.createdAt, recentCutoff)
+                )
+              )
+              .limit(1)
+          : [];
+        // Check specifically for this job name in metadata
+        const recentForThisJob = await db
+          .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata })
+          .from(opsChatMessages)
+          .where(
+            and(
+              eq(opsChatMessages.quickAction as any, "cron_error"),
+              gte(opsChatMessages.createdAt, recentCutoff)
+            )
+          )
+          .limit(20);
+        const alreadyPosted = recentForThisJob.some((row) => {
+          try { return JSON.parse(row.metadata ?? "{}").jobName === jobName; } catch { return false; }
+        });
+        if (!alreadyPosted) {
+          const errorMsg = resultSummary.replace(/^error:\s*/, "");
+          await db.insert(opsChatMessages).values({
+            channel: "command",
+            authorName: "System",
+            authorRole: "system",
+            body: `❌ Cron failed: ${jobName} — ${errorMsg}`,
+            quickAction: "cron_error",
+            metadata: JSON.stringify({ jobName, errorMsg, ranAt: new Date().toISOString() }),
+          } as any);
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message");
+          // Also notify owner
+          try {
+            const { notifyOwner } = await import("./_core/notification");
+            await notifyOwner({ title: `❌ Cron failed: ${jobName}`, content: errorMsg });
+          } catch { /* non-fatal */ }
+        }
+      } catch (cardErr) {
+        console.error(`[InternalCron] Failed to post cron_error card for ${jobName} (non-fatal):`, cardErr);
+      }
+    }
   } catch (err) {
     console.error(`[InternalCron] Failed to record heartbeat for ${jobName} (non-fatal):`, err);
   }
