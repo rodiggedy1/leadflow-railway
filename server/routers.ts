@@ -1084,11 +1084,12 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
+        const normalized = normalizePhone(input.leadPhone);
         await db
           .update(conversationSessions)
-          .set({ leadPhone: input.leadPhone })
+          .set({ leadPhone: normalized })
           .where(eq(conversationSessions.id, input.sessionId));
-        return { success: true, leadPhone: input.leadPhone };
+        return { success: true, leadPhone: normalized };
       }),
 
     /**
