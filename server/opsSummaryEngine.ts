@@ -44,6 +44,10 @@ export interface OpsSummaryResult {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function getTodayEt(): string {
+  const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  return `${etNow.getFullYear()}-${String(etNow.getMonth() + 1).padStart(2, "0")}-${String(etNow.getDate()).padStart(2, "0")}`;
+}
 function getTomorrowEt(): string {
   const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
   etNow.setDate(etNow.getDate() + 1);
@@ -312,7 +316,9 @@ export async function postOpsSummary(
   const db = await getDb();
   if (!db) throw new Error("DB unavailable");
 
-  const targetDate = targetDateOverride ?? getTomorrowEt();
+  // Default to TODAY — the 7 AM morning briefing covers today's jobs.
+  // Pass an explicit date for tomorrow (9 PM nightly sync) or any other day.
+  const targetDate = targetDateOverride ?? getTodayEt();
 
   // Idempotency check
   if (!force && (await isSummaryAlreadyPosted(db, targetDate))) {

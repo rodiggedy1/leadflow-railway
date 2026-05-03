@@ -1757,6 +1757,15 @@ const MessageList = memo(function MessageList({
                   const confirmedNames = (meta.confirmedNames as string[]) ?? [];
                   const unconfirmedNames = (meta.unconfirmedNames as string[]) ?? [];
                   const allGood = unconfirmed === 0 && missingPhone === 0 && gaps === 0;
+                  const summaryDate = (meta.summaryDate as string) ?? "";
+                  const summaryDateLabel = summaryDate
+                    ? (() => {
+                        try {
+                          const [y, m, d] = summaryDate.split("-").map(Number);
+                          return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+                        } catch { return summaryDate; }
+                      })()
+                    : "today";
                   return (
                     <div key={msg.id} className="flex justify-start">
                       <div className="max-w-[82%] rounded-xl overflow-hidden border border-slate-300 shadow-sm">
@@ -1767,7 +1776,7 @@ const MessageList = memo(function MessageList({
                         </div>
                         <div className="px-3 py-2.5 bg-white">
                           <div className="flex items-center gap-2 mb-2">
-                            <span className="text-sm font-semibold text-slate-900">{totalJobs} job{totalJobs !== 1 ? "s" : ""} tomorrow</span>
+                            <span className="text-sm font-semibold text-slate-900">{totalJobs} job{totalJobs !== 1 ? "s" : ""} — {summaryDateLabel}</span>
                             {allGood && <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">All confirmed 🎉</span>}
                           </div>
                           <div className="flex flex-wrap gap-2 text-xs">
