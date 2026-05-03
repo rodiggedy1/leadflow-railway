@@ -1625,6 +1625,58 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Sync mismatch card (red, dismissible) ─────────────────────────
+                if (msg.quickAction === "sync_mismatch") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const date = (meta.date as string | null) ?? "";
+                  const l27Count = (meta.l27Count as number | null) ?? 0;
+                  const dbCount = (meta.dbCount as number | null) ?? 0;
+                  const missingJobs = (meta.missingJobs as Array<{ id: number; name: string; status: string }> | null) ?? [];
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[85%] rounded-xl overflow-hidden border border-red-400 shadow-sm">
+                        {/* Header */}
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
+                          <AlertTriangle className="h-3 w-3 text-red-100" />
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">Sync Mismatch</span>
+                          <span className="ml-auto text-[10px] text-red-200">{fmtMsgTime(msg.createdAt)}</span>
+                          <button
+                            className="ml-1 text-red-200 hover:text-white transition-colors"
+                            title="Dismiss"
+                            onClick={() => dismissSystemCard(msg.id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        {/* Body */}
+                        <div className="px-3 py-2.5 bg-red-50">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {date} — Launch27 has {l27Count} job{l27Count !== 1 ? "s" : ""}, LeadFlow has {dbCount}
+                          </p>
+                          <p className="text-xs text-red-700 mt-0.5">
+                            {missingJobs.length} job{missingJobs.length !== 1 ? "s" : ""} missing after sync
+                          </p>
+                          {missingJobs.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {missingJobs.map((j) => (
+                                <li key={j.id} className="flex items-center gap-1.5 text-xs text-slate-700">
+                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                                  <span className="font-medium">{j.name}</span>
+                                  <span className="text-slate-400">#{j.id}</span>
+                                  <span className="ml-auto text-[10px] text-slate-400 capitalize">{j.status}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="text-[11px] text-slate-500 mt-2">
+                            Run a manual sync from Field Management to resolve.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Ops Summary card (daily schedule overview) ─────────────────────
                 if (msg.quickAction === "ops_summary") {
                   let meta: Record<string, unknown> = {};

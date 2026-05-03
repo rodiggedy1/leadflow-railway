@@ -796,6 +796,9 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
       }
     }
     if (mismatches.length > 0) {
+      const missingJobs = bookings
+        .filter((b) => !dbBookingIds.has(b.id))
+        .map((b) => ({ id: b.id, name: b.fullName, status: b.bookingStatus }));
       const alertMsg = [
         `⚠️ Sync integrity failure for ${dateStr}:`,
         `L27 has ${l27BookingIds.size} bookings, DB has ${dbBookingIds.size} unique booking IDs.`,
@@ -803,15 +806,46 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
         ...mismatches,
       ].join("\n");
       console.error(`[TodaySync] ${alertMsg}`);
-      // Fire-and-forget owner notification — never block the sync
-      import("./activityLogger").then(({ logActivity }) =>
-        logActivity({
-          eventType: "sync_integrity_failure",
-          title: `⚠️ Sync mismatch ${dateStr}: ${mismatches.length} job(s) missing`,
-          body: alertMsg,
-          meta: { date: dateStr, l27Count: l27BookingIds.size, dbCount: dbBookingIds.size, missing: mismatches },
-        }).catch(() => {})
-      ).catch(() => {});
+      // Post a sync_mismatch card to Command Chat (fire-and-forget, never block sync)
+      Promise.resolve().then(async () => {
+        try {
+          const { getDb } = await import("./db");
+          const { opsChatMessages } = await import("../drizzle/schema");
+          const dbConn = await getDb();
+          if (!dbConn) return;
+          // Deduplicate: don't post another card if one already exists for this date
+          const existing = await dbConn
+            .select({ id: opsChatMessages.id })
+            .from(opsChatMessages)
+            .where(
+              and(
+                eq(opsChatMessages.channel, "command"),
+                eq(opsChatMessages.quickAction as any, "sync_mismatch"),
+                gte(opsChatMessages.createdAt, new Date(Date.now() - 2 * 60 * 60 * 1000))
+              )
+            )
+            .limit(1);
+          if (existing.length > 0) return; // already alerted in last 2h
+          await dbConn.insert(opsChatMessages).values({
+            channel: "command",
+            authorName: "System",
+            authorRole: "system",
+            body: alertMsg,
+            quickAction: "sync_mismatch",
+            metadata: JSON.stringify({
+              date: dateStr,
+              l27Count: l27BookingIds.size,
+              dbCount: dbBookingIds.size,
+              missingJobs,
+            }),
+          } as any);
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message");
+        } catch (cardErr) {
+          console.error("[TodaySync] Failed to post sync_mismatch card:", cardErr);
+        }
+      });
+      // Owner push notification
       import("./_core/notification").then(({ notifyOwner }) =>
         notifyOwner({
           title: `⚠️ Sync mismatch ${dateStr}: ${mismatches.length} job(s) missing from LeadFlow`,
