@@ -86,10 +86,12 @@ export async function runNurtureEnrollment(): Promise<{
         and(
           // Mirror the leads page: exclude CS, hiring, and review sessions
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated', 'hiring_interview', 'review', 'review_rebooking'))`,
-          // Only leads created AFTER go-live cutoff (Apr 29 2026 15:00 UTC)
-          sql`${conversationSessions.createdAt} > '2026-04-29 15:00:00'`,
+          // Only leads created AFTER go-live cutoff (May 03 2026 13:17 UTC)
+          // Cutoff updated to prevent retroactive enrollment of existing unenrolled leads.
+          sql`${conversationSessions.createdAt} > '2026-05-03 13:17:00'`,
         )
       )
+      .orderBy(sql`${conversationSessions.createdAt} DESC`)
       .limit(100);
 
     checked = candidates.length;
