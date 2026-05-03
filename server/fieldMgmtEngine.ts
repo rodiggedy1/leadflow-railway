@@ -533,10 +533,6 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
  */
 export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
-
-  // RULE: Never send client SMS for unassigned jobs
-  if (!await isJobAssigned(cleanerJobId)) return;
-
   const db = await getDb();
   if (!db) return;
 
