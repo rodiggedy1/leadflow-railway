@@ -520,7 +520,7 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
   // ── outbound SMS to client (system_outbound = automation, system = manual) ──────────────────────
   if (msg.role === "system_outbound" || msg.role === "system") {
     const isManual = msg.role === "system";
-    const label = isManual ? "SMS → Client (Manual)" : `SMS → Client`;
+    const label = "SMS → Client";
     const senderLabel = msg.from;
     return (
       <div className="flex justify-end">
