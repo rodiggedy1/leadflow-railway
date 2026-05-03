@@ -243,7 +243,6 @@ export function startInternalCron(): void {
     const dd = String(etNow.getDate()).padStart(2, "0");
     const tomorrowDate = `${yyyy}-${mm}-${dd}`;
     console.log(`[InternalCron] Running TomorrowSync for ${tomorrowDate}...`);
-    const startedAt = new Date();
     try {
       const result = await runNightlySync(tomorrowDate);
       const summary = `date: ${result.date}, inserted: ${result.inserted}, skipped: ${result.skipped}`;
@@ -253,6 +252,20 @@ export function startInternalCron(): void {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[InternalCron] TomorrowSync failed:", msg);
       await recordHeartbeat("tomorrow-sync", `error: ${msg}`, false);
+    }
+    // Also sync cleanerJobs for tomorrow so the integrity check runs and alerts on any mismatch
+    try {
+      const qResult = await runSyncTodayJobs(tomorrowDate);
+      const qSummary = `date: ${qResult.date}, created: ${qResult.jobsCreated}, updated: ${qResult.jobsUpdated}, mismatches: ${qResult.mismatches.length}`;
+      console.log(`[InternalCron] TomorrowSync (cleanerJobs) — ${qSummary}`);
+      if (qResult.mismatches.length > 0) {
+        console.warn(`[InternalCron] TomorrowSync mismatches: ${qResult.mismatches.join(" | ")}`);
+      }
+      await recordHeartbeat("tomorrow-sync-jobs", qSummary.slice(0, 500), true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] TomorrowSync (cleanerJobs) failed:", msg);
+      await recordHeartbeat("tomorrow-sync-jobs", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
 

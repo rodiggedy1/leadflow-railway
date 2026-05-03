@@ -795,6 +795,44 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
         mismatches.push(`MISSING: L27 booking ${booking.id} (${booking.fullName}, status=${booking.bookingStatus}) not in DB after sync`);
       }
     }
+    if (mismatches.length === 0 && l27BookingIds.size > 0) {
+      // All good — post a green Sync OK card once per day (first clean sync of the day)
+      Promise.resolve().then(async () => {
+        try {
+          const { getDb } = await import("./db");
+          const { opsChatMessages } = await import("../drizzle/schema");
+          const dbConn = await getDb();
+          if (!dbConn) return;
+          // Only post once per calendar day per date
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const alreadyPosted = await dbConn
+            .select({ id: opsChatMessages.id })
+            .from(opsChatMessages)
+            .where(
+              and(
+                eq(opsChatMessages.channel, "command"),
+                eq(opsChatMessages.quickAction as any, "sync_ok"),
+                gte(opsChatMessages.createdAt, todayStart)
+              )
+            )
+            .limit(1);
+          if (alreadyPosted.length > 0) return;
+          await dbConn.insert(opsChatMessages).values({
+            channel: "command",
+            authorName: "System",
+            authorRole: "system",
+            body: `✅ Sync OK for ${dateStr}: all ${l27BookingIds.size} Launch27 jobs are in LeadFlow.`,
+            quickAction: "sync_ok",
+            metadata: JSON.stringify({ date: dateStr, count: l27BookingIds.size }),
+          } as any);
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message");
+        } catch (okCardErr) {
+          console.error("[TodaySync] Failed to post sync_ok card:", okCardErr);
+        }
+      });
+    }
     if (mismatches.length > 0) {
       const missingJobs = bookings
         .filter((b) => !dbBookingIds.has(b.id))

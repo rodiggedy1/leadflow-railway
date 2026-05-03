@@ -1677,6 +1677,39 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Sync OK card (green, dismissible) ───────────────────────────
+                if (msg.quickAction === "sync_ok") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const date = (meta.date as string | null) ?? "";
+                  const count = (meta.count as number | null) ?? 0;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-emerald-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
+                          <CheckCheck className="h-3 w-3 text-emerald-100" />
+                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">Sync OK</span>
+                          <span className="ml-auto text-[10px] text-emerald-200">{fmtMsgTime(msg.createdAt)}</span>
+                          <button
+                            className="ml-1 text-emerald-200 hover:text-white transition-colors"
+                            title="Dismiss"
+                            onClick={() => dismissSystemCard(msg.id)}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="px-3 py-2 bg-emerald-50">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {date} — all {count} job{count !== 1 ? "s" : ""} synced
+                          </p>
+                          <p className="text-xs text-emerald-700 mt-0.5">
+                            Launch27 and LeadFlow counts match.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Ops Summary card (daily schedule overview) ─────────────────────
                 if (msg.quickAction === "ops_summary") {
                   let meta: Record<string, unknown> = {};
