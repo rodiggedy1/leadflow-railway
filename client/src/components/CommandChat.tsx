@@ -57,6 +57,7 @@ interface CommandChatProps {
     replyToId?: number | null;
     replyToBody?: string | null;
     replyToAuthor?: string | null;
+    cleanerJobId?: number | null;
     createdAt: Date;
   }>;
   channelLoading: boolean;
@@ -403,6 +404,7 @@ type LeadMsg = {
   replyToId?: number | null;
   replyToBody?: string | null;
   replyToAuthor?: string | null;
+  cleanerJobId?: number | null;
   createdAt: Date;
 };
 
@@ -839,6 +841,7 @@ type MessageListProps = {
   channelMsgs: LeadMsg[];
   channelLoading: boolean;
   callerName: string;
+  onJumpToJob: (jobId: number) => void;
   reactionsByMsgId: Record<number, Array<{ callerId: string; callerName: string; emoji: string }>>;
   commandSeenByMap: Record<number, string[]>;
   senderPhotoMap: Record<string, string | null>;
@@ -870,6 +873,7 @@ const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
   callerName,
+  onJumpToJob,
   reactionsByMsgId,
   commandSeenByMap,
   senderPhotoMap,
@@ -1841,6 +1845,42 @@ const MessageList = memo(function MessageList({
                             <p className="text-xs text-slate-500 mt-1">
                               📞 Call manually: {cleanerPhone}
                             </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                // ── SMS Undelivered alert card ─────────────────────────────────────────
+                if (msg.quickAction === "sms_undelivered") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const customerName = (meta.customerName as string) ?? "Client";
+                  const phone = (meta.phone as string) ?? "";
+                  const step = (meta.step as string) ?? "";
+                  const stepLabel = step === "client_pre_job" ? "Pre-arrival SMS"
+                    : step === "client_on_the_way" ? "On-the-way SMS"
+                    : step === "client_running_late" ? "Running-late SMS"
+                    : "Client SMS";
+                  const jobId = (meta.cleanerJobId as number | undefined) ?? msg.cleanerJobId ?? undefined;
+                  return (
+                    <div key={msg.id} className="w-full my-2">
+                      <div className="rounded-xl border-2 border-red-400 bg-red-50 overflow-hidden shadow-sm">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-red-500">
+                          <span className="text-white text-sm font-bold">📵 SMS Not Delivered</span>
+                          <span className="ml-auto text-red-100 text-xs">{msg.createdAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                        <div className="px-3 py-2.5">
+                          <p className="text-sm font-semibold text-red-800">{stepLabel} to {customerName} was undelivered</p>
+                          {phone && <p className="text-xs text-red-600 mt-0.5">Phone: {phone} — may be a landline or VoIP</p>}
+                          <p className="text-xs text-red-500 mt-1 font-medium">Get an alternate mobile number and contact the client directly.</p>
+                          {jobId && (
+                            <button
+                              onClick={() => onJumpToJob(jobId)}
+                              className="mt-2 text-xs text-red-700 underline hover:text-red-900"
+                            >
+                              → Jump to job thread
+                            </button>
                           )}
                         </div>
                       </div>
@@ -4093,6 +4133,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           channelMsgs={channelMsgs}
           channelLoading={channelLoading}
           callerName={callerName}
+          onJumpToJob={onJumpToJob}
           reactionsByMsgId={reactionsByMsgId}
           commandSeenByMap={commandSeenByMap}
           senderPhotoMap={senderPhotoMap}

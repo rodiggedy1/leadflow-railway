@@ -96,11 +96,14 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // Handle delivery status updates for outbound SMS
-      if (event?.type === "message.delivered" || event?.type === "message.updated") {
+      // Handle delivery status updates for outbound SMS.
+      // OpenPhone fires "message.delivered" for both delivered and undelivered outcomes.
+      // The status field on the object is: "delivered" | "undelivered" | "failed" | "queued" | "sent"
+      if (event?.type === "message.delivered" || event?.type === "message.updated" || event?.type === "message.delivery.updated") {
         const msgObj = event?.data?.object;
         const messageId: string | undefined = msgObj?.id;
-        const status: string | undefined = msgObj?.status; // "delivered", "failed", "undelivered"
+        const status: string | undefined = msgObj?.status;
+        console.log(`[Webhook] Delivery event: type=${event?.type} messageId=${messageId} status=${status}`);
         if (messageId && status) {
           handleSmsDeliveryUpdate(messageId, status).catch((e: unknown) =>
             console.error("[Webhook] handleSmsDeliveryUpdate error:", e)
@@ -2680,29 +2683,91 @@ async function handleCallSummaryCompleted(event: any): Promise<void> {
   }
 }
 
+// Client-facing steps — these are the ones we alert on if undelivered
+const CLIENT_SMS_STEPS = new Set(["client_pre_job", "client_on_the_way", "client_running_late"]);
+
 /**
  * Handle SMS delivery status updates from OpenPhone.
  * Matches by openPhoneMessageId in both jobSmsReplies and fieldMgmtLog,
- * then updates deliveryStatus to "delivered", "failed", or "undelivered".
+ * then updates deliveryStatus to "delivered", "undelivered", or "failed".
+ * If a CLIENT-facing step is undelivered, posts an alert to the command channel.
  */
 async function handleSmsDeliveryUpdate(messageId: string, status: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  // Normalize status to our internal values
-  const deliveryStatus = status === "delivered" ? "delivered" : (status === "failed" || status === "undelivered") ? "failed" : status;
+  // Preserve the exact OpenPhone status — "delivered", "undelivered", "failed", "sent", "queued"
+  // We keep "undelivered" distinct from "failed" so the UI can show the right label.
+  const deliveryStatus = ["delivered", "undelivered", "failed", "sent", "queued"].includes(status) ? status : status;
   try {
-    // Update jobSmsReplies (manual outbound SMS from sendJobSms)
-    const { jobSmsReplies: jsr } = await import("../drizzle/schema");
-    const { fieldMgmtLog: fml } = await import("../drizzle/schema");
+    const { jobSmsReplies: jsr, fieldMgmtLog: fml, cleanerJobs: cj } = await import("../drizzle/schema");
     const { eq: eqFn } = await import("drizzle-orm");
+
+    // Update jobSmsReplies (manual outbound SMS from sendJobSms)
     await db.update(jsr)
       .set({ deliveryStatus } as any)
       .where(eqFn(jsr.openPhoneMessageId, messageId));
-    // Update fieldMgmtLog (automated client SMS)
+
+    // Update fieldMgmtLog (automated client SMS) and check if it's a client step
+    const [updatedRow] = await db.select({
+      id: fml.id,
+      cleanerJobId: fml.cleanerJobId,
+      step: fml.step,
+      recipientPhone: fml.recipientPhone,
+      smsSent: fml.smsSent,
+    }).from(fml).where(eqFn(fml.openPhoneMessageId, messageId)).limit(1);
+
     await db.update(fml)
       .set({ deliveryStatus } as any)
       .where(eqFn(fml.openPhoneMessageId, messageId));
-    console.log(`[Webhook] SMS delivery update: messageId=${messageId} status=${deliveryStatus}`);
+
+    console.log(`[Webhook] SMS delivery update: messageId=${messageId} status=${deliveryStatus} step=${updatedRow?.step ?? 'unknown'}`);
+
+    // ── Alert on undelivered client SMS ────────────────────────────────────────
+    // Only alert for client-facing steps (not cleaner SMS) and only for failures.
+    if (
+      updatedRow &&
+      (deliveryStatus === "undelivered" || deliveryStatus === "failed") &&
+      CLIENT_SMS_STEPS.has(updatedRow.step)
+    ) {
+      try {
+        // Look up customer name for the alert
+        const [jobRow] = await db.select({
+          customerName: cj.customerName,
+          jobAddress: cj.jobAddress,
+        }).from(cj).where(eqFn(cj.id, updatedRow.cleanerJobId)).limit(1);
+
+        const stepLabel = updatedRow.step === "client_pre_job" ? "Pre-arrival SMS"
+          : updatedRow.step === "client_on_the_way" ? "On-the-way SMS"
+          : "Running-late SMS";
+        const clientName = jobRow?.customerName ?? "Client";
+        const phone = updatedRow.recipientPhone ?? "unknown";
+        const address = jobRow?.jobAddress ?? "";
+
+        await db.insert(opsChatMessages).values({
+          cleanerJobId: updatedRow.cleanerJobId,
+          channel: "command",
+          authorName: "📵 SMS Failure",
+          authorRole: "system",
+          quickAction: "sms_undelivered",
+          body: `${stepLabel} to ${clientName} was **undelivered**.\nPhone: ${phone}${address ? `\nAddress: ${address}` : ""}\n\nThis number may be a landline or VoIP. Get an alternate mobile number.`,
+          metadata: JSON.stringify({
+            messageId,
+            step: updatedRow.step,
+            cleanerJobId: updatedRow.cleanerJobId,
+            phone,
+            customerName: clientName,
+          }),
+        });
+
+        // Broadcast so Command Chat refreshes immediately
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("new_message", { channel: "command" });
+
+        console.log(`[Webhook] Undelivered alert posted for job ${updatedRow.cleanerJobId} step=${updatedRow.step} phone=${phone}`);
+      } catch (alertErr) {
+        console.error("[Webhook] Failed to post undelivered alert:", alertErr);
+      }
+    }
   } catch (err) {
     console.error("[Webhook] handleSmsDeliveryUpdate DB error:", err);
   }

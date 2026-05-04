@@ -530,6 +530,7 @@ export const opsChatRouter = router({
         replyToId: m.replyToId ?? null,
         replyToBody: m.replyToBody ?? null,
         replyToAuthor: m.replyToAuthor ?? null,
+        cleanerJobId: m.cleanerJobId ?? null,
       }));
     }),
 
