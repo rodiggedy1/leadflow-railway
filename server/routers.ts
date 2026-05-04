@@ -110,7 +110,7 @@ export const appRouter = router({
         //      stays at REACTIVATION even after a reply, so we check the message log.
         const sourceFilter = and(
           // Never show CS inbox sessions or hiring sessions in the lead list
-          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated', 'hiring_interview'))`,
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated', 'hiring_interview', 'schedule_confirm'))`,
           // Never show pure review-flow sessions in the lead list
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
           or(

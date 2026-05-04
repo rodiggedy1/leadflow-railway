@@ -1397,3 +1397,7 @@
 - [x] Add T-30 check-in call chain (3 calls, 2 min apart) for every job where cleaner has not checked in — runs alongside existing T-58 chain, uses new step names checkin_call_t30_attempt_1/2/3
 - [x] Fix ETA updates to send client SMS on every ETA change (not just ops channel post)
 - [x] Show ETA update cards in Ops Chat job thread for each eta_update_* field_mgmt_log entry
+- [ ] Fix Leads page: schedule_confirm cleaner entries should NOT appear in leads list
+- [ ] Scheduling/confirmation SMS must send from 202-888-5362 OpenPhone number
+- [x] Fix Leads page: exclude schedule_confirm leadSource from leads.list query
+- [x] Scheduling/confirmation SMS already sends from Maids in Black DC number (PN0wVLcpCq = 202-888-5362) — confirmed correct
