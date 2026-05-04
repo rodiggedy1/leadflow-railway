@@ -324,6 +324,7 @@ export const opsChatRouter = router({
         replyToAuthor?: string | null;
         source: "ops" | "sms";
         deliveryStatus?: string | null;
+        isEtaUpdate?: boolean;
       };
 
       const thread: ThreadMessage[] = [];
@@ -369,15 +370,18 @@ export const opsChatRouter = router({
         client_running_late: "Running Late",
       };
       for (const f of fmLog) {
-        if (!f.smsSent || !CLIENT_FACING_STEPS.has(f.step)) continue;
+        // Include eta_update_* steps (ETA update SMS sent to client on each ETA change)
+        const isEtaUpdate = f.step.startsWith("eta_update_");
+        if (!f.smsSent || (!CLIENT_FACING_STEPS.has(f.step) && !isEtaUpdate)) continue;
         thread.push({
           id: `fmlog-${f.id}`,
           ts: f.firedAt.getTime(),
-          from: `System (${STEP_LABELS[f.step] ?? f.step})`,
+          from: isEtaUpdate ? "System (ETA Update)" : `System (${STEP_LABELS[f.step] ?? f.step})`,
           role: "system_outbound",
           body: f.smsSent,
           source: "sms",
           deliveryStatus: (f as any).deliveryStatus ?? null,
+          isEtaUpdate,
         });
       }
 

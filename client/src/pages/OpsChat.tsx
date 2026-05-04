@@ -520,7 +520,8 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
   // ── outbound SMS to client (system_outbound = automation, system = manual) ──────────────────────
   if (msg.role === "system_outbound" || msg.role === "system") {
     const isManual = msg.role === "system";
-    const label = "SMS → Client";
+    const isEtaUpdate = (msg as any).isEtaUpdate === true;
+    const label = isEtaUpdate ? "ETA Update → Client" : "SMS → Client";
     const senderLabel = msg.from;
     return (
       <div className="flex justify-end">
@@ -529,7 +530,9 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
           <div className="flex items-center gap-1.5 mb-0.5">
             <span className={cn(
               "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              isManual
+              isEtaUpdate
+                ? "bg-amber-50 text-amber-700 border border-amber-200"
+                : isManual
                 ? "bg-violet-100 text-violet-700 border border-violet-200"
                 : "bg-blue-50 text-blue-600 border border-blue-200"
             )}>
@@ -540,7 +543,9 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
           {/* Bubble */}
           <div className={cn(
             "rounded-2xl rounded-br-sm px-4 py-3",
-            isManual
+            isEtaUpdate
+              ? "bg-amber-500 text-white"
+              : isManual
               ? "bg-violet-600 text-white"
               : "bg-blue-600 text-white"
           )}>
