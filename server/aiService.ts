@@ -90,17 +90,18 @@ function executePriceTool(args: {
  *
  * This ensures the LLM NEVER calculates prices — it only formats verified numbers.
  */
-async function invokeLLMWithPriceTool(
+export async function invokeLLMWithPriceTool(
   messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; name?: string }>,
   fallbackBedrooms?: string | null,
   fallbackBathrooms?: string | null,
   fallbackServiceType?: string,
+  toolChoice: "auto" | "required" = "auto",
 ): Promise<string> {
   // Pass 1: offer the tool
   const pass1 = await invokeLLM({
     messages,
     tools: [GET_PRICE_TOOL],
-    toolChoice: "auto",
+    toolChoice,
   });
 
   const pass1Message = pass1.choices?.[0]?.message;

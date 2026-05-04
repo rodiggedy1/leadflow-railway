@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
-import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
+import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage, invokeLLMWithPriceTool } from "./aiService";
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
@@ -5040,12 +5040,11 @@ I have availability as soon as [specific day, e.g., 'this Thursday or Saturday m
 
 Either way, feel free to ask me anything — happy to help! 😊`;
 
-        const llmResult = await invokeLLM({
-          messages: [
+        const message = await invokeLLMWithPriceTool(
+          [
             {
-              role: "system",
+              role: "system" as const,
               content: `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
-
 Your job: fill in the following message template using the booking details provided. Rules:
 - Replace [Name] with the lead's first name only
 - Replace [Your Name] with "Madison"
@@ -5053,21 +5052,19 @@ Your job: fill in the following message template using the booking details provi
 - Replace [X] homes with a realistic number like "hundreds of"
 - Replace [City] with the city from the booking details
 - Replace [home size / job type] with a natural description based on the details (e.g., "3-bedroom home", "carpet cleaning", etc.)
-- Replace the price estimate with a realistic range based on the job type and size. For house cleaning: standard 3BR is $180–$220, deep clean adds 30–40%. For carpet cleaning, specialty jobs: use a reasonable range.
+- Replace the price estimate: you MUST call the get_price tool to get the exact price — do not guess.
 - Replace the 2-3 specific things with relevant items for the job type (e.g., for house cleaning: "all rooms, kitchen deep clean, and bathroom sanitization"; for carpet cleaning: "all carpeted rooms, stairs, and spot treatment")
 - Replace the availability with "this week" or "early next week" unless specific dates are mentioned in the details
 - Keep the tone warm, human, and professional — not salesy
 - Output ONLY the message text, no preamble, no quotes around it`,
             },
             {
-              role: "user",
+              role: "user" as const,
               content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}`,
             },
           ],
-        });
-
-        const raw = llmResult?.choices?.[0]?.message?.content;
-        const message = typeof raw === "string" ? raw : "";
+          null, null, "Standard Cleaning", "required"
+        );
         if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
         return { message: message.trim() };
       }),
