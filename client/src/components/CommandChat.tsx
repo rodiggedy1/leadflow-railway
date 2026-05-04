@@ -2926,6 +2926,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const autoRaised = cmdData?.autoRaised ?? [];
   const manualIssues = cmdData?.manualIssues ?? [];
   const pendingReminderCount = cmdData?.pendingReminderCount ?? 0;
+  const unassignedJobs = cmdData?.unassignedJobs ?? [];
   const cleanerStatuses = [...(cmdData?.cleanerStatuses ?? [])].sort((a, b) => a.ts - b.ts).filter(cs => {
     // Keep completed cards until midnight EST
     if (cs.status === "completed") {
@@ -3165,16 +3166,57 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             )}
 
-            {/* Command priority info card */}
-            <div className="mb-4 rounded-2xl border border-indigo-100 bg-[linear-gradient(135deg,rgba(99,102,241,0.08),rgba(255,255,255,0.7))] p-3.5">
-              <div className="mb-1.5 flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
-                  <Sparkles className="h-4 w-4" />
+            {/* Command priority card — shows unassigned jobs as max-priority alert */}
+            {unassignedJobs.length > 0 ? (
+              <div className="mb-4 rounded-2xl border-2 border-red-500 bg-red-50 p-3.5 shadow-lg shadow-red-500/20 animate-pulse">
+                <div className="mb-2 flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-600 text-white shadow-md shadow-red-500/30 shrink-0">
+                    <TriangleAlert className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-red-700 uppercase tracking-wide">⚠ Unassigned Job</div>
+                    <div className="text-[10px] font-semibold text-red-500 uppercase tracking-widest">Action required now</div>
+                  </div>
+                  <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">{unassignedJobs.length}</span>
                 </div>
-                <div className="text-sm font-semibold">Command priority</div>
+                <div className="space-y-2">
+                  {unassignedJobs.slice(0, 2).map(job => (
+                    <button
+                      key={job.id}
+                      onClick={() => onJumpToJob(job.id)}
+                      className="w-full text-left rounded-xl border border-red-200 bg-white p-2.5 hover:bg-red-50 transition"
+                    >
+                      <div className="flex items-start justify-between gap-1">
+                        <span className="text-xs font-bold text-red-700 leading-tight">{job.customerName}</span>
+                        {job.startTime && (
+                          <span className={cn(
+                            "shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                            job.minutesUntil !== null && job.minutesUntil <= 60
+                              ? "bg-red-600 text-white"
+                              : "bg-red-100 text-red-700"
+                          )}>{job.minutesUntil !== null && job.minutesUntil < 0 ? `${Math.abs(job.minutesUntil)}m ago` : job.startTime}</span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-red-500 font-medium truncate">{job.jobAddress || job.serviceType}</div>
+                      <div className="mt-1 text-[10px] font-bold text-red-600 uppercase tracking-widest">No team assigned → Tap to assign</div>
+                    </button>
+                  ))}
+                  {unassignedJobs.length > 2 && (
+                    <p className="text-[10px] text-red-500 font-semibold text-center">+{unassignedJobs.length - 2} more unassigned</p>
+                  )}
+                </div>
               </div>
-              <p className="text-xs leading-5 text-slate-600">General chat stays lightweight. The system only creates an issue when risk, money, or schedule confidence drops.</p>
-            </div>
+            ) : (
+              <div className="mb-4 rounded-2xl border border-indigo-100 bg-[linear-gradient(135deg,rgba(99,102,241,0.08),rgba(255,255,255,0.7))] p-3.5">
+                <div className="mb-1.5 flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
+                    <Sparkles className="h-4 w-4" />
+                  </div>
+                  <div className="text-sm font-semibold">Command priority</div>
+                </div>
+                <p className="text-xs leading-5 text-slate-600">All jobs assigned. General chat stays lightweight — issues only appear when risk, money, or schedule confidence drops.</p>
+              </div>
+            )}
 
             {/* Chat / Issues tab switcher */}
             <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-2">

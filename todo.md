@@ -1388,3 +1388,4 @@
 - [x] SMS delivery status on outbound bubbles — store OpenPhone message ID on send, update deliveryStatus via webhook (sent/delivered/failed), show indicator on bubble
 - [x] Show client phone number as subtitle in job detail header in Ops Chat
 - [x] Force all UI timestamp displays to EST (America/New_York) in Command Chat and Ops Chat — display only, no data changes
+- [x] Command Priority card: surface unassigned jobs as blinking red maximum-priority alert (teamId IS NULL, today's jobs, not cancelled/rescheduled)

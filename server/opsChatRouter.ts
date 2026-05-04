@@ -949,7 +949,7 @@ export const opsChatRouter = router({
    */
   getCommandChatData: opsChatProcedure.query(async () => {
     const db = await getDb();
-    if (!db) return { snapshot: { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 }, alerts: [], pinnedJobs: [], autoRaised: [], manualIssues: [] };
+    if (!db) return { snapshot: { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 }, alerts: [], pinnedJobs: [], autoRaised: [], manualIssues: [], unassignedJobs: [] };
 
     const today = todayDateString();
     const jobs = await db
@@ -963,6 +963,7 @@ export const opsChatRouter = router({
         issueNote: cleanerJobs.issueNote,
         serviceDateTime: cleanerJobs.serviceDateTime,
         teamName: cleanerJobs.teamName,
+        teamId: cleanerJobs.teamId,
         cleanerProfileId: cleanerJobs.cleanerProfileId,
       })
       .from(cleanerJobs)
@@ -1261,7 +1262,26 @@ export const opsChatRouter = router({
     }
     const cleanerStatusesFinal = cleanerStatuses;
 
-    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses: cleanerStatusesFinal };
+    // Unassigned jobs: teamId IS NULL, not completed/cancelled/rescheduled, sorted by start time
+    const unassignedJobs = jobs
+      .filter(j => j.teamId == null && j.jobStatus !== 'completed')
+      .map(j => {
+        const jobMs = j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0;
+        const minutesUntil = jobMs ? Math.round((jobMs - now) / 60_000) : null;
+        const startTime = jobMs ? new Date(jobMs).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) : null;
+        return {
+          id: j.id,
+          customerName: j.customerName ?? 'Unknown Client',
+          jobAddress: j.jobAddress ?? '',
+          serviceType: j.serviceType ?? '',
+          startTime,
+          startMs: jobMs,
+          minutesUntil,
+        };
+      })
+      .sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+
+    return { snapshot, alerts, pinnedJobs, autoRaised, manualIssues, pendingReminderCount: pendingReminders.length, cleanerStatuses: cleanerStatusesFinal, unassignedJobs };
   }),
 
   /**
