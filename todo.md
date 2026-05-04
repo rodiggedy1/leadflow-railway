@@ -1393,3 +1393,4 @@
 - [x] Auto-raise command channel alert when client SMS is undelivered (post ops message with job details and phone number)
 - [x] Show delivery failure badge on client SMS bubbles in Ops Chat job card
 - [x] Fix duplicate SMS cards in Ops Chat job thread — system_outbound rows in job_sms_replies were duplicating fieldMgmtLog client SMS cards; skip system_outbound in thread builder
+- [x] Fix messageIds NaN error on leads page — threadMsgIds and cmdMsgIds were passing string IDs (fmlog-123, sms-456) through Number() producing NaN; added .filter(id => Number.isFinite(id) && id > 0) guard in OpsChat.tsx and CommandChat.tsx

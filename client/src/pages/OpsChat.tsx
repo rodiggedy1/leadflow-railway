@@ -1463,8 +1463,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Reactions ────────────────────────────────────────────────────────────────
   // Collect all visible message IDs for the reactions query
-  const threadMsgIds = useMemo(() => (jobDetail?.thread ?? []).map(m => Number(m.id)), [jobDetail?.thread]);
-  const channelMsgIds = useMemo(() => channelMsgs.map(m => m.id), [channelMsgs]);
+  const threadMsgIds = useMemo(() => {
+    return (jobDetail?.thread ?? [])
+      .map(m => Number(m.id))
+      .filter(id => Number.isFinite(id) && id > 0);
+  }, [jobDetail?.thread]);
+  const channelMsgIds = useMemo(() => channelMsgs.map(m => m.id).filter(id => Number.isFinite(id) && id > 0), [channelMsgs]);
   const activeMsgIds = activeTab === "today" ? threadMsgIds : channelMsgIds;
 
   // getReactions is a mutation (POST) to avoid HTTP 414 when hundreds of IDs are sent.

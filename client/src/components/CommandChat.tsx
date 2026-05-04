@@ -2365,7 +2365,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // ── Reactions ────────────────────────────────────────────────────────────────
   // getReactions is a mutation (POST) to avoid HTTP 414 when hundreds of IDs are sent.
-  const cmdMsgIds = useMemo(() => channelMsgs.map(m => m.id), [channelMsgs]);
+  const cmdMsgIds = useMemo(() => channelMsgs.map(m => m.id).filter(id => Number.isFinite(id) && id > 0), [channelMsgs]);
   const [reactionsData, setReactionsData] = useState<{ reactions: Array<{ messageId: number; callerId: string; callerName: string; emoji: string }> } | undefined>(undefined);
   const getReactionsMutation = trpc.opsChat.getReactions.useMutation({
     onSuccess: (data) => setReactionsData(data),
