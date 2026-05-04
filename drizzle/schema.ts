@@ -1430,6 +1430,10 @@ export const fieldMgmtSteps = [
   "checkin_call_attempt_1",
   "checkin_call_attempt_2",
   "checkin_call_attempt_3",
+  // T-30min VAPI check-in call attempts (3 attempts, 2 min apart — second chance)
+  "checkin_call_t30_attempt_1",
+  "checkin_call_t30_attempt_2",
+  "checkin_call_t30_attempt_3",
   // Post-start escalation steps
   "post_start_call_1",
   "post_start_cs_alert",

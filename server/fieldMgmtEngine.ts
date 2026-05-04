@@ -1983,6 +1983,118 @@ async function placeCheckinCall(
   }
 }
 
+// ── Step 8b: T-30min Check-In Call (3 attempts, 2 min apart) ─────────────────
+/**
+ * Runs every 5 minutes. Finds jobs starting in 25–35 minutes where:
+ * - Cleaner has NOT set on_the_way, arrived, in_progress, or completed
+ * - No checkin_call_t30_attempt_1 has been fired yet
+ * Places up to 3 VAPI calls to the cleaner, 2 minutes apart.
+ * Re-checks job status before each subsequent attempt — stops if cleaner checks in.
+ * Runs alongside the T-58 chain as a second-chance escalation.
+ */
+export async function runCheckinCallsT30(): Promise<{ checked: number; called: number; errors: number }> {
+  if (!FIELD_MGMT_ENABLED) return { checked: 0, called: 0, errors: 0 };
+  const db = await getDb();
+  if (!db) return { checked: 0, called: 0, errors: 0 };
+  const now = Date.now();
+  // Window: jobs starting 25–35 minutes from now (±5 min around T-30)
+  const windowStart = new Date(now + 25 * 60 * 1000);
+  const windowEnd = new Date(now + 35 * 60 * 1000);
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName: cleanerJobs.cleanerName,
+      customerName: cleanerJobs.customerName,
+      jobAddress: cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobStatus: cleanerJobs.jobStatus,
+      bookingStatus: cleanerJobs.bookingStatus,
+      cleanerPhone: cleanerProfiles.phone,
+    })
+    .from(cleanerJobs)
+    .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+    .where(
+      and(
+        inArray(cleanerJobs.bookingStatus, ["assigned", "new"]),
+        sql`${cleanerJobs.serviceDateTime} IS NOT NULL`
+      )
+    );
+
+  let called = 0;
+  let errors = 0;
+  let jobIndex = 0;
+
+  for (const job of jobs) {
+    if (!job.serviceDateTime) continue;
+    const serviceTime = parseServiceDateTime(job.serviceDateTime);
+    if (!serviceTime) continue;
+    const serviceMs = serviceTime.getTime();
+    if (serviceMs < windowStart.getTime() || serviceMs > windowEnd.getTime()) continue;
+
+    // Skip if cleaner already on the way or further
+    if (
+      job.jobStatus === "on_the_way" ||
+      job.jobStatus === "arrived" ||
+      job.jobStatus === "in_progress" ||
+      job.jobStatus === "completed"
+    ) continue;
+
+    if (!job.cleanerPhone) {
+      console.warn(`[FieldMgmt] T-30 check-in call: no phone for cleaner on job ${job.id} — skipping`);
+      continue;
+    }
+
+    // Dedup guard: only fire if T-30 attempt 1 hasn't been claimed yet
+    const alreadyFired = await stepAlreadyFired(job.id, "checkin_call_t30_attempt_1");
+    if (alreadyFired) continue;
+
+    const script = `You still have not checked in for your next job. Please check in now to avoid payment penalties and so your client knows what is going on.`;
+
+    const jobIdForCall = job.id;
+    const cleanerNameForCall = job.cleanerName ?? "Unknown";
+    const cleanerPhoneForCall = job.cleanerPhone;
+    const staggerMs = jobIndex * 30 * 1000;
+    jobIndex++;
+
+    // Fire all 3 attempts asynchronously (non-blocking, staggered)
+    sleep(staggerMs)
+      .then(async () => {
+        // ── Attempt 1 ──
+        const claimed1 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_t30_attempt_1", recipientPhone: cleanerPhoneForCall });
+        if (!claimed1) return;
+        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_t30_attempt_1");
+        called++;
+
+        // Wait 2 minutes, re-check status
+        await sleep(2 * 60 * 1000);
+        const stillNeeded1 = await isCheckinStillNeeded(jobIdForCall);
+        if (!stillNeeded1) return;
+
+        // ── Attempt 2 ──
+        const claimed2 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_t30_attempt_2", recipientPhone: cleanerPhoneForCall });
+        if (!claimed2) return;
+        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_t30_attempt_2");
+
+        // Wait 2 more minutes, re-check status
+        await sleep(2 * 60 * 1000);
+        const stillNeeded2 = await isCheckinStillNeeded(jobIdForCall);
+        if (!stillNeeded2) return;
+
+        // ── Attempt 3 ──
+        const claimed3 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_t30_attempt_3", recipientPhone: cleanerPhoneForCall });
+        if (!claimed3) return;
+        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_t30_attempt_3");
+      })
+      .catch((err) => {
+        errors++;
+        console.error(`[FieldMgmt] T-30 check-in call chain failed for job ${jobIdForCall}:`, err);
+      });
+  }
+
+  return { checked: jobs.length, called, errors };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST-START ESCALATION
 // Fires after the job start time has passed with no check-in.

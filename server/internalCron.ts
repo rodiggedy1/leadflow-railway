@@ -36,6 +36,7 @@ import {
   runExceptionHandling,
   runNoShowEscalation,
   runCheckinCalls,
+  runCheckinCallsT30,
   runPostStartEscalation,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
@@ -446,13 +447,14 @@ export function startInternalCron(): void {
   cron.schedule("0 */5 6-22 * * *", async () => {
     if (!FIELD_MGMT_ENABLED) return;
     try {
-      const [reminders, clientPreJob, nudges, exceptions, noshow, checkinCalls, postStart] = await Promise.all([
+      const [reminders, clientPreJob, nudges, exceptions, noshow, checkinCalls, checkinCallsT30, postStart] = await Promise.all([
         runPreJobReminders(),
         runClientPreJobNotifications(),
         runMidJobNudges(),
         runExceptionHandling(),
         runNoShowEscalation(),
         runCheckinCalls(),
+        runCheckinCallsT30(),
         runPostStartEscalation(),
       ]);
       const summary = [
@@ -462,9 +464,10 @@ export function startInternalCron(): void {
         `exceptions: ${exceptions.sent}/${exceptions.checked}`,
         `noshow: ${noshow.sent}/${noshow.checked}`,
         `checkinCalls: ${checkinCalls.called}/${checkinCalls.checked}`,
+        `checkinCallsT30: ${checkinCallsT30.called}/${checkinCallsT30.checked}`,
         `postStart: ${postStart.acted}/${postStart.checked}`,
       ].join(", ");
-      const didWork = reminders.sent + clientPreJob.sent + nudges.sent + exceptions.sent + noshow.sent + checkinCalls.called + postStart.acted > 0;
+      const didWork = reminders.sent + clientPreJob.sent + nudges.sent + exceptions.sent + noshow.sent + checkinCalls.called + checkinCallsT30.called + postStart.acted > 0;
       if (didWork) console.log(`[InternalCron] FieldMgmt — ${summary}`);
       await recordHeartbeat("field-mgmt", summary, didWork);
     } catch (err) {
