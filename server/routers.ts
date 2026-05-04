@@ -5045,11 +5045,16 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           priceStr = priceMatch ? `$${priceMatch[1]}` : null;
         }
 
-        // Template WITHOUT the price line — LLM fills everything else, we inject price in code
-        const template = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
+        // Build template with PRICE_TOKEN — LLM keeps it as-is, we replace in code after
+        const PRICE_TOKEN = "XPRICEX";
+        const templateForLLM = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
+
 A little about us: we're fully insured, background-checked, and we've served [X] homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
-For your [home size / job type], [PRICE_PLACEHOLDER]. That includes [list 2-3 specific things they'll get].
+
+For your [home size / job type], I'm estimating ${PRICE_TOKEN}. That includes [list 2-3 specific things they'll get].
+
 I have availability as soon as [specific day, e.g., 'this Thursday or Saturday morning']. Want me to lock in a time for you?
+
 Either way, feel free to ask me anything — happy to help! 😊`;
 
         const llmResult = await invokeLLM({
@@ -5057,7 +5062,6 @@ Either way, feel free to ask me anything — happy to help! 😊`;
             {
               role: "system",
               content: `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
-
 Your job: fill in the following message template using the booking details provided. Rules:
 - Replace [Name] with the lead's first name only
 - Replace [Your Name] with "Madison"
@@ -5065,7 +5069,7 @@ Your job: fill in the following message template using the booking details provi
 - Replace [X] homes with a realistic number like "hundreds of"
 - Replace [City] with the city from the booking details
 - Replace [home size / job type] with a natural description based on the details (e.g., "3-bedroom home", "carpet cleaning", etc.)
-- Leave [PRICE_PLACEHOLDER] exactly as-is — do NOT replace it with any number or text
+- The token XPRICEX is a system placeholder — output it exactly as "XPRICEX" with no changes
 - Replace the 2-3 specific things with relevant items for the job type (e.g., for house cleaning: "all rooms, kitchen deep clean, and bathroom sanitization"; for carpet cleaning: "all carpeted rooms, stairs, and spot treatment")
 - Replace the availability with "this week" or "early next week" unless specific dates are mentioned in the details
 - Keep the tone warm, human, and professional — not salesy
@@ -5073,7 +5077,7 @@ Your job: fill in the following message template using the booking details provi
             },
             {
               role: "user",
-              content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}`,
+              content: `Template:\n${templateForLLM}\n\nBooking details:\n${input.bookingDetails}`,
             },
           ],
         });
@@ -5081,12 +5085,11 @@ Your job: fill in the following message template using the booking details provi
         const raw = llmResult?.choices?.[0]?.message?.content;
         let message = typeof raw === "string" ? raw : "";
         if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
-        // Inject the real price — replace [PRICE_PLACEHOLDER] with the actual price
-        if (priceStr) {
-          message = message.replace(/\[PRICE_PLACEHOLDER\]/g, `I'm estimating ${priceStr}`);
-        } else {
-          message = message.replace(/\[PRICE_PLACEHOLDER\]/g, "I'll send you a custom quote shortly");
-        }
+
+        // Inject real price — replace XPRICEX token with actual price
+        const pricePhrase = priceStr ?? "a competitive rate";
+        message = message.replace(/XPRICEX/g, pricePhrase);
+
         return { message: message.trim() };
       }),
   }),
