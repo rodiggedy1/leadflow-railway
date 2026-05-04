@@ -90,7 +90,7 @@ function executePriceTool(args: {
  *
  * This ensures the LLM NEVER calculates prices — it only formats verified numbers.
  */
-export async function invokeLLMWithPriceTool(
+async function invokeLLMWithPriceTool(
   messages: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string; tool_call_id?: string; name?: string }>,
   fallbackBedrooms?: string | null,
   fallbackBathrooms?: string | null,
