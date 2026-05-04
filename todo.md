@@ -1401,3 +1401,4 @@
 - [ ] Scheduling/confirmation SMS must send from 202-888-5362 OpenPhone number
 - [x] Fix Leads page: exclude schedule_confirm leadSource from leads.list query
 - [x] Scheduling/confirmation SMS already sends from Maids in Black DC number (PN0wVLcpCq = 202-888-5362) — confirmed correct
+- [x] Fix First Message Generator wand: inject PRICING_TABLE + get_price tool — LLM was estimating prices instead of using deterministic pricing engine

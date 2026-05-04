@@ -11,6 +11,7 @@ import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAge
 import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
+import { PRICING_TABLE, calculatePrice, calculateRecurringPrice, RECURRING_DISCOUNTS } from "./engine/pricing";
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
@@ -5030,46 +5031,109 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         })
       )
       .mutation(async ({ input }) => {
-        const template = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
+        const template = `Hi [Name]! 👋 This is Madison from Maid in Black. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
 
-A little about us: we're fully insured, background-checked, and we've served [X] homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
+A little about us: we're fully insured, background-checked, and we've served hundreds of homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
 
-For your [home size / job type], I'm estimating [X]–[X]. That includes [list 2-3 specific things they'll get].
+For your [home size / job type], I'm estimating [PRICE]. That includes [list 2-3 specific things they'll get].
 
 I have availability as soon as [specific day, e.g., 'this Thursday or Saturday morning']. Want me to lock in a time for you?
 
 Either way, feel free to ask me anything — happy to help! 😊`;
 
-        const llmResult = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content: `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
+        // ── Layer 1: get_price tool so the LLM NEVER estimates prices itself ──
+        const GET_PRICE_TOOL_DEF = {
+          type: "function" as const,
+          function: {
+            name: "get_price",
+            description: "Look up the exact price for a cleaning service. ALWAYS call this tool when you need to mention any dollar amount. NEVER calculate or estimate prices yourself.",
+            parameters: {
+              type: "object",
+              properties: {
+                bedrooms: { type: "string", description: "e.g. '2 Bedrooms', '3 Bedrooms', 'Studio'" },
+                bathrooms: { type: "string", description: "e.g. '2 Bathrooms', '1.5 Bathrooms'" },
+                serviceType: { type: "string", description: "'Standard Cleaning', 'Deep Cleaning', 'Move-In/Move-Out', 'Post-Construction Cleaning'" },
+                frequency: { type: "string", enum: ["one_time", "weekly", "biweekly", "monthly"] },
+              },
+              required: ["bedrooms", "bathrooms", "serviceType", "frequency"],
+              additionalProperties: false,
+            },
+          },
+        };
 
-Your job: fill in the following message template using the booking details provided. Rules:
+        const systemPrompt = `You are Madison, a professional representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
+
+Your job: fill in the following message template using the booking details provided.
+
+Rules:
 - Replace [Name] with the lead's first name only
-- Replace [Your Name] with "Madison"
-- Replace [Business] with "Maid in Black"
-- Replace [X] homes with a realistic number like "hundreds of"
 - Replace [City] with the city from the booking details
-- Replace [home size / job type] with a natural description based on the details (e.g., "3-bedroom home", "carpet cleaning", etc.)
-- Replace the price estimate with a realistic range based on the job type and size. For house cleaning: standard 3BR is $180–$220, deep clean adds 30–40%. For carpet cleaning, specialty jobs: use a reasonable range.
-- Replace the 2-3 specific things with relevant items for the job type (e.g., for house cleaning: "all rooms, kitchen deep clean, and bathroom sanitization"; for carpet cleaning: "all carpeted rooms, stairs, and spot treatment")
-- Replace the availability with "this week" or "early next week" unless specific dates are mentioned in the details
+- Replace [home size / job type] with a natural description (e.g., "3-bedroom home", "deep clean", etc.)
+- For [PRICE]: call the get_price tool with the home size and service type from the booking details — NEVER estimate or guess the price yourself
+- Replace the 2-3 specific things with relevant items for the job type
+- Replace the availability with "this week" or "early next week" unless specific dates are mentioned
 - Keep the tone warm, human, and professional — not salesy
-- Output ONLY the message text, no preamble, no quotes around it`,
-            },
-            {
-              role: "user",
-              content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}`,
-            },
-          ],
-        });
+- Output ONLY the message text, no preamble, no quotes around it
 
-        const raw = llmResult?.choices?.[0]?.message?.content;
-        const message = typeof raw === "string" ? raw : "";
-        if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
-        return { message: message.trim() };
+CRITICAL: You MUST call get_price to get the dollar amount. Do NOT use the hardcoded range from the template.
+
+PRICING REFERENCE (for context only — always use get_price tool for the actual number):
+${PRICING_TABLE}`;
+
+        const messages: Array<{ role: "system" | "user"; content: string }> = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}` },
+        ];
+
+        // Pass 1: offer the get_price tool
+        const pass1 = await invokeLLM({ messages, tools: [GET_PRICE_TOOL_DEF], toolChoice: "auto" } as any);
+        const pass1Msg = pass1?.choices?.[0]?.message;
+        const toolCalls = (pass1Msg as any)?.tool_calls;
+
+        let finalMessage: string;
+
+        if (!toolCalls || toolCalls.length === 0) {
+          // Model replied directly (no price needed or already in context)
+          finalMessage = typeof pass1Msg?.content === "string" ? pass1Msg.content.trim() : "";
+        } else {
+          // Execute tool calls locally using the deterministic pricing engine
+          const toolResults: Array<{ role: "tool"; content: string; tool_call_id: string; name: string }> = [];
+          for (const tc of toolCalls) {
+            let result: string;
+            try {
+              const args = JSON.parse(tc.function.arguments) as { bedrooms?: string; bathrooms?: string; serviceType?: string; frequency?: string };
+              const bedrooms = args.bedrooms ?? "2 Bedrooms";
+              const bathrooms = args.bathrooms ?? "2 Bathrooms";
+              const serviceType = args.serviceType ?? "Standard Cleaning";
+              const frequency = (args.frequency ?? "one_time") as "one_time" | "weekly" | "biweekly" | "monthly";
+              const basePrice = calculatePrice(bedrooms, bathrooms, serviceType);
+              if (frequency === "one_time") {
+                result = `$${basePrice} (one-time ${serviceType})`;
+              } else {
+                const discounted = calculateRecurringPrice(basePrice, frequency as keyof typeof RECURRING_DISCOUNTS);
+                const pct = RECURRING_DISCOUNTS[frequency as keyof typeof RECURRING_DISCOUNTS].pct;
+                const label = RECURRING_DISCOUNTS[frequency as keyof typeof RECURRING_DISCOUNTS].label;
+                result = `$${discounted}/clean (${pct}% off for ${label} recurring — base was $${basePrice})`;
+              }
+            } catch {
+              result = "Price lookup failed — use the pricing table.";
+            }
+            toolResults.push({ role: "tool", content: result, tool_call_id: tc.id, name: tc.function.name });
+          }
+
+          // Pass 2: feed tool result back for final message
+          const pass2Messages = [
+            ...messages,
+            { role: "assistant" as const, content: typeof pass1Msg?.content === "string" ? pass1Msg.content : "", tool_calls: toolCalls },
+            ...toolResults,
+          ];
+          const pass2 = await invokeLLM({ messages: pass2Messages as any });
+          const raw2 = pass2?.choices?.[0]?.message?.content;
+          finalMessage = typeof raw2 === "string" ? raw2.trim() : "";
+        }
+
+        if (!finalMessage) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
+        return { message: finalMessage };
       }),
   }),
 
