@@ -1395,3 +1395,4 @@
 - [x] Fix duplicate SMS cards in Ops Chat job thread — system_outbound rows in job_sms_replies were duplicating fieldMgmtLog client SMS cards; skip system_outbound in thread builder
 - [x] Fix messageIds NaN error on leads page — threadMsgIds and cmdMsgIds were passing string IDs (fmlog-123, sms-456) through Number() producing NaN; added .filter(id => Number.isFinite(id) && id > 0) guard in OpsChat.tsx and CommandChat.tsx
 - [x] Add T-30 check-in call chain (3 calls, 2 min apart) for every job where cleaner has not checked in — runs alongside existing T-58 chain, uses new step names checkin_call_t30_attempt_1/2/3
+- [x] Fix ETA updates to send client SMS on every ETA change (not just ops channel post)

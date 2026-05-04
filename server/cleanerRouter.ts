@@ -20,7 +20,7 @@ import { publicProcedure, cleanerProcedure, agentProcedure, opsChatProcedure, ro
 import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
-import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
+import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms, sendClientEtaUpdateSms } from "./fieldMgmtEngine";
 import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
 
@@ -513,8 +513,13 @@ export const cleanerRouter = router({
       }
 
       if (input.status === "on_the_way") {
+        // First tap: sendClientOnTheWaySms claims the step and sends the initial SMS.
+        // Repeat taps (ETA updates): sendClientEtaUpdateSms sends every time, no dedup.
         sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
           console.error("[FieldMgmt] sendClientOnTheWaySms error:", err)
+        );
+        sendClientEtaUpdateSms(input.cleanerJobId).catch(err =>
+          console.error("[FieldMgmt] sendClientEtaUpdateSms error:", err)
         );
       }
       if (input.status === "arrived") {

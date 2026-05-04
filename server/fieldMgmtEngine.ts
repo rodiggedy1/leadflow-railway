@@ -612,6 +612,91 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
   }
 }
 
+/**
+ * Send an ETA update SMS to the client every time the cleaner submits a new ETA
+ * while already on_the_way. No dedup — fires every time intentionally.
+ * Logs to field_mgmt_log with a unique step name per update (eta_update_<timestamp>)
+ * so each update is traceable without blocking future updates.
+ */
+export async function sendClientEtaUpdateSms(cleanerJobId: number): Promise<void> {
+  if (!FIELD_MGMT_ENABLED) return;
+  const db = await getDb();
+  if (!db) return;
+
+  // Only send ETA updates if the initial on-the-way SMS has already been sent.
+  // On the first tap, sendClientOnTheWaySms handles it; this function handles repeats.
+  const firstAlreadySent = await stepAlreadyFired(cleanerJobId, "client_on_the_way");
+  if (!firstAlreadySent) return;
+
+  if (!(await isJobAssigned(cleanerJobId))) return;
+
+  const jobRows = await db
+    .select()
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const job = jobRows[0];
+  if (!job) return;
+
+  const clientPhone = job.customerPhone;
+  if (!clientPhone) {
+    console.warn(`[FieldMgmt] ETA update: no customer phone for job ${cleanerJobId}`);
+    return;
+  }
+
+  const clientFirstName = firstName(job.customerName);
+
+  // Use live etaTimestamp — this is the whole point of this function
+  let etaStr = "shortly";
+  if (job.etaTimestamp && job.etaTimestamp > Date.now()) {
+    etaStr = formatTimeET(new Date(job.etaTimestamp));
+  } else if (job.serviceDateTime) {
+    const serviceTime = parseServiceDateTime(job.serviceDateTime);
+    if (serviceTime) etaStr = formatTimeET(serviceTime);
+  }
+
+  const trackingLink = await ensureTrackerToken(cleanerJobId);
+
+  const msg = [
+    `Hi ${clientFirstName}! Quick update — your Maids in Black team is still on the way and now expects to arrive around ${etaStr}. 🚗`,
+    ``,
+    `Track their live location here: ${trackingLink}`,
+    ``,
+    `Sorry for the delay — we appreciate your patience!`,
+  ].join("\n");
+
+  // Use a unique step name per update so each is logged without blocking the next
+  const stepName = `eta_update_${Date.now()}`;
+
+  // Log to field_mgmt_log directly (no dedup guard — intentional)
+  await db.insert(fieldMgmtLog).values({
+    cleanerJobId,
+    step: stepName as any,
+    success: 1,
+    smsSent: msg,
+    recipientPhone: clientPhone,
+    firedAt: new Date(),
+  }).catch(err => console.error(`[FieldMgmt] ETA update log insert failed for job ${cleanerJobId}:`, err));
+
+  const result = await sendSms({ to: clientPhone, content: msg });
+
+  if (result.success) {
+    console.log(`[FieldMgmt] ETA update SMS sent to ${clientPhone} for job ${cleanerJobId} (eta: ${etaStr})`);
+    if (result.messageId) {
+      await db.update(fieldMgmtLog)
+        .set({ openPhoneMessageId: result.messageId, deliveryStatus: "sent" })
+        .where(eq(fieldMgmtLog.step, stepName as any))
+        .catch(() => {});
+    }
+  } else {
+    await db.update(fieldMgmtLog)
+      .set({ success: 0, errorDetail: result.error ?? "unknown" })
+      .where(eq(fieldMgmtLog.step, stepName as any))
+      .catch(() => {});
+    console.error(`[FieldMgmt] ETA update SMS FAILED for job ${cleanerJobId}:`, result.error);
+  }
+}
+
 // ── Step 3: Arrival Check-In Auto-Response ────────────────────────────────────
 
 /**
