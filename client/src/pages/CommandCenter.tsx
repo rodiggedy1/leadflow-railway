@@ -884,7 +884,7 @@ export default function CommandCenter() {
                   <span className="text-xs text-emerald-600 font-medium bg-emerald-50 border border-emerald-100 rounded-full px-2 py-0.5">Live</span>
                 </div>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
+                  {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" })} · Real-time pipeline, AI insights, and next-best actions
                 </p>
               </div>
             </div>
@@ -936,7 +936,7 @@ export default function CommandCenter() {
         {/* ── Page Sub-Header (range + refresh) ────────────────────────────── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <p className="text-sm text-gray-400">
-            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · Real-time pipeline, AI insights, and next-best actions
+            {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "America/New_York" })} · Real-time pipeline, AI insights, and next-best actions
           </p>
           <div className="flex items-center gap-2">
             {(["today", "7d", "30d"] as Range[]).map(r => (
@@ -1045,8 +1045,8 @@ export default function CommandCenter() {
                       <span className="text-xs font-medium text-amber-900 capitalize">{c.campaignId.replace(/_/g, ' ')}</span>
                       <span className="text-xs text-amber-600">— {c.sentCount} sent</span>
                       <span className="text-xs text-amber-400">
-                        {new Date(c.firstSent).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                        {c.firstSent !== c.lastSent && ` – ${new Date(c.lastSent).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`}
+                        {new Date(c.firstSent).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}
+                        {c.firstSent !== c.lastSent && ` – ${new Date(c.lastSent).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })}`}
                       </span>
                     </div>
                   ))}
@@ -1283,12 +1283,12 @@ export default function CommandCenter() {
                                 <td className="px-3 py-2 text-gray-600">{r.frequency ?? <span className="text-gray-300">—</span>}</td>
                                 <td className="px-3 py-2 text-gray-600">
                                   {r.lastBookingDate
-                                    ? new Date(r.lastBookingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                    ? new Date(r.lastBookingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })
                                     : <span className="text-gray-300">—</span>}
                                 </td>
                                 <td className="px-3 py-2 text-gray-600">
                                   {r.lastCampaignSmsDate
-                                    ? new Date(r.lastCampaignSmsDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                                    ? new Date(r.lastCampaignSmsDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })
                                     : <span className="text-gray-400 italic">Never</span>}
                                 </td>
                                 <td className="px-2 py-2 text-right">
@@ -1734,7 +1734,7 @@ export default function CommandCenter() {
                     return (
                       <tr key={row.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
                         <td className="py-3 pr-4 text-gray-500 text-xs whitespace-nowrap">
-                          {new Date(row.firedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                          {new Date(row.firedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}
                         </td>
                         <td className="py-3 pr-4">
                           <span className="font-medium text-gray-900">{row.campaignTitle}</span>

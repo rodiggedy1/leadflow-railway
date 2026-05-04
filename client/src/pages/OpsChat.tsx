@@ -382,7 +382,7 @@ function stripTeamName(text: string): string {
 function TimelineEvent({ event }: { event: { id: string; ts: number; type: string; text: string } }) {
   const tone = TIMELINE_TONE[event.type] ?? TIMELINE_TONE.schedule;
   // 12-hour clock, no seconds
-  const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const timeStr = new Date(event.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
   const Icon = TIMELINE_ICON[event.type] ?? Clock;
   const label = stripTeamName(event.text);
   return (
@@ -493,7 +493,7 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
   const [showReactPicker, setShowReactPicker] = useState(false);
   // Prefer the explicit isMine prop (computed with myNames Set at call site) over the internal check
   const isMine = isMineOverride ?? (msg.from === callerName);
-  const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const timeStr = new Date(msg.ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
   const initials = msg.from.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
   const colorClass = senderColorClass(msg.from);
   const senderPhoto = senderPhotoMap?.[msg.from] ?? null;
@@ -2007,7 +2007,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       : diffMin === 0 ? "Active now"
                       : diffMin < 60 ? `${diffMin}m ago`
                       : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago`
-                      : new Date(seenMs).toLocaleDateString();
+                      : new Date(seenMs).toLocaleDateString("en-US", { timeZone: "America/New_York" });
                     const dotColor = agStatus === "online" ? "bg-green-500" : agStatus === "away" ? "bg-amber-400" : "bg-slate-300";
                     return (
                       <div key={ag.id} className="flex items-center gap-3 px-4 py-2.5">
