@@ -5031,22 +5031,17 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         })
       )
       .mutation(async ({ input }) => {
-        const template = `Hi [Name]! 👋 This is Madison from Maid in Black. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
-
-A little about us: we're fully insured, background-checked, and we've served hundreds of homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
-
+        const template = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
+A little about us: we're fully insured, background-checked, and we've served [X] homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
 For your [home size / job type], I'm estimating [PRICE]. That includes [list 2-3 specific things they'll get].
-
 I have availability as soon as [specific day, e.g., 'this Thursday or Saturday morning']. Want me to lock in a time for you?
-
 Either way, feel free to ask me anything — happy to help! 😊`;
 
-        // ── Layer 1: get_price tool so the LLM NEVER estimates prices itself ──
         const GET_PRICE_TOOL_DEF = {
           type: "function" as const,
           function: {
             name: "get_price",
-            description: "Look up the exact price for a cleaning service. ALWAYS call this tool when you need to mention any dollar amount. NEVER calculate or estimate prices yourself.",
+            description: "Look up the exact price for a cleaning service. ALWAYS call this tool when you need to fill in [PRICE]. NEVER calculate or estimate prices yourself.",
             parameters: {
               type: "object",
               properties: {
@@ -5061,42 +5056,35 @@ Either way, feel free to ask me anything — happy to help! 😊`;
           },
         };
 
-        const systemPrompt = `You are Madison, a professional representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
-
-Your job: fill in the following message template using the booking details provided.
-
-Rules:
+        const systemContent = `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
+Your job: fill in the following message template using the booking details provided. Rules:
 - Replace [Name] with the lead's first name only
+- Replace [Your Name] with "Madison"
+- Replace [Business] with "Maid in Black"
+- Replace [X] homes with a realistic number like "hundreds of"
 - Replace [City] with the city from the booking details
-- Replace [home size / job type] with a natural description (e.g., "3-bedroom home", "deep clean", etc.)
-- For [PRICE]: call the get_price tool with the home size and service type from the booking details — NEVER estimate or guess the price yourself
-- Replace the 2-3 specific things with relevant items for the job type
-- Replace the availability with "this week" or "early next week" unless specific dates are mentioned
+- Replace [home size / job type] with a natural description based on the details (e.g., "3-bedroom home", "carpet cleaning", etc.)
+- For [PRICE]: call the get_price tool — NEVER estimate or guess the price yourself
+- Replace the 2-3 specific things with relevant items for the job type (e.g., for house cleaning: "all rooms, kitchen deep clean, and bathroom sanitization"; for carpet cleaning: "all carpeted rooms, stairs, and spot treatment")
+- Replace the availability with "this week" or "early next week" unless specific dates are mentioned in the details
 - Keep the tone warm, human, and professional — not salesy
-- Output ONLY the message text, no preamble, no quotes around it
+- Output ONLY the message text, no preamble, no quotes around it`;
 
-CRITICAL: You MUST call get_price to get the dollar amount. Do NOT use the hardcoded range from the template.
-
-PRICING REFERENCE (for context only — always use get_price tool for the actual number):
-${PRICING_TABLE}`;
-
-        const messages: Array<{ role: "system" | "user"; content: string }> = [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}` },
+        const wandMessages = [
+          { role: "system" as const, content: systemContent },
+          { role: "user" as const, content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}` },
         ];
 
-        // Pass 1: offer the get_price tool
-        const pass1 = await invokeLLM({ messages, tools: [GET_PRICE_TOOL_DEF], toolChoice: "required" } as any);
+        // Pass 1: force tool call for price
+        const pass1 = await invokeLLM({ messages: wandMessages, tools: [GET_PRICE_TOOL_DEF], toolChoice: "required" } as any);
         const pass1Msg = pass1?.choices?.[0]?.message;
-        const toolCalls = (pass1Msg as any)?.tool_calls;
+        const toolCalls = (pass1Msg as any)?.tool_calls as Array<{ id: string; function: { name: string; arguments: string } }> | undefined;
 
         let finalMessage: string;
 
         if (!toolCalls || toolCalls.length === 0) {
-          // Model replied directly (no price needed or already in context)
           finalMessage = typeof pass1Msg?.content === "string" ? pass1Msg.content.trim() : "";
         } else {
-          // Execute tool calls locally using the deterministic pricing engine
           const toolResults: Array<{ role: "tool"; content: string; tool_call_id: string; name: string }> = [];
           for (const tc of toolCalls) {
             let result: string;
@@ -5108,22 +5096,19 @@ ${PRICING_TABLE}`;
               const frequency = (args.frequency ?? "one_time") as "one_time" | "weekly" | "biweekly" | "monthly";
               const basePrice = calculatePrice(bedrooms, bathrooms, serviceType);
               if (frequency === "one_time") {
-                result = `$${basePrice} (one-time ${serviceType})`;
+                result = `$${basePrice}`;
               } else {
                 const discounted = calculateRecurringPrice(basePrice, frequency as keyof typeof RECURRING_DISCOUNTS);
-                const pct = RECURRING_DISCOUNTS[frequency as keyof typeof RECURRING_DISCOUNTS].pct;
-                const label = RECURRING_DISCOUNTS[frequency as keyof typeof RECURRING_DISCOUNTS].label;
-                result = `$${discounted}/clean (${pct}% off for ${label} recurring — base was $${basePrice})`;
+                result = `$${discounted}/clean`;
               }
             } catch {
-              result = "Price lookup failed — use the pricing table.";
+              result = "price unavailable";
             }
             toolResults.push({ role: "tool", content: result, tool_call_id: tc.id, name: tc.function.name });
           }
 
-          // Pass 2: feed tool result back for final message
           const pass2Messages = [
-            ...messages,
+            ...wandMessages,
             { role: "assistant" as const, content: typeof pass1Msg?.content === "string" ? pass1Msg.content : "", tool_calls: toolCalls },
             ...toolResults,
           ];
@@ -5136,8 +5121,7 @@ ${PRICING_TABLE}`;
         return { message: finalMessage };
       }),
   }),
-
-  push: router({
+    push: router({
     /** Return the VAPID public key so the client can subscribe */
     getVapidPublicKey: agentProcedure.query(() => {
       return { publicKey: process.env.VAPID_PUBLIC_KEY ?? "" };
