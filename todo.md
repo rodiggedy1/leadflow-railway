@@ -1392,3 +1392,4 @@
 - [x] Fix SMS delivery tracking: handle message.delivered webhook event (only event OpenPhone fires), store "undelivered" when status != delivered, preserve "sent" as initial state
 - [x] Auto-raise command channel alert when client SMS is undelivered (post ops message with job details and phone number)
 - [x] Show delivery failure badge on client SMS bubbles in Ops Chat job card
+- [x] Fix duplicate SMS cards in Ops Chat job thread — system_outbound rows in job_sms_replies were duplicating fieldMgmtLog client SMS cards; skip system_outbound in thread builder

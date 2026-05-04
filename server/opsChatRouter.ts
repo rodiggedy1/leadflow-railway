@@ -346,6 +346,10 @@ export const opsChatRouter = router({
       }
 
       for (const s of smsReplies) {
+        // Skip system_outbound rows — these are the same client-facing automation SMS
+        // already tracked in fieldMgmtLog (client_pre_job, client_on_the_way, etc.).
+        // Including both causes duplicate cards in the job thread.
+        if (s.senderType === "system_outbound") continue;
         thread.push({
           id: `sms-${s.id}`,
           ts: s.receivedAt.getTime(),
