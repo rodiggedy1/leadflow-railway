@@ -5086,7 +5086,7 @@ ${PRICING_TABLE}`;
         ];
 
         // Pass 1: offer the get_price tool
-        const pass1 = await invokeLLM({ messages, tools: [GET_PRICE_TOOL_DEF], toolChoice: "auto" } as any);
+        const pass1 = await invokeLLM({ messages, tools: [GET_PRICE_TOOL_DEF], toolChoice: "required" } as any);
         const pass1Msg = pass1?.choices?.[0]?.message;
         const toolCalls = (pass1Msg as any)?.tool_calls;
 
