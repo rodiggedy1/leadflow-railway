@@ -11,6 +11,7 @@ import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAge
 import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
+import { calculatePrice } from "./engine/pricing";
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
@@ -5027,12 +5028,22 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       .input(
         z.object({
           bookingDetails: z.string().min(1).max(4000),
+          bedrooms: z.string().optional(),
+          bathrooms: z.string().optional(),
+          serviceType: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
-        // Extract quoted price already calculated and passed in bookingDetails
-        const priceMatch = input.bookingDetails.match(/Quote:\s*\$(\d+(?:\.\d+)?)/i);
-        const priceStr = priceMatch ? `$${priceMatch[1]}` : null;
+        // Calculate price deterministically if bedrooms/bathrooms provided
+        let priceStr: string | null = null;
+        if (input.bedrooms && input.bathrooms) {
+          const price = calculatePrice(input.bedrooms, input.bathrooms, input.serviceType ?? "Standard Cleaning");
+          priceStr = `$${price}`;
+        } else {
+          // Fallback: parse from bookingDetails text
+          const priceMatch = input.bookingDetails.match(/Quote:\s*\$(\d+(?:\.\d+)?)/i);
+          priceStr = priceMatch ? `$${priceMatch[1]}` : null;
+        }
 
         const template = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
 

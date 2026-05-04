@@ -999,7 +999,7 @@ function ConversationDrawer({
   onRefresh: () => void;
   currentAgentName?: string;
   initialTab?: "conversation" | "flow" | "performance";
-  onOpenFirstMsg?: (details: string) => void;
+  onOpenFirstMsg?: (details: string, bedrooms?: string, bathrooms?: string, serviceType?: string) => void;
 }) {
   const utils = trpc.useUtils();
   let messages: { role: string; content: string }[] = [];
@@ -1610,7 +1610,7 @@ function ConversationDrawer({
                   if (session.serviceType) parts.push(`Service: ${session.serviceType}`);
                   if (session.quotedPrice) parts.push(`Quote: $${session.quotedPrice}`);
                   if (session.barkQA) parts.push(session.barkQA);
-                  onOpenFirstMsg?.(parts.join("\n"));
+                  onOpenFirstMsg?.(parts.join("\n"), session.bedrooms ?? undefined, session.bathrooms ?? undefined, session.serviceType ?? undefined);
                 }}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-violet-100 text-gray-400 hover:text-violet-600 transition-colors"
               >
@@ -3453,6 +3453,9 @@ export default function AdminDashboard() {
   // ── First Message Generator modal (shared across lead drawer wand buttons) ──
   const [firstMsgOpen, setFirstMsgOpen] = useState(false);
   const [firstMsgDetails, setFirstMsgDetails] = useState("");
+  const [firstMsgBedrooms, setFirstMsgBedrooms] = useState<string | undefined>(undefined);
+  const [firstMsgBathrooms, setFirstMsgBathrooms] = useState<string | undefined>(undefined);
+  const [firstMsgServiceType, setFirstMsgServiceType] = useState<string | undefined>(undefined);
   const [firstMsgResult, setFirstMsgResult] = useState("");
   const [firstMsgCopied, setFirstMsgCopied] = useState(false);
   const generateFirstMessageMutation = trpc.tools.generateFirstMessage.useMutation({
@@ -5207,8 +5210,11 @@ export default function AdminDashboard() {
           onRefresh={() => refetch()}
           currentAgentName={meQuery.data?.name ?? "Admin"}
           initialTab={drawerInitialTab}
-          onOpenFirstMsg={(details) => {
+          onOpenFirstMsg={(details, bedrooms, bathrooms, serviceType) => {
             setFirstMsgDetails(details);
+            setFirstMsgBedrooms(bedrooms);
+            setFirstMsgBathrooms(bathrooms);
+            setFirstMsgServiceType(serviceType);
             setFirstMsgResult("");
             setFirstMsgCopied(false);
             setFirstMsgOpen(true);
@@ -5294,7 +5300,7 @@ export default function AdminDashboard() {
               <Button
                 className="flex-1 rounded-xl bg-gradient-to-r from-violet-500 to-indigo-500 hover:from-violet-600 hover:to-indigo-600 text-white"
                 disabled={!firstMsgDetails.trim() || generateFirstMessageMutation.isPending}
-                onClick={() => generateFirstMessageMutation.mutate({ bookingDetails: firstMsgDetails.trim() })}
+                onClick={() => generateFirstMessageMutation.mutate({ bookingDetails: firstMsgDetails.trim(), bedrooms: firstMsgBedrooms, bathrooms: firstMsgBathrooms, serviceType: firstMsgServiceType })}
               >
                 {generateFirstMessageMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin mr-1.5" /> Generating…</> : <><Wand2 className="h-4 w-4 mr-1.5" /> Generate Message</>}
               </Button>
