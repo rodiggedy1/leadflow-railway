@@ -5031,7 +5031,13 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         })
       )
       .mutation(async ({ input }) => {
-        const template = `Hi [Name]! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
+        // Extract first name from bookingDetails (e.g. "Name: Mauli D." → "Mauli")
+        const nameLineMatch = input.bookingDetails.match(/^Name:\s*(.+)$/im);
+        const rawName = nameLineMatch?.[1]?.trim() ?? "";
+        // Take only the first word (first name), strip trailing period
+        const firstName = rawName.split(/\s+/)[0]?.replace(/\.$/, "") || "there";
+
+        const template = `Hi ${firstName}! 👋 This is [Your Name] from [Business]. I just saw your request and wanted to reach out right away — I know finding a reliable cleaner can be stressful.
 
 A little about us: we're fully insured, background-checked, and we've served [X] homes right here in [City]. Every clean comes with a satisfaction guarantee — if anything's off, we come back at no charge.
 
@@ -5048,7 +5054,7 @@ Either way, feel free to ask me anything — happy to help! 😊`;
               content: `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
 
 Your job: fill in the following message template using the booking details provided. Rules:
-- Replace [Name] with the lead's first name only
+- The greeting "Hi ${firstName}!" is already set — do NOT change the name in the greeting
 - Replace [Your Name] with "Madison"
 - Replace [Business] with "Maid in Black"
 - Replace [X] homes with a realistic number like "hundreds of"
