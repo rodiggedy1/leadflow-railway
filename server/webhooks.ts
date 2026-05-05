@@ -1237,8 +1237,10 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
         .where(
           and(
             or(
-              eq(cleanerJobs.customerPhone, fromPhone),
-              eq(cleanerProfiles.phone, fromPhone)
+              // Normalize both sides: strip non-digits and compare last 10 digits
+              // This handles stored formats like "2405438028", "(240) 543-8028", "+12405438028"
+              sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE CONCAT('%', RIGHT(REGEXP_REPLACE(${fromPhone}, '[^0-9]', ''), 10))`,
+              sql`REGEXP_REPLACE(${cleanerProfiles.phone}, '[^0-9]', '') LIKE CONCAT('%', RIGHT(REGEXP_REPLACE(${fromPhone}, '[^0-9]', ''), 10))`
             ),
             // Only jobs from the last 2 days
             sql`${cleanerJobs.serviceDateTime} >= ${twoDaysAgo.toISOString().slice(0, 10)}`
