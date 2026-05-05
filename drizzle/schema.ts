@@ -1126,7 +1126,10 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   scheduleConfirmed: int("scheduleConfirmed").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (t) => [index("idx_cleaner_jobs_job_date").on(t.jobDate)]);
+}, (t) => [
+  index("idx_cleaner_jobs_job_date").on(t.jobDate),
+  uniqueIndex("uq_cleaner_jobs_booking_profile").on(t.bookingId, t.cleanerProfileId),
+]);
 export type CleanerJob = typeof cleanerJobs.$inferSelect;
 export type InsertCleanerJob = typeof cleanerJobs.$inferInsert;
 

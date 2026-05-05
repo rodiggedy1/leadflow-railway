@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_jobs` ADD CONSTRAINT `uq_cleaner_jobs_booking_profile` UNIQUE(`bookingId`,`cleanerProfileId`);

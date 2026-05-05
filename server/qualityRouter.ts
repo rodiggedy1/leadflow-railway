@@ -1666,16 +1666,27 @@ export const qualityRouter = router({
                 );
               }
             } else {
-              // Create new cleanerJob
-              const [ins] = await db.insert(cleanerJobs).values({
-                ...jobData,
-                completedJobId: 0, // placeholder — not linked to completedJobs table for quality-sync jobs
-                photoSubmitted: 0,
-                flagged: 0,
-                trackerToken: generateTrackerToken(), // generate at creation time
-              });
-              const newJobId = (ins as any).insertId as number;
-              created++;
+              // Create new cleanerJob — wrapped in duplicate-key guard for race condition safety
+              // (unique constraint on bookingId+cleanerProfileId prevents double-inserts at DB level)
+              let newJobId: number;
+              try {
+                const [ins] = await db.insert(cleanerJobs).values({
+                  ...jobData,
+                  completedJobId: 0, // placeholder — not linked to completedJobs table for quality-sync jobs
+                  photoSubmitted: 0,
+                  flagged: 0,
+                  trackerToken: generateTrackerToken(), // generate at creation time
+                });
+                newJobId = (ins as any).insertId as number;
+                created++;
+              } catch (insertErr: any) {
+                if (insertErr?.code === 'ER_DUP_ENTRY') {
+                  // Concurrent sync already inserted this row — silently skip
+                  console.log(`[Sync] Skipping duplicate insert for booking ${booking.id} / profile ${profile.id} (race condition)`);
+                  continue;
+                }
+                throw insertErr;
+              }
 
               // If this is a new mid-day assignment (job starts within 2 hours),
               // fire the cleaner pre-job SMS + magic link immediately.
