@@ -786,7 +786,15 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
     const dbRows = await db
       .select({ bookingId: cleanerJobs.bookingId })
       .from(cleanerJobs)
-      .where(and(eq(cleanerJobs.jobDate, dateStr), ne(cleanerJobs.bookingStatus, "cancelled")));
+      .where(
+        and(
+          eq(cleanerJobs.jobDate, dateStr),
+          ne(cleanerJobs.bookingStatus, "cancelled"),
+          // Exclude rescheduled: these rows are kept in DB for history but L27 no longer
+          // lists them on this date, so they would always cause a false EXTRA mismatch.
+          ne(cleanerJobs.bookingStatus, "rescheduled")
+        )
+      );
     // Use unique booking IDs (a booking with 2 teams = 2 DB rows but 1 L27 booking)
     const dbBookingIds = new Set(dbRows.map((r) => r.bookingId));
     const l27BookingIds = new Set(bookings.map((b) => b.id));

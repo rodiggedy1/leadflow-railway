@@ -2082,11 +2082,14 @@ async function placeCheckinCall(
         });
       }
     }
-    await recordStep({ cleanerJobId, step, success: true, recipientPhone: normalizedPhone });
+    // Row was already inserted by tryClaimStep before this function was called.
+    // Just confirm success (no-op since success=1 is the default, but explicit for clarity).
+    await updateStepOutcome(cleanerJobId, step, true);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[FieldMgmt] Check-in call (${step}) FAILED for job ${cleanerJobId}:`, msg);
-    await recordStep({ cleanerJobId, step, success: false, recipientPhone: normalizedPhone, errorDetail: msg });
+    // Mark the already-inserted row as failed.
+    await updateStepOutcome(cleanerJobId, step, false, msg);
   }
 }
 
