@@ -115,7 +115,7 @@ function fmt12(ts: number): string {
 }
 
 function fmtMsgTime(d: Date): string {
-  return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+  return new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 // ── ElapsedTimer: live "X min ago" display ───────────────────────────────────
@@ -4054,9 +4054,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 <div className="flex items-center justify-between gap-1 mb-0.5">
                                   <span className="text-xs font-semibold text-slate-700 truncate">{msg.from}</span>
                                   <span className="text-[10px] text-slate-400 shrink-0">
-                                    {new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" })}
+                                    {new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                                     {" "}
-                                    {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}
+                                    {new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
                                   </span>
                                 </div>
                                 <p
