@@ -612,7 +612,7 @@ export const fieldMgmtRouter = router({
         })
         .from(cleanerJobs)
         .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
-        .where(and(eq(cleanerJobs.jobDate, input.date), ne(cleanerJobs.bookingStatus, "cancelled")))
+        .where(and(eq(cleanerJobs.jobDate, input.date), ne(cleanerJobs.bookingStatus, "cancelled"), ne(cleanerJobs.bookingStatus, "rescheduled")))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.cleanerName);
 
       if (jobs.length === 0) return [];
