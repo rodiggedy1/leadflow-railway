@@ -10,7 +10,7 @@ import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
-import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
+import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage, invokeLLMWithPriceTool } from "./aiService";
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
@@ -5040,8 +5040,7 @@ I have availability as soon as [specific day, e.g., 'this Thursday or Saturday m
 
 Either way, feel free to ask me anything — happy to help! 😊`;
 
-        const llmResult = await invokeLLM({
-          messages: [
+        const wandMessages: Array<{ role: "system" | "user"; content: string }> = [
             {
               role: "system",
               content: `You are a professional cleaning business representative for Maid in Black, a premium home cleaning service in the Washington DC metro area (DC/MD/VA). You write warm, confident, and concise first outreach messages to new leads.
@@ -5063,11 +5062,8 @@ Your job: fill in the following message template using the booking details provi
               role: "user",
               content: `Template:\n${template}\n\nBooking details:\n${input.bookingDetails}`,
             },
-          ],
-        });
-
-        const raw = llmResult?.choices?.[0]?.message?.content;
-        const message = typeof raw === "string" ? raw : "";
+          ];
+        const message = await invokeLLMWithPriceTool(wandMessages as any, null, null, "Standard Cleaning");
         if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
         return { message: message.trim() };
       }),
