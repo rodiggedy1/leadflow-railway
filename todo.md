@@ -1424,3 +1424,9 @@
 - [x] Add POST /api/thumbtack/update-lead-phone endpoint: find session by first name + thumbtack- phone prefix, update phone + last name, return sessionId
 - [x] Update popup.js fireBridgeWithRevealedPhone() to call update-lead-phone first, get sessionId, then fire bridge call with real phone + sessionId
 - [x] Update content.js to pass full lead name (from Messages page header) in PHONE_REVEALED message
+
+## SMS Send on Phone Reveal
+
+- [x] Store generated message on session (pendingMessage field or chrome.storage) when user clicks Send on lead detail page
+- [x] update-lead-phone endpoint: after updating phone, send the stored pending message as SMS to the real phone
+- [x] Update popup.js to pass the generated message to fireBridgeWithRevealedPhone so it can be sent via bridge-call
