@@ -1401,3 +1401,11 @@
 - [ ] Scheduling/confirmation SMS must send from 202-888-5362 OpenPhone number
 - [x] Fix Leads page: exclude schedule_confirm leadSource from leads.list query
 - [x] Scheduling/confirmation SMS already sends from Maids in Black DC number (PN0wVLcpCq = 202-888-5362) — confirmed correct
+
+## Chrome Extension — Thumbtack Lead Automation
+- [x] Build Chrome extension (Manifest V3) targeting thumbtack.com and quote.maidinblack.com
+- [x] Extension popup: manual input panel (name, phone, service, beds, baths, notes), generate message via wand API, review before send
+- [x] Extension send flow: (1) inject message into Thumbtack reply box, (2) call bridge endpoint (SMS + Vapi conference call), (3) update lead name/phone in LeadFlow
+- [x] Server: POST /api/thumbtack/bridge-call endpoint — sends SMS via OpenPhone, triggers Vapi outbound call to office (202-888-5362) with announcement, bridges to client
+- [x] Register thumbtackBridgeRoute in server/_core/index.ts
+- [ ] Update content.js CSS selectors for Thumbtack page (stubs — needs real lead page inspection)

@@ -9,6 +9,7 @@ import { registerWebhookRoutes } from "../webhooks";
 import { registerCronRoutes } from "../cronSync";
 import { registerFollowUpCronRoutes } from "../followUpCron";
 import { registerVapiWebhookRoute } from "../vapiWebhook";
+import { registerThumbTackBridgeRoute } from "../thumbtackBridgeRoute";
 import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
@@ -105,6 +106,8 @@ async function startServer() {
   registerFollowUpCronRoutes(app);
   // Vapi voice AI webhook (tool-calls + end-of-call-report)
   registerVapiWebhookRoute(app);
+  // Thumbtack Chrome extension bridge: SMS + Vapi conference call
+  registerThumbTackBridgeRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",
