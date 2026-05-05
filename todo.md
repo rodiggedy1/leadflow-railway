@@ -1418,3 +1418,9 @@
 - [x] Update background.js to handle PHONE_REVEALED message and store phone in session storage
 - [x] Update popup.js to listen for PHONE_READY and fire bridge call automatically
 - [x] Re-zip extension as thumbtack-extension.zip v1.1.0
+
+## Thumbtack Lead Phone Update Flow
+
+- [x] Add POST /api/thumbtack/update-lead-phone endpoint: find session by first name + thumbtack- phone prefix, update phone + last name, return sessionId
+- [x] Update popup.js fireBridgeWithRevealedPhone() to call update-lead-phone first, get sessionId, then fire bridge call with real phone + sessionId
+- [x] Update content.js to pass full lead name (from Messages page header) in PHONE_REVEALED message

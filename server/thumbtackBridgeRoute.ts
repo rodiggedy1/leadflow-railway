@@ -13,7 +13,7 @@
 import type { Express } from "express";
 import { getDb } from "./db";
 import { conversationSessions } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, like, and } from "drizzle-orm";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 
@@ -45,6 +45,94 @@ async function vapiPost(path: string, body: unknown): Promise<unknown> {
 }
 
 export function registerThumbTackBridgeRoute(app: Express) {
+  /**
+   * POST /api/thumbtack/update-lead-phone
+   *
+   * Called by the Chrome extension after "Click to show phone number" reveals the real phone.
+   * Finds the matching LeadFlow session by:
+   *   - leadName matches the Thumbtack display name (e.g. "Mauli D." or "Mauli D")
+   *   - leadPhone starts with "thumbtack-" or "no-phone-thumbtack-" (placeholder)
+   * Updates the session with the real phone number and full name (if available).
+   * Returns the sessionId so the bridge call can be fired with the correct session.
+   */
+  app.post("/api/thumbtack/update-lead-phone", async (req, res) => {
+    try {
+      const {
+        thumbtackName,   // e.g. "Mauli D." — the name shown on the Thumbtack lead page
+        fullName,        // e.g. "Mauli Dosi" — full name revealed on Messages page (optional)
+        realPhone,       // e.g. "+14105551234" — the real phone number after reveal
+      } = req.body as {
+        thumbtackName: string;
+        fullName?: string;
+        realPhone: string;
+      };
+
+      if (!thumbtackName || !realPhone) {
+        res.status(400).json({ error: "thumbtackName and realPhone are required" });
+        return;
+      }
+
+      const db = await getDb();
+      if (!db) {
+        res.status(500).json({ error: "Database unavailable" });
+        return;
+      }
+
+      // Normalize the real phone to E.164
+      const normalizedPhone = realPhone.startsWith("+")
+        ? realPhone
+        : `+1${realPhone.replace(/\D/g, "")}`;
+
+      // Normalize the thumbtack name for matching:
+      // "Mauli D." → "Mauli D" (strip trailing period for flexible match)
+      const nameNormalized = thumbtackName.trim().replace(/\.$/, "");
+
+      // Find the session: leadName matches (with or without trailing period) AND phone is a placeholder
+      const sessions = await db
+        .select()
+        .from(conversationSessions)
+        .where(
+          and(
+            like(conversationSessions.leadName, `${nameNormalized}%`),
+            like(conversationSessions.leadPhone, "thumbtack%")
+          )
+        )
+        .orderBy(conversationSessions.id)
+        .limit(5);
+
+      if (sessions.length === 0) {
+        console.warn(`[ThumbTackBridge] No session found for name="${thumbtackName}" with thumbtack placeholder phone`);
+        res.status(404).json({ error: `No session found for "${thumbtackName}" with a Thumbtack placeholder phone` });
+        return;
+      }
+
+      // Pick the most recent session (highest id)
+      const session = sessions[sessions.length - 1];
+
+      // Update: set real phone, and update name to full name if we have it
+      const updatedName = fullName?.trim() || session.leadName || thumbtackName;
+      await db
+        .update(conversationSessions)
+        .set({
+          leadPhone: normalizedPhone,
+          leadName: updatedName,
+        })
+        .where(eq(conversationSessions.id, session.id));
+
+      console.log(`[ThumbTackBridge] Session ${session.id} updated: phone ${session.leadPhone} → ${normalizedPhone}, name "${session.leadName}" → "${updatedName}"`);
+
+      res.json({
+        success: true,
+        sessionId: String(session.id),
+        leadName: updatedName,
+        leadPhone: normalizedPhone,
+      });
+    } catch (err) {
+      console.error("[ThumbTackBridge] update-lead-phone error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.post("/api/thumbtack/bridge-call", async (req, res) => {
     try {
       const {
