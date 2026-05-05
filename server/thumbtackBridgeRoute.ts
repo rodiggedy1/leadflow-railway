@@ -58,11 +58,11 @@ export function registerThumbTackBridgeRoute(app: Express) {
         leadPhone: string;
         leadName: string;
         serviceType?: string;
-        message: string;
+        message?: string;
       };
 
-      if (!leadPhone || !message) {
-        res.status(400).json({ error: "leadPhone and message are required" });
+      if (!leadPhone) {
+        res.status(400).json({ error: "leadPhone is required" });
         return;
       }
 
@@ -79,29 +79,34 @@ export function registerThumbTackBridgeRoute(app: Express) {
 
       // ── 1. Send SMS ────────────────────────────────────────────────────────
       try {
-        const smsResult = await sendSms({ to: normalizedPhone, content: message });
-        results.sms = smsResult.success;
-        if (!smsResult.success) {
-          results.errors.push(`SMS failed: ${smsResult.error ?? "unknown"}`);
-        }
-
-        // Log the SMS to the session thread so it appears in the lead drawer
-        if (smsResult.success && sessionId) {
-          const db = await getDb();
-          if (db) {
-            const [session] = await db
-              .select({ messageHistory: conversationSessions.messageHistory })
-              .from(conversationSessions)
-              .where(eq(conversationSessions.id, parseInt(sessionId)))
-              .limit(1);
-            if (session) {
-              const history: Array<{ role: string; content: string }> =
-                JSON.parse(session.messageHistory as unknown as string) ?? [];
-              history.push({ role: "assistant", content: message });
-              await db
-                .update(conversationSessions)
-                .set({ messageHistory: JSON.stringify(history) })
-                .where(eq(conversationSessions.id, parseInt(sessionId)));
+        // Only send SMS if a message was provided (phone-reveal-only calls skip SMS)
+        if (!message) {
+          results.errors.push("SMS skipped — no message provided");
+          // Skip to Vapi call
+        } else {
+          const smsResult = await sendSms({ to: normalizedPhone, content: message });
+          results.sms = smsResult.success;
+          if (!smsResult.success) {
+            results.errors.push(`SMS failed: ${smsResult.error ?? "unknown"}`);
+          }
+          // Log the SMS to the session thread so it appears in the lead drawer
+          if (smsResult.success && sessionId) {
+            const db = await getDb();
+            if (db) {
+              const [session] = await db
+                .select({ messageHistory: conversationSessions.messageHistory })
+                .from(conversationSessions)
+                .where(eq(conversationSessions.id, parseInt(sessionId)))
+                .limit(1);
+              if (session) {
+                const history: Array<{ role: string; content: string }> =
+                  JSON.parse(session.messageHistory as unknown as string) ?? [];
+                history.push({ role: "assistant", content: message });
+                await db
+                  .update(conversationSessions)
+                  .set({ messageHistory: JSON.stringify(history) })
+                  .where(eq(conversationSessions.id, parseInt(sessionId)));
+              }
             }
           }
         }
