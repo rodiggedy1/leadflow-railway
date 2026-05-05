@@ -1,0 +1,1 @@
+ALTER TABLE `field_mgmt_log` MODIFY COLUMN `step` varchar(100) NOT NULL;

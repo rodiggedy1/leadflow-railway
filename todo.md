@@ -1439,3 +1439,7 @@
 
 - [x] Research root cause of ETA update SMS not being delivered to customers — isJobAssigned guard in sendClientEtaUpdateSms + dedup on sendRunningLateSms
 - [x] Fix the issue and verify end-to-end
+
+## Bug: ETA Update SMS Not Showing in Ops Chat
+
+- [ ] Find ops chat post call in sendClientOnTheWaySms and replicate in sendClientEtaUpdateSms and sendRunningLateSms

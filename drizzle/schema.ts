@@ -1450,8 +1450,8 @@ export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
   id: int("id").autoincrement().primaryKey(),
   /** Link to cleanerJobs.id */
   cleanerJobId: int("cleanerJobId").notNull(),
-  /** Which automation step fired */
-  step: mysqlEnum("step", fieldMgmtSteps as unknown as [string, ...string[]]).notNull(),
+  /** Which automation step fired — varchar to support dynamic step names like eta_update_{ts} and client_running_late_{ts} */
+  step: varchar("step", { length: 100 }).notNull(),
   /** Whether the SMS/call was sent successfully */
   success: int("success").default(0).notNull(),
   /** Error message if failed */
