@@ -109,7 +109,8 @@ export function registerThumbTackBridgeRoute(app: Express) {
       // Pick the most recent session (highest id)
       const session = sessions[sessions.length - 1];
 
-      // Update: set real phone, and update name to full name if we have it
+      // Update: set real phone, and update name to full name if we have it.
+      // Do NOT touch leadSource — it reflects how the lead originally came in.
       const updatedName = fullName?.trim() || session.leadName || thumbtackName;
       await db
         .update(conversationSessions)

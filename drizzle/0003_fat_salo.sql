@@ -1,0 +1,1 @@
+ALTER TABLE `field_mgmt_log` DROP INDEX `uniq_field_mgmt_job_step`;

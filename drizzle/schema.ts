@@ -1465,12 +1465,11 @@ export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
   /** Delivery status updated by webhook: sent | delivered | failed */
   deliveryStatus: varchar("deliveryStatus", { length: 16 }),
   firedAt: timestamp("firedAt").defaultNow().notNull(),
-}, (table) => ({
-  /** DB-level dedup: only one log row per (job, step). If two cron ticks race,
-   * the second INSERT will throw a duplicate key error which we catch and ignore.
-   * This is the last line of defense — stepAlreadyFired() is still the primary guard. */
-  uniqJobStep: uniqueIndex("uniq_field_mgmt_job_step").on(table.cleanerJobId, table.step),
-}));
+});
+// NOTE: The unique index uniq_field_mgmt_job_step was intentionally DROPPED from the DB.
+// field_mgmt_log is an append-only audit log — steps like checkin_call_t30_attempt_N
+// and client_running_late_{ts} must be allowed to fire multiple times per job.
+// Dedup is handled in code via tryClaimStep (SELECT before INSERT), not at the DB level.
 
 export type FieldMgmtLog = typeof fieldMgmtLog.$inferSelect;
 export type InsertFieldMgmtLog = typeof fieldMgmtLog.$inferInsert;
