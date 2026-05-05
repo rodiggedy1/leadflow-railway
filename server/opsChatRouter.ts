@@ -372,11 +372,16 @@ export const opsChatRouter = router({
       for (const f of fmLog) {
         // Include eta_update_* steps (ETA update SMS sent to client on each ETA change)
         const isEtaUpdate = f.step.startsWith("eta_update_");
-        if (!f.smsSent || (!CLIENT_FACING_STEPS.has(f.step) && !isEtaUpdate)) continue;
+        // client_running_late is logged with a timestamp suffix (e.g. client_running_late_1234567890)
+        // to allow multiple running-late SMSes per job — match the prefix too.
+        const isRunningLate = f.step === "client_running_late" || f.step.startsWith("client_running_late_");
+        if (!f.smsSent || (!CLIENT_FACING_STEPS.has(f.step) && !isEtaUpdate && !isRunningLate)) continue;
+        // Normalise the step label for timestamped variants
+        const displayStep = isRunningLate ? "client_running_late" : f.step;
         thread.push({
           id: `fmlog-${f.id}`,
           ts: f.firedAt.getTime(),
-          from: isEtaUpdate ? "System (ETA Update)" : `System (${STEP_LABELS[f.step] ?? f.step})`,
+          from: isEtaUpdate ? "System (ETA Update)" : `System (${STEP_LABELS[displayStep] ?? displayStep})`,
           role: "system_outbound",
           body: f.smsSent,
           source: "sms",

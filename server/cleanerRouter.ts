@@ -543,10 +543,17 @@ export const cleanerRouter = router({
           .catch((err) => console.error("[FieldMgmt] noEtaArrival history check error:", err));
       }
       if (input.status === "running_late") {
-        // Save delayMinutes to DB first so sendRunningLateSms can read it
-        if (input.delayMinutes) {
+        // Derive delayMinutes from etaLabel if not explicitly provided
+        const ETA_DELAY_MAP: Record<string, number> = {
+          "30 minutes": 30,
+          "1 hour": 60,
+          "1 hr 30 min": 90,
+          "2 hours": 120,
+        };
+        const derivedDelay = input.delayMinutes ?? (input.etaLabel ? ETA_DELAY_MAP[input.etaLabel] ?? null : null);
+        if (derivedDelay) {
           db.update(cleanerJobs)
-            .set({ delayMinutes: input.delayMinutes })
+            .set({ delayMinutes: derivedDelay })
             .where(eq(cleanerJobs.id, input.cleanerJobId))
             .catch(() => {});
         }
