@@ -1409,3 +1409,12 @@
 - [x] Server: POST /api/thumbtack/bridge-call endpoint — sends SMS via OpenPhone, triggers Vapi outbound call to office (202-888-5362) with announcement, bridges to client
 - [x] Register thumbtackBridgeRoute in server/_core/index.ts
 - [ ] Update content.js CSS selectors for Thumbtack page (stubs — needs real lead page inspection)
+
+## Chrome Extension v1.1 — Real Thumbtack Selectors
+
+- [x] Update manifest.json content_scripts to match real URLs: /pro-leads/* and /messages/*
+- [x] Rewrite content.js with real selectors from live Thumbtack screenshots
+- [x] Add two-step phone reveal flow: auto-click "Click to show phone number" after reply sent
+- [x] Update background.js to handle PHONE_REVEALED message and store phone in session storage
+- [x] Update popup.js to listen for PHONE_READY and fire bridge call automatically
+- [x] Re-zip extension as thumbtack-extension.zip v1.1.0
