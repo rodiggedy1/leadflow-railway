@@ -1430,3 +1430,12 @@
 - [x] Store generated message on session (pendingMessage field or chrome.storage) when user clicks Send on lead detail page
 - [x] update-lead-phone endpoint: after updating phone, send the stored pending message as SMS to the real phone
 - [x] Update popup.js to pass the generated message to fireBridgeWithRevealedPhone so it can be sent via bridge-call
+
+## Message History Logging
+
+- [ ] Append Thumbtack-generated message to session messageHistory after SMS sends successfully in bridge-call endpoint
+
+## Bug: ETA SMS Notifications Not Reaching Customers
+
+- [x] Research root cause of ETA update SMS not being delivered to customers — isJobAssigned guard in sendClientEtaUpdateSms + dedup on sendRunningLateSms
+- [x] Fix the issue and verify end-to-end

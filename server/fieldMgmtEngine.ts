@@ -628,7 +628,10 @@ export async function sendClientEtaUpdateSms(cleanerJobId: number): Promise<void
   const firstAlreadySent = await stepAlreadyFired(cleanerJobId, "client_on_the_way");
   if (!firstAlreadySent) return;
 
-  if (!(await isJobAssigned(cleanerJobId))) return;
+  // NOTE: isJobAssigned check intentionally omitted here.
+  // A cleaner who has already set on_the_way is actively working the job regardless
+  // of bookingStatus (which may be 'new' for jobs synced before assignment completes).
+  // Blocking ETA updates in that state silently drops customer notifications.
 
   const jobRows = await db
     .select()
@@ -1491,16 +1494,34 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
     `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
   ].join("\n");
 
-  const claimed = await tryClaimStep({ cleanerJobId, step: "client_running_late", smsSent: msg, recipientPhone: clientPhone });
-  if (!claimed) return;
+  // Use a unique step name per call so each running-late tap sends a new SMS.
+  // The dedup guard on a fixed step name was silently blocking repeat running-late notifications.
+  const stepName = `client_running_late_${Date.now()}`;
+
+  await db.insert(fieldMgmtLog).values({
+    cleanerJobId,
+    step: stepName as any,
+    success: 1,
+    smsSent: msg,
+    recipientPhone: clientPhone,
+    firedAt: new Date(),
+  }).catch(err => console.error(`[FieldMgmt] Running late log insert failed for job ${cleanerJobId}:`, err));
 
   const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Running late SMS sent to ${clientPhone} for job ${cleanerJobId}`);
-    if (result.messageId) await updateStepMessageId(cleanerJobId, "client_running_late", result.messageId);
+    if (result.messageId) {
+      await db.update(fieldMgmtLog)
+        .set({ openPhoneMessageId: result.messageId, deliveryStatus: "sent" })
+        .where(eq(fieldMgmtLog.step, stepName as any))
+        .catch(() => {});
+    }
   } else {
-    await updateStepOutcome(cleanerJobId, "client_running_late", false, result.error);
+    await db.update(fieldMgmtLog)
+      .set({ success: 0, errorDetail: result.error ?? "unknown" })
+      .where(eq(fieldMgmtLog.step, stepName as any))
+      .catch(() => {});
     console.error(`[FieldMgmt] Running late SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
 }
