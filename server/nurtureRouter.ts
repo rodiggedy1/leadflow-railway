@@ -360,6 +360,46 @@ export const nurtureRouter = router({
       return { ok: true, ended: false, newStep: nextStep.step };
     }),
 
+  /**
+   * Skip backward to the previous nurture step — does NOT send anything.
+   * Disabled when already at the first step (step 3).
+   */
+  skipBackStep: adminAgentProcedure
+    .input(z.object({ enrollmentId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+
+      const [enrollment] = await db
+        .select({ id: nurtureEnrollments.id, nextStep: nurtureEnrollments.nextStep, status: nurtureEnrollments.status })
+        .from(nurtureEnrollments)
+        .where(eq(nurtureEnrollments.id, input.enrollmentId))
+        .limit(1);
+
+      if (!enrollment) throw new Error("Enrollment not found");
+      if (enrollment.status !== "active") throw new Error("Enrollment is not active");
+
+      const minStep = Math.min(...NURTURE_STEPS.map((s) => s.step));
+      if (enrollment.nextStep <= minStep) throw new Error("Already at first step");
+
+      // Find the previous step — highest step number strictly less than nextStep
+      const prevStep = NURTURE_STEPS
+        .filter((s) => s.step < enrollment.nextStep)
+        .sort((a, b) => b.step - a.step)[0];
+
+      if (!prevStep) throw new Error("No previous step found");
+
+      // Recalculate nextSendAt from NOW using the previous step's schedule offset
+      const nextSendAt = prevStep.scheduledAt(new Date());
+
+      await db
+        .update(nurtureEnrollments)
+        .set({ nextStep: prevStep.step, nextSendAt })
+        .where(eq(nurtureEnrollments.id, input.enrollmentId));
+
+      return { ok: true, newStep: prevStep.step };
+    }),
+
   /** Send a test SMS for a given step to the test number +13029816191 */
   testSend: adminAgentProcedure
     .input(z.object({ step: z.number().int().min(1).max(17), body: z.string().min(1) }))

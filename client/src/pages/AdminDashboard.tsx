@@ -108,6 +108,7 @@ import {
   PanelRight,
   Inbox,
   SkipForward,
+  SkipBack,
   Pause,
   Play,
 } from "lucide-react";
@@ -1397,6 +1398,10 @@ function ConversationDrawer({
     onSuccess: () => { refetchNurture(); toast.success("Skipped to next step"); },
     onError: (e) => toast.error(e.message),
   });
+  const nurtureSkipBackMutation = trpc.nurture.skipBackStep.useMutation({
+    onSuccess: () => { refetchNurture(); toast.success("Moved back to previous step"); },
+    onError: (e) => toast.error(e.message),
+  });
   const nurtureEnrollMutation = trpc.nurture.enroll.useMutation({
     onSuccess: () => { refetchNurture(); toast.success("Enrolled in nurture"); },
     onError: (e) => toast.error(e.message),
@@ -2051,6 +2056,14 @@ function ConversationDrawer({
                       <div className="flex items-center gap-1 shrink-0">
                         {enr.status === 'active' && (
                           <>
+                            <button
+                              onClick={() => nurtureSkipBackMutation.mutate({ enrollmentId: enr.id })}
+                              disabled={nurtureSkipBackMutation.isPending || enr.nextStep <= 3}
+                              title="Go back to previous step"
+                              className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
+                            >
+                              {nurtureSkipBackMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <SkipBack className="w-3 h-3" />}
+                            </button>
                             <button
                               onClick={() => nurtureSkipMutation.mutate({ enrollmentId: enr.id })}
                               disabled={nurtureSkipMutation.isPending}
