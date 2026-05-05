@@ -795,6 +795,16 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
         mismatches.push(`MISSING: L27 booking ${booking.id} (${booking.fullName}, status=${booking.bookingStatus}) not in DB after sync`);
       }
     }
+    // Also flag if DB has MORE unique bookings than L27 (e.g. duplicate rows or phantom jobs)
+    for (const dbBookingId of Array.from(dbBookingIds)) {
+      if (dbBookingId !== null && !l27BookingIds.has(dbBookingId)) {
+        mismatches.push(`EXTRA: DB has booking ${dbBookingId} for ${dateStr} that is NOT in L27 (possible duplicate or phantom job)`);
+      }
+    }
+    // Flag total count mismatch even if all IDs match (e.g. duplicate rows for same booking)
+    if (mismatches.length === 0 && dbRows.length !== bookings.length) {
+      mismatches.push(`COUNT MISMATCH: L27 has ${bookings.length} job(s), DB has ${dbRows.length} row(s) for ${dateStr} — possible duplicate rows`);
+    }
     if (mismatches.length === 0 && l27BookingIds.size > 0) {
       // Post a green Sync OK card after every clean sync — deduplicate within 5 min to avoid duplicates
       // if the sync function is called multiple times in quick succession (e.g. batch processing)
