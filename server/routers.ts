@@ -14,6 +14,7 @@ import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, ha
 import bcrypt from "bcryptjs";
 import { parse as parseCookie } from "cookie";
 import { calculateExtrasTotal } from "../shared/extras";
+import { calculatePrice } from "./engine/pricing";
 import { campaignRouter, markReactivationContactBooked } from "./campaignRouter";
 import { logActivity } from "./activityLogger";
 import { reviewRouter } from "./reviewRouter";
@@ -5067,8 +5068,25 @@ Your job: fill in the following message template using the booking details provi
         });
 
         const raw = llmResult?.choices?.[0]?.message?.content;
-        const message = typeof raw === "string" ? raw : "";
+        let message = typeof raw === "string" ? raw : "";
         if (!message) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI did not return a message" });
+        // Post-process: replace LLM-estimated price with real calculated price
+        try {
+          const bedsMatch = input.bookingDetails.match(/Bedrooms?:\s*(\d+)/i);
+          const bathsMatch = input.bookingDetails.match(/Bathrooms?:\s*([\d.]+)/i);
+          const svcMatch = input.bookingDetails.match(/Service:\s*([^\n]+)/i);
+          if (bedsMatch && bathsMatch) {
+            const beds = parseInt(bedsMatch[1]);
+            const baths = parseFloat(bathsMatch[1]);
+            const svc = svcMatch ? svcMatch[1].trim() : "Standard Cleaning";
+            const bedsStr = beds === 1 ? "1 Bedroom" : `${beds} Bedrooms`;
+            const bathsStr = baths === 1 ? "1 Bathroom" : baths === 1.5 ? "1.5 Bathrooms" : `${baths} Bathrooms`;
+            const realPrice = calculatePrice(bedsStr, bathsStr, svc);
+            if (realPrice > 0) {
+              message = message.replace(/\$\d+(?:[\u2013\-]\$?\d+)?/g, `$${realPrice}`);
+            }
+          }
+        } catch (_) { /* fallback: return original message unchanged */ }
         return { message: message.trim() };
       }),
   }),
