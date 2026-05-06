@@ -88,6 +88,20 @@ export function registerThumbTackBridgeRoute(app: Express) {
       // Strip ALL periods so "L. W." and "L W." both become "L W" for LIKE matching
       const nameNormalized = thumbtackName.trim().replace(/\./g, "").replace(/\s+/g, " ").trim();
 
+      // Safety check: if this realPhone is already assigned to an existing session,
+      // something is wrong (stale phone from a previous lead). Refuse the update.
+      const existing = await db
+        .select({ id: conversationSessions.id, leadName: conversationSessions.leadName })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.leadPhone, normalizedPhone))
+        .limit(1);
+
+      if (existing.length > 0) {
+        console.warn(`[ThumbTackBridge] REJECTED update-lead-phone — phone ${normalizedPhone} already belongs to session ${existing[0].id} ("${existing[0].leadName}"). Refusing to overwrite.`);
+        res.status(409).json({ error: `Phone ${normalizedPhone} is already assigned to session ${existing[0].id} ("${existing[0].leadName}"). Possible stale phone — update rejected.` });
+        return;
+      }
+
       // Find the session: leadName matches (with or without trailing period) AND phone is a placeholder OR null
       // Thumbtack leads with no phone get leadPhone=null; those with a placeholder get leadPhone='no-phone-thumbtack-...' or 'thumbtack-...'
       const sessions = await db
