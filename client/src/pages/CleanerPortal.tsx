@@ -346,6 +346,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   const [nextJobEtaTarget, setNextJobEtaTarget] = useState<{ id: number; customerName: string | null } | null>(null);
   // Custom exact-time ETA input ("HH:MM" in 24h format from <input type="time">)
   const [customEtaTime, setCustomEtaTime] = useState<string>("");
+  // Returns "HH:MM" for 1 hour from now in device local time
+  function defaultEtaTime(): string {
+    const d = new Date(Date.now() + 60 * 60 * 1000);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
   const ETA_OPTIONS = [
     { label: "30 min",      value: "30 minutes" },
     { label: "1 hour",     value: "1 hour" },
@@ -992,6 +997,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     if (s.key === "running_late" || s.key === "on_the_way") {
                       // Open the blocking ETA modal
                       setEtaModalFor(s.key as "on_the_way" | "running_late");
+                      setCustomEtaTime(defaultEtaTime());
                       setShowEtaModal(true);
                       setShowIssueInput(false);
                       return;
@@ -1068,6 +1074,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <button
                   onClick={() => {
                     setEtaModalFor(job.jobStatus as "on_the_way" | "running_late");
+                    setCustomEtaTime(defaultEtaTime());
                     setShowEtaModal(true);
                   }}
                   className={`text-[11px] font-semibold px-2 py-1 rounded-full border transition-colors cursor-pointer ${
@@ -1442,6 +1449,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                       // Open the blocking ETA modal targeting the next job
                       setNextJobEtaTarget({ id: nextJob.id, customerName: nextJob.customerName ?? null });
                       setEtaModalFor("on_the_way");
+                      setCustomEtaTime(defaultEtaTime());
                       setShowEtaModal(true);
                     }}
                   >
