@@ -43,10 +43,40 @@ export function getPhaseName(step: number): string {
   return PHASE_NAMES[getPhaseNum(step)];
 }
 
+/** Returns the hour (0-23) in LA time for a given Date */
+function laHour(d: Date): number {
+  return parseInt(
+    d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles', hour12: false, hour: 'numeric' })
+  );
+}
+
+/**
+ * Returns the effective send time, advancing past quiet hours (10 PM – 8 AM LA).
+ * If the scheduled time falls in quiet hours, returns the next 8 AM LA.
+ */
+function effectiveSendTime(d: Date): Date {
+  const h = laHour(d);
+  if (h >= 22 || h < 8) {
+    // Advance to 8 AM LA the same day (or next day if already past midnight)
+    const laDateStr = d.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });
+    const next8am = new Date(`${laDateStr} 08:00:00 AM`);
+    // Convert 8 AM LA to UTC properly
+    const offset = d.getTime() - new Date(d.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })).getTime();
+    const next8amUTC = new Date(next8am.getTime() + offset);
+    // If still in quiet hours (e.g. it's 11 PM and 8 AM today already passed), go to next day
+    if (next8amUTC <= d) {
+      next8amUTC.setDate(next8amUTC.getDate() + 1);
+    }
+    return next8amUTC;
+  }
+  return d;
+}
+
 export function formatNextSendAt(date: Date | string | null): string {
   if (!date) return "—";
-  const d = date instanceof Date ? date : new Date(date);
+  const raw = date instanceof Date ? date : new Date(date);
   const now = new Date();
+  const d = effectiveSendTime(raw);
   const diffMs = d.getTime() - now.getTime();
   if (diffMs < 0) return "overdue";
   const diffMin = Math.round(diffMs / 60000);
