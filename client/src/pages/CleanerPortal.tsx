@@ -1221,9 +1221,18 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             }`}>
               <p className="text-xs text-slate-400 mb-2 font-medium">Or enter an exact arrival time:</p>
               <div className="flex gap-2 items-center">
+                {/* Compute the current time in HH:MM (device local) for the min attribute */}
                 <input
                   type="time"
                   value={customEtaTime}
+                  min={(() => {
+                    const now = new Date();
+                    // Add 1 minute buffer so "now" is never selectable
+                    now.setMinutes(now.getMinutes() + 1);
+                    const hh = String(now.getHours()).padStart(2, "0");
+                    const mm = String(now.getMinutes()).padStart(2, "0");
+                    return `${hh}:${mm}`;
+                  })()}
                   onChange={e => setCustomEtaTime(e.target.value)}
                   disabled={statusMutation.isPending}
                   className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold bg-slate-800 border text-white
@@ -1235,20 +1244,30 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     }`}
                 />
                 <button
-                  disabled={!customEtaTime || statusMutation.isPending}
+                  disabled={(() => {
+                    if (!customEtaTime || statusMutation.isPending) return true;
+                    // Disable if the chosen time is in the past or within 1 minute of now
+                    const [hh, mm] = customEtaTime.split(":").map(Number);
+                    const now = new Date();
+                    const chosen = new Date(
+                      now.getFullYear(), now.getMonth(), now.getDate(),
+                      hh, mm, 0, 0
+                    );
+                    return chosen.getTime() <= Date.now() + 60_000;
+                  })()}
                   onClick={() => {
                     if (!etaModalFor || !customEtaTime) return;
-                    // Convert HH:MM (local time) to absolute Unix ms using today's date in ET
+                    // Build the ETA date using the device's local time (which is what the cleaner sees)
                     const [hh, mm] = customEtaTime.split(":").map(Number);
                     const now = new Date();
                     const etaDate = new Date(
                       now.getFullYear(), now.getMonth(), now.getDate(),
                       hh, mm, 0, 0
                     );
-                    // If the chosen time is in the past (e.g. cleaner typed 8:00 at 9:00), bump to tomorrow
-                    if (etaDate.getTime() < Date.now() - 60_000) {
-                      etaDate.setDate(etaDate.getDate() + 1);
-                    }
+                    // Safety check — should never happen because button is disabled for past times,
+                    // but guard anyway
+                    if (etaDate.getTime() <= Date.now() + 60_000) return;
+                    // Format label in the device's local timezone (same timezone the cleaner is in)
                     const label = `at ${etaDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
                     const targetId = nextJobEtaTarget?.id ?? job.id;
                     statusMutation.mutate({
