@@ -1443,3 +1443,10 @@
 ## Bug: ETA Update SMS Not Showing in Ops Chat
 
 - [ ] Find ops chat post call in sendClientOnTheWaySms and replicate in sendClientEtaUpdateSms and sendRunningLateSms
+
+## ETA / Cleaner Portal Safety Alerts
+
+- [ ] BUG FIX: Post-complete "Next Job" CTA bypasses ETA modal — fix to open ETA modal for next job instead of firing status directly
+- [ ] GUARD: Mark Complete confirmation — warn if completing a job that is NOT the one currently in_progress/finishing_up (wrong-job protection)
+- [ ] GUARD: Stale ETA banner — show yellow warning on job card if etaTimestamp is >30 min in the past and status is still on_the_way or running_late
+- [ ] GUARD: No-ETA status warning — toast when cleaner taps in_progress/finishing_up without ever having set on_the_way (client not notified)

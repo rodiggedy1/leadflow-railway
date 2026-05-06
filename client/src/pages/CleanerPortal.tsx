@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import {
   Camera, Star, CheckCircle2, Clock, MapPin, DollarSign,
   ChevronLeft, ChevronRight, Upload, Loader2, LogOut, User,
-  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, X
+  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -342,7 +342,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   // ETA modal — full blocking popup
   const [showEtaModal, setShowEtaModal] = useState(false);
   const [etaModalFor, setEtaModalFor] = useState<"on_the_way" | "running_late" | null>(null);
-
+  // When opened from the post-complete "Next Job" CTA, fire the mutation for this job id instead of job.id
+  const [nextJobEtaTarget, setNextJobEtaTarget] = useState<{ id: number; customerName: string | null } | null>(null);
   const ETA_OPTIONS = [
     { label: "30 min",      value: "30 minutes" },
     { label: "1 hour",     value: "1 hour" },
@@ -1050,30 +1051,39 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             </div>
           )}
           {(job.jobStatus === "on_the_way" || job.jobStatus === "running_late") && (
-            <div className="flex items-center gap-2">
-              <p className={`text-xs rounded px-2 py-1 border flex-1 ${
-                job.jobStatus === "on_the_way"
-                  ? "text-blue-300 bg-blue-900/20 border-blue-700/30"
-                  : "text-orange-300 bg-orange-900/20 border-orange-700/30"
-              }`}>
-                {job.etaTimestamp
-                  ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
-                  : job.jobStatus === "on_the_way" ? "On the Way" : "Running Late"
-                }
-              </p>
-              <button
-                onClick={() => {
-                  setEtaModalFor(job.jobStatus as "on_the_way" | "running_late");
-                  setShowEtaModal(true);
-                }}
-                className={`text-[11px] font-semibold px-2 py-1 rounded-full border transition-colors cursor-pointer ${
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <p className={`text-xs rounded px-2 py-1 border flex-1 ${
                   job.jobStatus === "on_the_way"
-                    ? "text-blue-300 border-blue-600/50 bg-blue-900/30 hover:bg-blue-800/50"
-                    : "text-orange-300 border-orange-600/50 bg-orange-900/30 hover:bg-orange-800/50"
-                }`}
-              >
-                Update ETA
-              </button>
+                    ? "text-blue-300 bg-blue-900/20 border-blue-700/30"
+                    : "text-orange-300 bg-orange-900/20 border-orange-700/30"
+                }`}>
+                  {job.etaTimestamp
+                    ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+                    : job.jobStatus === "on_the_way" ? "On the Way" : "Running Late"
+                  }
+                </p>
+                <button
+                  onClick={() => {
+                    setEtaModalFor(job.jobStatus as "on_the_way" | "running_late");
+                    setShowEtaModal(true);
+                  }}
+                  className={`text-[11px] font-semibold px-2 py-1 rounded-full border transition-colors cursor-pointer ${
+                    job.jobStatus === "on_the_way"
+                      ? "text-blue-300 border-blue-600/50 bg-blue-900/30 hover:bg-blue-800/50"
+                      : "text-orange-300 border-orange-600/50 bg-orange-900/30 hover:bg-orange-800/50"
+                  }`}
+                >
+                  Update ETA
+                </button>
+              </div>
+              {/* Stale ETA banner — shown when ETA has passed by more than 30 min */}
+              {job.etaTimestamp !== null && job.etaTimestamp < Date.now() - 30 * 60 * 1000 && (
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-900/30 border border-amber-600/40 rounded-lg">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <p className="text-amber-300 text-xs flex-1">ETA has passed — tap <strong>Update ETA</strong> to notify your client.</p>
+                </div>
+              )}
             </div>
           )}
           {job.jobStatus === "issue_at_property" && job.issueNote && (
@@ -1163,12 +1173,12 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               <p className={`text-sm font-semibold ${
                 etaModalFor === "on_the_way" ? "text-blue-200" : "text-orange-200"
               }`}>
-                When will you arrive?
+                When will you arrive at {nextJobEtaTarget?.customerName ?? job.customerName ?? "your client"}'s home?
               </p>
-              <p className={`text-xs mt-1 ${
+              <p className={`text-xs mt-1 font-semibold ${
                 etaModalFor === "on_the_way" ? "text-blue-400" : "text-orange-400"
               }`}>
-                Select your ETA — your client will be notified automatically.
+                ⚠ Your client will be texted this arrival time immediately. Only select a time you can 100% guarantee.
               </p>
             </div>
 
@@ -1179,9 +1189,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   key={opt.value}
                   onClick={() => {
                     if (!etaModalFor) return;
-                    statusMutation.mutate({ cleanerJobId: job.id, status: etaModalFor, etaLabel: opt.value });
+                    const targetId = nextJobEtaTarget?.id ?? job.id;
+                    statusMutation.mutate({ cleanerJobId: targetId, status: etaModalFor, etaLabel: opt.value });
                     setShowEtaModal(false);
                     setEtaModalFor(null);
+                    setNextJobEtaTarget(null);
                   }}
                   disabled={statusMutation.isPending}
                   className={`py-4 rounded-2xl text-sm font-bold border-2 transition-all active:scale-95 disabled:opacity-50 ${
@@ -1205,6 +1217,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               onClick={() => {
                 setShowEtaModal(false);
                 setEtaModalFor(null);
+                setNextJobEtaTarget(null);
               }}
               disabled={statusMutation.isPending}
             >
@@ -1235,6 +1248,35 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 </div>
               </div>
             )}
+
+            {/* Are-you-sure confirmation block — always shown */}
+            <div className="flex items-start gap-3 p-3 bg-emerald-950/40 border border-emerald-700/40 rounded-xl">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-emerald-300">You are completing: {job.customerName ?? "this job"}</p>
+                <p className="text-xs text-emerald-400/80 mt-0.5">Your client will receive a completion text message.</p>
+              </div>
+            </div>
+
+            {/* Wrong-job guard — only shown when another job is actively in progress */}
+            {(() => {
+              const activeOther = allJobs.find(
+                j => j.id !== job.id &&
+                  (j.jobStatus === "in_progress" || j.jobStatus === "finishing_up" || j.jobStatus === "arrived")
+              );
+              if (!activeOther) return null;
+              return (
+                <div className="flex items-start gap-3 p-3 bg-red-950/60 border border-red-600/50 rounded-xl">
+                  <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-300">Wrong job?</p>
+                    <p className="text-xs text-red-400/80 mt-0.5">
+                      Your active job appears to be <strong className="text-red-200">{activeOther.customerName ?? "another client"}</strong> — are you sure you're completing the right one?
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Irreversible warning */}
             <div className="flex items-start gap-3 p-3 bg-slate-800 border border-slate-700 rounded-xl">
@@ -1314,8 +1356,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     size="sm"
                     className="w-full bg-blue-600 hover:bg-blue-500 text-white"
                     onClick={() => {
-                      statusMutation.mutate({ cleanerJobId: nextJob.id, status: "on_the_way", etaLabel: "on the way" });
                       setShowPostComplete(false);
+                      // Open the blocking ETA modal targeting the next job
+                      setNextJobEtaTarget({ id: nextJob.id, customerName: nextJob.customerName ?? null });
+                      setEtaModalFor("on_the_way");
+                      setShowEtaModal(true);
                     }}
                   >
                     Set "On the Way" for Next Job
