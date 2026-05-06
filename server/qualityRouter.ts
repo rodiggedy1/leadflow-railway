@@ -760,19 +760,23 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
       errors.push(`Team-reassign cleanup booking ${booking.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
-  // ── Stale cleanup ──
+  // ── Stale cleanup: delete any DB row not in L27's response ──
+  // If L27 has 5 bookings, LeadFlow must have 5 bookings. Any row not in L27 is deleted.
   let staleMarked = 0;
   try {
     const freshBookingIds = bookings.map((b) => b.id);
-    if (freshBookingIds.length > 0) {
-      const staleRows = await db
-        .select({ id: cleanerJobs.id })
-        .from(cleanerJobs)
-        .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")));
-      for (const row of staleRows) {
-        await db.update(cleanerJobs).set({ bookingStatus: "rescheduled" }).where(eq(cleanerJobs.id, row.id));
-        staleMarked++;
-      }
+    const staleRows = freshBookingIds.length > 0
+      ? await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds)))
+      : await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.jobDate, dateStr));
+    for (const row of staleRows) {
+      await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+      staleMarked++;
     }
   } catch (staleErr) {
     errors.push(`Stale cleanup error: ${staleErr instanceof Error ? staleErr.message : String(staleErr)}`);
@@ -1767,36 +1771,23 @@ export const qualityRouter = router({
         }
       }
 
-      // ── Stale cleanup: mark rows that are no longer in Launch27's response as "rescheduled" ──
-      // Collect all (bookingId, cleanerProfileId) pairs returned by Launch27 for this date.
-      // Any DB row for this date whose bookingId is NOT in that set was removed/rescheduled
-      // in Launch27 after the last sync — mark it so it disappears from the Day Board.
+      // ── Stale cleanup: delete any DB row not in L27's response ──
+      // If L27 has 5 bookings, LeadFlow must have 5 bookings. Any row not in L27 is deleted.
       let staleMarked = 0;
       try {
         const freshBookingIds = bookings.map((b) => b.id);
-        if (freshBookingIds.length > 0) {
-          // Find all DB rows for this date whose bookingId is no longer in the fresh list
-          const staleRows = await db
-            .select({ id: cleanerJobs.id })
-            .from(cleanerJobs)
-            .where(
-              and(
-                eq(cleanerJobs.jobDate, dateStr),
-                notInArray(cleanerJobs.bookingId, freshBookingIds),
-                ne(cleanerJobs.bookingStatus, "rescheduled"),
-                ne(cleanerJobs.bookingStatus, "cancelled")
-              )
-            );
-          if (staleRows.length > 0) {
-            // Update each stale row individually
-            for (const row of staleRows) {
-              await db
-                .update(cleanerJobs)
-                .set({ bookingStatus: "rescheduled" })
-                .where(eq(cleanerJobs.id, row.id));
-              staleMarked++;
-            }
-          }
+        const staleRows = freshBookingIds.length > 0
+          ? await db
+              .select({ id: cleanerJobs.id })
+              .from(cleanerJobs)
+              .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds)))
+          : await db
+              .select({ id: cleanerJobs.id })
+              .from(cleanerJobs)
+              .where(eq(cleanerJobs.jobDate, dateStr));
+        for (const row of staleRows) {
+          await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
+          staleMarked++;
         }
       } catch (staleErr) {
         errors.push(`Stale cleanup error: ${staleErr instanceof Error ? staleErr.message : String(staleErr)}`);
