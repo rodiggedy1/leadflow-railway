@@ -519,14 +519,20 @@ export const cleanerRouter = router({
       }
 
       if (input.status === "on_the_way") {
-        // First tap: sendClientOnTheWaySms claims the step and sends the initial SMS.
-        // Repeat taps (ETA updates): sendClientEtaUpdateSms sends every time, no dedup.
+        // sendClientOnTheWaySms handles the initial SMS (guarded by tryClaimStep — no-op on repeat).
+        // sendClientEtaUpdateSms fires ONLY when etaLabel is present, which means the cleaner
+        // tapped "Update ETA" (not the first "On the Way" tap). This prevents the double-SMS
+        // bug where both functions fired in parallel on the first tap, causing the client to
+        // receive two identical texts within seconds.
         sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
           console.error("[FieldMgmt] sendClientOnTheWaySms error:", err)
         );
-        sendClientEtaUpdateSms(input.cleanerJobId).catch(err =>
-          console.error("[FieldMgmt] sendClientEtaUpdateSms error:", err)
-        );
+        if (input.etaLabel) {
+          // etaLabel present = cleaner is updating an existing ETA (Update ETA button)
+          sendClientEtaUpdateSms(input.cleanerJobId).catch(err =>
+            console.error("[FieldMgmt] sendClientEtaUpdateSms error:", err)
+          );
+        }
       }
       if (input.status === "arrived") {
         sendArrivedCheckin(input.cleanerJobId).catch(err =>

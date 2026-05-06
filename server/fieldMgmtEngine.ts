@@ -300,31 +300,30 @@ export async function tryClaimStep(params: {
   const db = await getDb();
   if (!db) return false; // safe default: don't fire if DB is down
   try {
-    // TiDB-compatible dedup: SELECT first, then INSERT.
-    // TiDB returns affectedRows=1 for both first insert AND no-op ON DUPLICATE KEY UPDATE,
-    // so we cannot rely on affectedRows to detect duplicates. Instead, check existence
-    // before inserting. The UNIQUE constraint on (cleanerJobId, step) still prevents
-    // actual duplicate rows if two concurrent calls slip through the SELECT window.
-    const existing = await db
-      .select({ id: fieldMgmtLog.id })
-      .from(fieldMgmtLog)
-      .where(and(eq(fieldMgmtLog.cleanerJobId, params.cleanerJobId), eq(fieldMgmtLog.step, params.step as any)))
-      .limit(1);
-    if (existing.length > 0) return false; // already fired
-    // Attempt to claim — ON DUPLICATE KEY UPDATE is the race guard for concurrent calls
-    await db.insert(fieldMgmtLog).values({
-      cleanerJobId: params.cleanerJobId,
-      step: params.step as any,
-      success: 1, // optimistic — update to 0 on failure via updateStepOutcome
-      smsSent: params.smsSent ?? null,
-      recipientPhone: params.recipientPhone ?? null,
-      openPhoneMessageId: params.openPhoneMessageId ?? null,
-      deliveryStatus: params.deliveryStatus ?? null,
-      firedAt: new Date(),
-    }).onDuplicateKeyUpdate({ set: { cleanerJobId: params.cleanerJobId } }); // no-op race guard
-    // Re-verify: if another concurrent call inserted first, the row already existed above
-    // and we returned false. If we got here, we are the first — proceed.
-    return true;
+    // Atomic dedup via INSERT IGNORE:
+    // INSERT IGNORE skips the insert (affectedRows=0) when a row with the same
+    // UNIQUE key (cleanerJobId, step) already exists. Unlike ON DUPLICATE KEY UPDATE,
+    // TiDB correctly returns affectedRows=0 for a skipped INSERT IGNORE — so we can
+    // reliably detect whether THIS call won the race without a SELECT-then-INSERT
+    // window that allowed two concurrent calls to both return true.
+    const result = await db.execute(
+      sql`INSERT IGNORE INTO field_mgmt_log
+        (cleanerJobId, step, success, smsSent, recipientPhone, openPhoneMessageId, deliveryStatus, firedAt)
+        VALUES (
+          ${params.cleanerJobId},
+          ${params.step},
+          1,
+          ${params.smsSent ?? null},
+          ${params.recipientPhone ?? null},
+          ${params.openPhoneMessageId ?? null},
+          ${params.deliveryStatus ?? null},
+          NOW()
+        )`
+    );
+    // affectedRows === 1 → we inserted the row (we won the race) → proceed
+    // affectedRows === 0 → duplicate existed (another call already claimed this step) → skip
+    const affectedRows = (result as any)?.[0]?.affectedRows ?? (result as any)?.rowsAffected ?? 0;
+    return affectedRows > 0;
   } catch (err) {
     console.error(`[FieldMgmt] tryClaimStep failed for step ${params.step} job ${params.cleanerJobId}:`, err);
     return false;
@@ -1542,6 +1541,24 @@ export async function sendRunningLateSms(cleanerJobId: number): Promise<void> {
     ``,
     `Really appreciate your flexibility, and we do apologize for the delay. Look forward to seeing you soon. 🙏`,
   ].join("\n");
+
+  // Cooldown guard: prevent triple-fire when cleaner taps "Running Late" multiple times
+  // within seconds (double-tap or network lag). Allow at most one running-late SMS per
+  // 2-minute window. Legitimate repeat updates (cleaner changing ETA again later) still
+  // fire because the cooldown window expires.
+  const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+  const recentRunningLate = await db.execute(
+    sql`SELECT id FROM field_mgmt_log
+        WHERE cleanerJobId = ${cleanerJobId}
+          AND step LIKE 'client_running_late_%'
+          AND firedAt >= ${twoMinutesAgo}
+        LIMIT 1`
+  );
+  const recentRows = (recentRunningLate as any)?.[0] ?? [];
+  if (Array.isArray(recentRows) && recentRows.length > 0) {
+    console.log(`[FieldMgmt] Running late SMS cooldown active for job ${cleanerJobId} — skipping duplicate within 2 min`);
+    return;
+  }
 
   // Use a unique step name per call so each running-late tap sends a new SMS.
   // The dedup guard on a fixed step name was silently blocking repeat running-late notifications.
