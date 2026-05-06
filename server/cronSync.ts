@@ -594,6 +594,21 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // ── Nurture send: triggered externally every 5 min to work around Cloud Run idle scaling ──
+  app.post("/api/cron/nurture-send", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
+    if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const { runNurtureSend } = await import("./nurtureCron");
+      const result = await runNurtureSend();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   // ── One-shot: backfill cleanerJobId on existing cleaner_status cards ────────────────
   app.post("/api/cron/backfill-cleaner-job-id", async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;
