@@ -1,4 +1,4 @@
-/**
+/*
  * nurtureSequence.ts
  *
  * 30-day SMS lead nurture sequence engine.
@@ -7,9 +7,10 @@
  * This sequence starts at step 3 (+50 min) and runs through step 17 (Day 30).
  *
  * Timing is calculated from leadCreatedAt (original submission time), not enrollment time.
- * All times are in US Eastern time (America/New_York).
+ * All times are in the business timezone defined by BUSINESS_TIMEZONE env var (default: America/Los_Angeles).
  */
 
+import { ENV } from "./_core/env";
 import { nurtureEnrollments, conversationSessions } from "../drizzle/schema";
 import { eq, and, lte, inArray } from "drizzle-orm";
 import { getDb } from "./db";
@@ -35,51 +36,49 @@ export interface NurtureContext {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
- * Returns a Date set to the given hour:minute in US Eastern time on the
+ * Returns the business timezone string from env (default: America/Los_Angeles).
+ */
+function getBusinessTimezone(): string {
+  return ENV.businessTimezone || "America/Los_Angeles";
+}
+
+/**
+ * Returns the UTC offset for the business timezone at a given date (handles DST).
+ * Returns milliseconds: (localMs - utcMs), negative for timezones behind UTC.
+ */
+function getTzOffsetMs(date: Date): number {
+  const tz = getBusinessTimezone();
+  const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" });
+  const localStr = date.toLocaleString("en-US", { timeZone: tz });
+  const utcMs = new Date(utcStr).getTime();
+  const localMs = new Date(localStr).getTime();
+  return localMs - utcMs; // negative for timezones behind UTC
+}
+
+/**
+ * Returns a Date set to the given hour:minute in the business timezone on the
  * same calendar day as `base` + `daysOffset` days.
  */
-function etTime(base: Date, daysOffset: number, hour: number, minute = 0): Date {
-  // Work in ET by formatting and reparsing
-  const etFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
+function localTime(base: Date, daysOffset: number, hour: number, minute = 0): Date {
+  const tz = getBusinessTimezone();
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   });
 
-  // Get the ET date of base + daysOffset days
   const shifted = new Date(base.getTime() + daysOffset * 24 * 60 * 60 * 1000);
-  const parts = etFormatter.formatToParts(shifted);
+  const parts = formatter.formatToParts(shifted);
   const year = parseInt(parts.find((p) => p.type === "year")!.value);
   const month = parseInt(parts.find((p) => p.type === "month")!.value) - 1;
   const day = parseInt(parts.find((p) => p.type === "day")!.value);
 
-  // Build the target ET datetime string and convert to UTC
-  // "2024-04-28T09:00:00" in ET
-  const etString = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
+  const localString = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`;
 
-  // Parse as ET by using a trick: append timezone offset
-  // Simpler: use Date constructor with explicit offset
-  // etString is the wall-clock time in ET. To convert ET→UTC:
-  // UTC = ET_wall_clock_as_UTC - ET_offset
-  // getEtOffsetMs returns (etMs - utcMs) which is negative (e.g. -14400000 for EDT)
-  // So: UTC = etString_as_UTC - (negative offset) = etString_as_UTC + |offset|
-  const etDate = new Date(
-    new Date(etString + "Z").getTime() - getEtOffsetMs(shifted)
+  return new Date(
+    new Date(localString + "Z").getTime() - getTzOffsetMs(shifted)
   );
-  return etDate;
-}
-
-/**
- * Returns the UTC offset for America/New_York at a given date (handles DST).
- * Returns milliseconds to ADD to UTC to get ET (negative for behind UTC).
- */
-function getEtOffsetMs(date: Date): number {
-  const utcStr = date.toLocaleString("en-US", { timeZone: "UTC" });
-  const etStr = date.toLocaleString("en-US", { timeZone: "America/New_York" });
-  const utcMs = new Date(utcStr).getTime();
-  const etMs = new Date(etStr).getTime();
-  return etMs - utcMs; // negative (ET is behind UTC)
 }
 
 /**
@@ -121,7 +120,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 1,
     label: "Soft reset",
     // "Same evening" — 7 PM ET on the day of submission
-    scheduledAt: (t) => etTime(t, 0, 19, 0),
+    scheduledAt: (t) => localTime(t, 0, 19, 0),
     buildMessage: () =>
       "No worries if today got busy — happens to everyone. I can check what's open tomorrow or later this week if that works better?",
   },
@@ -132,7 +131,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 2,
     label: "Fresh start",
     // Day 2 morning — 9 AM ET
-    scheduledAt: (t) => etTime(t, 1, 9, 0),
+    scheduledAt: (t) => localTime(t, 1, 9, 0),
     buildMessage: ({ firstName }) =>
       `Morning ${firstName} — still need the cleaning done? I've got the schedule in front of me.`,
   },
@@ -141,7 +140,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 2,
     label: "Simple CTA",
     // Day 2 midday — 12 PM ET
-    scheduledAt: (t) => etTime(t, 1, 12, 0),
+    scheduledAt: (t) => localTime(t, 1, 12, 0),
     buildMessage: () =>
       "Would morning or evening work better if we can fit you in?",
   },
@@ -150,7 +149,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 2,
     label: "Last call",
     // Day 2 evening — 6 PM ET
-    scheduledAt: (t) => etTime(t, 1, 18, 0),
+    scheduledAt: (t) => localTime(t, 1, 18, 0),
     buildMessage: () =>
       "Last message for today — almost full this week. Want me to grab you one of the last spots?",
   },
@@ -159,7 +158,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 2,
     label: "Value reminder",
     // Day 3 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 2, 10, 0),
+    scheduledAt: (t) => localTime(t, 2, 10, 0),
     buildMessage: () =>
       "Just so you know — we bring everything and handle the full home in one visit. No prep needed on your end. Want me to check times?",
   },
@@ -170,7 +169,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 3,
     label: "Circle back",
     // Day 4 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 3, 10, 0),
+    scheduledAt: (t) => localTime(t, 3, 10, 0),
     buildMessage: ({ firstName }) =>
       `Hey ${firstName} — still looking to get the cleaning done, or did you already sort it out?`,
   },
@@ -179,7 +178,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 3,
     label: "Timing opener",
     // Day 6 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 5, 10, 0),
+    scheduledAt: (t) => localTime(t, 5, 10, 0),
     buildMessage: () =>
       "If timing was the issue, we still have a few spots open this week. Want me to check what works for you?",
   },
@@ -188,7 +187,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 3,
     label: "First-time offer",
     // Day 7 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 6, 10, 0),
+    scheduledAt: (t) => localTime(t, 6, 10, 0),
     buildMessage: () =>
       "We had a couple openings come up — if you book this week I can take something off for a first-time clean. Want me to check times?",
   },
@@ -199,7 +198,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 4,
     label: "Still need help?",
     // Day 10 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 9, 10, 0),
+    scheduledAt: (t) => localTime(t, 9, 10, 0),
     buildMessage: ({ firstName }) =>
       `Hey ${firstName}, still need help with the cleaning this week, or should I close this out for now?`,
   },
@@ -208,7 +207,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 4,
     label: "Convenience reframe",
     // Day 14 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 13, 10, 0),
+    scheduledAt: (t) => localTime(t, 13, 10, 0),
     buildMessage: () =>
       "Quick one — you don't have to be home, we bring everything, and the whole place gets done in one visit. Want me to check what's open?",
   },
@@ -217,7 +216,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 4,
     label: "Trust signal",
     // Day 18 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 17, 10, 0),
+    scheduledAt: (t) => localTime(t, 17, 10, 0),
     buildMessage: () =>
       "Totally get it if you're still deciding — we're insured, background-checked, and our team cleans homes like yours every week. Want me to send a couple times?",
   },
@@ -226,7 +225,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 4,
     label: "Schedule gap fill",
     // Day 21 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 20, 10, 0),
+    scheduledAt: (t) => localTime(t, 20, 10, 0),
     buildMessage: () =>
       "We had a few last-minute openings come up — if you still want the cleaning done, I can check if one of them works for you.",
   },
@@ -235,7 +234,7 @@ export const NURTURE_STEPS: NurtureStep[] = [
     phase: 4,
     label: "Breakup text",
     // Day 30 — 10 AM ET
-    scheduledAt: (t) => etTime(t, 29, 10, 0),
+    scheduledAt: (t) => localTime(t, 29, 10, 0),
     buildMessage: ({ firstName }) =>
       `Hey ${firstName}, I'll close this out for now so I'm not bugging you. If you still need help with the cleaning later, just reply here and I'll check the schedule 👍`,
   },

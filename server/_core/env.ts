@@ -21,4 +21,5 @@ export const ENV = {
   zapierWebhookSecret: process.env.ZAPIER_WEBHOOK_SECRET ?? "",
   quoteAppSecret: process.env.QUOTE_APP_SECRET ?? "",
   quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://maidsquotes-b55s3sg4.manus.space",
+  businessTimezone: process.env.BUSINESS_TIMEZONE ?? "America/Los_Angeles",
 };
