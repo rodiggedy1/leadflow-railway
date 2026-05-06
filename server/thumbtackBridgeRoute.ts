@@ -84,8 +84,8 @@ export function registerThumbTackBridgeRoute(app: Express) {
         : `+1${realPhone.replace(/\D/g, "")}`;
 
       // Normalize the thumbtack name for matching:
-      // "Mauli D." → "Mauli D" (strip trailing period for flexible match)
-      const nameNormalized = thumbtackName.trim().replace(/\.$/, "");
+      // Strip ALL periods so "L. W." and "L W." both become "L W" for LIKE matching
+      const nameNormalized = thumbtackName.trim().replace(/\./g, "").replace(/\s+/g, " ").trim();
 
       // Find the session: leadName matches (with or without trailing period) AND phone is a placeholder OR null
       // Thumbtack leads with no phone get leadPhone=null; those with a placeholder get leadPhone='no-phone-thumbtack-...' or 'thumbtack-...'
