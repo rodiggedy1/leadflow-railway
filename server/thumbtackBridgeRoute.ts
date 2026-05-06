@@ -13,7 +13,7 @@
 import type { Express } from "express";
 import { getDb } from "./db";
 import { conversationSessions } from "../drizzle/schema";
-import { eq, like, and, or, isNull } from "drizzle-orm";
+import { eq, like, and, or, isNull, notLike } from "drizzle-orm";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -56,6 +56,39 @@ export function registerThumbTackBridgeRoute(app: Express) {
    * Updates the session with the real phone number and full name (if available).
    * Returns the sessionId so the bridge call can be fired with the correct session.
    */
+  // Wipe all previously revealed real phones from the DB.
+  // Called the moment a new lead is detected — before anything else.
+  app.post("/api/thumbtack/clear-previous-phone", async (req, res) => {
+    try {
+      const db = await getDb();
+      if (!db) { res.status(500).json({ error: "Database unavailable" }); return; }
+      // Find sessions with a real phone (starts with + or digit — not a placeholder)
+      const revealed = await db
+        .select({ id: conversationSessions.id, leadName: conversationSessions.leadName })
+        .from(conversationSessions)
+        .where(
+          and(
+            notLike(conversationSessions.leadPhone, "thumbtack%"),
+            notLike(conversationSessions.leadPhone, "no-phone%"),
+            notLike(conversationSessions.leadPhone, "thumbtack-cleared%")
+          )
+        )
+        .limit(20);
+      const toWipe = revealed.filter(s => s.leadName); // only real sessions
+      for (const s of toWipe) {
+        await db
+          .update(conversationSessions)
+          .set({ leadPhone: `thumbtack-cleared-${Date.now()}` })
+          .where(eq(conversationSessions.id, s.id));
+        console.log(`[ThumbTackBridge] clear-previous-phone: wiped phone from session ${s.id} ("${s.leadName}")`);
+      }
+      res.json({ success: true, wiped: toWipe.length });
+    } catch (err) {
+      console.error("[ThumbTackBridge] clear-previous-phone error:", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.post("/api/thumbtack/update-lead-phone", async (req, res) => {
     try {
       const {
