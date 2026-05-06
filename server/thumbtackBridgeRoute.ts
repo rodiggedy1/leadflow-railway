@@ -13,7 +13,7 @@
 import type { Express } from "express";
 import { getDb } from "./db";
 import { conversationSessions } from "../drizzle/schema";
-import { eq, like, and } from "drizzle-orm";
+import { eq, like, and, or, isNull } from "drizzle-orm";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 
@@ -87,14 +87,19 @@ export function registerThumbTackBridgeRoute(app: Express) {
       // "Mauli D." → "Mauli D" (strip trailing period for flexible match)
       const nameNormalized = thumbtackName.trim().replace(/\.$/, "");
 
-      // Find the session: leadName matches (with or without trailing period) AND phone is a placeholder
+      // Find the session: leadName matches (with or without trailing period) AND phone is a placeholder OR null
+      // Thumbtack leads with no phone get leadPhone=null; those with a placeholder get leadPhone='no-phone-thumbtack-...' or 'thumbtack-...'
       const sessions = await db
         .select()
         .from(conversationSessions)
         .where(
           and(
             like(conversationSessions.leadName, `${nameNormalized}%`),
-            like(conversationSessions.leadPhone, "thumbtack%")
+            or(
+              isNull(conversationSessions.leadPhone),
+              like(conversationSessions.leadPhone, "thumbtack%"),
+              like(conversationSessions.leadPhone, "no-phone%")
+            )
           )
         )
         .orderBy(conversationSessions.id)
