@@ -1449,6 +1449,55 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
   return { checked, sent, errors };
 }
 
+// ── ETA Approaching — Proactive Client Reassurance ──────────────────────────
+
+/**
+ * Fires once per job when the cleaner's set ETA is ~5 minutes away and they
+ * are still on_the_way or running_late (not yet arrived).
+ * Sends a warm reassurance SMS to the client — no ETA time mentioned to avoid
+ * committing to a time that may be blown.
+ * Idempotent: guarded by tryClaimStep with step "client_eta_approaching".
+ * Called from the stale_eta cron in internalCron.ts.
+ */
+export async function sendClientEtaApproachingSms(cleanerJobId: number): Promise<void> {
+  if (!FIELD_MGMT_ENABLED) return;
+  const db = await getDb();
+  if (!db) return;
+  const jobRows = await db
+    .select()
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  const job = jobRows[0];
+  if (!job) return;
+  // Only fire for jobs that are still on the way (not yet arrived)
+  if (job.jobStatus !== "on_the_way" && job.jobStatus !== "running_late") return;
+  // Only fire for assigned jobs — never send client SMS for unassigned/cancelled
+  const assigned = await isJobAssigned(cleanerJobId);
+  if (!assigned) return;
+  const clientPhone = job.customerPhone;
+  if (!clientPhone) {
+    console.warn(`[FieldMgmt] ETA approaching: no customer phone for job ${cleanerJobId}`);
+    return;
+  }
+  const clientFirstName = firstName(job.customerName);
+  const msg = [
+    `Hi ${clientFirstName}! Your Maids in Black team is on their way to you. We'll send you an update as soon as they're close. Thanks for your patience! 🚗`,
+    ``,
+    `If you have any questions, just reply here.`,
+  ].join("\n");
+  const claimed = await tryClaimStep({ cleanerJobId, step: "client_eta_approaching", smsSent: msg, recipientPhone: clientPhone });
+  if (!claimed) return; // already sent for this job
+  const result = await sendSms({ to: clientPhone, content: msg });
+  if (result.success) {
+    console.log(`[FieldMgmt] ETA approaching SMS sent to ${clientPhone} for job ${cleanerJobId}`);
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "client_eta_approaching", result.messageId);
+  } else {
+    await updateStepOutcome(cleanerJobId, "client_eta_approaching", false, result.error);
+    console.error(`[FieldMgmt] ETA approaching SMS FAILED for job ${cleanerJobId}:`, result.error);
+  }
+}
+
 // ── Running Late — Client Notification ───────────────────────────────────────
 
 /**

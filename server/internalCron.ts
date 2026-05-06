@@ -38,6 +38,7 @@ import {
   runCheckinCalls,
   runCheckinCallsT30,
   runPostStartEscalation,
+  sendClientEtaApproachingSms,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
@@ -643,6 +644,32 @@ export function startInternalCron(): void {
         const { broadcastOpsUpdate } = await import("./sseBroadcast");
         broadcastOpsUpdate("new_message");
         console.log(`[InternalCron] StaleETA — posted alert for job ${job.id} (${cleanerFirst}, ETA was ${etaStr})`);
+      }
+
+      // ── ETA Approaching: fire client SMS 5 min before ETA ─────────────────
+      // Finds on_the_way or running_late jobs whose ETA is within the next 5 minutes
+      // (i.e. etaTimestamp is between now and now+5min) and sends a warm reassurance
+      // SMS to the client. Dedup is handled inside sendClientEtaApproachingSms via
+      // tryClaimStep("client_eta_approaching") — fires once per job, never twice.
+      if (FIELD_MGMT_ENABLED) {
+        const fiveMinMs = 5 * 60 * 1000;
+        const approachingJobs = await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(and(
+            isNotNull(cleanerJobs.etaTimestamp),
+            gte(cleanerJobs.etaTimestamp, now),
+            lte(cleanerJobs.etaTimestamp, now + fiveMinMs),
+            gte(cleanerJobs.etaTimestamp, todayStartMs)
+          ));
+        for (const aj of approachingJobs) {
+          sendClientEtaApproachingSms(aj.id).catch(err =>
+            console.error(`[InternalCron] EtaApproaching SMS error for job ${aj.id}:`, err)
+          );
+        }
+        if (approachingJobs.length > 0) {
+          console.log(`[InternalCron] EtaApproaching — queued SMS for ${approachingJobs.length} job(s)`);
+        }
       }
     } catch (err) {
       console.error("[InternalCron] StaleETA check failed:", err);
