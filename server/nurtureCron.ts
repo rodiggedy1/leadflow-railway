@@ -29,6 +29,80 @@ import {
 } from "./nurtureSequence";
 import { nurtureStepScripts } from "../drizzle/schema";
 
+// ── Quiet hours helpers ──────────────────────────────────────────────────────
+
+/** Returns the current hour (0–23) in America/New_York timezone. */
+function getEasternHour(date: Date = new Date()): number {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      hour12: false,
+    }).format(date),
+    10
+  );
+}
+
+/**
+ * Returns true if the current moment is within the quiet window (10pm–8am Eastern).
+ */
+function isEasternQuietHours(): boolean {
+  const h = getEasternHour();
+  return h >= 22 || h < 8;
+}
+
+/**
+ * Returns the next 8:00am Eastern as a UTC Date.
+ * Works correctly across DST transitions by iterating forward in 1-minute
+ * increments from the current time until we hit 8am Eastern — but that's
+ * too slow. Instead we use a direct calculation:
+ *   1. Get today's Eastern date parts.
+ *   2. Construct a UTC timestamp for 8am Eastern today by binary-searching
+ *      the UTC offset at that moment.
+ *   3. If that time is already past (or we're past 10pm), add 24h.
+ */
+function nextEasternSendWindow(): Date {
+  const now = new Date();
+  const h = getEasternHour(now);
+
+  // Get Eastern date parts for today
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(now);
+  const p: Record<string, string> = {};
+  for (const part of parts) p[part.type] = part.value;
+
+  // 8am Eastern:
+  //   EDT (UTC-4): 8am ET = 12:00 UTC  → utcHour = 12
+  //   EST (UTC-5): 8am ET = 13:00 UTC  → utcHour = 13
+  // Try both and pick whichever Intl confirms as Eastern hour 8.
+  const dateStr = `${p.year}-${p.month}-${p.day}`;
+  let candidate: Date | null = null;
+  for (const offsetHours of [4, 5]) {
+    const utcHour = 8 + offsetHours;
+    const probe = new Date(`${dateStr}T${String(utcHour).padStart(2, "0")}:00:00Z`);
+    if (getEasternHour(probe) === 8) {
+      candidate = probe;
+      break;
+    }
+  }
+  // Fallback: 12:00 UTC = 8am EDT (shouldn't be needed)
+  if (candidate === null) {
+    candidate = new Date(`${dateStr}T12:00:00Z`);
+  }
+
+  // If it's 10pm or later Eastern, push to tomorrow's 8am
+  if (h >= 22) {
+    candidate = new Date(candidate.getTime() + 24 * 3600 * 1000);
+  }
+
+  return candidate;
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /**
@@ -278,6 +352,22 @@ export async function runNurtureSend(): Promise<{
         }
         // Normalize to E.164 for the actual send
         const currentPhone = normalizePhone(rawPhone);
+
+        // ── Quiet hours guard (10pm–8am Eastern) ──────────────────────────────
+        // If we're in the quiet window, reschedule to 8am Eastern and skip.
+        // The message is NOT lost — it fires at 8am on the next send tick.
+        if (isEasternQuietHours()) {
+          const nextWindow = nextEasternSendWindow();
+          await db
+            .update(nurtureEnrollments)
+            .set({ nextSendAt: nextWindow })
+            .where(eq(nurtureEnrollments.id, enrollment.id));
+          console.log(
+            `[NurtureSend] Quiet hours — rescheduled enrollment ${enrollment.id} step ${enrollment.nextStep} to ${nextWindow.toISOString()} (8am ET)`
+          );
+          continue;
+        }
+
         // Sync normalized phone onto enrollment record if it was missing or different at enrollment time
         if (enrollment.leadPhone !== currentPhone) {
           await db.update(nurtureEnrollments).set({ leadPhone: currentPhone }).where(eq(nurtureEnrollments.id, enrollment.id));
