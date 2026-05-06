@@ -27,6 +27,7 @@ import {
   fieldMgmtCalls,
   jobStatusHistory,
   opsChatMessages,
+  stepLocks,
 } from "../drizzle/schema";
 import { sendSms, sleep } from "./openphone";
 import { logActivity } from "./activityLogger";
@@ -279,15 +280,27 @@ export function formatTimeET(d: Date): string {
 }
 
 /**
- * Atomically claim a step for a given job using INSERT ... ON DUPLICATE KEY UPDATE (no-op).
+ * Atomically claim a step for a given job.
  *
- * Returns true  → this is the FIRST fire; proceed with SMS/action.
- * Returns false → already fired; skip everything.
+ * Returns true  → this call is the first to claim this step; proceed with SMS/action.
+ * Returns false → another call already claimed it; skip everything.
  *
- * TiDB-compatible: uses SELECT-first + INSERT approach. TiDB returns affectedRows=1
- * for both first insert and no-op ON DUPLICATE KEY UPDATE, so we cannot rely on
- * affectedRows. The UNIQUE constraint on (cleanerJobId, step) is the true race guard.
- * Replaces both stepAlreadyFired and the initial recordStep call at every call site.
+ * Implementation: two-phase approach.
+ *
+ * Phase 1 — Mutex via step_locks (INSERT IGNORE):
+ *   step_locks has a UNIQUE index on (cleanerJobId, step). INSERT IGNORE returns
+ *   affectedRows=1 when the row was inserted (this caller won) and affectedRows=0
+ *   when a duplicate already exists (another caller already claimed it).
+ *
+ *   field_mgmt_log is intentionally append-only with NO unique constraint — it must
+ *   allow multiple rows per job for dynamic steps like client_running_late_{ts} and
+ *   eta_update_{ts}. INSERT IGNORE on field_mgmt_log would silently no-op on any
+ *   step that was ever fired before, which is wrong. step_locks is the correct
+ *   dedup surface because it is a separate, purpose-built mutex table.
+ *
+ * Phase 2 — Audit log via field_mgmt_log (append-only INSERT):
+ *   Only the winner writes the audit row. field_mgmt_log remains the source of
+ *   truth for the ops timeline and delivery tracking.
  */
 export async function tryClaimStep(params: {
   cleanerJobId: number;
@@ -298,32 +311,29 @@ export async function tryClaimStep(params: {
   deliveryStatus?: string;
 }): Promise<boolean> {
   const db = await getDb();
-  if (!db) return false; // safe default: don't fire if DB is down
+  if (!db) return false;
   try {
-    // Atomic dedup via INSERT IGNORE:
-    // INSERT IGNORE skips the insert (affectedRows=0) when a row with the same
-    // UNIQUE key (cleanerJobId, step) already exists. Unlike ON DUPLICATE KEY UPDATE,
-    // TiDB correctly returns affectedRows=0 for a skipped INSERT IGNORE — so we can
-    // reliably detect whether THIS call won the race without a SELECT-then-INSERT
-    // window that allowed two concurrent calls to both return true.
-    const result = await db.execute(
-      sql`INSERT IGNORE INTO field_mgmt_log
-        (cleanerJobId, step, success, smsSent, recipientPhone, openPhoneMessageId, deliveryStatus, firedAt)
-        VALUES (
-          ${params.cleanerJobId},
-          ${params.step},
-          1,
-          ${params.smsSent ?? null},
-          ${params.recipientPhone ?? null},
-          ${params.openPhoneMessageId ?? null},
-          ${params.deliveryStatus ?? null},
-          NOW()
-        )`
+    // Phase 1: atomic mutex
+    const lockResult = await db.execute(
+      sql`INSERT IGNORE INTO step_locks (cleanerJobId, step) VALUES (${params.cleanerJobId}, ${params.step})`
     );
-    // affectedRows === 1 → we inserted the row (we won the race) → proceed
-    // affectedRows === 0 → duplicate existed (another call already claimed this step) → skip
-    const affectedRows = (result as any)?.[0]?.affectedRows ?? (result as any)?.rowsAffected ?? 0;
-    return affectedRows > 0;
+    const affectedRows = (lockResult as any)?.[0]?.affectedRows ?? (lockResult as any)?.rowsAffected ?? 0;
+    if (affectedRows === 0) {
+      // Duplicate — another concurrent call already claimed this step.
+      return false;
+    }
+    // Phase 2: we own the lock — write the audit row
+    await db.insert(fieldMgmtLog).values({
+      cleanerJobId: params.cleanerJobId,
+      step: params.step as any,
+      success: 1,
+      smsSent: params.smsSent ?? null,
+      recipientPhone: params.recipientPhone ?? null,
+      openPhoneMessageId: params.openPhoneMessageId ?? null,
+      deliveryStatus: params.deliveryStatus ?? null,
+      firedAt: new Date(),
+    });
+    return true;
   } catch (err) {
     console.error(`[FieldMgmt] tryClaimStep failed for step ${params.step} job ${params.cleanerJobId}:`, err);
     return false;

@@ -2177,3 +2177,34 @@ export const nurtureStepScripts = mysqlTable("nurture_step_scripts", {
 
 export type NurtureStepScript = typeof nurtureStepScripts.$inferSelect;
 export type InsertNurtureStepScript = typeof nurtureStepScripts.$inferInsert;
+
+/**
+ * stepLocks — atomic mutex for field management automation steps.
+ *
+ * field_mgmt_log is intentionally append-only (no unique constraint) because
+ * dynamic steps like client_running_late_{ts} and eta_update_{ts} must insert
+ * multiple rows per job. This means INSERT IGNORE on field_mgmt_log cannot
+ * serve as a race guard — there is no unique constraint to trigger the IGNORE.
+ *
+ * stepLocks is a separate, minimal table whose ONLY purpose is deduplication.
+ * The UNIQUE index on (cleanerJobId, step) makes INSERT IGNORE truly atomic:
+ * exactly one concurrent caller wins the race; all others get affectedRows=0.
+ *
+ * Workflow (inside tryClaimStep):
+ *   1. INSERT IGNORE into step_locks → affectedRows=1 means "I own this step"
+ *   2. Winner fires SMS/call
+ *   3. Winner writes full audit row to field_mgmt_log (append-only, no constraint)
+ *
+ * Rows are never deleted — they serve as a permanent "this step fired" record.
+ */
+export const stepLocks = mysqlTable("step_locks", {
+  id: int("id").autoincrement().primaryKey(),
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Same step name used in field_mgmt_log. Max 100 chars matches field_mgmt_log.step. */
+  step: varchar("step", { length: 100 }).notNull(),
+  /** UTC timestamp when the lock was claimed. */
+  claimedAt: timestamp("claimedAt").defaultNow().notNull(),
+}, (t) => ({
+  uniqJobStep: uniqueIndex("uniq_step_locks_job_step").on(t.cleanerJobId, t.step),
+}));
+export type StepLock = typeof stepLocks.$inferSelect;
