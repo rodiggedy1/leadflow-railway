@@ -2059,7 +2059,7 @@ function ConversationDrawer({
                           <>
                             <button
                               onClick={() => nurtureSkipBackMutation.mutate({ enrollmentId: enr.id })}
-                              disabled={nurtureSkipBackMutation.isPending || enr.nextStep <= 3}
+                              disabled={nurtureSkipBackMutation.isPending || enr.nextStep <= 3 || enr.id === 0}
                               title="Go back to previous step"
                               className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
                             >
@@ -2067,7 +2067,7 @@ function ConversationDrawer({
                             </button>
                             <button
                               onClick={() => nurtureSkipMutation.mutate({ enrollmentId: enr.id })}
-                              disabled={nurtureSkipMutation.isPending}
+                              disabled={nurtureSkipMutation.isPending || enr.id === 0}
                               title="Skip to next step"
                               className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
                             >
@@ -2075,7 +2075,7 @@ function ConversationDrawer({
                             </button>
                             <button
                               onClick={() => nurturePauseMutation.mutate({ enrollmentId: enr.id })}
-                              disabled={nurturePauseMutation.isPending}
+                              disabled={nurturePauseMutation.isPending || enr.id === 0}
                               title="Pause nurture"
                               className="w-6 h-6 flex items-center justify-center rounded text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors disabled:opacity-40"
                             >
