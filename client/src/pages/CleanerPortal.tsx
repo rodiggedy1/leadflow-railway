@@ -346,17 +346,10 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   const [nextJobEtaTarget, setNextJobEtaTarget] = useState<{ id: number; customerName: string | null } | null>(null);
   // Custom exact-time ETA input ("HH:MM" in 24h format from <input type="time">)
   const [customEtaTime, setCustomEtaTime] = useState<string>("");
-  // Returns "HH:MM" for 1 hour from now in ET (America/New_York)
+  // Returns "HH:MM" for 1 hour from now in device local time
   function defaultEtaTime(): string {
     const d = new Date(Date.now() + 60 * 60 * 1000);
-    const etParts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
-      hour: "2-digit", minute: "2-digit", hour12: false,
-    }).formatToParts(d);
-    const hh = etParts.find(p => p.type === "hour")!.value;
-    const mm = etParts.find(p => p.type === "minute")!.value;
-    // Clamp "24" to "00" (midnight edge case from some browsers)
-    return `${hh === "24" ? "00" : hh}:${mm}`;
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
   const ETA_OPTIONS = [
     { label: "30 min",      value: "30 minutes" },
@@ -1074,7 +1067,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     : "text-orange-300 bg-orange-900/20 border-orange-700/30"
                 }`}>
                   {job.etaTimestamp
-                    ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}`
+                    ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
                     : job.jobStatus === "on_the_way" ? "On the Way" : "Running Late"
                   }
                 </p>
@@ -1260,54 +1253,35 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <button
                   disabled={(() => {
                     if (!customEtaTime || statusMutation.isPending) return true;
-                    // Disable if the chosen ET time is not at least 1 min in the future
+                    // Disable if the chosen time is in the past or within 1 minute of now
                     const [hh, mm] = customEtaTime.split(":").map(Number);
-                    const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-                    const nowUtcMs = Date.now();
-                    const etNowStr = new Date(nowUtcMs).toLocaleString("en-CA", {
-                      timeZone: "America/New_York", hour12: false,
-                      year: "numeric", month: "2-digit", day: "2-digit",
-                      hour: "2-digit", minute: "2-digit", second: "2-digit",
-                    });
-                    const etNowMs = new Date(etNowStr.replace(", ", "T") + "Z").getTime();
-                    const etOffsetMs = nowUtcMs - etNowMs;
-                    const [etY, etMo, etD] = todayET.split("-").map(Number);
-                    const targetUtcMs = Date.UTC(etY, etMo - 1, etD, hh, mm, 0) + etOffsetMs;
-                    return targetUtcMs <= Date.now() + 60_000;
+                    const now = new Date();
+                    const chosen = new Date(
+                      now.getFullYear(), now.getMonth(), now.getDate(),
+                      hh, mm, 0, 0
+                    );
+                    return chosen.getTime() <= Date.now() + 60_000;
                   })()}
                   onClick={() => {
                     if (!etaModalFor || !customEtaTime) return;
-                    // Build the ETA timestamp from the HH:MM the cleaner selected,
-                    // always interpreted as ET (America/New_York).
-                    //
-                    // Strategy: find the UTC offset for ET right now by comparing
-                    // Date.now() to what Intl says ET "now" is, then apply that
-                    // offset to the chosen HH:MM on today's ET date.
+                    // Build the ETA date using the device's local time (which is what the cleaner sees)
                     const [hh, mm] = customEtaTime.split(":").map(Number);
-                    const todayET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // "YYYY-MM-DD"
-                    // Get the ET offset in minutes by comparing UTC now to ET now
-                    const nowUtcMs = Date.now();
-                    const etNowStr = new Date(nowUtcMs).toLocaleString("en-CA", {
-                      timeZone: "America/New_York",
-                      hour12: false,
-                      year: "numeric", month: "2-digit", day: "2-digit",
-                      hour: "2-digit", minute: "2-digit", second: "2-digit",
-                    }); // e.g. "2026-05-06, 10:15:30"
-                    const etNowMs = new Date(etNowStr.replace(", ", "T") + "Z").getTime();
-                    const etOffsetMs = nowUtcMs - etNowMs; // positive: ET is behind UTC (e.g. EDT = +14400000)
-                    // Build target UTC ms: today's ET date at HH:MM, shifted by ET offset
-                    const [etY, etMo, etD] = todayET.split("-").map(Number);
-                    const targetUtcMs = Date.UTC(etY, etMo - 1, etD, hh, mm, 0) + etOffsetMs;
-                    // Safety check — must be at least 1 min in the future
-                    if (targetUtcMs <= Date.now() + 60_000) return;
-                    // Format label in ET for ops chat / SMS
-                    const label = `at ${new Date(targetUtcMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}`;
+                    const now = new Date();
+                    const etaDate = new Date(
+                      now.getFullYear(), now.getMonth(), now.getDate(),
+                      hh, mm, 0, 0
+                    );
+                    // Safety check — should never happen because button is disabled for past times,
+                    // but guard anyway
+                    if (etaDate.getTime() <= Date.now() + 60_000) return;
+                    // Format label in the device's local timezone (same timezone the cleaner is in)
+                    const label = `at ${etaDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
                     const targetId = nextJobEtaTarget?.id ?? job.id;
                     statusMutation.mutate({
                       cleanerJobId: targetId,
                       status: etaModalFor,
                       etaLabel: label,
-                      etaTimestampOverride: targetUtcMs,
+                      etaTimestampOverride: etaDate.getTime(),
                     });
                     setShowEtaModal(false);
                     setEtaModalFor(null);

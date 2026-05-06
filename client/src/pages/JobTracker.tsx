@@ -180,7 +180,7 @@ function ETADisplay({ etaTimestamp }: { etaTimestamp: number | null | undefined 
   const eta = new Date(etaTimestamp);
   return (
     <span className="text-amber-400 font-semibold">
-      ETA {eta.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}
+      ETA {eta.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
     </span>
   );
 }
