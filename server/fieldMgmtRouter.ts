@@ -67,8 +67,9 @@ const STEP_LABELS: Record<string, {
   pre_job_reminder:    { label: "Pre-Job Reminder",        recipient: "cleaner", kind: "sms" },
   client_pre_job:      { label: "Pre-Job Notification",    recipient: "client",  kind: "sms" },
   client_on_the_way:   { label: "On the Way Notification", recipient: "client",  kind: "sms" },
-  client_running_late: { label: "Running Late Alert",       recipient: "client",  kind: "sms" },
-  arrived_checkin:     { label: "Arrival Check-In",        recipient: "cleaner", kind: "sms" },
+  client_running_late:    { label: "Running Late Alert",        recipient: "client",  kind: "sms" },
+  client_eta_approaching: { label: "ETA Approaching Alert",    recipient: "client",  kind: "sms" },
+  arrived_checkin:        { label: "Arrival Check-In",         recipient: "cleaner", kind: "sms" },
   mid_job_nudge:       { label: "Mid-Job Nudge",           recipient: "cleaner", kind: "sms" },
   completion_flow:     { label: "Completion Checklist",    recipient: "cleaner", kind: "sms" },
   exception_sms:       { label: "No Check-In Alert",       recipient: "cleaner", kind: "sms" },
@@ -347,6 +348,60 @@ function buildTimeline(
           : undefined,
       success: true,
       step: job.jobStatus,
+    });
+  }
+
+  // 3. Extra log rows — steps not in STEP_SEQUENCE (dynamic steps, cron-fired steps, etc.)
+  // These include: client_eta_approaching, eta_update_*, client_running_late_*, checkin_call_attempt_*,
+  // post_start_call_*, post_start_cs_alert, post_start_noshow_flag, stale_eta, etc.
+  const sequenceStepSet = new Set(STEP_SEQUENCE.map((s) => s.step));
+  for (const row of logRows) {
+    if (sequenceStepSet.has(row.step)) continue; // already handled above
+    const meta = STEP_LABELS[row.step];
+    // For dynamic steps like eta_update_1234567890 or client_running_late_1234567890,
+    // derive a human label from the prefix
+    let label: string;
+    let type: TimelineEvent["type"];
+    if (meta) {
+      label = meta.label;
+      type = deriveEventType(row.step);
+    } else if (row.step.startsWith("eta_update_")) {
+      label = "ETA Updated";
+      type = "sms_client";
+    } else if (row.step.startsWith("client_running_late_")) {
+      label = "Running Late Alert";
+      type = "sms_client";
+    } else if (row.step.startsWith("checkin_call_attempt_")) {
+      label = "Check-In Call";
+      type = "call";
+    } else if (row.step.startsWith("post_start_call_")) {
+      label = "Post-Start Call";
+      type = "call";
+    } else if (row.step === "post_start_cs_alert") {
+      label = "Post-Start CS Alert";
+      type = "cs_alert";
+    } else if (row.step === "post_start_noshow_flag") {
+      label = "No-Show Flag";
+      type = "cs_alert";
+    } else if (row.step === "stale_eta") {
+      label = "Stale ETA Alert (Ops)";
+      type = "cs_alert";
+    } else {
+      label = row.step.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      type = deriveEventType(row.step);
+    }
+    events.push({
+      id: `log-${row.id}`,
+      logId: row.id,
+      type,
+      status: row.success === 1 ? "sent" : "failed",
+      timestamp: new Date(row.firedAt),
+      label,
+      detail: row.smsSent ?? undefined,
+      recipient: row.recipientPhone ?? undefined,
+      success: row.success === 1,
+      errorDetail: row.errorDetail ?? undefined,
+      step: row.step,
     });
   }
 

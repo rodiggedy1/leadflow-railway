@@ -982,6 +982,7 @@ const ALL_STEPS: { value: string; label: string; recipient: string }[] = [
   { value: "post_start_noshow_flag",   label: "Post-Start No-Show Flag (T+10–15min)", recipient: "Chat Card" },
   { value: "client_on_the_way",        label: "On the Way Notification",           recipient: "Client" },
   { value: "client_running_late",      label: "Running Late Alert",                recipient: "Client" },
+  { value: "client_eta_approaching",   label: "ETA Approaching Alert (T-5min)",     recipient: "Client" },
   { value: "arrived_checkin",          label: "Arrival Check-In",                  recipient: "Cleaner" },
   { value: "mid_job_nudge",            label: "Mid-Job Nudge",                     recipient: "Cleaner" },
   { value: "completion_flow",          label: "Completion Checklist",              recipient: "Cleaner" },
