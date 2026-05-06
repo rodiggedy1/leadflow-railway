@@ -29,6 +29,8 @@ export type OpsStreamCallbacks = {
   onAgentStatus?: () => void;
   /** Called when the SSE connection is established or re-established */
   onConnected?: () => void;
+  /** Called when update-lead-phone successfully links a real phone to a lead */
+  onPhoneUpdate?: (leadName: string, newPhone: string) => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -64,6 +66,8 @@ export function useOpsStream(callbacks: OpsStreamCallbacks) {
             type: string;
             channel?: string;
             jobId?: number;
+            leadName?: string;
+            newPhone?: string;
           };
 
           switch (event.type) {
@@ -84,6 +88,9 @@ export function useOpsStream(callbacks: OpsStreamCallbacks) {
               break;
             case "agent_status":
               cbRef.current.onAgentStatus?.();
+              break;
+            case "phone_update":
+              cbRef.current.onPhoneUpdate?.(event.leadName ?? "", event.newPhone ?? "");
               break;
             case "ping":
               // keepalive — no action needed

@@ -16,6 +16,7 @@ import { conversationSessions } from "../drizzle/schema";
 import { eq, like, and, or, isNull } from "drizzle-orm";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
+import { broadcastOpsUpdate } from "./sseBroadcast";
 
 const VAPI_API_BASE = "https://api.vapi.ai";
 const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
@@ -121,6 +122,7 @@ export function registerThumbTackBridgeRoute(app: Express) {
         .where(eq(conversationSessions.id, session.id));
 
       console.log(`[ThumbTackBridge] Session ${session.id} updated: phone ${session.leadPhone} → ${normalizedPhone}, name preserved as "${session.leadName}"`);
+      broadcastOpsUpdate("phone_update", { leadName: session.leadName ?? "", newPhone: normalizedPhone });
 
       res.json({
         success: true,

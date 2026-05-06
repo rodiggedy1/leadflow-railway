@@ -4,6 +4,7 @@
  */
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useLeadReplyNotifier } from "@/hooks/useLeadReplyNotifier";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import SmsComposeBox from "@/components/SmsComposeBox";
 import AgentNotificationBell from "@/components/AgentNotificationBell";
 import { FollowUpReminderToast, useTodayFollowUps } from "@/components/FollowUpReminderToast";
@@ -1845,6 +1846,11 @@ export default function AgentDashboard() {
   // Global new-reply chime — fires for ANY session that gets a new customer reply,
   // regardless of whether a conversation drawer is open.
   useLeadReplyNotifier(allSessions);
+  useOpsStream({
+    onPhoneUpdate: (leadName, newPhone) => {
+      toast.success(`Updated ${leadName}'s phone to ${newPhone}`, { duration: 8000 });
+    },
+  });
 
   // ── Follow-up reminder toasts ───────────────────────────────────────────────────────────────────────────
   const { data: todayFollowUps, refetch: refetchFollowUps } = useTodayFollowUps(!!agentMe);

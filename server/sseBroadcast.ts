@@ -15,6 +15,7 @@
  *   "reaction_update" — a reaction was added or removed
  *   "reminder_update" — a reminder was set or fired
  *   "agent_status"    — an agent's on-call status changed (call answered/completed)
+ *   "phone_update"    — update-lead-phone successfully linked a real phone to a lead
  *   "ping"            — keepalive (sent every 25s to prevent proxy timeouts)
  */
 
@@ -27,6 +28,7 @@ export type OpsEventType =
   | "reaction_update"
   | "reminder_update"
   | "agent_status"
+  | "phone_update"
   | "ping";
 
 export interface OpsEvent {
@@ -34,6 +36,9 @@ export interface OpsEvent {
   /** Optional channel or jobId hint so the client can be selective */
   channel?: string;
   jobId?: number;
+  /** For phone_update events */
+  leadName?: string;
+  newPhone?: string;
   ts: number;
 }
 

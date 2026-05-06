@@ -146,6 +146,7 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import CallGuide from "@/components/CallGuide";
 import PipelineBoard from "@/components/PipelineBoard";
 import { getStepLabel, getPhaseName, formatNextSendAt } from "@/lib/nurtureUtils";
+import { useOpsStream } from "@/hooks/useOpsStream";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
 /**
  * Slide-in toast stack that appears from the bottom-right when leads have
@@ -3502,6 +3503,11 @@ export default function AdminDashboard() {
   // Global new-reply chime — fires for ANY session that gets a new customer reply,
   // regardless of whether a conversation drawer is open.
   useLeadReplyNotifier(sessions);
+  useOpsStream({
+    onPhoneUpdate: (leadName, newPhone) => {
+      toast.success(`Updated ${leadName}'s phone to ${newPhone}`, { duration: 8000 });
+    },
+  });
 
   // Call recording indicators — lightweight map of sessionId → { hasRecording, hasTranscript, callScore }
   const { data: recordingMap = {} } = trpc.leads.getSessionsWithRecordings.useQuery(undefined, {
