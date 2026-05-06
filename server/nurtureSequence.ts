@@ -306,18 +306,28 @@ export async function enrollLead(
   // Calculate from now so stale leads don't get a past-due nextSendAt on enrollment
   const nextSendAt = firstStep.scheduledAt(new Date());
 
-  const [result] = await db.insert(nurtureEnrollments).values({
-    sessionId: session.id,
-    leadPhone: session.leadPhone,
-    leadFirstName: ctx.firstName,
-    serviceType: ctx.serviceType,
-    leadCreatedAt: session.createdAt,
-    nextStep: resolvedStep,
-    nextSendAt,
-    status: "active",
-  });
+  let insertId: number;
+  try {
+    const [result] = await db.insert(nurtureEnrollments).values({
+      sessionId: session.id,
+      leadPhone: session.leadPhone,
+      leadFirstName: ctx.firstName,
+      serviceType: ctx.serviceType,
+      leadCreatedAt: session.createdAt,
+      nextStep: resolvedStep,
+      nextSendAt,
+      status: "active",
+    });
+    insertId = (result as any).insertId as number;
+  } catch (err: any) {
+    // Duplicate key — race condition: another request enrolled this session concurrently
+    if (err?.code === 'ER_DUP_ENTRY') {
+      console.log(`[Nurture] Session ${session.id} duplicate key on insert — already enrolled by concurrent request, skipping`);
+      return null;
+    }
+    throw err;
+  }
 
-  const insertId = (result as any).insertId as number;
   console.log(
     `[Nurture] Enrolled session ${session.id} (${session.leadPhone}) — enrollment id=${insertId}, first send at ${nextSendAt.toISOString()}`
   );

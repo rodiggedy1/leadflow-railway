@@ -1,0 +1,1 @@
+ALTER TABLE `nurture_enrollments` ADD CONSTRAINT `nurture_enrollments_sessionId_unique` UNIQUE(`sessionId`);

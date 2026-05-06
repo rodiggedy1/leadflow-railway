@@ -2122,7 +2122,7 @@ export type MetricsAiAlert = typeof metricsAiAlerts.$inferSelect;
 export const nurtureEnrollments = mysqlTable("nurture_enrollments", {
   id: int("id").autoincrement().primaryKey(),
   /** FK to conversation_sessions.id */
-  sessionId: int("sessionId").notNull(),
+  sessionId: int("sessionId").notNull().unique(),
   /** E.164 phone — denormalized for fast cron queries without joins */
   leadPhone: varchar("leadPhone", { length: 30 }).notNull(),
   /** Lead first name (extracted from leadName at enrollment time) */
