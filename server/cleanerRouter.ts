@@ -421,7 +421,8 @@ export const cleanerRouter = router({
       cleanerJobId: z.number(),
       status: z.enum(["on_the_way", "arrived", "running_late", "in_progress", "finishing_up", "wrapping_up", "completed", "issue_at_property"]),
       issueNote: z.string().max(500).optional(),
-      etaLabel: z.string().max(50).optional(), // e.g. "30 minutes", "1 hour", "Don't know"
+      etaLabel: z.string().max(50).optional(), // e.g. "30 minutes", "1 hour", "Don't know", "at 9:45 AM"
+      etaTimestampOverride: z.number().int().positive().optional(), // absolute Unix ms — used when cleaner picks an exact time
       delayMinutes: z.number().int().positive().optional(), // minutes late for running_late
     }))
     .mutation(async ({ ctx, input }) => {
@@ -457,12 +458,17 @@ export const cleanerRouter = router({
       };
 
       if ((input.status === "on_the_way" || input.status === "running_late") && input.etaLabel) {
-        const mins = ETA_MINUTES[input.etaLabel] ?? null;
-        if (mins !== null) {
-          updateData.etaTimestamp = Date.now() + mins * 60 * 1000;
+        // If an exact timestamp was provided by the client (custom time picker), use it directly
+        if (input.etaTimestampOverride) {
+          updateData.etaTimestamp = input.etaTimestampOverride;
         } else {
-          // "Don't know" — clear any previous ETA
-          updateData.etaTimestamp = null;
+          const mins = ETA_MINUTES[input.etaLabel] ?? null;
+          if (mins !== null) {
+            updateData.etaTimestamp = Date.now() + mins * 60 * 1000;
+          } else {
+            // "Don't know" — clear any previous ETA
+            updateData.etaTimestamp = null;
+          }
         }
         // Keep issueNote as the human label for cleaner portal display
         updateData.issueNote = input.etaLabel;

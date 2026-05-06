@@ -344,6 +344,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   const [etaModalFor, setEtaModalFor] = useState<"on_the_way" | "running_late" | null>(null);
   // When opened from the post-complete "Next Job" CTA, fire the mutation for this job id instead of job.id
   const [nextJobEtaTarget, setNextJobEtaTarget] = useState<{ id: number; customerName: string | null } | null>(null);
+  // Custom exact-time ETA input ("HH:MM" in 24h format from <input type="time">)
+  const [customEtaTime, setCustomEtaTime] = useState<string>("");
   const ETA_OPTIONS = [
     { label: "30 min",      value: "30 minutes" },
     { label: "1 hour",     value: "1 hour" },
@@ -1182,7 +1184,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               </p>
             </div>
 
-            {/* ETA option buttons — large, easy to tap */}
+             {/* ETA option buttons — large, easy to tap */}
             <div className="grid grid-cols-2 gap-3">
               {ETA_OPTIONS.map(opt => (
                 <button
@@ -1194,6 +1196,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     setShowEtaModal(false);
                     setEtaModalFor(null);
                     setNextJobEtaTarget(null);
+                    setCustomEtaTime("");
                   }}
                   disabled={statusMutation.isPending}
                   className={`py-4 rounded-2xl text-sm font-bold border-2 transition-all active:scale-95 disabled:opacity-50 ${
@@ -1208,6 +1211,66 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   }
                 </button>
               ))}
+            </div>
+
+            {/* Custom exact-time picker */}
+            <div className={`p-3 rounded-xl border ${
+              etaModalFor === "on_the_way"
+                ? "bg-blue-950/30 border-blue-700/40"
+                : "bg-orange-950/30 border-orange-700/40"
+            }`}>
+              <p className="text-xs text-slate-400 mb-2 font-medium">Or enter an exact arrival time:</p>
+              <div className="flex gap-2 items-center">
+                <input
+                  type="time"
+                  value={customEtaTime}
+                  onChange={e => setCustomEtaTime(e.target.value)}
+                  disabled={statusMutation.isPending}
+                  className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold bg-slate-800 border text-white
+                    focus:outline-none focus:ring-2 disabled:opacity-50
+                    ${
+                      etaModalFor === "on_the_way"
+                        ? "border-blue-600/50 focus:ring-blue-500/40"
+                        : "border-orange-600/50 focus:ring-orange-500/40"
+                    }`}
+                />
+                <button
+                  disabled={!customEtaTime || statusMutation.isPending}
+                  onClick={() => {
+                    if (!etaModalFor || !customEtaTime) return;
+                    // Convert HH:MM (local time) to absolute Unix ms using today's date in ET
+                    const [hh, mm] = customEtaTime.split(":").map(Number);
+                    const now = new Date();
+                    const etaDate = new Date(
+                      now.getFullYear(), now.getMonth(), now.getDate(),
+                      hh, mm, 0, 0
+                    );
+                    // If the chosen time is in the past (e.g. cleaner typed 8:00 at 9:00), bump to tomorrow
+                    if (etaDate.getTime() < Date.now() - 60_000) {
+                      etaDate.setDate(etaDate.getDate() + 1);
+                    }
+                    const label = `at ${etaDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
+                    const targetId = nextJobEtaTarget?.id ?? job.id;
+                    statusMutation.mutate({
+                      cleanerJobId: targetId,
+                      status: etaModalFor,
+                      etaLabel: label,
+                      etaTimestampOverride: etaDate.getTime(),
+                    });
+                    setShowEtaModal(false);
+                    setEtaModalFor(null);
+                    setNextJobEtaTarget(null);
+                    setCustomEtaTime("");
+                  }}
+                  className={`px-4 py-2.5 rounded-xl text-sm font-bold border-2 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    etaModalFor === "on_the_way"
+                      ? "bg-blue-700 text-white border-blue-500 hover:bg-blue-600"
+                      : "bg-orange-700 text-white border-orange-500 hover:bg-orange-600"
+                  }`}
+                >
+                  {statusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Set"}
+                </button>
+              </div>
             </div>
 
             {/* Cancel */}
