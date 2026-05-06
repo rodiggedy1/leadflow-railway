@@ -5062,7 +5062,7 @@ Your job: fill in the following message template using the booking details provi
 - Replace [home size / job type] with a natural description based on the details (e.g., "3-bedroom home", "carpet cleaning", etc.)
 - Replace the price estimate with a realistic range based on the job type and size. For house cleaning: standard 3BR is $180–$220, deep clean adds 30–40%. For carpet cleaning, specialty jobs: use a reasonable range.
 - Replace the 2-3 specific things with relevant items for the job type (e.g., for house cleaning: "all rooms, kitchen deep clean, and bathroom sanitization"; for carpet cleaning: "all carpeted rooms, stairs, and spot treatment")
-- Replace the availability with the exact dates from 'Dates requested' in the booking details if present (e.g. if 'Dates requested: May 6-8' then write 'May 6th or 8th'). If no dates are provided, use 'this week' or 'early next week'
+- Replace the availability with "this week" or "early next week" unless specific dates are mentioned in the details
 - Keep the tone warm, human, and professional — not salesy
 - Output ONLY the message text, no preamble, no quotes around it`,
             },
