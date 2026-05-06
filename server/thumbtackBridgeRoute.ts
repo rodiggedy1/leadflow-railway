@@ -109,23 +109,18 @@ export function registerThumbTackBridgeRoute(app: Express) {
       // Pick the most recent session (highest id)
       const session = sessions[sessions.length - 1];
 
-      // Update: set real phone, and update name to full name if we have it.
-      // Do NOT touch leadSource — it reflects how the lead originally came in.
-      const updatedName = fullName?.trim() || session.leadName || thumbtackName;
+      // Update phone ONLY. Do NOT touch leadName — the session already has the correct name from when it was created.
       await db
         .update(conversationSessions)
-        .set({
-          leadPhone: normalizedPhone,
-          leadName: updatedName,
-        })
+        .set({ leadPhone: normalizedPhone })
         .where(eq(conversationSessions.id, session.id));
 
-      console.log(`[ThumbTackBridge] Session ${session.id} updated: phone ${session.leadPhone} → ${normalizedPhone}, name "${session.leadName}" → "${updatedName}"`);
+      console.log(`[ThumbTackBridge] Session ${session.id} updated: phone ${session.leadPhone} → ${normalizedPhone}, name preserved as "${session.leadName}"`);
 
       res.json({
         success: true,
         sessionId: String(session.id),
-        leadName: updatedName,
+        leadName: session.leadName,
         leadPhone: normalizedPhone,
       });
     } catch (err) {
