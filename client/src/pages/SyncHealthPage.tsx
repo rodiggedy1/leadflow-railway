@@ -41,6 +41,10 @@ import {
   Inbox,
   WifiOff,
   ShieldCheck,
+  RotateCcw,
+  PhoneIncoming,
+  List,
+  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -757,7 +761,252 @@ function MessageIntegrityPanel() {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Orphan Tray Panel ────────────────────────────────────────────────────────────────────────────────────
+
+interface OrphanSession {
+  id: number;
+  leadPhone: string;
+  leadName: string | null;
+  lastMessage: string;
+  createdAt: Date | string;
+}
+
+function OrphanTrayPanel() {
+  const { data, isLoading, refetch } = trpc.leads.getOrphanSessions.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+
+  const orphans = (data ?? []) as OrphanSession[];
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <UserX className="w-4 h-4 text-amber-500" />
+          <h2 className="text-sm font-semibold text-gray-900">Orphan Tray</h2>
+          <span className="text-xs text-gray-400">Inbound SMS with no matching lead session</span>
+          {orphans.length > 0 && (
+            <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">{orphans.length}</Badge>
+          )}
+        </div>
+        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading} className="gap-1.5 text-xs">
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
+
+      {isLoading && (
+        <div className="px-5 py-8 text-center">
+          <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Loading orphan sessions…</p>
+        </div>
+      )}
+
+      {!isLoading && orphans.length === 0 && (
+        <div className="px-5 py-8 text-center">
+          <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 font-medium">No orphan messages — all inbound SMS matched a lead.</p>
+          <p className="text-xs text-gray-400 mt-1">When an unknown number texts in, it will appear here so you can match it to a lead.</p>
+        </div>
+      )}
+
+      {!isLoading && orphans.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-50/50">
+              <TableHead className="text-xs font-semibold text-gray-600">Phone</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600">Last Message</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600">Received</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600 text-right">Session ID</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {orphans.map((o) => (
+              <TableRow key={o.id} className="hover:bg-amber-50/30">
+                <TableCell className="text-sm font-mono font-medium text-gray-900">{o.leadPhone}</TableCell>
+                <TableCell className="text-sm text-gray-600 max-w-xs truncate">
+                  <span className="italic">&ldquo;{o.lastMessage.slice(0, 120)}{o.lastMessage.length > 120 ? '…' : ''}&rdquo;</span>
+                </TableCell>
+                <TableCell className="text-xs text-gray-500">{timeAgo(o.createdAt)}</TableCell>
+                <TableCell className="text-right">
+                  <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs font-mono">#{o.id}</Badge>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+// ─── Webhook Event Log Panel ────────────────────────────────────────────────────────────────────────────────────
+
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  'message.received': 'bg-blue-100 text-blue-700 border-blue-200',
+  'message.delivered': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  'message.delivery.updated': 'bg-teal-100 text-teal-700 border-teal-200',
+  'call.recording.completed': 'bg-purple-100 text-purple-700 border-purple-200',
+  'call.transcript.completed': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  'call.completed': 'bg-gray-100 text-gray-600 border-gray-200',
+  'call.ringing': 'bg-amber-100 text-amber-700 border-amber-200',
+  'call.answered': 'bg-orange-100 text-orange-700 border-orange-200',
+};
+
+interface WebhookEvent {
+  id: number;
+  source: string;
+  eventType: string;
+  eventId: string | null;
+  fromPhone: string | null;
+  toPhone: string | null;
+  processed: number;
+  processedAt: number | null;
+  sessionId: number | null;
+  errorMessage: string | null;
+  createdAt: Date | string | null;
+}
+
+function WebhookEventLogPanel() {
+  const [eventTypeFilter, setEventTypeFilter] = useState<string | undefined>(undefined);
+  const [replayingId, setReplayingId] = useState<number | null>(null);
+
+  const { data, isLoading, refetch } = trpc.leads.getWebhookEvents.useQuery(
+    { limit: 100, eventType: eventTypeFilter },
+    { staleTime: 30_000 }
+  );
+
+  const replay = trpc.leads.replayWebhookEvent.useMutation({
+    onSuccess: (_result, vars) => {
+      toast.success(`Event #${vars.eventId} replayed successfully`);
+      setReplayingId(null);
+      refetch();
+    },
+    onError: (err, vars) => {
+      toast.error(`Replay failed: ${err.message}`);
+      setReplayingId(null);
+    },
+  });
+
+  const events = (data ?? []) as WebhookEvent[];
+
+  const EVENT_TYPES = ['message.received', 'message.delivered', 'call.recording.completed', 'call.transcript.completed', 'call.completed'];
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <List className="w-4 h-4 text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-900">Webhook Event Log</h2>
+          <span className="text-xs text-gray-400">Every raw OpenPhone event, logged before processing</span>
+          {events.length > 0 && (
+            <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs">{events.length} events</Badge>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setEventTypeFilter(undefined)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                !eventTypeFilter ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >All</button>
+            {EVENT_TYPES.map(et => (
+              <button
+                key={et}
+                onClick={() => setEventTypeFilter(et === eventTypeFilter ? undefined : et)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  eventTypeFilter === et ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >{et.replace('message.', 'msg.').replace('call.', 'call.')}</button>
+            ))}
+          </div>
+          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading} className="gap-1.5 text-xs">
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="px-5 py-8 text-center">
+          <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Loading webhook events…</p>
+        </div>
+      )}
+
+      {!isLoading && events.length === 0 && (
+        <div className="px-5 py-8 text-center">
+          <PhoneIncoming className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 font-medium">No webhook events logged yet.</p>
+          <p className="text-xs text-gray-400 mt-1">Events will appear here as OpenPhone sends webhooks. The log captures every event before processing.</p>
+        </div>
+      )}
+
+      {!isLoading && events.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-gray-50/50">
+              <TableHead className="text-xs font-semibold text-gray-600 w-12">#</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600">Event Type</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600">From</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600">To</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600 text-center">Status</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600">Received</TableHead>
+              <TableHead className="text-xs font-semibold text-gray-600 text-right">Action</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {events.map((ev) => (
+              <TableRow key={ev.id} className={`hover:bg-gray-50/50 ${ev.errorMessage ? 'bg-red-50/30' : ''}`}>
+                <TableCell className="text-xs text-gray-400 font-mono">{ev.id}</TableCell>
+                <TableCell>
+                  <Badge className={`text-xs ${EVENT_TYPE_COLORS[ev.eventType] ?? 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                    {ev.eventType}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-gray-600 font-mono">{ev.fromPhone ?? '—'}</TableCell>
+                <TableCell className="text-xs text-gray-600 font-mono">{ev.toPhone ?? '—'}</TableCell>
+                <TableCell className="text-center">
+                  {ev.errorMessage ? (
+                    <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">Error</Badge>
+                  ) : ev.processed ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-xs">Processed</Badge>
+                  ) : (
+                    <Badge className="bg-gray-100 text-gray-500 border-gray-200 text-xs">Logged</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs text-gray-500">{ev.createdAt ? timeAgo(ev.createdAt) : '—'}</TableCell>
+                <TableCell className="text-right">
+                  {ev.eventType === 'message.received' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs h-7 px-2.5 gap-1"
+                      disabled={replayingId === ev.id}
+                      onClick={() => {
+                        setReplayingId(ev.id);
+                        replay.mutate({ eventId: ev.id });
+                      }}
+                    >
+                      {replayingId === ev.id ? (
+                        <><RefreshCw className="w-3 h-3 animate-spin" />Replaying…</>
+                      ) : (
+                        <><RotateCcw className="w-3 h-3" />Replay</>
+                      )}
+                    </Button>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────────────────────────
 
 export default function SyncHealthPage() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
@@ -989,6 +1238,10 @@ export default function SyncHealthPage() {
         <SilentSessionsPanel />
         {/* ── Message Integrity Panel ── */}
         <MessageIntegrityPanel />
+        {/* ── Orphan Tray ── */}
+        <OrphanTrayPanel />
+        {/* ── Webhook Event Log ── */}
+        <WebhookEventLogPanel />
       </main>
     </div>
     </AdminPageGuard>

@@ -67,6 +67,24 @@ export function registerWebhookRoutes(app: Express) {
     try {
       const event = req.body;
 
+      // ── Webhook Event Log ────────────────────────────────────────────────────
+      // Write every raw event to webhook_events BEFORE any processing.
+      // This ensures no event is ever silently lost, even if processing fails.
+      // Events can be replayed from the Sync Health page.
+      // Fire-and-forget: don't await, don't block processing
+      getDb().then(db0 => {
+        if (!db0) return;
+        const msgObj0 = event?.data?.object;
+        const fromPhone0: string | null = msgObj0?.from ?? null;
+        const toPhone0: string | null = Array.isArray(msgObj0?.to) ? msgObj0.to[0] : (msgObj0?.to ?? null);
+        const eventId0: string | null = msgObj0?.id ?? null;
+        const evType = event?.type ?? 'unknown';
+        const evPayload = JSON.stringify(event);
+        return db0.execute(
+          sql`INSERT INTO webhook_events (source, event_type, event_id, from_phone, to_phone, raw_payload, processed, created_at) VALUES (${'openphone'}, ${evType}, ${eventId0}, ${fromPhone0}, ${toPhone0}, ${evPayload}, 0, NOW())`
+        );
+      }).catch((err: unknown) => console.error('[WebhookLog] Failed to log event:', err));
+
       // Route by event type
       if (event?.type === "call.recording.completed") {
         await handleCallRecordingCompleted(event);
@@ -543,7 +561,49 @@ export function registerWebhookRoutes(app: Express) {
       const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent
 
       if (!session) {
-        console.warn(`[Webhook] No conversation session found for ${fromPhone}.`);
+        console.warn(`[Webhook] No conversation session found for ${fromPhone}. Creating orphan session.`);
+        // ── Orphan Message Handler ──────────────────────────────────────────────────
+        // Instead of silently dropping the message, create an inbound-orphan session
+        // so the admin can see it in the Orphan Tray and manually match it to a lead.
+        try {
+          const orphanHistory = JSON.stringify([
+            { role: 'user', content: inboundText, ts: Date.now(), mediaUrls: mediaUrls.length ? mediaUrls : undefined },
+          ]);
+          const [orphanIns] = await db.insert(conversationSessions).values({
+            leadPhone: fromPhone,
+            leadName: `Unknown (${fromPhone})`,
+            stage: 'QUOTE_SENT' as any,
+            messageHistory: orphanHistory,
+            leadSource: 'inbound-orphan',
+            aiMode: 0, // never auto-reply to orphans
+          } as any);
+          const orphanSessionId = (orphanIns as any).insertId ?? null;
+          console.log(`[Webhook] Orphan session created — sessionId=${orphanSessionId}, phone=${fromPhone}`);
+
+          // Post to Command Chat so the team sees it immediately
+          try {
+            await db.insert(opsChatMessages).values({
+              cleanerJobId: null,
+              channel: 'command',
+              authorName: '⚠️ Unknown Inbound SMS',
+              authorRole: 'system',
+              body: `⚠️ **Unknown inbound SMS** from ${fromPhone}\n\n"${inboundText}"\n\nNo matching lead found. Check the Orphan Tray in Sync Health to match this to a lead.`,
+              mediaUrl: null,
+              quickAction: 'orphan_sms',
+              metadata: JSON.stringify({ fromPhone, inboundText, sessionId: orphanSessionId }),
+            });
+          } catch (chatErr) {
+            console.error('[Webhook] Failed to post orphan card to command chat:', chatErr);
+          }
+
+          // Notify the owner
+          notifyOwner({
+            title: `⚠️ Unknown SMS from ${fromPhone}`,
+            content: `Message: "${inboundText}"\n\nNo matching lead session found. Check the Orphan Tray in Sync Health.`,
+          }).catch(() => {});
+        } catch (orphanErr) {
+          console.error('[Webhook] Failed to create orphan session:', orphanErr);
+        }
         return;
       }
 

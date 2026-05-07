@@ -401,7 +401,7 @@ export async function runNurtureSend(): Promise<{
         }
         const smsResult = NURTURE_SMS_ENABLED
           ? await sendSms({
-              to: enrollment.leadPhone,
+              to: currentPhone,
               content: messageBody,
             })
           : { success: true, error: null };

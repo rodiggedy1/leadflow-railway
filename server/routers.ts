@@ -3549,6 +3549,103 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
       }),
 
     /**
+     * getOrphanSessions — returns sessions with leadSource = 'inbound-orphan'.
+     * These are inbound SMS messages that arrived with no matching lead session.
+     * Displayed in the Orphan Tray on the Sync Health page.
+     */
+    getOrphanSessions: opsChatProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const orphans = await db
+          .select({
+            id: conversationSessions.id,
+            leadPhone: conversationSessions.leadPhone,
+            leadName: conversationSessions.leadName,
+            messageHistory: conversationSessions.messageHistory,
+            createdAt: conversationSessions.createdAt,
+          })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.leadSource, 'inbound-orphan'))
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(50);
+        return orphans.map(o => {
+          let lastMessage = '';
+          try {
+            const hist = JSON.parse(o.messageHistory as string ?? '[]');
+            if (hist.length > 0) lastMessage = hist[hist.length - 1]?.content ?? '';
+          } catch { /* ignore */ }
+          return {
+            id: o.id,
+            leadPhone: o.leadPhone,
+            leadName: o.leadName,
+            lastMessage,
+            createdAt: o.createdAt,
+          };
+        });
+      }),
+
+    /**
+     * getWebhookEvents — returns recent rows from webhook_events table.
+     * Used by the Webhook Event Log on the Sync Health page.
+     */
+    getWebhookEvents: opsChatProcedure
+      .input(z.object({ limit: z.number().optional(), eventType: z.string().optional() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const limit = input.limit ?? 100;
+        const rows = await db.execute(
+          sql`SELECT id, source, event_type, event_id, from_phone, to_phone, processed, processed_at, session_id, error_message, created_at FROM webhook_events ${input.eventType ? sql`WHERE event_type = ${input.eventType}` : sql``} ORDER BY id DESC LIMIT ${limit}`
+        );
+        const results = (rows as any)[0] as any[];
+        return results.map((r: any) => ({
+          id: r.id as number,
+          source: r.source as string,
+          eventType: r.event_type as string,
+          eventId: r.event_id as string | null,
+          fromPhone: r.from_phone as string | null,
+          toPhone: r.to_phone as string | null,
+          processed: r.processed as number,
+          processedAt: r.processed_at as number | null,
+          sessionId: r.session_id as number | null,
+          errorMessage: r.error_message as string | null,
+          createdAt: r.created_at as Date | null,
+        }));
+      }),
+
+    /**
+     * replayWebhookEvent — re-fires a raw webhook payload through the OpenPhone handler.
+     * Used by the Webhook Event Log replay button.
+     * Replays by POSTing to the internal webhook endpoint on localhost.
+     */
+    replayWebhookEvent: opsChatProcedure
+      .input(z.object({ eventId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const rows = await db.execute(
+          sql`SELECT raw_payload FROM webhook_events WHERE id = ${input.eventId} LIMIT 1`
+        );
+        const results = (rows as any)[0] as any[];
+        if (!results.length) throw new Error('Event not found');
+        const payload = JSON.parse(results[0].raw_payload);
+        // Re-POST to the internal webhook handler (same process, localhost)
+        const port = process.env.PORT ?? 3000;
+        const replayRes = await fetch(`http://localhost:${port}/api/webhooks/openphone`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Webhook-Replay': '1' },
+          body: JSON.stringify(payload),
+        });
+        if (!replayRes.ok) throw new Error(`Replay failed: HTTP ${replayRes.status}`);
+        // Mark as processed
+        await db.execute(
+          sql`UPDATE webhook_events SET processed = 1, processed_at = ${Date.now()} WHERE id = ${input.eventId}`
+        );
+        return { success: true };
+      }),
+
+    /**
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
      * Used by the Teams right panel in CsInbox.
      */

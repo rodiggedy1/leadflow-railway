@@ -1452,3 +1452,11 @@
 - [ ] GUARD: No-ETA status warning — toast when cleaner taps in_progress/finishing_up without ever having set on_the_way (client not notified)
 - [ ] ETA modal: add custom time input so cleaners can enter an exact arrival time (not just 30-min intervals)
 - [x] Add unread message filter to leads list — lastReadAt column, hasUnread server-computed, blue dot badge on lead rows, UNREAD filter button with count badge, attention item in sidebar, markRead on drawer open
+
+## Message Integrity System (World-Class)
+- [x] Add webhook_events log table to DB schema (raw event log before processing)
+- [x] Wire webhook event log into OpenPhone webhook handler (write raw event first, then process)
+- [x] Add orphan message handler (no session match → create inbound-orphan session + notify admin)
+- [ ] Replace nightly OpenPhone API scan with smart canary (flag active sessions with 0 inbound in 7 days)
+- [x] Add Orphan Tray and Webhook Event Log with replay button to Sync Health UI
+- [x] Fix nurtureCron sending to stale enrollment.leadPhone instead of normalized currentPhone (caused OpenPhone 400 errors)
