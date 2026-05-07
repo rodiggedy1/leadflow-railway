@@ -386,6 +386,12 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * sends a new message with a timestamp newer than this value.
    */
   respondedAt: bigint("respondedAt", { mode: "number" }),
+  /**
+   * Unix ms timestamp set when an admin/agent opens the lead drawer.
+   * A lead is "unread" when the most recent inbound message (role:"user") has
+   * a ts newer than this value (or this is null).
+   */
+  lastReadAt: bigint("lastReadAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

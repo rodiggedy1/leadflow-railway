@@ -1451,3 +1451,4 @@
 - [x] GUARD: Stale ETA banner — show yellow warning on job card if etaTimestamp is >30 min in the past and status is still on_the_way or running_late
 - [ ] GUARD: No-ETA status warning — toast when cleaner taps in_progress/finishing_up without ever having set on_the_way (client not notified)
 - [ ] ETA modal: add custom time input so cleaners can enter an exact arrival time (not just 30-min intervals)
+- [x] Add unread message filter to leads list — lastReadAt column, hasUnread server-computed, blue dot badge on lead rows, UNREAD filter button with count badge, attention item in sidebar, markRead on drawer open

@@ -812,6 +812,8 @@ type DrawerSession = {
   nurtureStatus?: 'active' | 'paused';
   nurtureNextStep?: number;
   nurtureNextSendAt?: Date | string | null;
+  // Unread flag — true when the most recent inbound message is newer than lastReadAt
+  hasUnread?: boolean;
 };
 
 /** Returns a flag emoji + language label for non-English sessions */
@@ -1010,6 +1012,17 @@ function ConversationDrawer({
   } catch {
     messages = [];
   }
+
+  // Mark as read when the drawer opens — clears the unread badge on this lead
+  const markReadMutation = trpc.leads.markRead.useMutation({
+    onSuccess: () => utils.leads.list.invalidate(),
+  });
+  useEffect(() => {
+    if (session.hasUnread) {
+      markReadMutation.mutate({ sessionId: session.id });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id]);
 
   const [pendingLostSession, setPendingLostSession] = useState<{ id: number; name: string | null } | null>(null);
   const adminUpdateStageMutation = trpc.leads.adminUpdateStage.useMutation({
@@ -3677,6 +3690,9 @@ export default function AdminDashboard() {
             matchesStage = false;
           }
         }
+      } else if (stageFilter === "UNREAD") {
+        // UNREAD synthetic filter: leads where hasUnread is true (server-computed)
+        matchesStage = !!(s as any).hasUnread;
       } else {
         matchesStage = stageFilter === "all" || s.stage === stageFilter;
       }
@@ -3707,6 +3723,7 @@ export default function AdminDashboard() {
   }, [sessions, stageFilter, agentFilter, sourceFilter, search]);
 
   const unhandledCount = stats?.byStage?.["UNHANDLED"] ?? 0;
+  const unreadCount = sessions.filter(s => !!(s as any).hasUnread).length;
   const [leadsView, setLeadsView] = useState<"split" | "board">("split");
   const [leadsCollapsed, setLeadsCollapsed] = useState(false);
   const [selectedLeadPanel, setSelectedLeadPanel] = useState<typeof sessions[0] | null>(null);
@@ -4225,6 +4242,22 @@ export default function AdminDashboard() {
                             {stage === "all" ? "All" : STAGE_CONFIG[stage as Stage]?.label ?? stage}
                           </button>
                         ))}
+                        {/* Unread quick-filter button */}
+                        <button
+                          onClick={() => setStageFilter(stageFilter === "UNREAD" ? "all" : "UNREAD")}
+                          className={`relative rounded-xl px-2.5 py-1 text-xs font-medium whitespace-nowrap transition ${
+                            stageFilter === "UNREAD"
+                              ? "bg-blue-600 text-white shadow-sm"
+                              : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          }`}
+                        >
+                          Unread
+                          {unreadCount > 0 && (
+                            <span className="ml-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">
+                              {unreadCount}
+                            </span>
+                          )}
+                        </button>
                         {/* Clear pill — shown when a synthetic/attention-driven filter is active */}
                         {stageFilter === "AWAITING_REPLY" && (
                           <span className="inline-flex items-center gap-1 rounded-xl bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
@@ -4256,6 +4289,18 @@ export default function AdminDashboard() {
                             <button
                               onClick={() => setStageFilter("all")}
                               className="ml-0.5 rounded-full p-0.5 hover:bg-orange-200 transition"
+                              aria-label="Clear filter"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )}
+                        {stageFilter === "UNREAD" && (
+                          <span className="inline-flex items-center gap-1 rounded-xl bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+                            Filtered: Unread
+                            <button
+                              onClick={() => setStageFilter("all")}
+                              className="ml-0.5 rounded-full p-0.5 hover:bg-blue-200 transition"
                               aria-label="Clear filter"
                             >
                               <X className="h-3 w-3" />
@@ -4417,7 +4462,12 @@ export default function AdminDashboard() {
                                 >
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="min-w-0">
-                                      <div className="text-2xl font-semibold tracking-[-0.03em] truncate">{lead.leadName ?? lead.leadPhone}</div>
+                                      <div className="flex items-center gap-2">
+                                        {!!(lead as any).hasUnread && (
+                                          <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" title="Unread message" />
+                                        )}
+                                        <div className="text-2xl font-semibold tracking-[-0.03em] truncate">{lead.leadName ?? lead.leadPhone}</div>
+                                      </div>
                                       <div className="mt-1 text-sm text-zinc-500">{lead.leadPhone}</div>
                                     </div>
                                     <span className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold ${tone}`}>{status}</span>
@@ -4655,7 +4705,10 @@ export default function AdminDashboard() {
                                       if (selectedLeadPanel.stage === "UNHANDLED") return "bg-rose-500";
                                       return "bg-zinc-300";
                                     })()}`} />
-                                    <h3 className="text-[22px] font-bold tracking-[-0.02em] leading-tight">
+                                    <h3 className="text-[22px] font-bold tracking-[-0.02em] leading-tight flex items-center gap-2">
+                                      {!!(selectedLeadPanel as any).hasUnread && (
+                                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" title="Unread message" />
+                                      )}
                                       {selectedLeadPanel.leadName ?? "Unknown"}
                                     </h3>
                                   </div>
@@ -5046,9 +5099,15 @@ export default function AdminDashboard() {
                                   setTimeout(() => {
                                     document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
                                   }, 80);
+                                } else if (item.key === "unread") {
+                                  setActiveTab("leads");
+                                  setStageFilter("UNREAD");
+                                  setTimeout(() => {
+                                    document.getElementById("leads-table-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  }, 80);
                                 }
                               };
-                              const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "hot_leads";
+                              const isClickable = item.count > 0 || item.key === "nurture_paused" || item.key === "hot_leads" || item.key === "unread";
                               return (
                               <button
                                 key={item.key}

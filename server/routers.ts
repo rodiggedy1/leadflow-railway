@@ -231,7 +231,16 @@ export const appRouter = router({
             // Outbound staff calls are not customer replies and must not trigger the notifier.
           }
 
-          return { ...s, lastActivityText, lastActivityAt, lastActivityType, lastCustomerReplyAt };
+          // ── Unread flag ───────────────────────────────────────────────────
+          // A lead is unread when the most recent inbound (role:"user") message
+          // has a ts newer than lastReadAt (or lastReadAt is null).
+          let hasUnread = false;
+          if (lastCustomerReplyAt) {
+            const lastReadAt = s.lastReadAt as number | null | undefined;
+            hasUnread = !lastReadAt || lastCustomerReplyAt.getTime() > lastReadAt;
+          }
+
+          return { ...s, lastActivityText, lastActivityAt, lastActivityType, lastCustomerReplyAt, hasUnread };
         });
 
         // Sort by the most recent "significant action" descending:
@@ -1239,6 +1248,23 @@ export const appRouter = router({
         await db
           .update(conversationSessions)
           .set({ respondedAt: Date.now() })
+          .where(eq(conversationSessions.id, input.sessionId));
+        return { success: true };
+      }),
+
+    /**
+     * leads.markRead — stamp lastReadAt = now() so the lead is no longer "unread".
+     * Called automatically when the lead drawer is opened.
+     */
+    markRead: publicProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await getAgentSessionFromCtx(ctx);
+        const db = await getDb();
+        if (!db) return { success: false };
+        await db
+          .update(conversationSessions)
+          .set({ lastReadAt: Date.now() })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
@@ -3991,7 +4017,37 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         } catch { /* skip malformed */ }
       }
 
-      // ── Build items ───────────────────────────────────────────────────────────
+      // ── 5. Unread leads ───────────────────────────────────────────────────
+      // A lead is unread when the most recent inbound message (role:"user") has
+      // a ts newer than lastReadAt (or lastReadAt is null). Fetch lastReadAt for
+      // active sessions to compute the count.
+      const activeSessionsWithRead = await db
+        .select({
+          id: conversationSessions.id,
+          messageHistory: conversationSessions.messageHistory,
+          lastReadAt: conversationSessions.lastReadAt,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            sql`${conversationSessions.stage} NOT IN ('BOOKED','COMPLETED','CLOSED','LOST','COLD')`,
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound','cs-inbound-cleaner','cs_initiated','hiring_interview','review'))`,
+          )
+        )
+        .limit(500);
+
+      let unreadLeadsCount = 0;
+      for (const s of activeSessionsWithRead) {
+        try {
+          const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+          const lastCustomer = [...history].reverse().find(m => m.role === "user" || m.role === "customer");
+          if (!lastCustomer?.ts) continue;
+          const lastReadAt = s.lastReadAt as number | null | undefined;
+          if (!lastReadAt || lastCustomer.ts > lastReadAt) unreadLeadsCount++;
+        } catch { /* skip malformed */ }
+      }
+
+      // ── Build items ───────────────────────────────────────────────────
       type Severity = "urgent" | "warning" | "ok";
       const items: Array<{ key: string; label: string; count: number; detail: string; severity: Severity }> = [
         {
@@ -4022,6 +4078,15 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             ? `${hotLeadsCount} lead${hotLeadsCount !== 1 ? "s" : ""} active in the last 72 hours`
             : "No hot leads right now",
           severity: hotLeadsCount > 0 ? "warning" : "ok",
+        },
+        {
+          key: "unread",
+          label: "Unread messages",
+          count: unreadLeadsCount,
+          detail: unreadLeadsCount > 0
+            ? `${unreadLeadsCount} lead${unreadLeadsCount !== 1 ? "s" : ""} with new messages you haven't seen`
+            : "All messages have been read",
+          severity: unreadLeadsCount > 0 ? "warning" : "ok",
         },
       ];
 
