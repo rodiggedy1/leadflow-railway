@@ -442,10 +442,29 @@ export const schedulingRouter = router({
 
       // Merge: attach assignment info to each job
       const assignmentMap = new Map(assignments.map(a => [a.cleanerJobId, a]));
-      const enriched = jobs.map(j => ({
-        ...j,
-        assignment: assignmentMap.get(j.id) ?? null,
-      }));
+      // Build a lookup from scheduling_teams name -> team row
+      const teamByName = new Map(teams.map(t => [t.name, t]));
+      const enriched = jobs.map(j => {
+        const savedAssignment = assignmentMap.get(j.id);
+        // If no saved assignment yet, synthesize one from the job's own Launch27 teamName
+        const syntheticAssignment = !savedAssignment && j.teamName && teamByName.has(j.teamName)
+          ? {
+              cleanerJobId: j.id,
+              jobDate: j.jobDate,
+              teamId: teamByName.get(j.teamName)!.id,
+              teamName: j.teamName,
+              routeOrder: 0,
+              estimatedArrivalMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : null,
+              estimatedDepartureMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() + 2 * 3600000 : null,
+              driveTimeSecs: null,
+              isManual: 0,
+            }
+          : null;
+        return {
+          ...j,
+          assignment: savedAssignment ?? syntheticAssignment,
+        };
+      });
 
       return { jobs: enriched, teams, hasAssignments: assignments.length > 0 };
     }),
