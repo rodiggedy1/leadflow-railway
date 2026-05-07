@@ -44,7 +44,6 @@ import {
   RotateCcw,
   PhoneIncoming,
   List,
-  UserX,
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -761,85 +760,6 @@ function MessageIntegrityPanel() {
   );
 }
 
-// ─── Orphan Tray Panel ────────────────────────────────────────────────────────────────────────────────────
-
-interface OrphanSession {
-  id: number;
-  leadPhone: string;
-  leadName: string | null;
-  lastMessage: string;
-  createdAt: Date | string;
-}
-
-function OrphanTrayPanel() {
-  const { data, isLoading, refetch } = trpc.leads.getOrphanSessions.useQuery(undefined, {
-    staleTime: 60_000,
-  });
-
-  const orphans = (data ?? []) as OrphanSession[];
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <UserX className="w-4 h-4 text-amber-500" />
-          <h2 className="text-sm font-semibold text-gray-900">Orphan Tray</h2>
-          <span className="text-xs text-gray-400">Inbound SMS with no matching lead session</span>
-          {orphans.length > 0 && (
-            <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">{orphans.length}</Badge>
-          )}
-        </div>
-        <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading} className="gap-1.5 text-xs">
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
-      </div>
-
-      {isLoading && (
-        <div className="px-5 py-8 text-center">
-          <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
-          <p className="text-sm text-gray-500">Loading orphan sessions…</p>
-        </div>
-      )}
-
-      {!isLoading && orphans.length === 0 && (
-        <div className="px-5 py-8 text-center">
-          <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-          <p className="text-sm text-gray-600 font-medium">No orphan messages — all inbound SMS matched a lead.</p>
-          <p className="text-xs text-gray-400 mt-1">When an unknown number texts in, it will appear here so you can match it to a lead.</p>
-        </div>
-      )}
-
-      {!isLoading && orphans.length > 0 && (
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50/50">
-              <TableHead className="text-xs font-semibold text-gray-600">Phone</TableHead>
-              <TableHead className="text-xs font-semibold text-gray-600">Last Message</TableHead>
-              <TableHead className="text-xs font-semibold text-gray-600">Received</TableHead>
-              <TableHead className="text-xs font-semibold text-gray-600 text-right">Session ID</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {orphans.map((o) => (
-              <TableRow key={o.id} className="hover:bg-amber-50/30">
-                <TableCell className="text-sm font-mono font-medium text-gray-900">{o.leadPhone}</TableCell>
-                <TableCell className="text-sm text-gray-600 max-w-xs truncate">
-                  <span className="italic">&ldquo;{o.lastMessage.slice(0, 120)}{o.lastMessage.length > 120 ? '…' : ''}&rdquo;</span>
-                </TableCell>
-                <TableCell className="text-xs text-gray-500">{timeAgo(o.createdAt)}</TableCell>
-                <TableCell className="text-right">
-                  <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs font-mono">#{o.id}</Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </div>
-  );
-}
-
 // ─── Webhook Event Log Panel ────────────────────────────────────────────────────────────────────────────────────
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
@@ -1238,8 +1158,6 @@ export default function SyncHealthPage() {
         <SilentSessionsPanel />
         {/* ── Message Integrity Panel ── */}
         <MessageIntegrityPanel />
-        {/* ── Orphan Tray ── */}
-        <OrphanTrayPanel />
         {/* ── Webhook Event Log ── */}
         <WebhookEventLogPanel />
       </main>

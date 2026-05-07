@@ -1460,3 +1460,6 @@
 - [ ] Replace nightly OpenPhone API scan with smart canary (flag active sessions with 0 inbound in 7 days)
 - [x] Add Orphan Tray and Webhook Event Log with replay button to Sync Health UI
 - [x] Fix nurtureCron sending to stale enrollment.leadPhone instead of normalized currentPhone (caused OpenPhone 400 errors)
+- [x] Simplify orphan SMS: create normal inbound-sms session instead of inbound-orphan special case
+- [x] Remove Orphan Tray panel from Sync Health page (no longer needed)
+- [x] Remove getOrphanSessions tRPC procedure (no longer needed)

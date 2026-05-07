@@ -561,48 +561,26 @@ export function registerWebhookRoutes(app: Express) {
       const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent
 
       if (!session) {
-        console.warn(`[Webhook] No conversation session found for ${fromPhone}. Creating orphan session.`);
-        // ── Orphan Message Handler ──────────────────────────────────────────────────
-        // Instead of silently dropping the message, create an inbound-orphan session
-        // so the admin can see it in the Orphan Tray and manually match it to a lead.
+        // ── New Inbound Lead ────────────────────────────────────────────────────────────────────────────────────
+        // Unknown number texted in — create a normal new lead session so it appears
+        // in the Leads list and the AI can engage it like any other inbound lead.
+        console.log(`[Webhook] No session found for ${fromPhone} — creating new inbound-sms lead session.`);
         try {
-          const orphanHistory = JSON.stringify([
+          const newHistory = JSON.stringify([
             { role: 'user', content: inboundText, ts: Date.now(), mediaUrls: mediaUrls.length ? mediaUrls : undefined },
           ]);
-          const [orphanIns] = await db.insert(conversationSessions).values({
+          const [newIns] = await db.insert(conversationSessions).values({
             leadPhone: fromPhone,
-            leadName: `Unknown (${fromPhone})`,
+            leadName: null,
             stage: 'QUOTE_SENT' as any,
-            messageHistory: orphanHistory,
-            leadSource: 'inbound-orphan',
-            aiMode: 0, // never auto-reply to orphans
+            messageHistory: newHistory,
+            leadSource: 'inbound-sms',
+            aiMode: 1, // allow AI to engage
           } as any);
-          const orphanSessionId = (orphanIns as any).insertId ?? null;
-          console.log(`[Webhook] Orphan session created — sessionId=${orphanSessionId}, phone=${fromPhone}`);
-
-          // Post to Command Chat so the team sees it immediately
-          try {
-            await db.insert(opsChatMessages).values({
-              cleanerJobId: null,
-              channel: 'command',
-              authorName: '⚠️ Unknown Inbound SMS',
-              authorRole: 'system',
-              body: `⚠️ **Unknown inbound SMS** from ${fromPhone}\n\n"${inboundText}"\n\nNo matching lead found. Check the Orphan Tray in Sync Health to match this to a lead.`,
-              mediaUrl: null,
-              quickAction: 'orphan_sms',
-              metadata: JSON.stringify({ fromPhone, inboundText, sessionId: orphanSessionId }),
-            });
-          } catch (chatErr) {
-            console.error('[Webhook] Failed to post orphan card to command chat:', chatErr);
-          }
-
-          // Notify the owner
-          notifyOwner({
-            title: `⚠️ Unknown SMS from ${fromPhone}`,
-            content: `Message: "${inboundText}"\n\nNo matching lead session found. Check the Orphan Tray in Sync Health.`,
-          }).catch(() => {});
-        } catch (orphanErr) {
-          console.error('[Webhook] Failed to create orphan session:', orphanErr);
+          const newSessionId = (newIns as any).insertId ?? null;
+          console.log(`[Webhook] New inbound-sms session created — sessionId=${newSessionId}, phone=${fromPhone}`);
+        } catch (createErr) {
+          console.error('[Webhook] Failed to create inbound-sms session:', createErr);
         }
         return;
       }
