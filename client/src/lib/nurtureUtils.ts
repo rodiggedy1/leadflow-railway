@@ -6,6 +6,24 @@
  * the definitions already in LeadNurturing.tsx.
  */
 
+export const STEP_PREVIEW: Record<number, string> = {
+  3:  "I can hold a spot for you, but spots go fast. Want me to check what's open this week or tomorrow?",
+  4:  "Heads up — openings this week are filling up. Want me to check what's left before they're gone?",
+  5:  "No worries if today got busy — happens to everyone. I can check what's open tomorrow or later this week if that works better?",
+  6:  "Morning [name] — still need the cleaning done? I've got the schedule in front of me.",
+  7:  "Would morning or evening work better if we can fit you in?",
+  8:  "Last message for today — almost full this week. Want me to grab you one of the last spots?",
+  9:  "Just so you know — we bring everything and handle the full home in one visit. No prep needed on your end. Want me to check times?",
+  10: "Hey [name] — still looking to get the cleaning done, or did you already sort it out?",
+  11: "If timing was the issue, we still have a few spots open this week. Want me to check what works for you?",
+  12: "We had a couple openings come up — if you book this week I can take something off for a first-time clean. Want me to check times?",
+  13: "Hey [name], still need help with the cleaning this week, or should I close this out for now?",
+  14: "Quick one — you don't have to be home, we bring everything, and the whole place gets done in one visit. Want me to check what's open?",
+  15: "Totally get it if you're still deciding — we're insured, background-checked, and our team cleans homes like yours every week. Want me to send a couple times?",
+  16: "We had a few last-minute openings come up — if you still want the cleaning done, I can check if one of them works for you.",
+  17: "Hey [name], I'll close this out for now so I'm not bugging you. If you still need help with the cleaning later, just reply here and I'll check the schedule 👍",
+};
+
 export const STEP_META: Record<number, { label: string; phase: 1 | 2 | 3 | 4 }> = {
   3:  { label: "Holding a spot",      phase: 1 },
   4:  { label: "Urgency",             phase: 1 },

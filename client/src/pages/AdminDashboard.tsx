@@ -145,7 +145,7 @@ import { FollowUpReminderToast } from "@/components/FollowUpReminderToast";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import CallGuide from "@/components/CallGuide";
 import PipelineBoard from "@/components/PipelineBoard";
-import { getStepLabel, getPhaseName, formatNextSendAt } from "@/lib/nurtureUtils";
+import { getStepLabel, getPhaseName, formatNextSendAt, STEP_PREVIEW } from "@/lib/nurtureUtils";
 import { useOpsStream } from "@/hooks/useOpsStream";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
 /**
@@ -1382,7 +1382,7 @@ function ConversationDrawer({
                 : new Date(Date.now() + 86_400_000),
               lastStepSent: null as number | null,
             },
-            nextMessageBody: null as string | null,
+            nextMessageBody: (STEP_PREVIEW[session.nurtureNextStep ?? 3] ?? null) as string | null,
           }
         : undefined,
     }
