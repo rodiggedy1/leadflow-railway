@@ -4048,10 +4048,13 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       for (const s of activeSessionsWithRead) {
         try {
           const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
-          const lastCustomer = [...history].reverse().find(m => m.role === "user" || m.role === "customer");
-          if (!lastCustomer?.ts) continue;
+          if (history.length === 0) continue;
+          // Only unread when the LAST message is from the customer — if agent replied last, it's read.
+          const lastMsg = history[history.length - 1];
+          const lastIsCustomer = lastMsg.role === "user" || lastMsg.role === "customer";
+          if (!lastIsCustomer || !lastMsg.ts) continue;
           const lastReadAt = s.lastReadAt as number | null | undefined;
-          if (!lastReadAt || lastCustomer.ts > lastReadAt) unreadLeadsCount++;
+          if (!lastReadAt || lastMsg.ts > lastReadAt) unreadLeadsCount++;
         } catch { /* skip malformed */ }
       }
 
