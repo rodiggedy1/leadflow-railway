@@ -188,6 +188,20 @@ function estimateDurationHours(serviceType: string | null, bedrooms: number | nu
  *   2. Assign remaining unmatched jobs to the team with the nearest existing route endpoint.
  *   3. Run 2-opt within each team's route to reduce total drive time.
  */
+/**
+ * Solve the scheduling problem with two phases:
+ *
+ * Phase 1 — LOCK assigned jobs:
+ *   Jobs that already have a teamName from Launch27 are locked to that team.
+ *   Their start time comes from serviceDateTime (the real scheduled time).
+ *   Route order within each team is sorted chronologically by serviceDateTime.
+ *
+ * Phase 2 — INSERT unassigned jobs:
+ *   Jobs with no teamName are inserted into the best team based on:
+ *   - Geographic proximity to that team's existing jobs (travel matrix)
+ *   - Available capacity (team not over maxHoursPerDay)
+ *   Unassigned jobs get an estimated start time after the team's last locked job.
+ */
 function solveVRP(
   jobs: GeocodedJob[],
   teams: TeamConfig[],
@@ -195,14 +209,11 @@ function solveVRP(
   allPoints: LatLng[], // [team homes..., job points...]
   teamOffset: number,  // index where job points start in allPoints
 ): Assignment[] {
-  const DAY_START_MS = 8 * 3600 * 1000; // 8 AM in ms from midnight
-  const BUFFER_SECS = 900; // 15 min buffer between jobs
-
-  // Build team routes: map teamId → list of job indices (into jobs[])
+  // map teamId → list of job indices (into jobs[])
   const routes = new Map<number, number[]>();
   for (const t of teams) routes.set(t.id, []);
 
-  // Step 1: Assign jobs that already have a matching team name
+  // ── Phase 1: Lock assigned jobs to their Launch27 team ──────────────────────
   const unassigned: number[] = [];
   for (let ji = 0; ji < jobs.length; ji++) {
     const job = jobs[ji];
@@ -214,82 +225,108 @@ function solveVRP(
     }
   }
 
-  // Step 2: Assign unmatched jobs to nearest team (by drive time from team home)
+  // Sort each team's locked jobs chronologically by serviceDateTime
+  for (const [, route] of Array.from(routes.entries())) {
+    route.sort((a, b) => {
+      const ta = jobs[a].serviceDateTime ? new Date(jobs[a].serviceDateTime!).getTime() : 0;
+      const tb = jobs[b].serviceDateTime ? new Date(jobs[b].serviceDateTime!).getTime() : 0;
+      return ta - tb;
+    });
+  }
+
+  // ── Phase 2: Insert unassigned jobs into best team by proximity ─────────────
   for (const ji of unassigned) {
     const jobPointIdx = teamOffset + ji;
     let bestTeam = teams[0];
     let bestCost = Infinity;
+
     for (const t of teams) {
-      const teamHomeIdx = teams.indexOf(t);
       const route = routes.get(t.id)!;
-      // Cost = drive time from last point in route (or home) to this job
-      const lastIdx = route.length > 0 ? teamOffset + route[route.length - 1] : teamHomeIdx;
-      const cost = travelMatrix[lastIdx]?.[jobPointIdx] ?? Infinity;
-      // Penalize overloaded teams
       const totalHours = route.reduce((s, rji) => s + jobs[rji].durationHours, 0);
-      const teamCfg = teams.find(tt => tt.id === t.id)!;
-      if (totalHours >= teamCfg.maxHoursPerDay) continue;
-      if (cost < bestCost) { bestCost = cost; bestTeam = t; }
+      if (totalHours >= t.maxHoursPerDay) continue; // team full
+
+      // Cost = minimum travel time from this job to any of the team's existing jobs (or home)
+      const teamIdx = teams.indexOf(t);
+      let minCost = Infinity;
+      if (route.length === 0) {
+        minCost = travelMatrix[teamIdx]?.[jobPointIdx] ?? Infinity;
+      } else {
+        for (const rji of route) {
+          const d = travelMatrix[teamOffset + rji]?.[jobPointIdx] ?? Infinity;
+          if (d < minCost) minCost = d;
+        }
+      }
+      if (minCost < bestCost) { bestCost = minCost; bestTeam = t; }
     }
     routes.get(bestTeam.id)!.push(ji);
   }
 
-  // Step 3: 2-opt improvement within each team's route
-  for (const [teamId, route] of Array.from(routes.entries())) {
-    if (route.length < 3) continue;
-    const teamIdx = teams.findIndex(t => t.id === teamId);
-    let improved = true;
-    while (improved) {
-      improved = false;
-      for (let i = 0; i < route.length - 1; i++) {
-        for (let k = i + 1; k < route.length; k++) {
-          const before = routeCost(route, i, k, teamIdx, teamOffset, travelMatrix);
-          // Reverse segment [i+1..k]
-          const newRoute = [...route.slice(0, i + 1), ...route.slice(i + 1, k + 1).reverse(), ...route.slice(k + 1)];
-          const after = routeCost(newRoute, i, k, teamIdx, teamOffset, travelMatrix);
-          if (after < before) {
-            route.splice(0, route.length, ...newRoute);
-            improved = true;
-          }
-        }
-      }
-    }
-  }
-
-  // Step 4: Build Assignment objects with estimated arrival times
+  // ── Build Assignment objects ─────────────────────────────────────────────────
+  const BUFFER_MS = 15 * 60 * 1000; // 15 min buffer between jobs
   const assignments: Assignment[] = [];
+
   for (const [teamId, route] of Array.from(routes.entries())) {
     const team = teams.find(t => t.id === teamId)!;
     const teamIdx = teams.findIndex(t => t.id === teamId);
-    let currentTimeMs = DAY_START_MS;
-    let prevPointIdx = teamIdx;
 
-    for (let order = 0; order < route.length; order++) {
-      const ji = route[order];
+    // Separate locked (have Launch27 team + serviceDateTime) from newly inserted
+    const locked = route.filter(ji => !!jobs[ji].serviceDateTime && !!jobs[ji].teamName);
+    const inserted = route.filter(ji => !jobs[ji].serviceDateTime || !jobs[ji].teamName);
+
+    // Sort locked jobs chronologically
+    locked.sort((a, b) =>
+      new Date(jobs[a].serviceDateTime!).getTime() - new Date(jobs[b].serviceDateTime!).getTime()
+    );
+
+    // Determine end time of last locked job (for appending inserted jobs after)
+    const lastLockedEndMs = locked.length > 0
+      ? new Date(jobs[locked[locked.length - 1]].serviceDateTime!).getTime()
+        + jobs[locked[locked.length - 1]].durationHours * 3600000
+      : Date.now();
+
+    // Emit locked jobs — use real serviceDateTime as arrival
+    locked.forEach((ji, order) => {
       const job = jobs[ji];
-      const jobPointIdx = teamOffset + ji;
-      const driveSecs = travelMatrix[prevPointIdx]?.[jobPointIdx] ?? 0;
-      currentTimeMs += driveSecs * 1000 + BUFFER_SECS * 1000;
-      const arrivalMs = currentTimeMs;
-      const departureMs = arrivalMs + job.durationHours * 3600 * 1000;
-      currentTimeMs = departureMs;
-      prevPointIdx = jobPointIdx;
-
+      const startMs = new Date(job.serviceDateTime!).getTime();
+      const endMs = startMs + job.durationHours * 3600000;
+      const prevIdx = order === 0 ? teamIdx : teamOffset + locked[order - 1];
+      const driveSecs = travelMatrix[prevIdx]?.[teamOffset + ji] ?? 0;
       assignments.push({
         cleanerJobId: job.cleanerJobId,
         teamId,
         teamName: team.name,
         routeOrder: order,
-        estimatedArrivalMs: arrivalMs,
-        estimatedDepartureMs: departureMs,
+        estimatedArrivalMs: startMs,
+        estimatedDepartureMs: endMs,
         driveTimeSecs: driveSecs,
       });
-    }
+    });
+
+    // Emit inserted (unassigned) jobs — appended after locked jobs
+    let currentMs = lastLockedEndMs + BUFFER_MS;
+    inserted.forEach((ji, i) => {
+      const job = jobs[ji];
+      const startMs = currentMs;
+      const endMs = startMs + job.durationHours * 3600000;
+      currentMs = endMs + BUFFER_MS;
+      const prevIdx = locked.length > 0 && i === 0
+        ? teamOffset + locked[locked.length - 1]
+        : i === 0 ? teamIdx : teamOffset + inserted[i - 1];
+      const driveSecs = travelMatrix[prevIdx]?.[teamOffset + ji] ?? 0;
+      assignments.push({
+        cleanerJobId: job.cleanerJobId,
+        teamId,
+        teamName: team.name,
+        routeOrder: locked.length + i,
+        estimatedArrivalMs: startMs,
+        estimatedDepartureMs: endMs,
+        driveTimeSecs: driveSecs,
+      });
+    });
   }
 
   return assignments;
 }
-
 function routeCost(route: number[], i: number, k: number, teamIdx: number, teamOffset: number, matrix: number[][]): number {
   let cost = 0;
   const prev = (idx: number) => idx === 0 ? teamIdx : teamOffset + route[idx - 1];
@@ -470,18 +507,43 @@ export const schedulingRouter = router({
 
       if (teamConfigs.length === 0) {
         // No teams have home addresses — use simple team-name matching only
-        const simpleAssignments: Assignment[] = geocoded.map((job, i) => {
-          const matchedTeam = teams.find(t => t.name === job.teamName) ?? teams[0];
-          return {
-            cleanerJobId: job.cleanerJobId,
-            teamId: matchedTeam.id,
-            teamName: matchedTeam.name,
-            routeOrder: i,
-            estimatedArrivalMs: 8 * 3600 * 1000,
-            estimatedDepartureMs: (8 + job.durationHours) * 3600 * 1000,
-            driveTimeSecs: 0,
-          };
-        });
+        // Group by team (locked), then assign unmatched to nearest team by name proximity
+        const tGroups = new Map<number, GeocodedJob[]>();
+        for (const t of teams) tGroups.set(t.id, []);
+        const unmatched2: GeocodedJob[] = [];
+        for (const job of geocoded) {
+          const mt = teams.find(t => t.name === job.teamName);
+          if (mt) tGroups.get(mt.id)!.push(job);
+          else unmatched2.push(job);
+        }
+        for (const job of unmatched2) {
+          tGroups.get(teams[0].id)!.push(job);
+        }
+        const simpleAssignments: Assignment[] = [];
+        for (const [tid, tJobs] of Array.from(tGroups.entries())) {
+          const team2 = teams.find(t => t.id === tid)!;
+          const lockedJ = tJobs.filter(j => !!j.serviceDateTime && !!j.teamName)
+            .sort((a, b) => new Date(a.serviceDateTime!).getTime() - new Date(b.serviceDateTime!).getTime());
+          const insertedJ = tJobs.filter(j => !j.serviceDateTime || !j.teamName);
+          const lastEndMs2 = lockedJ.length > 0
+            ? new Date(lockedJ[lockedJ.length-1].serviceDateTime!).getTime() + lockedJ[lockedJ.length-1].durationHours * 3600000
+            : Date.now();
+          let curMs = lastEndMs2 + 15 * 60 * 1000;
+          [...lockedJ, ...insertedJ].forEach((job, i) => {
+            const startMs = i < lockedJ.length ? new Date(job.serviceDateTime!).getTime() : curMs;
+            const endMs = startMs + job.durationHours * 3600000;
+            if (i >= lockedJ.length) curMs = endMs + 15 * 60 * 1000;
+            simpleAssignments.push({
+              cleanerJobId: job.cleanerJobId,
+              teamId: tid,
+              teamName: team2.name,
+              routeOrder: i,
+              estimatedArrivalMs: startMs,
+              estimatedDepartureMs: endMs,
+              driveTimeSecs: 0,
+            });
+          });
+        }
         await persistAssignments(db, input.date, simpleAssignments);
         return { assigned: simpleAssignments.length, message: `Assigned ${simpleAssignments.length} jobs (no home addresses set — add team home addresses for route optimization).` };
       }
@@ -536,8 +598,8 @@ export const schedulingRouter = router({
           teamName: team[0].name,
           routeOrder: input.routeOrder ?? 0,
           isManual: 1,
-          estimatedArrivalMs: 8 * 3600 * 1000,
-          estimatedDepartureMs: 10 * 3600 * 1000,
+          estimatedArrivalMs: Date.now(),
+          estimatedDepartureMs: Date.now() + 2 * 3600 * 1000,
           driveTimeSecs: 0,
         })
         .onDuplicateKeyUpdate({
