@@ -232,13 +232,21 @@ export const appRouter = router({
           }
 
           // ── Unread flag ───────────────────────────────────────────────────
-          // A lead is unread when the most recent inbound (role:"user") message
-          // has a ts newer than lastReadAt (or lastReadAt is null).
+          // A lead is unread ONLY when:
+          //   1. The LAST message in the conversation is from the customer (role:"user")
+          //   2. AND that message's ts is newer than lastReadAt (or lastReadAt is null)
+          // If the agent replied last, the conversation is NOT unread regardless of history.
           let hasUnread = false;
-          if (lastCustomerReplyAt) {
-            const lastReadAt = s.lastReadAt as number | null | undefined;
-            hasUnread = !lastReadAt || lastCustomerReplyAt.getTime() > lastReadAt;
-          }
+          try {
+            const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+            // Find the last non-empty message
+            const lastMsg = history.length > 0 ? history[history.length - 1] : null;
+            const lastIsCustomer = lastMsg && (lastMsg.role === "user" || lastMsg.role === "customer");
+            if (lastIsCustomer && lastMsg?.ts) {
+              const lastReadAt = s.lastReadAt as number | null | undefined;
+              hasUnread = !lastReadAt || lastMsg.ts > lastReadAt;
+            }
+          } catch { /* ignore */ }
 
           return { ...s, lastActivityText, lastActivityAt, lastActivityType, lastCustomerReplyAt, hasUnread };
         });
