@@ -1523,7 +1523,7 @@ export default function FieldManagement() {
       <AdminHeader activeTab="field-management" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <div className={`mx-auto px-4 sm:px-6 py-8 ${
-        activeTab === "board" || activeTab === "tower" ? "max-w-7xl" : "max-w-3xl"
+        activeTab === "board" || activeTab === "tower" || activeTab === "schedule" ? "max-w-7xl" : "max-w-3xl"
       }`}>
         {/* Page header */}
         <div className="mb-6 flex items-start justify-between gap-4">

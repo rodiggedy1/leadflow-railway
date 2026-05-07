@@ -593,7 +593,7 @@ export default function SchedulingTab() {
       ) : (
         <div className="flex gap-4 flex-1 min-h-0" style={{ height: "calc(100vh - 280px)" }}>
           {/* Left: team job lists */}
-          <div className="w-80 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
+          <div className="w-96 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
             {teams.filter(t => t.isActive).map(team => {
               const teamJobs = teamGroups.get(team.id) ?? [];
               const totalHours = teamJobs.reduce((s, j) => {
@@ -661,8 +661,8 @@ export default function SchedulingTab() {
 
             {teams.length === 0 && (
               <div className="bg-blue-50 rounded-xl p-4 text-center">
-                <p className="text-sm text-blue-700 font-medium">No teams configured</p>
-                <p className="text-xs text-blue-500 mt-1">Click "Teams" above to add your cleaning teams</p>
+                <p className="text-sm text-blue-700 font-medium">No active teams</p>
+                <p className="text-xs text-blue-500 mt-1">Teams are auto-synced from Launch27. Click "Teams" to manage them.</p>
               </div>
             )}
           </div>

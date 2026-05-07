@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -308,6 +308,27 @@ export const schedulingRouter = router({
   getTeams: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    // Auto-sync: insert any new teamNames from cleaner_jobs not yet in scheduling_teams
+    const SKIP = ["Unassigned", "fake rohan team"];
+    const COLORS = ["#6366f1","#f59e0b","#10b981","#ef4444","#3b82f6","#8b5cf6","#ec4899","#14b8a6","#f97316","#84cc16","#06b6d4","#a855f7"];
+    const [distinctRows] = await (db as any).execute(
+      sql`SELECT DISTINCT teamName, teamId FROM cleaner_jobs WHERE teamName IS NOT NULL`
+    ) as [Array<{teamName:string;teamId:number|null}>];
+    const existing = await db.select({ name: schedulingTeams.name }).from(schedulingTeams);
+    const existingNames = new Set(existing.map(r => r.name));
+    const toInsert = distinctRows.filter((r: any) => r.teamName && !SKIP.includes(r.teamName) && !existingNames.has(r.teamName));
+    if (toInsert.length > 0) {
+      const colorCount = existingNames.size;
+      await db.insert(schedulingTeams).values(
+        toInsert.map((r: any, i: number) => ({
+          name: r.teamName,
+          launch27TeamId: r.teamId ?? undefined,
+          maxHoursPerDay: 8,
+          color: COLORS[(colorCount + i) % COLORS.length],
+          isActive: 1,
+        }))
+      );
+    }
     return db.select().from(schedulingTeams).orderBy(schedulingTeams.name);
   }),
 
