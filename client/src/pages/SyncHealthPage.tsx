@@ -37,6 +37,9 @@ import {
   Heart,
   Timer,
   Zap,
+  AlertTriangle,
+  Inbox,
+  WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -450,6 +453,158 @@ function RunRow({ run }: { run: SyncRun }) {
   );
 }
 
+// ─── Silent Sessions Panel ──────────────────────────────────────────────────
+
+type SilentSession = {
+  id: number;
+  name: string;
+  phone: string;
+  stage: string;
+  totalSent: number;
+  totalReceived: number;
+  spanDays: number;
+  lastActivity: string;
+  severity: 'high' | 'medium' | 'low';
+};
+
+function SilentSessionsPanel() {
+  const [loaded, setLoaded] = useState(false);
+  const [reconcilingId, setReconcilingId] = useState<number | null>(null);
+
+  const { data, isLoading, refetch } = trpc.leads.detectSilentSessions.useQuery(undefined, {
+    enabled: loaded,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const reconcile = trpc.leads.reconcileSessionMessages.useMutation({
+    onSuccess: (result, vars) => {
+      toast.success(`Reconciled: +${result.added} messages added (total ${result.total})`);
+      setReconcilingId(null);
+      refetch();
+    },
+    onError: (err) => {
+      toast.error(`Reconcile failed: ${err.message}`);
+      setReconcilingId(null);
+    },
+  });
+
+  const severityColor = (s: string) =>
+    s === 'high' ? 'bg-red-100 text-red-700 border-red-200' :
+    s === 'medium' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+    'bg-gray-100 text-gray-600 border-gray-200';
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <WifiOff className="w-4 h-4 text-red-500" />
+          <h2 className="text-sm font-semibold text-gray-900">Webhook Gap Detection</h2>
+          <span className="text-xs text-gray-400">Sessions with many outbound messages but very few inbound replies</span>
+        </div>
+        {!loaded ? (
+          <Button size="sm" variant="outline" onClick={() => setLoaded(true)} className="gap-1.5 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+            Run Detection
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading} className="gap-1.5 text-xs">
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        )}
+      </div>
+
+      {!loaded && (
+        <div className="px-5 py-8 text-center">
+          <Inbox className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Click "Run Detection" to scan all sessions for missing inbound messages.</p>
+          <p className="text-xs text-gray-400 mt-1">This scans all sessions — may take a few seconds.</p>
+        </div>
+      )}
+
+      {loaded && isLoading && (
+        <div className="px-5 py-8 text-center">
+          <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Scanning sessions…</p>
+        </div>
+      )}
+
+      {loaded && !isLoading && data && (
+        <>
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">{data.total} affected sessions found</span>
+            {data.total > 0 && (
+              <>
+                <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">{data.sessions.filter((s: SilentSession) => s.severity === 'high').length} high</Badge>
+                <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">{data.sessions.filter((s: SilentSession) => s.severity === 'medium').length} medium</Badge>
+                <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs">{data.sessions.filter((s: SilentSession) => s.severity === 'low').length} low</Badge>
+              </>
+            )}
+          </div>
+          {data.total === 0 ? (
+            <div className="px-5 py-8 text-center">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+              <p className="text-sm text-gray-600 font-medium">All clear — no webhook gaps detected.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gray-50/50">
+                  <TableHead className="text-xs font-semibold text-gray-600">Client</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600">Phone</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600">Stage</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600 text-center">Sent</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600 text-center">Received</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600 text-center">Span</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600">Last Activity</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600">Severity</TableHead>
+                  <TableHead className="text-xs font-semibold text-gray-600 text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(data.sessions as SilentSession[]).map((s) => (
+                  <TableRow key={s.id} className="hover:bg-gray-50/50">
+                    <TableCell className="text-sm font-medium text-gray-900">{s.name || '(no name)'}</TableCell>
+                    <TableCell className="text-xs text-gray-500 font-mono">{s.phone}</TableCell>
+                    <TableCell className="text-xs text-gray-500">{s.stage}</TableCell>
+                    <TableCell className="text-xs text-center font-semibold text-gray-700">{s.totalSent}</TableCell>
+                    <TableCell className="text-xs text-center">
+                      <span className={`font-semibold ${s.totalReceived === 0 ? 'text-red-600' : 'text-amber-600'}`}>{s.totalReceived}</span>
+                    </TableCell>
+                    <TableCell className="text-xs text-center text-gray-500">{s.spanDays}d</TableCell>
+                    <TableCell className="text-xs text-gray-500">{s.lastActivity}</TableCell>
+                    <TableCell>
+                      <Badge className={`text-xs ${severityColor(s.severity)}`}>{s.severity}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-7 px-2.5"
+                        disabled={reconcilingId === s.id}
+                        onClick={() => {
+                          setReconcilingId(s.id);
+                          reconcile.mutate({ sessionId: s.id, phone: s.phone });
+                        }}
+                      >
+                        {reconcilingId === s.id ? (
+                          <><RefreshCw className="w-3 h-3 animate-spin mr-1" />Syncing…</>
+                        ) : (
+                          'Reconcile'
+                        )}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SyncHealthPage() {
@@ -677,6 +832,9 @@ export default function SyncHealthPage() {
           <span className="flex items-center gap-1"><XCircle className="w-3.5 h-3.5 text-red-500" /> Error — failed with an exception</span>
           <span className="flex items-center gap-1"><MinusCircle className="w-3.5 h-3.5 text-gray-400" /> Skipped — nothing to do</span>
         </div>
+
+        {/* ── Silent Sessions Panel ── */}
+        <SilentSessionsPanel />
       </main>
     </div>
     </AdminPageGuard>

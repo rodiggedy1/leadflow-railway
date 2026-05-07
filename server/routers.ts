@@ -3377,6 +3377,148 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
         return { rowsUpdated: result.affectedRows ?? 0 };
       }),
     /**
+     * detectSilentSessions — finds sessions with many outbound messages but very few
+     * inbound replies, indicating the webhook may have missed customer messages.
+     */
+    detectSilentSessions: opsChatProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const sessions = await db
+          .select({
+            id: conversationSessions.id,
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            stage: conversationSessions.stage,
+            messageHistory: conversationSessions.messageHistory,
+          })
+          .from(conversationSessions)
+          .where(sql`${conversationSessions.messageHistory} IS NOT NULL AND ${conversationSessions.messageHistory} != '[]'`);
+
+        const affected: Array<{
+          id: number;
+          name: string;
+          phone: string;
+          stage: string;
+          totalSent: number;
+          totalReceived: number;
+          spanDays: number;
+          lastActivity: string;
+          severity: 'high' | 'medium' | 'low';
+        }> = [];
+
+        for (const row of sessions) {
+          try {
+            const hist: any[] = Array.isArray(row.messageHistory)
+              ? row.messageHistory as any[]
+              : JSON.parse(row.messageHistory as string);
+            if (!Array.isArray(hist) || hist.length === 0) continue;
+            const assistantMsgs = hist.filter((m: any) => m.role === 'assistant' && m.ts);
+            const userMsgs = hist.filter((m: any) => m.role === 'user' && m.ts);
+            if (assistantMsgs.length < 10) continue;
+            const firstTs = Math.min(...assistantMsgs.map((m: any) => m.ts as number));
+            const lastTs = Math.max(...assistantMsgs.map((m: any) => m.ts as number));
+            const spanDays = (lastTs - firstTs) / (1000 * 60 * 60 * 24);
+            if (spanDays < 14) continue;
+            const ratio = userMsgs.length / assistantMsgs.length;
+            if (ratio >= 0.1) continue;
+            const severity: 'high' | 'medium' | 'low' =
+              userMsgs.length === 0 ? 'high' : ratio < 0.05 ? 'medium' : 'low';
+            affected.push({
+              id: row.id,
+              name: row.leadName ?? '',
+              phone: row.leadPhone ?? '',
+              stage: row.stage ?? '',
+              totalSent: assistantMsgs.length,
+              totalReceived: userMsgs.length,
+              spanDays: Math.round(spanDays),
+              lastActivity: new Date(lastTs).toISOString().split('T')[0],
+              severity,
+            });
+          } catch (_) {}
+        }
+        const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+        affected.sort((a, b) =>
+          (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3) ||
+          b.totalSent - a.totalSent
+        );
+        return { total: affected.length, sessions: affected };
+      }),
+
+    /**
+     * reconcileSessionMessages — pulls all OpenPhone messages for a given phone
+     * and merges any missing messages into the session's messageHistory.
+     */
+    reconcileSessionMessages: opsChatProcedure
+      .input(z.object({ sessionId: z.number(), phone: z.string() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const { ENV } = await import('./_core/env');
+        const apiKey = ENV.openPhoneApiKey;
+        const phoneNumberIds = [
+          ENV.openPhoneNumberId,
+          ENV.openPhoneCsNumberId,
+          ENV.openPhoneBarkNumberId,
+        ].filter(Boolean);
+
+        const opMessages: Array<{ id: string; direction: string; text?: string; body?: string; createdAt: string }> = [];
+        for (const pnId of phoneNumberIds) {
+          let pageToken: string | null = null;
+          while (true) {
+            const params = new URLSearchParams({ phoneNumberId: pnId, participants: input.phone, maxResults: '100' });
+            if (pageToken) params.set('pageToken', pageToken);
+            const res = await fetch(`https://api.openphone.com/v1/messages?${params}`, {
+              headers: { Authorization: apiKey },
+            });
+            if (!res.ok) break;
+            const json = await res.json() as { data?: any[]; nextPageToken?: string };
+            opMessages.push(...(json.data ?? []));
+            if (!json.nextPageToken || !json.data?.length) break;
+            pageToken = json.nextPageToken;
+          }
+        }
+
+        const seen = new Set<string>();
+        const unique = opMessages.filter(m => { if (seen.has(m.id)) return false; seen.add(m.id); return true; });
+
+        const [session] = await db.select({ messageHistory: conversationSessions.messageHistory })
+          .from(conversationSessions).where(eq(conversationSessions.id, input.sessionId)).limit(1);
+        if (!session) throw new Error('Session not found');
+
+        const existing: any[] = Array.isArray(session.messageHistory)
+          ? session.messageHistory as any[]
+          : JSON.parse(session.messageHistory as string ?? '[]');
+        const existingIds = new Set(existing.map((m: any) => m.openPhoneId).filter(Boolean));
+        const existingTs = new Set(existing.map((m: any) => m.ts).filter(Boolean));
+
+        const toMerge: any[] = [];
+        for (const msg of unique) {
+          if (existingIds.has(msg.id)) continue;
+          const ts = new Date(msg.createdAt).getTime();
+          if (existingTs.has(ts)) continue;
+          const text = msg.text ?? msg.body ?? '';
+          if (!text.trim()) continue;
+          toMerge.push({
+            role: msg.direction === 'incoming' ? 'user' : 'assistant',
+            content: text,
+            ts,
+            openPhoneId: msg.id,
+            source: 'openphone_reconcile',
+          });
+        }
+
+        if (toMerge.length === 0) return { added: 0, total: existing.length };
+
+        const merged = [...existing, ...toMerge].sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
+        await db.update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(merged) } as any)
+          .where(eq(conversationSessions.id, input.sessionId));
+
+        return { added: toMerge.length, total: merged.length };
+      }),
+
+    /**
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
      * Used by the Teams right panel in CsInbox.
      */
