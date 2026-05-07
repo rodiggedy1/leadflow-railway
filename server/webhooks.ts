@@ -579,6 +579,35 @@ export function registerWebhookRoutes(app: Express) {
           } as any);
           const newSessionId = (newIns as any).insertId ?? null;
           console.log(`[Webhook] New inbound-sms session created — sessionId=${newSessionId}, phone=${fromPhone}`);
+
+          // Notify the team so they know a new cold inbound arrived
+          try {
+            await db.insert(opsChatMessages).values({
+              cleanerJobId: null,
+              channel: 'command',
+              authorName: '📲 New Inbound SMS',
+              authorRole: 'system',
+              body: `📲 **New inbound SMS** from ${fromPhone}\n\n"${inboundText}"\n\nAI is engaging — check the Leads page.`,
+              mediaUrl: null,
+              quickAction: 'new_lead',
+              metadata: JSON.stringify({ leadPhone: fromPhone, sessionId: newSessionId, arrivedAt: Date.now() }),
+            });
+          } catch (chatErr) {
+            console.error('[Webhook] Failed to post inbound-sms card to command chat:', chatErr);
+          }
+          void sendPushToAll({
+            title: '📲 New Inbound SMS',
+            body: `${fromPhone}: "${inboundText.slice(0, 80)}"`,
+            tag: `new-lead-inbound-${newSessionId}`,
+            url: '/leads',
+            playSound: true,
+          });
+          logActivity({
+            eventType: 'new_lead',
+            title: `New inbound SMS from ${fromPhone}`,
+            body: inboundText.length > 120 ? inboundText.slice(0, 120) + '…' : inboundText,
+            meta: { leadPhone: fromPhone, sessionId: newSessionId, source: 'inbound-sms' },
+          }).catch(() => {});
         } catch (createErr) {
           console.error('[Webhook] Failed to create inbound-sms session:', createErr);
         }

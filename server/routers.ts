@@ -3549,43 +3549,6 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
       }),
 
     /**
-     * getOrphanSessions — returns sessions with leadSource = 'inbound-orphan'.
-     * These are inbound SMS messages that arrived with no matching lead session.
-     * Displayed in the Orphan Tray on the Sync Health page.
-     */
-    getOrphanSessions: opsChatProcedure
-      .query(async () => {
-        const db = await getDb();
-        if (!db) throw new Error("Database unavailable");
-        const orphans = await db
-          .select({
-            id: conversationSessions.id,
-            leadPhone: conversationSessions.leadPhone,
-            leadName: conversationSessions.leadName,
-            messageHistory: conversationSessions.messageHistory,
-            createdAt: conversationSessions.createdAt,
-          })
-          .from(conversationSessions)
-          .where(eq(conversationSessions.leadSource, 'inbound-orphan'))
-          .orderBy(desc(conversationSessions.createdAt))
-          .limit(50);
-        return orphans.map(o => {
-          let lastMessage = '';
-          try {
-            const hist = JSON.parse(o.messageHistory as string ?? '[]');
-            if (hist.length > 0) lastMessage = hist[hist.length - 1]?.content ?? '';
-          } catch { /* ignore */ }
-          return {
-            id: o.id,
-            leadPhone: o.leadPhone,
-            leadName: o.leadName,
-            lastMessage,
-            createdAt: o.createdAt,
-          };
-        });
-      }),
-
-    /**
      * getWebhookEvents — returns recent rows from webhook_events table.
      * Used by the Webhook Event Log on the Sync Health page.
      */

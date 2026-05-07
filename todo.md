@@ -1463,3 +1463,9 @@
 - [x] Simplify orphan SMS: create normal inbound-sms session instead of inbound-orphan special case
 - [x] Remove Orphan Tray panel from Sync Health page (no longer needed)
 - [x] Remove getOrphanSessions tRPC procedure (no longer needed)
+
+## SMS Pipeline Audit Fixes
+- [ ] Fix: new inbound-sms session has no push notification or command chat card (team won't know about it)
+- [ ] Fix: DONE stage fallback creates new session instead of re-opening the old one
+- [ ] Fix: remove stale getOrphanSessions procedure from routers.ts (still queries inbound-orphan)
+- [ ] Fix: new inbound-sms session stage should be UNHANDLED not QUOTE_SENT (wrong stage means AI tries to run quote flow on a cold inbound)
