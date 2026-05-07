@@ -31,6 +31,7 @@ import { settingsRouter } from "./settingsRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
 import { metricsRouter } from "./metricsRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
+import { schedulingRouter } from "./schedulingRouter";
 import { opsChatRouter } from "./opsChatRouter";
 import { followUpsRouter } from "./followUpsRouter";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
@@ -5095,6 +5096,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
   commandCenter: commandCenterRouter,
   metrics: metricsRouter,
   fieldMgmt: fieldMgmtRouter,
+  scheduling: schedulingRouter,
   opsChat: opsChatRouter,
   followUps: followUpsRouter,
   teamPay: teamPayRouter,

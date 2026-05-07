@@ -18,6 +18,7 @@ import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import DayBoard from "@/components/DayBoard";
 import ControlTowerTab from "@/components/ControlTowerTab";
+import SchedulingTab from "@/components/SchedulingTab";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
@@ -1514,7 +1515,7 @@ function LastSyncedBadge() {
 
 export default function FieldManagement() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
-  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower">("board");
+  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower" | "schedule">("board");
 
   return (
     <AdminPageGuard pageId="field-management">
@@ -1537,7 +1538,7 @@ export default function FieldManagement() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
-          {(["board", "tower", "log", "workflow"] as const).map((tab) => (
+          {(["board", "tower", "schedule", "log", "workflow"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1547,7 +1548,7 @@ export default function FieldManagement() {
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {tab === "board" ? "Day Board" : tab === "tower" ? "Control Tower" : tab === "log" ? "Job Log" : "Workflow"}
+              {tab === "board" ? "Day Board" : tab === "tower" ? "Control Tower" : tab === "schedule" ? "Schedule" : tab === "log" ? "Job Log" : "Workflow"}
             </button>
           ))}
         </div>
@@ -1561,6 +1562,7 @@ export default function FieldManagement() {
         )}
 
         {activeTab === "log" && <LogTab />}
+        {activeTab === "schedule" && <SchedulingTab />}
       </div>
     </div>
     </AdminPageGuard>

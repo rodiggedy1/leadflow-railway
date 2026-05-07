@@ -1,4 +1,4 @@
-import { bigint, decimal, index, int, json, longtext, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, decimal, double, index, int, json, longtext, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -2214,3 +2214,98 @@ export const stepLocks = mysqlTable("step_locks", {
   uniqJobStep: uniqueIndex("uniq_step_locks_job_step").on(t.cleanerJobId, t.step),
 }));
 export type StepLock = typeof stepLocks.$inferSelect;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULING SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * schedulingTeams — one row per cleaning team (used for route optimization).
+ * Teams are derived from Launch27 but enriched with a home base address and
+ * geocoordinates so the VRP solver can compute drive times from home to first job.
+ */
+export const schedulingTeams = mysqlTable("scheduling_teams", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Team name (matches teamName in cleanerJobs, e.g. "Team Solange") */
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Launch27 team ID (optional, for syncing) */
+  launch27TeamId: int("launch27TeamId"),
+  /** Home base / starting address for route optimization */
+  homeAddress: varchar("homeAddress", { length: 500 }),
+  /** Geocoded latitude of home base */
+  homeLat: double("homeLat"),
+  /** Geocoded longitude of home base */
+  homeLng: double("homeLng"),
+  /** Max billable hours per day (default 8) */
+  maxHoursPerDay: double("maxHoursPerDay").default(8),
+  /** Comma-separated skill tags (e.g. "deep_clean,move_out") */
+  skills: varchar("skills", { length: 500 }),
+  /** Whether this team is currently active */
+  isActive: int("isActive").default(1).notNull(),
+  /** Color hex for map display (e.g. "#FF6B35") */
+  color: varchar("color", { length: 10 }).default("#6366f1"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SchedulingTeam = typeof schedulingTeams.$inferSelect;
+export type InsertSchedulingTeam = typeof schedulingTeams.$inferInsert;
+
+/**
+ * scheduleAssignments — one row per job-to-team assignment for a given date.
+ * Stores the optimized (or manually overridden) assignment, route order,
+ * and estimated arrival time for each job.
+ *
+ * When the optimizer runs for a date, all existing rows for that date are
+ * replaced with the new solution. Manual overrides set isManual=1 and are
+ * preserved across re-optimizations.
+ */
+export const scheduleAssignments = mysqlTable("schedule_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Job date (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }).notNull(),
+  /** Link to cleanerJobs.id */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Link to schedulingTeams.id */
+  teamId: int("teamId").notNull(),
+  /** Team name (denormalized for display) */
+  teamName: varchar("teamName", { length: 255 }),
+  /** Position in this team's route for the day (0-indexed) */
+  routeOrder: int("routeOrder").default(0).notNull(),
+  /** Estimated arrival time at this job (Unix ms UTC) */
+  estimatedArrivalMs: bigint("estimatedArrivalMs", { mode: "number" }),
+  /** Estimated departure time from this job (Unix ms UTC) */
+  estimatedDepartureMs: bigint("estimatedDepartureMs", { mode: "number" }),
+  /** Estimated drive time from previous job/home (seconds) */
+  driveTimeSecs: int("driveTimeSecs"),
+  /** Whether this assignment was manually set by an admin (overrides optimizer) */
+  isManual: int("isManual").default(0).notNull(),
+  /** Total route distance for this team on this day (meters) */
+  totalDistanceMeters: int("totalDistanceMeters"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  uniqJobDate: uniqueIndex("uniq_schedule_job_date").on(t.cleanerJobId, t.jobDate),
+}));
+export type ScheduleAssignment = typeof scheduleAssignments.$inferSelect;
+export type InsertScheduleAssignment = typeof scheduleAssignments.$inferInsert;
+
+/**
+ * jobGeoCache — cached geocoding results for job addresses.
+ * Avoids re-geocoding the same address on every optimizer run.
+ */
+export const jobGeoCache = mysqlTable("job_geo_cache", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Normalized address string (trimmed, lowercased) */
+  addressKey: varchar("addressKey", { length: 500 }).notNull().unique(),
+  /** Original address as provided */
+  originalAddress: varchar("originalAddress", { length: 500 }).notNull(),
+  /** Geocoded latitude */
+  lat: double("lat").notNull(),
+  /** Geocoded longitude */
+  lng: double("lng").notNull(),
+  /** Full formatted address returned by geocoder */
+  formattedAddress: varchar("formattedAddress", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type JobGeoCache = typeof jobGeoCache.$inferSelect;
+export type InsertJobGeoCache = typeof jobGeoCache.$inferInsert;
