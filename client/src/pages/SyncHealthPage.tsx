@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   Inbox,
   WifiOff,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -605,6 +606,157 @@ function SilentSessionsPanel() {
   );
 }
 
+// ─── Message Integrity Panel ─────────────────────────────────────────────────
+
+interface IntegrityRow {
+  id: number;
+  sessionId: number;
+  leadName: string | null;
+  leadPhone: string;
+  dbCount: number;
+  openphoneCount: number;
+  delta: number;
+  checkedAt: number | null;
+  firstDetectedAt: number | null;
+  reconciled: number;
+}
+
+function MessageIntegrityPanel() {
+  const [running, setRunning] = useState(false);
+  const [reconcilingId, setReconcilingId] = useState<number | null>(null);
+
+  const { data, isLoading, refetch } = trpc.leads.getIntegrityResults.useQuery(undefined, {
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const runCheck = trpc.leads.runIntegrityCheck.useMutation({
+    onMutate: () => setRunning(true),
+    onSuccess: (result) => {
+      toast.success(`Integrity check done — ${result.checked} checked, ${result.gaps} gaps found`);
+      setRunning(false);
+      refetch();
+    },
+    onError: (err) => {
+      toast.error(`Check failed: ${err.message}`);
+      setRunning(false);
+    },
+  });
+
+  const reconcile = trpc.leads.reconcileSessionMessages.useMutation({
+    onSuccess: (result, vars) => {
+      toast.success(`Reconciled: +${result.added} messages added (total ${result.total})`);
+      setReconcilingId(null);
+      refetch();
+    },
+    onError: (err) => {
+      toast.error(`Reconcile failed: ${err.message}`);
+      setReconcilingId(null);
+    },
+  });
+
+  const rows = (data ?? []) as IntegrityRow[];
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-blue-500" />
+          <h2 className="text-sm font-semibold text-gray-900">Message Integrity</h2>
+          <span className="text-xs text-gray-400">Sessions where OpenPhone has more messages than the DB (last 7 days)</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading} className="gap-1.5 text-xs">
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={() => runCheck.mutate()} disabled={running} className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white">
+            <ShieldCheck className={`w-3.5 h-3.5 ${running ? 'animate-pulse' : ''}`} />
+            {running ? 'Checking…' : 'Run Check Now'}
+          </Button>
+        </div>
+      </div>
+
+      {isLoading && (
+        <div className="px-5 py-8 text-center">
+          <RefreshCw className="w-6 h-6 text-gray-400 animate-spin mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Loading integrity results…</p>
+        </div>
+      )}
+
+      {!isLoading && rows.length === 0 && (
+        <div className="px-5 py-8 text-center">
+          <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-600 font-medium">All clear — no message gaps detected.</p>
+          <p className="text-xs text-gray-400 mt-1">Run the check to scan sessions active in the last 24 hours.</p>
+        </div>
+      )}
+
+      {!isLoading && rows.length > 0 && (
+        <>
+          <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">{rows.length} session{rows.length !== 1 ? 's' : ''} with gaps</span>
+            <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">{rows.filter(r => r.delta >= 5).length} high (&ge;5 missing)</Badge>
+            <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-xs">{rows.filter(r => r.delta >= 2 && r.delta < 5).length} medium</Badge>
+            <Badge className="bg-gray-100 text-gray-600 border-gray-200 text-xs">{rows.filter(r => r.delta === 1).length} low</Badge>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-gray-50/50">
+                <TableHead className="text-xs font-semibold text-gray-600">Client</TableHead>
+                <TableHead className="text-xs font-semibold text-gray-600">Phone</TableHead>
+                <TableHead className="text-xs font-semibold text-gray-600 text-center">DB (7d)</TableHead>
+                <TableHead className="text-xs font-semibold text-gray-600 text-center">OpenPhone (7d)</TableHead>
+                <TableHead className="text-xs font-semibold text-gray-600 text-center">Gap</TableHead>
+                <TableHead className="text-xs font-semibold text-gray-600">First Detected</TableHead>
+                <TableHead className="text-xs font-semibold text-gray-600 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.id} className="hover:bg-gray-50/50">
+                  <TableCell className="text-sm font-medium text-gray-900">{row.leadName ?? '—'}</TableCell>
+                  <TableCell className="text-sm text-gray-600 font-mono">{row.leadPhone}</TableCell>
+                  <TableCell className="text-sm text-center text-gray-700">{row.dbCount}</TableCell>
+                  <TableCell className="text-sm text-center text-gray-700">{row.openphoneCount}</TableCell>
+                  <TableCell className="text-center">
+                    <Badge className={`text-xs ${
+                      row.delta >= 5 ? 'bg-red-100 text-red-700 border-red-200' :
+                      row.delta >= 2 ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                      'bg-gray-100 text-gray-600 border-gray-200'
+                    }`}>+{row.delta}</Badge>
+                  </TableCell>
+                  <TableCell className="text-xs text-gray-500">
+                    {row.firstDetectedAt ? new Date(row.firstDetectedAt).toLocaleString() : '—'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={reconcilingId === row.sessionId}
+                      onClick={() => {
+                        setReconcilingId(row.sessionId);
+                        reconcile.mutate({ sessionId: row.sessionId, phone: row.leadPhone });
+                      }}
+                      className="text-xs gap-1"
+                    >
+                      {reconcilingId === row.sessionId ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3 h-3" />
+                      )}
+                      Reconcile
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SyncHealthPage() {
@@ -835,6 +987,8 @@ export default function SyncHealthPage() {
 
         {/* ── Silent Sessions Panel ── */}
         <SilentSessionsPanel />
+        {/* ── Message Integrity Panel ── */}
+        <MessageIntegrityPanel />
       </main>
     </div>
     </AdminPageGuard>

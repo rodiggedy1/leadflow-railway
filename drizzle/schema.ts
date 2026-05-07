@@ -2309,3 +2309,32 @@ export const jobGeoCache = mysqlTable("job_geo_cache", {
 });
 export type JobGeoCache = typeof jobGeoCache.$inferSelect;
 export type InsertJobGeoCache = typeof jobGeoCache.$inferInsert;
+
+/**
+ * messageIntegrityChecks — stores the result of nightly OpenPhone message count comparisons.
+ * Each row represents the last check for a given session.
+ * A delta > 0 means OpenPhone has more messages than the LeadFlow DB — potential missing messages.
+ */
+export const messageIntegrityChecks = mysqlTable("message_integrity_checks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to conversation_sessions.id */
+  sessionId: int("sessionId").notNull(),
+  /** Lead name at time of check */
+  leadName: varchar("leadName", { length: 255 }),
+  /** Lead phone at time of check */
+  leadPhone: varchar("leadPhone", { length: 50 }),
+  /** Number of messages in LeadFlow DB (messageHistory JSON array length) */
+  dbCount: int("dbCount").notNull().default(0),
+  /** Number of messages in OpenPhone for this phone number */
+  openphoneCount: int("openphoneCount").notNull().default(0),
+  /** openphoneCount - dbCount. Positive = missing messages in DB */
+  delta: int("delta").notNull().default(0),
+  /** Whether this session was reconciled after the gap was detected */
+  reconciled: tinyint("reconciled").notNull().default(0),
+  /** When the check was last run */
+  checkedAt: bigint("checkedAt", { mode: "number" }).notNull(),
+  /** When the gap was first detected (null if no gap) */
+  firstDetectedAt: bigint("firstDetectedAt", { mode: "number" }),
+});
+export type MessageIntegrityCheck = typeof messageIntegrityChecks.$inferSelect;
+export type InsertMessageIntegrityCheck = typeof messageIntegrityChecks.$inferInsert;

@@ -47,6 +47,7 @@ import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
 import { runScheduleConfirmSend, runScheduleConfirmNudge } from "./scheduleConfirmEngine";
 import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
+import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
 import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
 import { and, eq, isNull, lte, lt, gte, isNotNull, desc } from "drizzle-orm";
 
@@ -884,6 +885,23 @@ export function startInternalCron(): void {
       const msg = err instanceof Error ? err.message : String(err);
       console.error("[InternalCron] ScheduleEscalation failed:", msg);
       await recordHeartbeat("schedule-escalation", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+
+  // ── Daily 2 AM ET: message integrity check ─────────────────────────────────
+  // Compares last-7-days message counts per active session against OpenPhone.
+  // Flags sessions where OpenPhone has more messages than the DB (potential gaps).
+  cron.schedule("0 0 2 * * *", async () => {
+    console.log("[InternalCron] Running MessageIntegrityCheck (2 AM)...");
+    try {
+      const result = await runMessageIntegrityCheck();
+      const summary = `checked: ${result.checked}, gaps: ${result.gaps}, errors: ${result.errors}`;
+      console.log(`[InternalCron] MessageIntegrityCheck — ${summary}`);
+      await recordHeartbeat("message-integrity", summary, result.gaps > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] MessageIntegrityCheck failed:", msg);
+      await recordHeartbeat("message-integrity", `error: ${msg}`, false);
     }
   }, { timezone: "America/New_York" });
 

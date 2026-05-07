@@ -3519,6 +3519,36 @@ If fewer than 3 conversations need attention, return fewer. Return [] if none ar
       }),
 
     /**
+     * getIntegrityResults — returns all sessions with a message count gap (delta > 0)
+     * from the last integrity check run, sorted by largest gap first.
+     */
+    getIntegrityResults: opsChatProcedure
+      .query(async () => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const { messageIntegrityChecks } = await import('../drizzle/schema');
+        const { desc: descOp, gt } = await import('drizzle-orm');
+        const rows = await db
+          .select()
+          .from(messageIntegrityChecks)
+          .where(gt(messageIntegrityChecks.delta, 0))
+          .orderBy(descOp(messageIntegrityChecks.delta))
+          .limit(100);
+        return rows;
+      }),
+
+    /**
+     * runIntegrityCheck — manually triggers the message integrity check for all
+     * sessions active in the last 24 hours. Returns summary counts.
+     */
+    runIntegrityCheck: opsChatProcedure
+      .mutation(async () => {
+        const { runMessageIntegrityCheck } = await import('./messageIntegrityEngine');
+        const result = await runMessageIntegrityCheck();
+        return result;
+      }),
+
+    /**
      * getCleanerTodayJobs — returns all cleanerJobs for a given cleanerProfileId on today's date.
      * Used by the Teams right panel in CsInbox.
      */
