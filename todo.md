@@ -1492,3 +1492,6 @@
 
 ## Scheduler Home-to-First-Job Drive Time
 - [x] Show drive time from team home base to first job of the day in scheduler
+
+## Raechelle Richmond Notification Bug
+- [x] Fix: markRead was throwing for non-agent users (getAgentSessionFromCtx), leaving lastReadAt=NULL forever — removed auth requirement from read-receipt stamp

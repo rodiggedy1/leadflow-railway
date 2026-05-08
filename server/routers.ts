@@ -1267,8 +1267,10 @@ export const appRouter = router({
      */
     markRead: publicProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
-      .mutation(async ({ input, ctx }) => {
-        await getAgentSessionFromCtx(ctx);
+      .mutation(async ({ input }) => {
+        // No agent auth required — this is a read-receipt stamp, not a sensitive write.
+        // Previously called getAgentSessionFromCtx() which threw for non-agent users,
+        // leaving lastReadAt = NULL and causing persistent unread notifications.
         const db = await getDb();
         if (!db) return { success: false };
         await db
