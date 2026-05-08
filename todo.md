@@ -1489,3 +1489,6 @@
 
 ## Scheduler Real Drive Times Pre-Optimization
 - [x] Replace haversine estimate in getSchedule with real Google Maps Distance Matrix API drive times (same as optimizer)
+
+## Scheduler Home-to-First-Job Drive Time
+- [x] Show drive time from team home base to first job of the day in scheduler

@@ -670,7 +670,12 @@ export default function SchedulingTab() {
                     <div className="ml-auto flex items-center gap-2">
                       <span className="text-xs text-gray-400">{teamJobs.length} jobs · {totalHours.toFixed(1)}h</span>
                       {team.homeAddress && (
-                        <span title={team.homeAddress ?? undefined}><Home className="w-3 h-3 text-gray-300" /></span>
+                        <span className="flex items-center gap-1" title={team.homeAddress ?? undefined}>
+                          <Home className="w-3 h-3 text-gray-300" />
+                          {(team as any).homeDriveTimeSecs != null && (
+                            <span className="text-xs text-gray-400">{formatDrive((team as any).homeDriveTimeSecs)} from home</span>
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>

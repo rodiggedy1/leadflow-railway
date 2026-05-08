@@ -487,9 +487,20 @@ export const schedulingRouter = router({
       }
 
       // Build consecutive origin-destination pairs for Distance Matrix
-      // Only compute for jobs that don't already have a saved assignment (pre-optimization)
+      // Also include home → first job for each team
+      // Use fromId = -teamId to distinguish home-to-first pairs (negative = home departure)
       const pairs: Array<{ fromId: number; toId: number; from: LatLng; to: LatLng }> = [];
-      for (const [, teamJobs] of Array.from(jobsByTeam)) {
+      for (const [teamName, teamJobs] of Array.from(jobsByTeam)) {
+        const team = teamByName.get(teamName);
+        // Home → first job
+        const firstJob = teamJobs[0];
+        if (firstJob && team?.homeLat && team?.homeLng && !assignmentMap.has(firstJob.id)) {
+          const firstGeo = geoByAddress.get(firstJob.jobAddress?.trim().toLowerCase() ?? "");
+          if (firstGeo) {
+            pairs.push({ fromId: -(team.id), toId: firstJob.id, from: { lat: team.homeLat, lng: team.homeLng }, to: { lat: firstGeo.lat, lng: firstGeo.lng } });
+          }
+        }
+        // Consecutive job pairs
         for (let i = 1; i < teamJobs.length; i++) {
           const prev = teamJobs[i - 1];
           const curr = teamJobs[i];
@@ -562,7 +573,27 @@ export const schedulingRouter = router({
         };
       });
 
-      return { jobs: enriched, teams, hasAssignments: assignments.length > 0 };
+      // Build homeDriveTimeSecs map: teamId -> drive time from home to first job
+      const homeDriveByTeam = new Map<number, number>();
+      for (const [, teamJobs] of Array.from(jobsByTeam)) {
+        const firstJob = teamJobs[0];
+        if (firstJob) {
+          const secs = estimatedDriveMap.get(firstJob.id);
+          const team = teamByName.get(firstJob.teamName ?? "");
+          // Only count it as home drive if the pair was a home pair (fromId < 0)
+          // We stored it keyed by toId (firstJob.id) — check if a home pair exists for this job
+          const homePair = pairs.find(p => p.toId === firstJob.id && p.fromId < 0);
+          if (homePair && secs !== undefined && team) {
+            homeDriveByTeam.set(team.id, secs);
+          }
+        }
+      }
+      const teamsWithHomeDrive = teams.map(t => ({
+        ...t,
+        homeDriveTimeSecs: homeDriveByTeam.get(t.id) ?? null,
+      }));
+
+      return { jobs: enriched, teams: teamsWithHomeDrive, hasAssignments: assignments.length > 0 };
     }),
 
   // ── Run optimizer ───────────────────────────────────────────────────────────
