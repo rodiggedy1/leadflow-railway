@@ -846,7 +846,11 @@ export const schedulingRouter = router({
       // Their routeOrder from the existing assignment is already correct — no re-ordering needed.
 
       // 8. Persist (replace non-manual assignments)
-      const toSave = assignments.filter(a => !manualJobIds.has(a.cleanerJobId));
+      // Also exclude ALL locked jobs (team-locked + job-locked) from the persist step.
+      // Their existing DB rows must not be touched — they were already restored verbatim above.
+      const toSave = assignments.filter(a =>
+        !manualJobIds.has(a.cleanerJobId) && !lockedJobIdSet.has(a.cleanerJobId)
+      );
       await persistAssignments(db, input.date, toSave);
 
       return { assigned: assignments.length, message: `Optimized ${assignments.length} jobs across ${teamConfigs.length} teams.` };
