@@ -126,7 +126,17 @@ export function advanceStage(
         return { nextStage: "SLOT_CHOICE", persistedData: persisted, replyContext: replyCtx };
       }
 
-      // No day info → stay
+      // Positive reply with no specific day (e.g. "ok", "sure", "sounds good") → treat as flexible and advance
+      // This prevents the AI from looping and asking the same question again
+      if (signals.isPositiveReply) {
+        const defaultSlot = pickDefaultSlot(null);
+        persisted.selectedSlot = defaultSlot;
+        replyCtx.usedDefault = true;
+        replyCtx.defaultDescription = defaultSlot;
+        return { nextStage: "SLOT_CHOICE", persistedData: persisted, replyContext: replyCtx };
+      }
+
+      // No timing info at all → stay and ask again
       return { nextStage: stage, persistedData: persisted, replyContext: replyCtx };
     }
 

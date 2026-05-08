@@ -65,19 +65,24 @@ export function buildExtractionPrompt(todayDate: string): string {
 
 Today's date is ${todayDate} (Eastern Time). Use this to resolve relative dates:
 - "tomorrow" → resolve to the actual next calendar day with full date (e.g. "Wednesday, April 30")
-- "Thursday" → resolve to the next upcoming Thursday with full date
-- "this week" / "as soon as possible" / "whenever" → leave dayPreference as null
-- "next week" → leave dayPreference as null
+- "Thursday" / "Friday" / any named day → resolve to the next upcoming occurrence with full date
+- "this weekend" → resolve to the upcoming Saturday with full date (e.g. "Saturday, May 10")
+- "next weekend" → resolve to the Saturday of next weekend with full date
+- "this week" → resolve to the upcoming Friday with full date
+- "next week" → resolve to the Monday of next week with full date
+- "in a few days" / "in a couple days" / "soon" → resolve to 3 days from today with full date
+- "whenever" / "anytime" / "flexible" / "doesn't matter" / "you pick" / "no preference" → leave dayPreference as null, set isFlexible = true
+- "as soon as possible" / "ASAP" / "right away" / "urgent" → leave dayPreference as null, set isUrgent = true
 
 EXTRACTION RULES:
 - bedrooms/bathrooms: extract if the lead mentions room counts (e.g. "3 bed 2 bath" → "3 Bedrooms", "2 Bathrooms")
 - timeSlot: "9am" / "1pm" / "morning" / "afternoon" if mentioned. "any" if they say "any time", "either works", "you pick", "doesn't matter", "whatever". null otherwise.
-- dayPreference: specific day/date if mentioned. Resolve relative dates. null if vague.
+- dayPreference: resolve ALL relative date references to actual calendar dates as described above. null ONLY if the message contains absolutely zero timing information.
 - address: extract if a street address is present.
 - callPreference: "now" if call now/right away. "few_minutes" if in a few minutes/later.
 - specialScope: extract if they describe a partial scope instead of giving room counts.
 - optOut: true only for clear opt-out signals (STOP, unsubscribe, don't text me).
-- isFlexible: true if they express openness about timing.
+- isFlexible: true if they express openness about timing ("whenever", "flexible", "anytime", "doesn't matter", "you pick", "either works", "no preference").
 - questions: list any questions the lead asked.
 - wantsFutureBooking: true if they want to book weeks away.
 - isExistingCustomer: true if they mention an existing booking or need support.
