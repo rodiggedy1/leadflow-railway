@@ -4273,8 +4273,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .from(conversationSessions)
         .where(
           and(
-            sql`${conversationSessions.stage} NOT IN ('BOOKED','COMPLETED','CLOSED','LOST','COLD','DONE')`,
-            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound','cs-inbound-cleaner','cs_initiated','hiring_interview','review','schedule_confirm'))`,
+            sql`${conversationSessions.stage} NOT IN ('BOOKED','COMPLETED','CLOSED','LOST','COLD')`,
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound','cs-inbound-cleaner','cs_initiated','hiring_interview','review'))`,
           )
         )
         .limit(500);
