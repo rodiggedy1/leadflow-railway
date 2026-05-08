@@ -1495,3 +1495,6 @@
 
 ## Raechelle Richmond Notification Bug
 - [x] Fix: markRead was throwing for non-agent users (getAgentSessionFromCtx), leaving lastReadAt=NULL forever — removed auth requirement from read-receipt stamp
+
+## Notification Badge CS Filter Fix
+- [x] Exclude cs-inbound / cs_initiated / DONE sessions from unread notification badge count (match leads.list filter)
