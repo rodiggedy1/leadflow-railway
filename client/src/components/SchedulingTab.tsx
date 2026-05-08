@@ -204,7 +204,7 @@ function JobCard({
       <div
         onClick={() => { onSelect(); setShowReassign(true); }}
         className={`group relative bg-white rounded-xl border transition-all cursor-pointer hover:shadow-md ${
-          isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : isLocked ? "border-amber-200 bg-amber-50/30" : "border-gray-100 hover:border-gray-200"
+          isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : isLocked ? "border-amber-200 bg-amber-50/30" : !job.assignment ? "border-amber-300 bg-amber-50/40 hover:border-amber-400" : "border-gray-100 hover:border-gray-200"
         }`}
       >
         <div className="p-3">
@@ -223,6 +223,11 @@ function JobCard({
               </div>
               {job.serviceType && (
                 <div className="text-xs text-gray-400 mt-0.5 truncate">{job.serviceType}</div>
+              )}
+              {!job.assignment && (
+                <div className="flex items-center gap-1 mt-1 text-xs font-medium text-amber-600">
+                  <span>Tap to assign</span>
+                </div>
               )}
               <div className="flex items-center gap-3 mt-1.5">
                 {arrivalStr !== "—" && (

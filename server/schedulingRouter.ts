@@ -707,9 +707,46 @@ export const schedulingRouter = router({
       // 5. Build travel matrix
       const travelMatrix = await buildTravelMatrix(allPoints);
 
-      // 6. Solve VRP
-      const assignments = solveVRP(geocoded, teamConfigs, travelMatrix, allPoints, teamConfigs.length);
-
+       // 6a. Load team-level locks BEFORE VRP — exclude locked-team jobs from the solver
+      const teamLockRows = await db.select({ teamId: teamDayLock.teamId })
+        .from(teamDayLock)
+        .where(eq(teamDayLock.date, input.date));
+      const lockedTeamIds = new Set(teamLockRows.map(r => r.teamId));
+      // Load existing assignments for locked teams so we can restore them after VRP
+      const existingForLockedTeams = lockedTeamIds.size > 0
+        ? await db.select().from(scheduleAssignments)
+            .where(and(
+              eq(scheduleAssignments.jobDate, input.date),
+              inArray(scheduleAssignments.teamId, Array.from(lockedTeamIds)),
+            ))
+        : [];
+      const lockedJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
+      // Filter out locked-team jobs from VRP input so solver doesn't touch them
+      const vrpGeocodedJobs = geocoded.filter(j => !lockedJobIdSet.has(j.cleanerJobId));
+      // Rebuild allPoints and travelMatrix for the filtered job set
+      const vrpAllPoints: LatLng[] = [
+        ...teamConfigs.map(t => ({ lat: t.homeLat, lng: t.homeLng })),
+        ...vrpGeocodedJobs.map(j => ({ lat: j.lat, lng: j.lng })),
+      ];
+      const vrpTravelMatrix = vrpGeocodedJobs.length > 0
+        ? await buildTravelMatrix(vrpAllPoints)
+        : travelMatrix;
+      // 6. Solve VRP (only for unlocked jobs)
+      const assignments = vrpGeocodedJobs.length > 0
+        ? solveVRP(vrpGeocodedJobs, teamConfigs, vrpTravelMatrix, vrpAllPoints, teamConfigs.length)
+        : [];
+      // Re-add locked-team assignments as-is (they are preserved verbatim)
+      for (const ea of existingForLockedTeams) {
+        assignments.push({
+          cleanerJobId: ea.cleanerJobId,
+          teamId: ea.teamId,
+          teamName: ea.teamName ?? "",
+          routeOrder: ea.routeOrder,
+          estimatedArrivalMs: ea.estimatedArrivalMs ?? Date.now(),
+          estimatedDepartureMs: ea.estimatedDepartureMs ?? Date.now(),
+          driveTimeSecs: ea.driveTimeSecs ?? 0,
+        });
+      }
       // 7. Preserve manual overrides
       const existingManual = await db.select().from(scheduleAssignments)
         .where(and(
@@ -717,25 +754,9 @@ export const schedulingRouter = router({
           eq(scheduleAssignments.isManual, 1),
         ));
       const manualJobIds = new Set(existingManual.map(m => m.cleanerJobId));
-      // 7a. Respect team-level locks — all jobs on a locked team keep their existing assignment
-      const teamLockRows = await db.select({ teamId: teamDayLock.teamId })
-        .from(teamDayLock)
-        .where(eq(teamDayLock.date, input.date));
-      const lockedTeamIds = new Set(teamLockRows.map(r => r.teamId));
-      if (lockedTeamIds.size > 0) {
-        // Load existing assignments for locked teams and preserve them
-        const existingForLockedTeams = await db.select().from(scheduleAssignments)
-          .where(and(
-            eq(scheduleAssignments.jobDate, input.date),
-            inArray(scheduleAssignments.teamId, Array.from(lockedTeamIds)),
-          ));
-        // Mark those jobs as manual so they survive the persist step
-        for (const ea of existingForLockedTeams) {
-          manualJobIds.add(ea.cleanerJobId);
-        }
-        // Remove those jobs from the VRP assignments so they aren't re-assigned
-        const lockedJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
-        assignments.splice(0, assignments.length, ...assignments.filter(a => !lockedJobIdSet.has(a.cleanerJobId)));
+      // Mark locked-team jobs as manual so they survive the persist step
+      for (const ea of existingForLockedTeams) {
+        manualJobIds.add(ea.cleanerJobId);
       }
       // 7b. Respect locked positions — locked jobs stay at their pinned routeOrder.
       // Unlocked jobs are re-ordered by the VRP result, slotted into the gaps.
