@@ -233,29 +233,44 @@ function solveVRP(
     });
   }
 
-  // ── Phase 2: Insert unassigned jobs into best team by proximity ─────────────
+  // ── Phase 2: Insert unassigned jobs into best team by insertion cost ─────────
+  // Insertion cost = extra total drive time added to the team's day by inserting
+  // this job at its cheapest position in the route. This is better than nearest-
+  // neighbor because it accounts for the full route context, not just proximity
+  // to a single job.
   for (const ji of unassigned) {
     const jobPointIdx = teamOffset + ji;
     let bestTeam = teams[0];
     let bestCost = Infinity;
-
     for (const t of teams) {
       const route = routes.get(t.id)!;
       const totalHours = route.reduce((s, rji) => s + jobs[rji].durationHours, 0);
       if (totalHours >= t.maxHoursPerDay) continue; // team full
-
-      // Cost = minimum travel time from this job to any of the team's existing jobs (or home)
       const teamIdx = teams.indexOf(t);
-      let minCost = Infinity;
-      if (route.length === 0) {
-        minCost = travelMatrix[teamIdx]?.[jobPointIdx] ?? Infinity;
+      // Build the full sequence of point indices for this team: [home, job0, job1, ...]
+      const seq = [teamIdx, ...route.map(rji => teamOffset + rji)];
+      // Try inserting the new job at every position in the sequence
+      // Insertion cost at position i = drive(seq[i-1]→new) + drive(new→seq[i]) - drive(seq[i-1]→seq[i])
+      let minInsertCost = Infinity;
+      if (seq.length === 1) {
+        // Empty route — cost is just home→job
+        minInsertCost = travelMatrix[teamIdx]?.[jobPointIdx] ?? Infinity;
       } else {
-        for (const rji of route) {
-          const d = travelMatrix[teamOffset + rji]?.[jobPointIdx] ?? Infinity;
-          if (d < minCost) minCost = d;
+        for (let pos = 1; pos < seq.length; pos++) {
+          const prev = seq[pos - 1];
+          const next = seq[pos];
+          const insertCost =
+            (travelMatrix[prev]?.[jobPointIdx] ?? Infinity) +
+            (travelMatrix[jobPointIdx]?.[next] ?? Infinity) -
+            (travelMatrix[prev]?.[next] ?? 0);
+          if (insertCost < minInsertCost) minInsertCost = insertCost;
         }
+        // Also try appending at the end
+        const last = seq[seq.length - 1];
+        const appendCost = travelMatrix[last]?.[jobPointIdx] ?? Infinity;
+        if (appendCost < minInsertCost) minInsertCost = appendCost;
       }
-      if (minCost < bestCost) { bestCost = minCost; bestTeam = t; }
+      if (minInsertCost < bestCost) { bestCost = minInsertCost; bestTeam = t; }
     }
     routes.get(bestTeam.id)!.push(ji);
   }
