@@ -23,6 +23,7 @@ import {
   cleanerJobs,
   scheduleJobLocks,
   teamDayUnavailability,
+  teamDayLock,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -718,7 +719,26 @@ export const schedulingRouter = router({
           eq(scheduleAssignments.isManual, 1),
         ));
       const manualJobIds = new Set(existingManual.map(m => m.cleanerJobId));
-
+      // 7a. Respect team-level locks — all jobs on a locked team keep their existing assignment
+      const teamLockRows = await db.select({ teamId: teamDayLock.teamId })
+        .from(teamDayLock)
+        .where(eq(teamDayLock.date, input.date));
+      const lockedTeamIds = new Set(teamLockRows.map(r => r.teamId));
+      if (lockedTeamIds.size > 0) {
+        // Load existing assignments for locked teams and preserve them
+        const existingForLockedTeams = await db.select().from(scheduleAssignments)
+          .where(and(
+            eq(scheduleAssignments.jobDate, input.date),
+            inArray(scheduleAssignments.teamId, Array.from(lockedTeamIds)),
+          ));
+        // Mark those jobs as manual so they survive the persist step
+        for (const ea of existingForLockedTeams) {
+          manualJobIds.add(ea.cleanerJobId);
+        }
+        // Remove those jobs from the VRP assignments so they aren't re-assigned
+        const lockedJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
+        assignments.splice(0, assignments.length, ...assignments.filter(a => !lockedJobIdSet.has(a.cleanerJobId)));
+      }
       // 7b. Respect locked positions — locked jobs stay at their pinned routeOrder.
       // Unlocked jobs are re-ordered by the VRP result, slotted into the gaps.
       const locks = await db.select().from(scheduleJobLocks)
@@ -916,6 +936,44 @@ export const schedulingRouter = router({
         .where(and(
           eq(teamDayUnavailability.teamId, input.teamId),
           eq(teamDayUnavailability.date, input.date),
+        ));
+      return { ok: true };
+    }),
+
+  /** Returns set of teamIds that are locked for a given date */
+  getTeamLocks: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.select({ teamId: teamDayLock.teamId })
+        .from(teamDayLock)
+        .where(eq(teamDayLock.date, input.date));
+      return rows.map(r => r.teamId);
+    }),
+
+  /** Lock a team for a specific date — optimizer preserves all its assignments */
+  lockTeam: agentProcedure
+    .input(z.object({ teamId: z.number(), date: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.insert(teamDayLock)
+        .values({ teamId: input.teamId, date: input.date })
+        .onDuplicateKeyUpdate({ set: { teamId: input.teamId } });
+      return { ok: true };
+    }),
+
+  /** Unlock a team for a specific date */
+  unlockTeam: agentProcedure
+    .input(z.object({ teamId: z.number(), date: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.delete(teamDayLock)
+        .where(and(
+          eq(teamDayLock.teamId, input.teamId),
+          eq(teamDayLock.date, input.date),
         ));
       return { ok: true };
     }),

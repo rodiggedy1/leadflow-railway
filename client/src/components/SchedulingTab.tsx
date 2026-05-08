@@ -524,6 +524,18 @@ export default function SchedulingTab() {
     onError: (e) => toast.error(e.message),
   });
 
+  // Team-level locks for the selected date
+  const { data: lockedTeamIds = [] } = trpc.scheduling.getTeamLocks.useQuery({ date });
+  const lockedTeamSet = new Set(lockedTeamIds);
+  const lockTeam = trpc.scheduling.lockTeam.useMutation({
+    onSuccess: () => utils.scheduling.getTeamLocks.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+  const unlockTeam = trpc.scheduling.unlockTeam.useMutation({
+    onSuccess: () => utils.scheduling.getTeamLocks.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+
   const jobs: Job[] = (data?.jobs ?? []) as Job[];
   const teams: Team[] = (data?.teams ?? []) as Team[];
   const hasAssignments = data?.hasAssignments ?? false;
@@ -674,6 +686,7 @@ export default function SchedulingTab() {
               }, 0);
 
               const isUnavailable = unavailableSet.has(team.id);
+              const isTeamLocked = lockedTeamSet.has(team.id);
               return (
                 <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${isUnavailable ? "opacity-50 border-red-200" : "border-gray-100"}`}>
                   {/* Team header */}
@@ -704,6 +717,20 @@ export default function SchedulingTab() {
                         }`}
                       >
                         {isUnavailable ? "✓ OFF" : "Set OFF"}
+                      </button>
+                      <button
+                        title={isTeamLocked ? "Unlock team — optimizer can reassign" : "Lock team — optimizer won't change assignments"}
+                        onClick={() => isTeamLocked
+                          ? unlockTeam.mutate({ teamId: team.id, date })
+                          : lockTeam.mutate({ teamId: team.id, date })
+                        }
+                        className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                          isTeamLocked
+                            ? "bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200"
+                            : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200"
+                        }`}
+                      >
+                        {isTeamLocked ? "🔒 Locked" : "Lock"}
                       </button>
                     </div>
                   </div>

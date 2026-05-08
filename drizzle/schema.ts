@@ -2376,3 +2376,20 @@ export const teamDayUnavailability = mysqlTable("team_day_unavailability", {
   uniqTeamDate: uniqueIndex("uniq_team_day").on(t.teamId, t.date),
 }));
 export type TeamDayUnavailability = typeof teamDayUnavailability.$inferSelect;
+
+/**
+ * teamDayLock — locks a team's entire assignment for a specific date.
+ * When a row exists for (teamId, date), the optimizer preserves all existing
+ * job assignments for that team exactly as-is (no reassignment in or out).
+ */
+export const teamDayLock = mysqlTable("team_day_lock", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to schedulingTeams.id */
+  teamId: int("teamId").notNull(),
+  /** Date string YYYY-MM-DD */
+  date: varchar("date", { length: 20 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  uniqTeamDateLock: uniqueIndex("uniq_team_day_lock").on(t.teamId, t.date),
+}));
+export type TeamDayLock = typeof teamDayLock.$inferSelect;
