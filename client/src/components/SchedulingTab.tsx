@@ -64,22 +64,25 @@ const PRESET_COLORS = [
   "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6",
 ];
 
-// ── Date helpers ──────────────────────────────────────────────────────────────
+// ── Date helpers (Eastern Time) ───────────────────────────────────────────────────────
 
+const ET = "America/New_York";
+
+// Returns YYYY-MM-DD in Eastern Time
 function todayStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Date().toLocaleDateString("en-CA", { timeZone: ET });
 }
 
 function formatDate(dateStr: string): string {
+  // Parse as noon ET to avoid any DST edge cases
   const d = new Date(dateStr + "T12:00:00");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: ET });
 }
 
 function addDays(dateStr: string, n: number): string {
   const d = new Date(dateStr + "T12:00:00");
   d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return d.toLocaleDateString("en-CA", { timeZone: ET });
 }
 
 function formatTime(ms: number | null | undefined): string {

@@ -1476,3 +1476,6 @@
 - [x] Update optimize procedure to keep locked jobs fixed and route around them
 - [x] Add Reset button to restore original Launch27 order (clears all locks + assignments)
 - [x] Add Lock toggle (🔒) on each job row in the optimized schedule
+
+## Schedule Timezone Fix
+- [x] Fix scheduler to use Eastern Time (America/New_York) for "today" default date and all date display
