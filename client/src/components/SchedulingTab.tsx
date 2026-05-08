@@ -717,6 +717,12 @@ export default function SchedulingTab() {
                   : 2;
                 return s + dur;
               }, 0);
+              const totalDriveSecs = teamJobs.reduce((s, j) => s + (j.assignment?.driveTimeSecs ?? 0), 0);
+              const driveLabel = totalDriveSecs > 0
+                ? totalDriveSecs >= 3600
+                  ? `${(totalDriveSecs / 3600).toFixed(1)}h driving`
+                  : `${Math.round(totalDriveSecs / 60)}m driving`
+                : null;
 
               const isUnavailable = unavailableSet.has(team.id);
               const isTeamLocked = lockedTeamSet.has(team.id);
@@ -728,7 +734,10 @@ export default function SchedulingTab() {
                     <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
                     <div className="ml-auto flex items-center gap-2">
-                      <span className="text-xs text-gray-400">{teamJobs.length} jobs · {totalHours.toFixed(1)}h</span>
+                      <span className="text-xs text-gray-400">
+                        {teamJobs.length} jobs · {totalHours.toFixed(1)}h
+                        {driveLabel && <span className="text-orange-400"> · {driveLabel}</span>}
+                      </span>
                       {team.homeAddress && (
                         <span className="flex items-center gap-1" title={team.homeAddress ?? undefined}>
                           <Home className="w-3 h-3 text-gray-300" />
