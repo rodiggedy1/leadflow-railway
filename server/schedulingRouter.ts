@@ -781,6 +781,25 @@ export const schedulingRouter = router({
 
   // ── Manual override ─────────────────────────────────────────────────────────
 
+  unassignJob: agentProcedure
+    .input(z.object({ date: z.string(), cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.delete(scheduleAssignments)
+        .where(and(
+          eq(scheduleAssignments.jobDate, input.date),
+          eq(scheduleAssignments.cleanerJobId, input.cleanerJobId),
+        ));
+      // Also remove any job-level lock for this job on this date
+      await db.delete(scheduleJobLocks)
+        .where(and(
+          eq(scheduleJobLocks.date, input.date),
+          eq(scheduleJobLocks.jobId, input.cleanerJobId),
+        ));
+      return { ok: true };
+    }),
+
   manualAssign: agentProcedure
     .input(z.object({
       date: z.string(),

@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import {
   Sparkles, Settings2, ChevronLeft, ChevronRight, MapPin,
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
-  GripVertical, RotateCcw, Lock, Unlock,
+  GripVertical, RotateCcw, Lock, Unlock, X,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -176,9 +176,15 @@ function JobCard({
   isLocked?: boolean;
   onLockToggle?: (locked: boolean, position?: number) => void;
 }) {
-  const utils = trpc.useUtils();
+   const utils = trpc.useUtils();
   const [showReassign, setShowReassign] = useState(false);
-
+  const unassignJob = trpc.scheduling.unassignJob.useMutation({
+    onSuccess: () => {
+      utils.scheduling.getSchedule.invalidate({ date });
+      toast.success("Job unassigned");
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const manualAssign = trpc.scheduling.manualAssign.useMutation({
     onSuccess: () => {
       utils.scheduling.getSchedule.invalidate({ date });
@@ -246,6 +252,17 @@ function JobCard({
               >
                 <RotateCcw className="w-3.5 h-3.5 text-gray-400" />
               </button>
+              {/* Unassign button — only shown for assigned jobs */}
+              {job.assignment && (
+                <button
+                  onClick={e => { e.stopPropagation(); unassignJob.mutate({ date, cleanerJobId: job.id }); }}
+                  disabled={unassignJob.isPending}
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 transition-all"
+                  title="Unassign job"
+                >
+                  <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
+                </button>
+              )}
             </div>
           </div>
         </div>
