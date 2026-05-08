@@ -2469,9 +2469,16 @@ export const opsChatRouter = router({
         // Always ensure the session surfaces in the CS inbox and has the right name
         // If the session is already tagged as a cleaner (Teams), never overwrite csQueue
         const existingIsTeams = existing[0].csQueue === "Teams" || existing[0].leadSource === "cs-inbound-cleaner";
+        // Never overwrite a real lead source (thumbtack-sms, bark-sms, form, widget, inbound-sms, etc.)
+        // Only set cs_initiated if there is no meaningful source already recorded
+        const PROTECTED_SOURCES = new Set(["thumbtack-sms", "bark-sms", "bark", "form", "widget", "inbound-sms", "thumbtack"]);
+        const existingSource = existing[0].leadSource ?? null;
+        const newLeadSource = existingIsTeams
+          ? "cs-inbound-cleaner"
+          : (existingSource && PROTECTED_SOURCES.has(existingSource) ? existingSource : "cs_initiated");
         const updates: Record<string, unknown> = {
           csQueue: existingIsTeams ? "Teams" : (existing[0].csQueue ?? "Needs attention"),
-          leadSource: existingIsTeams ? "cs-inbound-cleaner" : "cs_initiated",
+          leadSource: newLeadSource,
         };
         if (resolvedName && (existing[0].leadName === e164 || !existing[0].leadName)) {
           updates.leadName = resolvedName;
