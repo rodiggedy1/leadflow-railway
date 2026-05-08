@@ -454,6 +454,23 @@ export const schedulingRouter = router({
         : [];
       const geoByAddress = new Map(geoCacheRows.map(g => [g.addressKey, g]));
 
+      // Geocode any addresses not yet in the cache (so drive times show on first load)
+      const uncachedJobs = jobs.filter(j => j.jobAddress && !geoByAddress.has(j.jobAddress.trim().toLowerCase()));
+      if (uncachedJobs.length > 0) {
+        await Promise.all(uncachedJobs.map(async j => {
+          try {
+            const geo = await geocodeWithCache(j.jobAddress!);
+            if (geo) {
+              geoByAddress.set(j.jobAddress!.trim().toLowerCase(), {
+                id: 0, addressKey: j.jobAddress!.trim().toLowerCase(),
+                originalAddress: j.jobAddress!, lat: geo.lat, lng: geo.lng,
+                formattedAddress: geo.formattedAddress, createdAt: new Date(),
+              });
+            }
+          } catch { /* skip if geocode fails */ }
+        }));
+      }
+
       // Group jobs by team, sort by serviceDateTime
       const jobsByTeam = new Map<string, typeof jobs>();
       for (const j of jobs) {
