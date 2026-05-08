@@ -196,7 +196,8 @@ function JobCard({
   });
 
   const a = job.assignment;
-  const arrivalStr = formatTime(a?.estimatedArrivalMs);
+  // Show the actual booked time from Launch27 (serviceDateTime), not the optimizer's estimated arrival
+  const bookedTimeStr = job.serviceDateTime ? formatTime(new Date(job.serviceDateTime).getTime()) : "—";
   const driveStr = formatDrive(a?.driveTimeSecs);
 
   return (
@@ -230,10 +231,10 @@ function JobCard({
                 </div>
               )}
               <div className="flex items-center gap-3 mt-1.5">
-                {arrivalStr !== "—" && (
+                {bookedTimeStr !== "—" && (
                   <div className="flex items-center gap-1 text-xs text-indigo-600 font-medium">
                     <Clock className="w-3 h-3" />
-                    {arrivalStr}
+                    {bookedTimeStr}
                   </div>
                 )}
                 {driveStr && (
@@ -436,7 +437,7 @@ function ScheduleMap({
               <div style="font-family:sans-serif;padding:4px 0;max-width:200px">
                 <div style="font-weight:600;font-size:13px">${job.customerName ?? "Job"}</div>
                 <div style="color:#6b7280;font-size:12px;margin-top:2px">${job.jobAddress}</div>
-                ${job.assignment?.estimatedArrivalMs ? `<div style="color:#6366f1;font-size:12px;margin-top:4px">ETA: ${formatTime(job.assignment.estimatedArrivalMs)}</div>` : ""}
+                ${job.serviceDateTime ? `<div style="color:#6366f1;font-size:12px;margin-top:4px">${formatTime(new Date(job.serviceDateTime).getTime())}</div>` : ""}
               </div>
             `);
             infoWindowRef.current?.open(map, marker);
