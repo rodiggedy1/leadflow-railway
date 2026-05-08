@@ -35,6 +35,7 @@ interface Team {
   maxHoursPerDay: number | null;
   color: string | null;
   isActive: number;
+  homeDriveTimeSecs?: number | null;
 }
 
 interface Job {
@@ -166,7 +167,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
 function JobCard({
-  job, teams, date, isSelected, onSelect, isLocked, onLockToggle,
+  job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
 }: {
   job: Job;
   teams: Team[];
@@ -175,6 +176,7 @@ function JobCard({
   onSelect: () => void;
   isLocked?: boolean;
   onLockToggle?: (locked: boolean, position?: number) => void;
+  homeDriveTimeSecs?: number | null;
 }) {
   // Open reassign dialog on card click (in addition to map selection)
    const utils = trpc.useUtils();
@@ -198,7 +200,9 @@ function JobCard({
   const a = job.assignment;
   // Show the actual booked time from Launch27 (serviceDateTime), not the optimizer's estimated arrival
   const bookedTimeStr = job.serviceDateTime ? formatTime(new Date(job.serviceDateTime).getTime()) : "—";
-  const driveStr = formatDrive(a?.driveTimeSecs);
+  // For the first job in a team, show drive time from home; for subsequent jobs, show job-to-job drive time
+  const rawDriveSecs = homeDriveTimeSecs != null ? homeDriveTimeSecs : (a?.driveTimeSecs ?? null);
+  const driveStr = formatDrive(rawDriveSecs);
 
   return (
     <>
@@ -238,7 +242,11 @@ function JobCard({
                   </div>
                 )}
                 {driveStr && (
-                  <div className="text-xs text-gray-400">{driveStr}</div>
+                  <div className="text-xs text-gray-400">
+                    {homeDriveTimeSecs != null
+                      ? `${driveStr.replace(" drive", "")} from home`
+                      : driveStr}
+                  </div>
                 )}
               </div>
             </div>
@@ -541,7 +549,8 @@ export default function SchedulingTab() {
     onSuccess: () => {
       utils.scheduling.getSchedule.invalidate({ date });
       utils.scheduling.getJobLocks.invalidate({ date });
-      toast.success("Schedule reset to original order");
+      utils.scheduling.getTeamLocks.invalidate({ date });
+      toast.success("Schedule reset — all assignments and locks cleared");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -782,7 +791,7 @@ export default function SchedulingTab() {
                     {teamJobs.length === 0 ? (
                       <p className="text-xs text-gray-400 text-center py-3">No jobs assigned</p>
                     ) : (
-                      teamJobs.map(job => (
+                      teamJobs.map((job, idx) => (
                         <JobCard
                           key={job.id}
                           job={job}
@@ -791,6 +800,7 @@ export default function SchedulingTab() {
                           isSelected={selectedJobId === job.id}
                           onSelect={() => setSelectedJobId(job.id === selectedJobId ? null : job.id)}
                           isLocked={lockedJobIds.has(job.id)}
+                          homeDriveTimeSecs={idx === 0 ? (team as any).homeDriveTimeSecs ?? null : null}
                           onLockToggle={(locked, position) => {
                             if (locked) {
                               unlockJob.mutate({ jobId: job.id, date });

@@ -503,17 +503,40 @@ export const schedulingRouter = router({
       // Also include home → first job for each team
       // Use fromId = -teamId to distinguish home-to-first pairs (negative = home departure)
       const pairs: Array<{ fromId: number; toId: number; from: LatLng; to: LatLng }> = [];
+
+      // Pass 1: home→first pairs based on saved assignment routeOrder=0 (post-optimization view)
+      // Group saved assignments by teamId, find the job with routeOrder=0
+      const assignedFirstByTeam = new Map<number, number>(); // teamId -> jobId with routeOrder=0
+      for (const [jobId, asgn] of Array.from(assignmentMap.entries())) {
+        if (asgn.routeOrder === 0 && asgn.teamId && asgn.teamId !== 0 && asgn.isManual !== 2) {
+          assignedFirstByTeam.set(asgn.teamId, jobId);
+        }
+      }
+      const seenHomePairs = new Set<number>(); // track which jobIds already have a home pair
+      for (const [teamId, firstJobId] of Array.from(assignedFirstByTeam.entries())) {
+        const team = teams.find(t => t.id === teamId);
+        const firstJob = jobs.find(j => j.id === firstJobId);
+        if (team?.homeLat && team?.homeLng && firstJob?.jobAddress) {
+          const firstGeo = geoByAddress.get(firstJob.jobAddress.trim().toLowerCase());
+          if (firstGeo) {
+            pairs.push({ fromId: -(team.id), toId: firstJobId, from: { lat: team.homeLat, lng: team.homeLng }, to: { lat: firstGeo.lat, lng: firstGeo.lng } });
+            seenHomePairs.add(firstJobId);
+          }
+        }
+      }
+
+      // Pass 2: home→first pairs based on Launch27 teamName grouping (pre-optimization view)
       for (const [teamName, teamJobs] of Array.from(jobsByTeam)) {
         const team = teamByName.get(teamName);
-        // Home → first job
+        // Home → first job (only if not already added from saved assignment)
         const firstJob = teamJobs[0];
-        if (firstJob && team?.homeLat && team?.homeLng && !assignmentMap.has(firstJob.id)) {
+        if (firstJob && team?.homeLat && team?.homeLng && !seenHomePairs.has(firstJob.id)) {
           const firstGeo = geoByAddress.get(firstJob.jobAddress?.trim().toLowerCase() ?? "");
           if (firstGeo) {
             pairs.push({ fromId: -(team.id), toId: firstJob.id, from: { lat: team.homeLat, lng: team.homeLng }, to: { lat: firstGeo.lat, lng: firstGeo.lng } });
           }
         }
-        // Consecutive job pairs
+        // Consecutive job pairs (only for jobs without saved assignments)
         for (let i = 1; i < teamJobs.length; i++) {
           const prev = teamJobs[i - 1];
           const curr = teamJobs[i];
@@ -588,18 +611,25 @@ export const schedulingRouter = router({
         };
       });
 
-      // Build homeDriveTimeSecs map: teamId -> drive time from home to first job
+      // Build homeDriveTimeSecs map: teamId -> drive time from home to first job.
+      // Use enriched (post-assignment) jobs grouped by assigned teamId so we use the
+      // optimizer-assigned team, not the original Launch27 teamName.
       const homeDriveByTeam = new Map<number, number>();
-      for (const [, teamJobs] of Array.from(jobsByTeam)) {
-        const firstJob = teamJobs[0];
+      const enrichedByTeam = new Map<number, typeof enriched>();
+      for (const ej of enriched) {
+        const tid = ej.assignment?.teamId;
+        if (tid == null || tid === 0) continue;
+        if (!enrichedByTeam.has(tid)) enrichedByTeam.set(tid, []);
+        enrichedByTeam.get(tid)!.push(ej);
+      }
+      for (const [tid, teamEnriched] of Array.from(enrichedByTeam.entries())) {
+        // Sort by routeOrder to find the actual first job
+        teamEnriched.sort((a, b) => (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0));
+        const firstJob = teamEnriched[0];
         if (firstJob) {
           const secs = estimatedDriveMap.get(firstJob.id);
-          const team = teamByName.get(firstJob.teamName ?? "");
-          // Only count it as home drive if the pair was a home pair (fromId < 0)
-          // We stored it keyed by toId (firstJob.id) — check if a home pair exists for this job
-          const homePair = pairs.find(p => p.toId === firstJob.id && p.fromId < 0);
-          if (homePair && secs !== undefined && team) {
-            homeDriveByTeam.set(team.id, secs);
+          if (secs !== undefined) {
+            homeDriveByTeam.set(tid, secs);
           }
         }
       }
@@ -966,15 +996,15 @@ export const schedulingRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      // Delete all non-manual assignments for this date
+      // Delete ALL assignments for this date (regardless of lock/manual status)
       await db.delete(scheduleAssignments)
-        .where(and(
-          eq(scheduleAssignments.jobDate, input.date),
-          eq(scheduleAssignments.isManual, 0),
-        ));
-      // Clear all locks for this date
+        .where(eq(scheduleAssignments.jobDate, input.date));
+      // Clear all job-level locks for this date
       await db.delete(scheduleJobLocks)
         .where(eq(scheduleJobLocks.date, input.date));
+      // Clear all team-day locks for this date
+      await db.delete(teamDayLock)
+        .where(eq(teamDayLock.date, input.date));
       return { ok: true };
     }),
 
