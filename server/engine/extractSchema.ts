@@ -18,6 +18,7 @@ export interface LeadSignals {
   specialScope: string | null;
   optOut: boolean;
   isFlexible: boolean;
+  hasTiming: boolean;
   questions: string[];
   wantsFutureBooking: boolean;
   isExistingCustomer: boolean;
@@ -42,6 +43,7 @@ export const LEAD_SIGNALS_JSON_SCHEMA = {
       specialScope:       { type: ["string", "null"], description: "Special or partial cleaning scope instead of room counts. null if not mentioned." },
       optOut:             { type: "boolean", description: "true if the lead wants to stop receiving messages." },
       isFlexible:         { type: "boolean", description: "true if the lead expressed flexibility about timing." },
+      hasTiming:          { type: "boolean", description: "true if the message contains ANY timing-related content whatsoever — a specific date, a day of the week, a relative expression (this week, next week, this weekend, tomorrow, soon, in a few days), a time of day, urgency (ASAP), or flexibility (whenever, anytime). false only if the message has zero scheduling or timing content." },
       questions:          { type: "array", items: { type: "string" }, description: "Questions the lead asked. Empty array if none." },
       wantsFutureBooking: { type: "boolean", description: "true if the lead wants to book weeks in the future." },
       isExistingCustomer: { type: "boolean", description: "true if this is an existing customer needing support." },
@@ -52,7 +54,7 @@ export const LEAD_SIGNALS_JSON_SCHEMA = {
     },
     required: [
       "bedrooms", "bathrooms", "timeSlot", "dayPreference", "address",
-      "callPreference", "specialScope", "optOut", "isFlexible", "questions",
+      "callPreference", "specialScope", "optOut", "isFlexible", "hasTiming", "questions",
       "wantsFutureBooking", "isExistingCustomer", "serviceType", "quotedPrice",
       "isPositiveReply", "isUrgent",
     ],
@@ -71,8 +73,8 @@ Today's date is ${todayDate} (Eastern Time). Use this to resolve relative dates:
 - "this week" → resolve to the upcoming Friday with full date
 - "next week" → resolve to the Monday of next week with full date
 - "in a few days" / "in a couple days" / "soon" → resolve to 3 days from today with full date
-- "whenever" / "anytime" / "flexible" / "doesn't matter" / "you pick" / "no preference" → leave dayPreference as null, set isFlexible = true
-- "as soon as possible" / "ASAP" / "right away" / "urgent" → leave dayPreference as null, set isUrgent = true
+- "whenever" / "anytime" / "flexible" / "doesn't matter" / "you pick" / "no preference" → leave dayPreference as null, set isFlexible = true, set hasTiming = true
+- "as soon as possible" / "ASAP" / "right away" / "urgent" → leave dayPreference as null, set isUrgent = true, set hasTiming = true
 
 EXTRACTION RULES:
 - bedrooms/bathrooms: extract if the lead mentions room counts (e.g. "3 bed 2 bath" → "3 Bedrooms", "2 Bathrooms")
@@ -83,6 +85,7 @@ EXTRACTION RULES:
 - specialScope: extract if they describe a partial scope instead of giving room counts.
 - optOut: true only for clear opt-out signals (STOP, unsubscribe, don't text me).
 - isFlexible: true if they express openness about timing ("whenever", "flexible", "anytime", "doesn't matter", "you pick", "either works", "no preference").
+- hasTiming: true if the message contains ANY timing content — a date, day, relative expression, time of day, urgency, or flexibility signal. false only if there is zero scheduling content.
 - questions: list any questions the lead asked.
 - wantsFutureBooking: true if they want to book weeks away.
 - isExistingCustomer: true if they mention an existing booking or need support.
