@@ -447,21 +447,20 @@ export const schedulingRouter = router({
       const teamByName = new Map(teams.map(t => [t.name, t]));
 
       // For pre-optimization view: load geocache for all job addresses so we can
-      // estimate drive times between consecutive jobs using haversine distance.
+      // compute real drive times between consecutive jobs using Google Maps Distance Matrix.
       const jobAddresses = jobs.map(j => j.jobAddress?.trim().toLowerCase()).filter(Boolean) as string[];
       const geoCacheRows = jobAddresses.length > 0
         ? await db.select().from(jobGeoCache).where(inArray(jobGeoCache.addressKey, jobAddresses))
         : [];
       const geoByAddress = new Map(geoCacheRows.map(g => [g.addressKey, g]));
 
-      // Group jobs by team, sort by serviceDateTime, then compute haversine drive times between consecutive jobs
+      // Group jobs by team, sort by serviceDateTime
       const jobsByTeam = new Map<string, typeof jobs>();
       for (const j of jobs) {
         if (!j.teamName) continue;
         if (!jobsByTeam.has(j.teamName)) jobsByTeam.set(j.teamName, []);
         jobsByTeam.get(j.teamName)!.push(j);
       }
-      // Sort each team's jobs by serviceDateTime
       for (const [, teamJobs] of Array.from(jobsByTeam)) {
         teamJobs.sort((a: typeof jobs[0], b: typeof jobs[0]) => {
           const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
@@ -469,20 +468,57 @@ export const schedulingRouter = router({
           return ta - tb;
         });
       }
-      // Build a map of jobId -> estimated drive time from previous job (haversine-based)
-      // Assume average driving speed of 25 mph in DC metro area
-      const estimatedDriveMap = new Map<number, number>();
+
+      // Build consecutive origin-destination pairs for Distance Matrix
+      // Only compute for jobs that don't already have a saved assignment (pre-optimization)
+      const pairs: Array<{ fromId: number; toId: number; from: LatLng; to: LatLng }> = [];
       for (const [, teamJobs] of Array.from(jobsByTeam)) {
         for (let i = 1; i < teamJobs.length; i++) {
           const prev = teamJobs[i - 1];
           const curr = teamJobs[i];
+          if (assignmentMap.has(curr.id)) continue; // already has real assignment
           const prevGeo = geoByAddress.get(prev.jobAddress?.trim().toLowerCase() ?? "");
           const currGeo = geoByAddress.get(curr.jobAddress?.trim().toLowerCase() ?? "");
           if (prevGeo && currGeo) {
-            const distM = haversineMeters({ lat: prevGeo.lat, lng: prevGeo.lng }, { lat: currGeo.lat, lng: currGeo.lng });
-            // 25 mph = 11.176 m/s, add 3 min base for stops/lights
-            const driveSecs = Math.round(distM / 11.176) + 180;
-            estimatedDriveMap.set(curr.id, driveSecs);
+            pairs.push({ fromId: prev.id, toId: curr.id, from: { lat: prevGeo.lat, lng: prevGeo.lng }, to: { lat: currGeo.lat, lng: currGeo.lng } });
+          }
+        }
+      }
+
+      // Fetch real drive times from Google Maps (batch as origin|origin... → dest|dest...)
+      const estimatedDriveMap = new Map<number, number>();
+      if (pairs.length > 0) {
+        try {
+          const CHUNK = 10;
+          for (let i = 0; i < pairs.length; i += CHUNK) {
+            const chunk = pairs.slice(i, i + CHUNK);
+            const origins = chunk.map(p => `${p.from.lat},${p.from.lng}`).join("|");
+            const destinations = chunk.map(p => `${p.to.lat},${p.to.lng}`).join("|");
+            const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+              origins,
+              destinations,
+              mode: "driving",
+              units: "metric",
+            });
+            if (result.status === "OK") {
+              // Each origin maps to its own destination (diagonal of the matrix)
+              chunk.forEach((pair, idx) => {
+                const el = result.rows[idx]?.elements[idx];
+                if (el?.status === "OK") {
+                  estimatedDriveMap.set(pair.toId, el.duration.value);
+                } else {
+                  // Fallback to haversine
+                  const distM = haversineMeters(pair.from, pair.to);
+                  estimatedDriveMap.set(pair.toId, Math.round(distM / 10));
+                }
+              });
+            }
+          }
+        } catch {
+          // Fallback: use haversine for all pairs
+          for (const pair of pairs) {
+            const distM = haversineMeters(pair.from, pair.to);
+            estimatedDriveMap.set(pair.toId, Math.round(distM / 10));
           }
         }
       }

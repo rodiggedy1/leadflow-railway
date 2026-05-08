@@ -1486,3 +1486,6 @@
 
 ## Scheduler Pre-Optimization Drive Times
 - [x] Show approximate drive times between jobs before optimization using geocached lat/lng (haversine distance → estimated drive time)
+
+## Scheduler Real Drive Times Pre-Optimization
+- [x] Replace haversine estimate in getSchedule with real Google Maps Distance Matrix API drive times (same as optimizer)
