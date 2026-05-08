@@ -512,6 +512,18 @@ export default function SchedulingTab() {
     onError: (e) => toast.error(e.message),
   });
 
+  // Team unavailability for the selected date
+  const { data: unavailableTeamIds = [] } = trpc.scheduling.getTeamUnavailability.useQuery({ date });
+  const unavailableSet = new Set(unavailableTeamIds);
+  const setUnavailable = trpc.scheduling.setTeamUnavailable.useMutation({
+    onSuccess: () => utils.scheduling.getTeamUnavailability.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+  const setAvailable = trpc.scheduling.setTeamAvailable.useMutation({
+    onSuccess: () => utils.scheduling.getTeamUnavailability.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+
   const jobs: Job[] = (data?.jobs ?? []) as Job[];
   const teams: Team[] = (data?.teams ?? []) as Team[];
   const hasAssignments = data?.hasAssignments ?? false;
@@ -661,12 +673,14 @@ export default function SchedulingTab() {
                 return s + dur;
               }, 0);
 
+              const isUnavailable = unavailableSet.has(team.id);
               return (
-                <div key={team.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${isUnavailable ? "opacity-50 border-red-200" : "border-gray-100"}`}>
                   {/* Team header */}
-                  <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-gray-50">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: team.color ?? "#6366f1" }} />
-                    <span className="font-semibold text-sm text-gray-900">{team.name}</span>
+                  <div className={`flex items-center gap-2.5 px-3 py-2.5 border-b ${isUnavailable ? "bg-red-50 border-red-100" : "border-gray-50"}`}>
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
+                    <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
+                    {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
                     <div className="ml-auto flex items-center gap-2">
                       <span className="text-xs text-gray-400">{teamJobs.length} jobs · {totalHours.toFixed(1)}h</span>
                       {team.homeAddress && (
@@ -677,6 +691,20 @@ export default function SchedulingTab() {
                           )}
                         </span>
                       )}
+                      <button
+                        title={isUnavailable ? "Mark available" : "Mark unavailable for this day"}
+                        onClick={() => isUnavailable
+                          ? setAvailable.mutate({ teamId: team.id, date })
+                          : setUnavailable.mutate({ teamId: team.id, date })
+                        }
+                        className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                          isUnavailable
+                            ? "bg-red-100 text-red-600 border-red-200 hover:bg-red-200"
+                            : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-orange-50 hover:text-orange-500 hover:border-orange-200"
+                        }`}
+                      >
+                        {isUnavailable ? "✓ OFF" : "Set OFF"}
+                      </button>
                     </div>
                   </div>
                   {/* Jobs */}

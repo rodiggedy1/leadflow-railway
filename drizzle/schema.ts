@@ -2360,3 +2360,19 @@ export const scheduleJobLocks = mysqlTable("schedule_job_locks", {
 });
 export type ScheduleJobLock = typeof scheduleJobLocks.$inferSelect;
 export type InsertScheduleJobLock = typeof scheduleJobLocks.$inferInsert;
+
+/**
+ * teamDayUnavailability — marks a team as unavailable for a specific date.
+ * When a row exists for (teamId, date), the optimizer skips that team entirely.
+ */
+export const teamDayUnavailability = mysqlTable("team_day_unavailability", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to schedulingTeams.id */
+  teamId: int("teamId").notNull(),
+  /** Date string YYYY-MM-DD */
+  date: varchar("date", { length: 20 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  uniqTeamDate: uniqueIndex("uniq_team_day").on(t.teamId, t.date),
+}));
+export type TeamDayUnavailability = typeof teamDayUnavailability.$inferSelect;

@@ -22,6 +22,7 @@ import {
   jobGeoCache,
   cleanerJobs,
   scheduleJobLocks,
+  teamDayUnavailability,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -611,9 +612,14 @@ export const schedulingRouter = router({
 
       if (activeJobs.length === 0) return { assigned: 0, message: "No active jobs for this date." };
 
-      // 2. Load active teams
-      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
-      if (teams.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No active teams configured. Add teams first." });
+      // 2. Load active teams, excluding those marked unavailable for this date
+      const allTeams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const unavailRows = await db.select({ teamId: teamDayUnavailability.teamId })
+        .from(teamDayUnavailability)
+        .where(eq(teamDayUnavailability.date, input.date));
+      const unavailIds = new Set(unavailRows.map(r => r.teamId));
+      const teams = allTeams.filter(t => !unavailIds.has(t.id));
+      if (teams.length === 0) throw new TRPCError({ code: "BAD_REQUEST", message: "No available teams for this date. All teams are marked OFF." });
 
       // 3. Geocode all job addresses
       const geocoded: GeocodedJob[] = [];
@@ -873,6 +879,44 @@ export const schedulingRouter = router({
       // Clear all locks for this date
       await db.delete(scheduleJobLocks)
         .where(eq(scheduleJobLocks.date, input.date));
+      return { ok: true };
+    }),
+
+  /** Returns set of teamIds that are marked unavailable for a given date */
+  getTeamUnavailability: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db.select({ teamId: teamDayUnavailability.teamId })
+        .from(teamDayUnavailability)
+        .where(eq(teamDayUnavailability.date, input.date));
+      return rows.map(r => r.teamId);
+    }),
+
+  /** Mark a team unavailable for a specific date */
+  setTeamUnavailable: agentProcedure
+    .input(z.object({ teamId: z.number(), date: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.insert(teamDayUnavailability)
+        .values({ teamId: input.teamId, date: input.date })
+        .onDuplicateKeyUpdate({ set: { teamId: input.teamId } });
+      return { ok: true };
+    }),
+
+  /** Mark a team available again for a specific date (removes the unavailability row) */
+  setTeamAvailable: agentProcedure
+    .input(z.object({ teamId: z.number(), date: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.delete(teamDayUnavailability)
+        .where(and(
+          eq(teamDayUnavailability.teamId, input.teamId),
+          eq(teamDayUnavailability.date, input.date),
+        ));
       return { ok: true };
     }),
 });
