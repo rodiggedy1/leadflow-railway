@@ -735,8 +735,28 @@ export const schedulingRouter = router({
               inArray(scheduleAssignments.teamId, Array.from(lockedTeamIds)),
             ))
         : [];
-      const lockedJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
-      // Filter out locked-team jobs from VRP input so solver doesn't touch them
+      const lockedTeamJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
+
+      // 6b. Load job-level locks BEFORE VRP — individually locked jobs must not move teams.
+      // Fetch their current assignments so we can restore them verbatim after the solver runs.
+      const jobLockRows = await db.select().from(scheduleJobLocks)
+        .where(eq(scheduleJobLocks.date, input.date));
+      const jobLockMap = new Map(jobLockRows.map(l => [l.jobId, l.lockedPosition]));
+      // Fetch current assignments for all individually-locked jobs
+      const existingForLockedJobs = jobLockMap.size > 0
+        ? await db.select().from(scheduleAssignments)
+            .where(and(
+              eq(scheduleAssignments.jobDate, input.date),
+              inArray(scheduleAssignments.cleanerJobId, Array.from(jobLockMap.keys())),
+            ))
+        : [];
+      // Build a set of all job IDs that must be excluded from VRP (team-locked OR job-locked)
+      const lockedJobIdSet = new Set([
+        ...Array.from(lockedTeamJobIdSet),
+        ...existingForLockedJobs.map(e => e.cleanerJobId),
+      ]);
+
+      // Filter out all locked jobs from VRP input so solver doesn't touch them
       const vrpGeocodedJobs = geocoded.filter(j => !lockedJobIdSet.has(j.cleanerJobId));
       // Exclude locked teams from VRP so solver cannot assign new jobs to them
       const vrpTeamConfigs = teamConfigs.filter(t => !lockedTeamIds.has(t.id));
@@ -748,12 +768,26 @@ export const schedulingRouter = router({
       const vrpTravelMatrix = vrpGeocodedJobs.length > 0
         ? await buildTravelMatrix(vrpAllPoints)
         : travelMatrix;
-      // 6. Solve VRP (only for unlocked jobs)
+      // 6c. Solve VRP (only for unlocked jobs on unlocked teams)
       const assignments = vrpGeocodedJobs.length > 0
         ? solveVRP(vrpGeocodedJobs, vrpTeamConfigs, vrpTravelMatrix, vrpAllPoints, vrpTeamConfigs.length)
         : [];
       // Re-add locked-team assignments as-is (they are preserved verbatim)
       for (const ea of existingForLockedTeams) {
+        assignments.push({
+          cleanerJobId: ea.cleanerJobId,
+          teamId: ea.teamId,
+          teamName: ea.teamName ?? "",
+          routeOrder: ea.routeOrder,
+          estimatedArrivalMs: ea.estimatedArrivalMs ?? Date.now(),
+          estimatedDepartureMs: ea.estimatedDepartureMs ?? Date.now(),
+          driveTimeSecs: ea.driveTimeSecs ?? 0,
+        });
+      }
+      // Re-add individually job-locked assignments as-is (same team, same routeOrder)
+      for (const ea of existingForLockedJobs) {
+        // Skip if already covered by a team-level lock (avoid duplicates)
+        if (lockedTeamJobIdSet.has(ea.cleanerJobId)) continue;
         assignments.push({
           cleanerJobId: ea.cleanerJobId,
           teamId: ea.teamId,
@@ -771,42 +805,15 @@ export const schedulingRouter = router({
           eq(scheduleAssignments.isManual, 1),
         ));
       const manualJobIds = new Set(existingManual.map(m => m.cleanerJobId));
-      // Mark locked-team jobs as manual so they survive the persist step
+      // Mark locked-team AND job-locked assignments as manual so they survive the persist step
       for (const ea of existingForLockedTeams) {
         manualJobIds.add(ea.cleanerJobId);
       }
-      // 7b. Respect locked positions — locked jobs stay at their pinned routeOrder.
-      // Unlocked jobs are re-ordered by the VRP result, slotted into the gaps.
-      const locks = await db.select().from(scheduleJobLocks)
-        .where(eq(scheduleJobLocks.date, input.date));
-      const lockMap = new Map(locks.map(l => [l.jobId, l.lockedPosition]));
-
-      if (lockMap.size > 0) {
-        // Per-team: place locked jobs at their pinned positions, fill gaps with VRP order
-        const byTeam = new Map<number, typeof assignments>();
-        for (const a of assignments) {
-          if (!byTeam.has(a.teamId)) byTeam.set(a.teamId, []);
-          byTeam.get(a.teamId)!.push(a);
-        }
-        const reordered: typeof assignments = [];
-        for (const [, teamJobs] of Array.from(byTeam.entries())) {
-          const locked = teamJobs.filter(j => lockMap.has(j.cleanerJobId));
-          const unlocked = teamJobs.filter(j => !lockMap.has(j.cleanerJobId));
-          const slots: (typeof assignments[0] | null)[] = new Array(teamJobs.length).fill(null);
-          for (const lj of locked) {
-            const pos = Math.min(lockMap.get(lj.cleanerJobId)!, teamJobs.length - 1);
-            slots[pos] = { ...lj, routeOrder: pos };
-          }
-          let ui = 0;
-          for (let i = 0; i < slots.length; i++) {
-            if (slots[i] === null && ui < unlocked.length) {
-              slots[i] = { ...unlocked[ui++]!, routeOrder: i };
-            }
-          }
-          reordered.push(...(slots.filter(Boolean) as typeof assignments));
-        }
-        assignments.splice(0, assignments.length, ...reordered);
+      for (const ea of existingForLockedJobs) {
+        manualJobIds.add(ea.cleanerJobId);
       }
+      // 7b. Job-locked jobs were excluded from VRP entirely and restored verbatim above.
+      // Their routeOrder from the existing assignment is already correct — no re-ordering needed.
 
       // 8. Persist (replace non-manual assignments)
       const toSave = assignments.filter(a => !manualJobIds.has(a.cleanerJobId));
