@@ -87,12 +87,13 @@ function addDays(dateStr: string, n: number): string {
 
 function formatTime(ms: number | null | undefined): string {
   if (!ms) return "—";
-  const totalMins = Math.floor(ms / 60000);
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12 = h % 12 || 12;
-  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+  // ms is a Unix timestamp — convert to Eastern Time for display
+  return new Date(ms).toLocaleTimeString("en-US", {
+    timeZone: ET,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function formatDrive(secs: number | null | undefined): string {
@@ -524,9 +525,13 @@ export default function SchedulingTab() {
     if (!teamGroups.has(tid)) teamGroups.set(tid, []);
     teamGroups.get(tid)!.push(job);
   }
-  // Sort each group by routeOrder
+  // Sort each group by earliest arrival time first (falls back to routeOrder)
   for (const [, group] of Array.from(teamGroups.entries())) {
-    group.sort((a, b) => (a.assignment?.routeOrder ?? 999) - (b.assignment?.routeOrder ?? 999));
+    group.sort((a, b) => {
+      const aTime = a.assignment?.estimatedArrivalMs ?? (a.assignment?.routeOrder ?? 999) * 1e12;
+      const bTime = b.assignment?.estimatedArrivalMs ?? (b.assignment?.routeOrder ?? 999) * 1e12;
+      return aTime - bTime;
+    });
   }
 
   const unassigned = teamGroups.get(null) ?? [];

@@ -1479,3 +1479,7 @@
 
 ## Schedule Timezone Fix
 - [x] Fix scheduler to use Eastern Time (America/New_York) for "today" default date and all date display
+
+## Scheduler Time Display Fixes
+- [x] Fix formatTime — now uses new Date(ms).toLocaleTimeString with timeZone: ET (was treating Unix ms as minutes-since-midnight)
+- [x] Sort jobs by earliest estimatedArrivalMs first within each team
