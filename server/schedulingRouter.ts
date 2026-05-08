@@ -738,9 +738,11 @@ export const schedulingRouter = router({
       const lockedJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
       // Filter out locked-team jobs from VRP input so solver doesn't touch them
       const vrpGeocodedJobs = geocoded.filter(j => !lockedJobIdSet.has(j.cleanerJobId));
+      // Exclude locked teams from VRP so solver cannot assign new jobs to them
+      const vrpTeamConfigs = teamConfigs.filter(t => !lockedTeamIds.has(t.id));
       // Rebuild allPoints and travelMatrix for the filtered job set
       const vrpAllPoints: LatLng[] = [
-        ...teamConfigs.map(t => ({ lat: t.homeLat, lng: t.homeLng })),
+        ...vrpTeamConfigs.map(t => ({ lat: t.homeLat, lng: t.homeLng })),
         ...vrpGeocodedJobs.map(j => ({ lat: j.lat, lng: j.lng })),
       ];
       const vrpTravelMatrix = vrpGeocodedJobs.length > 0
@@ -748,7 +750,7 @@ export const schedulingRouter = router({
         : travelMatrix;
       // 6. Solve VRP (only for unlocked jobs)
       const assignments = vrpGeocodedJobs.length > 0
-        ? solveVRP(vrpGeocodedJobs, teamConfigs, vrpTravelMatrix, vrpAllPoints, teamConfigs.length)
+        ? solveVRP(vrpGeocodedJobs, vrpTeamConfigs, vrpTravelMatrix, vrpAllPoints, vrpTeamConfigs.length)
         : [];
       // Re-add locked-team assignments as-is (they are preserved verbatim)
       for (const ea of existingForLockedTeams) {
