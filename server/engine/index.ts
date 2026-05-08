@@ -58,9 +58,10 @@ export async function processLeadReplyV2(
   leadReply: string,
   context: ConversationContext
 ): Promise<StageResult | null> {
-  // ── Post-booking stages — no AI auto-reply, human handles it ──────────────
-  if (context.stage === "DONE" || context.stage === "CALL_SCHEDULED") {
-    console.log(`[Engine] Skipping AI reply for post-booking stage=${context.stage}`);
+  // ── Terminal / human-handled stages — no AI auto-reply ─────────────────────
+  const SILENT_STAGES = new Set(["DONE", "CALL_SCHEDULED", "UNHANDLED", "BOOKED", "FUTURE_BOOKING", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED"]);
+  if (SILENT_STAGES.has(context.stage)) {
+    console.log(`[Engine] Skipping AI reply for terminal/human stage=${context.stage}`);
     return null;
   }
 

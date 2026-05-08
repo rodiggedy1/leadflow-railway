@@ -1015,9 +1015,9 @@ async function _processLeadReplyCore(
       console.error("[ConversationEngine] Language detection failed:", err);
     }
   }
-
-  // ── Post-booking stages — no AI auto-reply, human handles it ────────────────────────────────────
-  if (stage === "DONE" || stage === "CALL_SCHEDULED") {
+  // ── Terminal / human-handled stages — no AI auto-reply ──────────────────────────────────────────────────────────
+  const SILENT_STAGES = new Set(["DONE", "CALL_SCHEDULED", "UNHANDLED", "BOOKED", "FUTURE_BOOKING", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED"]);
+  if (SILENT_STAGES.has(stage)) {
     return null;
   }
   // ── REACTIVATION: Handle YES/price/STOP replies from reactivation campaign contacts ──
