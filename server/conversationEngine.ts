@@ -969,7 +969,7 @@ Respond with this exact JSON structure:
 async function _processLeadReplyCore(
   leadReply: string,
   context: ConversationContext
-): Promise<StageResult> {
+): Promise<StageResult | null> {
   const { stage } = context;
 
   // Build a human-readable extras string for AI context (e.g. "Clean Inside Oven, Load of Laundry")
@@ -1016,25 +1016,9 @@ async function _processLeadReplyCore(
     }
   }
 
-  // ── Post-booking stages — route through AI instead of a static dead-end ───────────────────────
+  // ── Post-booking stages — no AI auto-reply, human handles it ────────────────────────────────────
   if (stage === "DONE" || stage === "CALL_SCHEDULED") {
-    const reply = await handlePostBookingReply({
-      stage,
-      leadName: context.leadName,
-      quotedPrice: context.quotedPrice,
-      serviceType: context.serviceType,
-      bedrooms: context.bedrooms,
-      bathrooms: context.bathrooms,
-      selectedSlot: context.selectedSlot,
-      address: context.address,
-      messageHistory: context.messageHistory,
-      leadReply,
-      extrasContext,
-    });
-    return {
-      reply,
-      nextStage: stage, // stay in the same stage
-    };
+    return null;
   }
   // ── REACTIVATION: Handle YES/price/STOP replies from reactivation campaign contacts ──
   if (stage === "REACTIVATION") {
@@ -1876,16 +1860,14 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
 export async function processLeadReply(
   leadReply: string,
   context: ConversationContext
-): Promise<StageResult> {
+): Promise<StageResult | null> {
   // Step 1: Normalize input to English (skipped for English sessions — no LLM cost)
   const normalizedReply = await normalizeInput(leadReply, context.language);
-
   // Step 2: Run all stage logic with English input
   const result = await _processLeadReplyCore(normalizedReply, context);
-
+  if (result === null) return null;
   // Step 3: Localize output to lead's language (skipped for English sessions — no LLM cost)
   const localizedReply = await localizeOutput(result.reply, context.language);
-
   return { ...result, reply: localizedReply };
 }
 

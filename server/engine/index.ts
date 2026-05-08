@@ -57,7 +57,13 @@ const FALLBACK_REPLIES: Partial<Record<string, string>> = {
 export async function processLeadReplyV2(
   leadReply: string,
   context: ConversationContext
-): Promise<StageResult> {
+): Promise<StageResult | null> {
+  // ── Post-booking stages — no AI auto-reply, human handles it ──────────────
+  if (context.stage === "DONE" || context.stage === "CALL_SCHEDULED") {
+    console.log(`[Engine] Skipping AI reply for post-booking stage=${context.stage}`);
+    return null;
+  }
+
   // ── Flow C bypass ──────────────────────────────────────────────────────────
   if (context.smsFlow === "C" && FLOW_C_STAGES.has(context.stage)) {
     console.log(`[Engine] Flow C bypass: delegating stage=${context.stage} to conversationEngine`);

@@ -1495,3 +1495,6 @@
 
 ## Raechelle Richmond Notification Bug
 - [x] Fix: markRead was throwing for non-agent users (getAgentSessionFromCtx), leaving lastReadAt=NULL forever — removed auth requirement from read-receipt stamp
+
+## AI General Q&A Bug
+- [ ] Disable AI answering random/general questions outside the booking flow — only booking AI and nurture AI should respond

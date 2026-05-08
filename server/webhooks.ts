@@ -1057,6 +1057,12 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       // Process the reply through the LLM-first AI engine
       const result = await processLeadReplyV2(inboundText, context);
 
+      // DONE / CALL_SCHEDULED — no AI reply, human handles post-booking messages
+      if (result === null) {
+        console.log(`[Webhook] Skipping AI reply for post-booking stage=${session.stage} from ${fromPhone}`);
+        return;
+      }
+
       console.log(`[Webhook] Stage: ${session.stage} → ${result.nextStage}. Reply: "${result.reply}"`);
 
       // NOTE: history push is deferred until after finalReplyContent is resolved
