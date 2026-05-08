@@ -176,6 +176,7 @@ function JobCard({
   isLocked?: boolean;
   onLockToggle?: (locked: boolean, position?: number) => void;
 }) {
+  // Open reassign dialog on card click (in addition to map selection)
    const utils = trpc.useUtils();
   const [showReassign, setShowReassign] = useState(false);
   const unassignJob = trpc.scheduling.unassignJob.useMutation({
@@ -201,7 +202,7 @@ function JobCard({
   return (
     <>
       <div
-        onClick={onSelect}
+        onClick={() => { onSelect(); setShowReassign(true); }}
         className={`group relative bg-white rounded-xl border transition-all cursor-pointer hover:shadow-md ${
           isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : isLocked ? "border-amber-200 bg-amber-50/30" : "border-gray-100 hover:border-gray-200"
         }`}
@@ -271,7 +272,7 @@ function JobCard({
       <Dialog open={showReassign} onOpenChange={setShowReassign}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Reassign Job</DialogTitle>
+            <DialogTitle>{job.assignment ? "Reassign Job" : "Assign Job"}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-gray-500">{job.customerName} — {job.jobAddress}</p>
           <div className="space-y-2 mt-2">
@@ -288,7 +289,17 @@ function JobCard({
               </button>
             ))}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            {job.assignment && (
+              <Button
+                variant="outline"
+                className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
+                onClick={() => { unassignJob.mutate({ date, cleanerJobId: job.id }); setShowReassign(false); }}
+                disabled={unassignJob.isPending}
+              >
+                Unassign
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setShowReassign(false)}>Cancel</Button>
           </DialogFooter>
         </DialogContent>

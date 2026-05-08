@@ -216,16 +216,12 @@ function solveVRP(
   const routes = new Map<number, number[]>();
   for (const t of teams) routes.set(t.id, []);
 
-  // ── Phase 1: Lock assigned jobs to their Launch27 team ──────────────────────
+  // ── Phase 1: All jobs go to unassigned pool — VRP distributes across all available teams.
+  // We no longer lock jobs to their Launch27 teamName so every available team gets work.
+  // Jobs with existing serviceDateTime are treated as "locked" in Phase 2 for time ordering.
   const unassigned: number[] = [];
   for (let ji = 0; ji < jobs.length; ji++) {
-    const job = jobs[ji];
-    const matchedTeam = teams.find(t => t.name === job.teamName);
-    if (matchedTeam) {
-      routes.get(matchedTeam.id)!.push(ji);
-    } else {
-      unassigned.push(ji);
-    }
+    unassigned.push(ji);
   }
 
   // Sort each team's locked jobs chronologically by serviceDateTime
@@ -555,8 +551,10 @@ export const schedulingRouter = router({
 
       const enriched = jobs.map(j => {
         const savedAssignment = assignmentMap.get(j.id);
+        // isManual=2 is a sentinel meaning "explicitly unassigned" — treat as no assignment
+        const isExplicitlyUnassigned = savedAssignment?.isManual === 2;
         // If no saved assignment yet, synthesize one from the job's own Launch27 teamName
-        const syntheticAssignment = !savedAssignment && j.teamName && teamByName.has(j.teamName)
+        const syntheticAssignment = !savedAssignment && !isExplicitlyUnassigned && j.teamName && teamByName.has(j.teamName)
           ? {
               cleanerJobId: j.id,
               jobDate: j.jobDate,
@@ -571,7 +569,7 @@ export const schedulingRouter = router({
           : null;
         return {
           ...j,
-          assignment: savedAssignment ?? syntheticAssignment,
+          assignment: isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment),
         };
       });
 
@@ -786,11 +784,25 @@ export const schedulingRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await db.delete(scheduleAssignments)
-        .where(and(
-          eq(scheduleAssignments.jobDate, input.date),
-          eq(scheduleAssignments.cleanerJobId, input.cleanerJobId),
-        ));
+      // Insert sentinel row (isManual=2, teamId=0) to explicitly mark as unassigned.
+      // This prevents getSchedule from synthesizing an assignment from job.teamName.
+      await db.insert(scheduleAssignments)
+        .values({
+          jobDate: input.date,
+          cleanerJobId: input.cleanerJobId,
+          teamId: 0,
+          teamName: null,
+          routeOrder: 0,
+          isManual: 2, // sentinel: explicitly unassigned
+          estimatedArrivalMs: null,
+          estimatedDepartureMs: null,
+          driveTimeSecs: null,
+        })
+        .onDuplicateKeyUpdate({
+          set: { teamId: 0, teamName: null, isManual: 2, routeOrder: 0,
+                 estimatedArrivalMs: null, estimatedDepartureMs: null, driveTimeSecs: null,
+                 updatedAt: new Date() },
+        });
       // Also remove any job-level lock for this job on this date
       await db.delete(scheduleJobLocks)
         .where(and(
