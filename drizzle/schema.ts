@@ -2338,3 +2338,25 @@ export const messageIntegrityChecks = mysqlTable("message_integrity_checks", {
 });
 export type MessageIntegrityCheck = typeof messageIntegrityChecks.$inferSelect;
 export type InsertMessageIntegrityCheck = typeof messageIntegrityChecks.$inferInsert;
+
+/**
+ * scheduleJobLocks — persists locked positions in the schedule optimization.
+ * When a job is locked, its position in the optimized route is fixed and
+ * subsequent optimization runs route around it.
+ * Locks persist until explicitly unlocked by the user.
+ */
+export const scheduleJobLocks = mysqlTable("schedule_job_locks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Launch27 job ID */
+  jobId: int("jobId").notNull(),
+  /** Date string YYYY-MM-DD — the day this lock applies to */
+  date: varchar("date", { length: 10 }).notNull(),
+  /** Cleaner ID this lock belongs to (so locks are per-cleaner per-day) */
+  cleanerId: int("cleanerId").notNull(),
+  /** The locked position index (0-based) in the optimized sequence */
+  lockedPosition: int("lockedPosition").notNull(),
+  /** When the lock was created */
+  lockedAt: bigint("lockedAt", { mode: "number" }).notNull(),
+});
+export type ScheduleJobLock = typeof scheduleJobLocks.$inferSelect;
+export type InsertScheduleJobLock = typeof scheduleJobLocks.$inferInsert;

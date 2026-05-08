@@ -21,6 +21,7 @@ import {
   scheduleAssignments,
   jobGeoCache,
   cleanerJobs,
+  scheduleJobLocks,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -586,6 +587,39 @@ export const schedulingRouter = router({
         ));
       const manualJobIds = new Set(existingManual.map(m => m.cleanerJobId));
 
+      // 7b. Respect locked positions — locked jobs stay at their pinned routeOrder.
+      // Unlocked jobs are re-ordered by the VRP result, slotted into the gaps.
+      const locks = await db.select().from(scheduleJobLocks)
+        .where(eq(scheduleJobLocks.date, input.date));
+      const lockMap = new Map(locks.map(l => [l.jobId, l.lockedPosition]));
+
+      if (lockMap.size > 0) {
+        // Per-team: place locked jobs at their pinned positions, fill gaps with VRP order
+        const byTeam = new Map<number, typeof assignments>();
+        for (const a of assignments) {
+          if (!byTeam.has(a.teamId)) byTeam.set(a.teamId, []);
+          byTeam.get(a.teamId)!.push(a);
+        }
+        const reordered: typeof assignments = [];
+        for (const [, teamJobs] of Array.from(byTeam.entries())) {
+          const locked = teamJobs.filter(j => lockMap.has(j.cleanerJobId));
+          const unlocked = teamJobs.filter(j => !lockMap.has(j.cleanerJobId));
+          const slots: (typeof assignments[0] | null)[] = new Array(teamJobs.length).fill(null);
+          for (const lj of locked) {
+            const pos = Math.min(lockMap.get(lj.cleanerJobId)!, teamJobs.length - 1);
+            slots[pos] = { ...lj, routeOrder: pos };
+          }
+          let ui = 0;
+          for (let i = 0; i < slots.length; i++) {
+            if (slots[i] === null && ui < unlocked.length) {
+              slots[i] = { ...unlocked[ui++]!, routeOrder: i };
+            }
+          }
+          reordered.push(...(slots.filter(Boolean) as typeof assignments));
+        }
+        assignments.splice(0, assignments.length, ...reordered);
+      }
+
       // 8. Persist (replace non-manual assignments)
       const toSave = assignments.filter(a => !manualJobIds.has(a.cleanerJobId));
       await persistAssignments(db, input.date, toSave);
@@ -642,6 +676,78 @@ export const schedulingRouter = router({
       const result = await geocodeWithCache(input.address);
       if (!result) throw new TRPCError({ code: "BAD_REQUEST", message: "Could not geocode address" });
       return result;
+    }),
+
+  // ── Job lock procedures ──────────────────────────────────────────────────────
+  lockJob: agentProcedure
+    .input(z.object({
+      jobId: z.number(),
+      date: z.string(),
+      cleanerId: z.number(),
+      lockedPosition: z.number(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.insert(scheduleJobLocks)
+        .values({
+          jobId: input.jobId,
+          date: input.date,
+          cleanerId: input.cleanerId,
+          lockedPosition: input.lockedPosition,
+          lockedAt: Date.now(),
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            lockedPosition: input.lockedPosition,
+            lockedAt: Date.now(),
+          },
+        });
+      return { ok: true };
+    }),
+
+  unlockJob: agentProcedure
+    .input(z.object({ jobId: z.number(), date: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.delete(scheduleJobLocks)
+        .where(and(
+          eq(scheduleJobLocks.jobId, input.jobId),
+          eq(scheduleJobLocks.date, input.date),
+        ));
+      return { ok: true };
+    }),
+
+  getJobLocks: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const locks = await db.select().from(scheduleJobLocks)
+        .where(eq(scheduleJobLocks.date, input.date));
+      return locks;
+    }),
+
+  /**
+   * resetOptimization — clears all non-manual schedule assignments and all locks
+   * for the given date, restoring the original Launch27 order.
+   */
+  resetOptimization: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Delete all non-manual assignments for this date
+      await db.delete(scheduleAssignments)
+        .where(and(
+          eq(scheduleAssignments.jobDate, input.date),
+          eq(scheduleAssignments.isManual, 0),
+        ));
+      // Clear all locks for this date
+      await db.delete(scheduleJobLocks)
+        .where(eq(scheduleJobLocks.date, input.date));
+      return { ok: true };
     }),
 });
 

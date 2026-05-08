@@ -21,7 +21,7 @@ import { toast } from "sonner";
 import {
   Sparkles, Settings2, ChevronLeft, ChevronRight, MapPin,
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
-  GripVertical, RotateCcw,
+  GripVertical, RotateCcw, Lock, Unlock,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -162,13 +162,15 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 // ── Job Card ──────────────────────────────────────────────────────────────────
 
 function JobCard({
-  job, teams, date, isSelected, onSelect,
+  job, teams, date, isSelected, onSelect, isLocked, onLockToggle,
 }: {
   job: Job;
   teams: Team[];
   date: string;
   isSelected: boolean;
   onSelect: () => void;
+  isLocked?: boolean;
+  onLockToggle?: (locked: boolean, position?: number) => void;
 }) {
   const utils = trpc.useUtils();
   const [showReassign, setShowReassign] = useState(false);
@@ -191,7 +193,7 @@ function JobCard({
       <div
         onClick={onSelect}
         className={`group relative bg-white rounded-xl border transition-all cursor-pointer hover:shadow-md ${
-          isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : "border-gray-100 hover:border-gray-200"
+          isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : isLocked ? "border-amber-200 bg-amber-50/30" : "border-gray-100 hover:border-gray-200"
         }`}
       >
         <div className="p-3">
@@ -223,13 +225,24 @@ function JobCard({
                 )}
               </div>
             </div>
-            <button
-              onClick={e => { e.stopPropagation(); setShowReassign(true); }}
-              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all"
-              title="Reassign team"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-gray-400" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              {/* Lock toggle */}
+              <button
+                onClick={e => { e.stopPropagation(); onLockToggle?.(!!isLocked); }}
+                className={`p-1 rounded transition-all ${isLocked ? "text-amber-500 opacity-100" : "opacity-0 group-hover:opacity-100 text-gray-400 hover:text-amber-500"} hover:bg-amber-50`}
+                title={isLocked ? "Unlock position" : "Lock position"}
+              >
+                {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+              </button>
+              {/* Reassign button */}
+              <button
+                onClick={e => { e.stopPropagation(); setShowReassign(true); }}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-100 transition-all"
+                title="Reassign team"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -471,7 +484,26 @@ export default function SchedulingTab() {
   const optimize = trpc.scheduling.optimizeDay.useMutation({
     onSuccess: (result) => {
       utils.scheduling.getSchedule.invalidate({ date });
+      utils.scheduling.getJobLocks.invalidate({ date });
       toast.success(result.message);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const { data: jobLocks = [] } = trpc.scheduling.getJobLocks.useQuery({ date });
+  const lockedJobIds = new Set(jobLocks.map(l => l.jobId));
+  const lockJob = trpc.scheduling.lockJob.useMutation({
+    onSuccess: () => utils.scheduling.getJobLocks.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+  const unlockJob = trpc.scheduling.unlockJob.useMutation({
+    onSuccess: () => utils.scheduling.getJobLocks.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+  const resetOptimization = trpc.scheduling.resetOptimization.useMutation({
+    onSuccess: () => {
+      utils.scheduling.getSchedule.invalidate({ date });
+      utils.scheduling.getJobLocks.invalidate({ date });
+      toast.success("Schedule reset to original order");
     },
     onError: (e) => toast.error(e.message),
   });
@@ -561,6 +593,24 @@ export default function SchedulingTab() {
             </SheetContent>
           </Sheet>
 
+          {/* Reset button — only shown when there are assignments */}
+          {hasAssignments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (confirm("Reset schedule to original Launch27 order? All locks will be cleared.")) {
+                  resetOptimization.mutate({ date });
+                }
+              }}
+              disabled={resetOptimization.isPending || optimize.isPending}
+              className="gap-1.5 text-gray-600"
+              title="Reset to original Launch27 order"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset
+            </Button>
+          )}
           {/* Optimize button */}
           <Button
             onClick={() => optimize.mutate({ date })}
@@ -629,6 +679,16 @@ export default function SchedulingTab() {
                           date={date}
                           isSelected={selectedJobId === job.id}
                           onSelect={() => setSelectedJobId(job.id === selectedJobId ? null : job.id)}
+                          isLocked={lockedJobIds.has(job.id)}
+                          onLockToggle={(locked, position) => {
+                            if (locked) {
+                              unlockJob.mutate({ jobId: job.id, date });
+                            } else {
+                              const pos = job.assignment?.routeOrder ?? 0;
+                              const cleanerId = job.assignment?.teamId ?? 0;
+                              lockJob.mutate({ jobId: job.id, date, cleanerId, lockedPosition: position ?? pos });
+                            }
+                          }}
                         />
                       ))
                     )}

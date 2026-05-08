@@ -1469,3 +1469,10 @@
 - [ ] Fix: DONE stage fallback creates new session instead of re-opening the old one
 - [ ] Fix: remove stale getOrphanSessions procedure from routers.ts (still queries inbound-orphan)
 - [ ] Fix: new inbound-sms session stage should be UNHANDLED not QUOTE_SENT (wrong stage means AI tries to run quote flow on a cold inbound)
+
+## Schedule Optimization Lock/Reset
+- [x] Add schedule_job_locks table to DB schema (jobId, date, lockedPosition, lockedAt)
+- [x] Add lockJob / unlockJob / getLockedJobs / resetOptimization tRPC procedures
+- [x] Update optimize procedure to keep locked jobs fixed and route around them
+- [x] Add Reset button to restore original Launch27 order (clears all locks + assignments)
+- [x] Add Lock toggle (🔒) on each job row in the optimized schedule
