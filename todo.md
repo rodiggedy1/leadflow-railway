@@ -1483,3 +1483,6 @@
 ## Scheduler Time Display Fixes
 - [x] Fix formatTime — now uses new Date(ms).toLocaleTimeString with timeZone: ET (was treating Unix ms as minutes-since-midnight)
 - [x] Sort jobs by earliest estimatedArrivalMs first within each team
+
+## Scheduler Pre-Optimization Drive Times
+- [x] Show approximate drive times between jobs before optimization using geocached lat/lng (haversine distance → estimated drive time)

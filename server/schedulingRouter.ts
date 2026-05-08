@@ -445,6 +445,48 @@ export const schedulingRouter = router({
       const assignmentMap = new Map(assignments.map(a => [a.cleanerJobId, a]));
       // Build a lookup from scheduling_teams name -> team row
       const teamByName = new Map(teams.map(t => [t.name, t]));
+
+      // For pre-optimization view: load geocache for all job addresses so we can
+      // estimate drive times between consecutive jobs using haversine distance.
+      const jobAddresses = jobs.map(j => j.jobAddress?.trim().toLowerCase()).filter(Boolean) as string[];
+      const geoCacheRows = jobAddresses.length > 0
+        ? await db.select().from(jobGeoCache).where(inArray(jobGeoCache.addressKey, jobAddresses))
+        : [];
+      const geoByAddress = new Map(geoCacheRows.map(g => [g.addressKey, g]));
+
+      // Group jobs by team, sort by serviceDateTime, then compute haversine drive times between consecutive jobs
+      const jobsByTeam = new Map<string, typeof jobs>();
+      for (const j of jobs) {
+        if (!j.teamName) continue;
+        if (!jobsByTeam.has(j.teamName)) jobsByTeam.set(j.teamName, []);
+        jobsByTeam.get(j.teamName)!.push(j);
+      }
+      // Sort each team's jobs by serviceDateTime
+      for (const [, teamJobs] of Array.from(jobsByTeam)) {
+        teamJobs.sort((a: typeof jobs[0], b: typeof jobs[0]) => {
+          const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
+          const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
+          return ta - tb;
+        });
+      }
+      // Build a map of jobId -> estimated drive time from previous job (haversine-based)
+      // Assume average driving speed of 25 mph in DC metro area
+      const estimatedDriveMap = new Map<number, number>();
+      for (const [, teamJobs] of Array.from(jobsByTeam)) {
+        for (let i = 1; i < teamJobs.length; i++) {
+          const prev = teamJobs[i - 1];
+          const curr = teamJobs[i];
+          const prevGeo = geoByAddress.get(prev.jobAddress?.trim().toLowerCase() ?? "");
+          const currGeo = geoByAddress.get(curr.jobAddress?.trim().toLowerCase() ?? "");
+          if (prevGeo && currGeo) {
+            const distM = haversineMeters({ lat: prevGeo.lat, lng: prevGeo.lng }, { lat: currGeo.lat, lng: currGeo.lng });
+            // 25 mph = 11.176 m/s, add 3 min base for stops/lights
+            const driveSecs = Math.round(distM / 11.176) + 180;
+            estimatedDriveMap.set(curr.id, driveSecs);
+          }
+        }
+      }
+
       const enriched = jobs.map(j => {
         const savedAssignment = assignmentMap.get(j.id);
         // If no saved assignment yet, synthesize one from the job's own Launch27 teamName
@@ -457,7 +499,7 @@ export const schedulingRouter = router({
               routeOrder: 0,
               estimatedArrivalMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : null,
               estimatedDepartureMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() + 2 * 3600000 : null,
-              driveTimeSecs: null,
+              driveTimeSecs: estimatedDriveMap.get(j.id) ?? null,
               isManual: 0,
             }
           : null;
