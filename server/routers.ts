@@ -43,6 +43,7 @@ import { hiringRouter } from "./hiringRouter";
 import { teamPayRouter } from "./teamPayRouter";
 import { nurtureRouter } from "./nurtureRouter";
 import { endEnrollment } from "./nurtureSequence";
+import { callsRouter } from "./callsRouter";
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -5334,6 +5335,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
   opsChat: opsChatRouter,
   followUps: followUpsRouter,
   teamPay: teamPayRouter,
+  calls: callsRouter,
 
   tools: router({
     generateFirstMessage: agentProcedure

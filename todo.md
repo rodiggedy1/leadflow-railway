@@ -1498,3 +1498,17 @@
 
 ## AI General Q&A Bug
 - [ ] Disable AI answering random/general questions outside the booking flow — only booking AI and nurture AI should respond
+
+## AI Call Command Center
+- [x] Add callTemplates table (id, name, triggerType, targetType, scriptTemplate, isActive) to schema
+- [x] Add callLog table (id, jobId, teamId, clientName, clientPhone, templateId, resolvedScript, status, vapiCallId, recordingUrl, firedAt, completedAt, notes) to schema
+- [x] Add jobIssues table (id, cleanerJobId, jobDate, issueType, raisedBy, raisedAt, resolvedAt, callLogId) to schema
+- [x] Run pnpm db:push for new tables
+- [x] Create server/callsRouter.ts with getCallTemplates, raiseIssue, fireCall, getCallLog, updateCallLog procedures
+- [x] Mount callsRouter in server/routers.ts
+- [x] Seed 10 call templates from user-provided scripts
+- [x] Add Issue button (alert icon) to each JobCard in SchedulingTab
+- [x] Build IssueDialog: issue type selector, template suggestions, pre-filled editable variables, target selector, fire button
+- [x] Build CallLogPanel in toolbar: list of calls for the day, status badges, recording playback
+- [x] Auto-trigger: periodic check for teams past scheduled time with no check-in, raise issue automatically (Heartbeat endpoint ready at /api/scheduled/call-center-no-checkin — register cron after deploy)
+- [x] Write vitest tests for callsRouter procedures

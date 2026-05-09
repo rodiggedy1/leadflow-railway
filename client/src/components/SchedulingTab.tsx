@@ -24,8 +24,10 @@ import {
   Sparkles, Settings2, ChevronLeft, ChevronRight, MapPin,
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
   GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
-  SlidersHorizontal, Power,
+  SlidersHorizontal, Power, AlertTriangle, Phone,
 } from "lucide-react";
+import IssueDialog from "@/components/IssueDialog";
+import CallLogPanel from "@/components/CallLogPanel";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -174,7 +176,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 
 function JobCard({
   job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
-  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone,
+  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick,
 }: {
   job: Job;
   teams: Team[];
@@ -188,9 +190,10 @@ function JobCard({
   onReassignDone?: (destTeamId: number, srcTeamId: number | null) => void;
   onUnassignStart?: (srcTeamId: number | null) => void;
   onUnassignDone?: (srcTeamId: number | null) => void;
+  onIssueClick?: () => void;
 }) {
   // Open reassign dialog on card click (in addition to map selection)
-   const utils = trpc.useUtils();
+  const utils = trpc.useUtils();
   const [showReassign, setShowReassign] = useState(false);
   const unassignJob = trpc.scheduling.unassignJob.useMutation({
     onSuccess: () => {
@@ -296,6 +299,14 @@ function JobCard({
                 title="Reassign team"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+              {/* Issue / Call button */}
+              <button
+                onClick={e => { e.stopPropagation(); onIssueClick?.(); }}
+                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-orange-50 transition-all"
+                title="Raise issue & fire AI call"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-gray-400 hover:text-orange-500" />
               </button>
               {/* Unassign button — only shown for assigned jobs */}
               {job.assignment && (
@@ -809,6 +820,11 @@ export default function SchedulingTab() {
   const [editingTeam, setEditingTeam] = useState<Team | undefined>(undefined);
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamSheetOpen, setTeamSheetOpen] = useState(false);
+  // Call Command Center state
+  const [issueDialogJob, setIssueDialogJob] = useState<{ id: number; date: string } | null>(null);
+  const [callLogOpen, setCallLogOpen] = useState(false);
+  const { data: dayIssues = [] } = trpc.calls.getDayIssues.useQuery({ jobDate: date }, { refetchInterval: 30_000 });
+
   // Set of teamIds currently being recalculated (show spinner on their headers)
   const [recalculatingTeams, setRecalculatingTeams] = useState<Set<number>>(new Set());
   const markRecalculating = (ids: number[]) =>
@@ -1000,6 +1016,23 @@ export default function SchedulingTab() {
               Reset
             </Button>
           )}
+          {/* Call Log button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCallLogOpen(true)}
+            className="gap-1.5 relative"
+            title="View call log for this day"
+          >
+            <Phone className="w-4 h-4" />
+            Calls
+            {dayIssues.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {dayIssues.length}
+              </span>
+            )}
+          </Button>
+
           {/* Optimize button */}
           <Button
             onClick={() => optimize.mutate({ date })}
@@ -1229,6 +1262,7 @@ export default function SchedulingTab() {
                           onSelect={() => setSelectedJobId(job.id === selectedJobId ? null : job.id)}
                           isLocked={lockedJobIds.has(job.id)}
                           homeDriveTimeSecs={idx === 0 ? (team as any).homeDriveTimeSecs ?? null : null}
+                          onIssueClick={() => setIssueDialogJob({ id: job.id, date })}
                           onLockToggle={(locked, position) => {
                             if (locked) {
                               unlockJob.mutate({ jobId: job.id, date });
@@ -1299,6 +1333,24 @@ export default function SchedulingTab() {
           </div>
         </div>
       )}
+
+      {/* AI Call Command Center — Issue Dialog */}
+      {issueDialogJob && (
+        <IssueDialog
+          open={!!issueDialogJob}
+          onClose={() => setIssueDialogJob(null)}
+          cleanerJobId={issueDialogJob.id}
+          jobDate={issueDialogJob.date}
+          onCallFired={() => setCallLogOpen(true)}
+        />
+      )}
+
+      {/* AI Call Command Center — Call Log Panel */}
+      <CallLogPanel
+        open={callLogOpen}
+        onClose={() => setCallLogOpen(false)}
+        jobDate={date}
+      />
     </div>
   );
 }

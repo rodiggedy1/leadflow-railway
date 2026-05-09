@@ -2422,3 +2422,161 @@ export const teamDayConfig = mysqlTable("team_day_config", {
 }));
 export type TeamDayConfig = typeof teamDayConfig.$inferSelect;
 export type InsertTeamDayConfig = typeof teamDayConfig.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI CALL COMMAND CENTER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * callTemplates — library of AI voice call scripts for operational issues.
+ * Each template has a script with {{variable}} placeholders that are resolved
+ * at fire-time from schedule data (overridable by dispatcher before firing).
+ *
+ * triggerType: what kind of issue this template is used for
+ * targetType: who the call is placed to (team = cleaner, client, or both)
+ */
+export const callTemplateTriggerTypes = [
+  "arrival_confirmation",
+  "late_team",
+  "no_access",
+  "parking",
+  "delay_update",
+  "checkin_reminder",
+  "lockout_warning",
+  "lockout_final",
+  "utility_issue",
+  "completion_walkthrough",
+  "manual",
+] as const;
+export type CallTemplateTriggerType = (typeof callTemplateTriggerTypes)[number];
+
+export const callTemplateTargetTypes = ["team", "client", "both"] as const;
+export type CallTemplateTargetType = (typeof callTemplateTargetTypes)[number];
+
+export const callTemplates = mysqlTable("call_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Human-readable name shown in the UI */
+  name: varchar("name", { length: 255 }).notNull(),
+  /** What kind of operational issue this template addresses */
+  triggerType: mysqlEnum("triggerType", callTemplateTriggerTypes as unknown as [string, ...string[]]).notNull(),
+  /** Who to call: team (cleaner), client, or both */
+  targetType: mysqlEnum("targetType", callTemplateTargetTypes as unknown as [string, ...string[]]).notNull(),
+  /**
+   * The voice script with {{variable}} placeholders.
+   * Supported variables: {{team_name}}, {{client_name}}, {{address}},
+   * {{time}}, {{new_eta}}, {{water_power_access}}
+   */
+  scriptTemplate: text("scriptTemplate").notNull(),
+  /** Whether this template appears in the dispatcher UI */
+  isActive: int("isActive").default(1).notNull(),
+  /** Display sort order */
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CallTemplate = typeof callTemplates.$inferSelect;
+export type InsertCallTemplate = typeof callTemplates.$inferInsert;
+
+/**
+ * callLog — one row per AI call fired from the Command Center.
+ * Tracks the full lifecycle: pending → fired → completed | failed.
+ * vapiCallId links back to the VAPI call for recording/transcript retrieval.
+ */
+export const callLogStatuses = ["pending", "fired", "completed", "failed", "no_answer"] as const;
+export type CallLogStatus = (typeof callLogStatuses)[number];
+
+export const callLog = mysqlTable("call_log", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The job this call is about (cleanerJobs.id) */
+  cleanerJobId: int("cleanerJobId"),
+  /** The scheduling team involved */
+  teamId: int("teamId"),
+  /** Denormalized team name for display */
+  teamName: varchar("teamName", { length: 255 }),
+  /** Client name (denormalized for display) */
+  clientName: varchar("clientName", { length: 255 }),
+  /** Phone number called (E.164) */
+  calledPhone: varchar("calledPhone", { length: 30 }),
+  /** Who the call was placed to: team or client */
+  calledTarget: mysqlEnum("calledTarget", ["team", "client"]).notNull(),
+  /** Which template was used */
+  templateId: int("templateId"),
+  /** Template name at time of firing (denormalized) */
+  templateName: varchar("templateName", { length: 255 }),
+  /** The fully resolved script (variables substituted) */
+  resolvedScript: text("resolvedScript").notNull(),
+  /** Current lifecycle status */
+  status: mysqlEnum("status", callLogStatuses as unknown as [string, ...string[]]).default("pending").notNull(),
+  /** VAPI call ID returned from the VAPI API */
+  vapiCallId: varchar("vapiCallId", { length: 128 }),
+  /** URL to the call recording (populated from VAPI end-of-call webhook) */
+  recordingUrl: varchar("recordingUrl", { length: 1024 }),
+  /** Full call transcript (populated from VAPI end-of-call webhook) */
+  transcript: longtext("transcript"),
+  /** Job date this call relates to (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }),
+  /** Who fired the call: "dispatcher" | "auto" */
+  firedBy: varchar("firedBy", { length: 64 }),
+  /** When the call was placed */
+  firedAt: bigint("firedAt", { mode: "number" }),
+  /** When the call ended (from VAPI webhook) */
+  completedAt: bigint("completedAt", { mode: "number" }),
+  /** Duration in seconds (from VAPI webhook) */
+  durationSeconds: int("durationSeconds"),
+  /** Dispatcher notes (optional, added after the call) */
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idxJobDate: index("idx_cl_job_date").on(t.jobDate),
+  idxJobId: index("idx_cl_job_id").on(t.cleanerJobId),
+  idxVapi: index("idx_cl_vapi").on(t.vapiCallId),
+}));
+export type CallLog = typeof callLog.$inferSelect;
+export type InsertCallLog = typeof callLog.$inferInsert;
+
+/**
+ * jobIssues — tracks operational issues raised against a specific job+date.
+ * Issues can be raised manually by a dispatcher or automatically by the system
+ * (e.g. no check-in after scheduled time). Each issue can link to a callLog row
+ * once a call has been fired.
+ */
+export const jobIssueTypes = [
+  "late_team",
+  "no_access",
+  "parking",
+  "delay",
+  "lockout",
+  "utility_issue",
+  "no_checkin",
+  "completion",
+  "manual",
+] as const;
+export type JobIssueType = (typeof jobIssueTypes)[number];
+
+export const jobIssues = mysqlTable("job_issues", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The job this issue is about (cleanerJobs.id) */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** The date this issue applies to (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }).notNull(),
+  /** What kind of issue this is */
+  issueType: mysqlEnum("issueType", jobIssueTypes as unknown as [string, ...string[]]).notNull(),
+  /** How the issue was raised */
+  raisedBy: mysqlEnum("raisedBy", ["manual", "auto"]).default("manual").notNull(),
+  /** Who raised it (agent name or "system") */
+  raisedByName: varchar("raisedByName", { length: 128 }),
+  /** When the issue was raised (Unix ms) */
+  raisedAt: bigint("raisedAt", { mode: "number" }).notNull(),
+  /** When the issue was resolved (null = still open) */
+  resolvedAt: bigint("resolvedAt", { mode: "number" }),
+  /** Link to the callLog row if a call was fired for this issue */
+  callLogId: int("callLogId"),
+  /** Optional dispatcher note */
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxJobDate: index("idx_ji_job_date").on(t.cleanerJobId, t.jobDate),
+}));
+export type JobIssue = typeof jobIssues.$inferSelect;
+export type InsertJobIssue = typeof jobIssues.$inferInsert;

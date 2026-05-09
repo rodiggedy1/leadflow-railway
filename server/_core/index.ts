@@ -10,6 +10,7 @@ import { registerCronRoutes } from "../cronSync";
 import { registerFollowUpCronRoutes } from "../followUpCron";
 import { registerVapiWebhookRoute } from "../vapiWebhook";
 import { registerThumbTackBridgeRoute } from "../thumbtackBridgeRoute";
+import { registerCallCenterCronRoute } from "../callCommandCenterCron";
 import { bootstrapVapiAssistant } from "../vapiService";
 import { startInternalCron } from "../internalCron";
 import { registerWidgetEmbedRoute } from "../widgetEmbed";
@@ -108,6 +109,8 @@ async function startServer() {
   registerVapiWebhookRoute(app);
   // Thumbtack Chrome extension bridge: SMS + Vapi conference call
   registerThumbTackBridgeRoute(app);
+  // Call Command Center: auto-raise no-checkin issues (Heartbeat cron)
+  registerCallCenterCronRoute(app);
   // tRPC API
   app.use(
     "/api/trpc",

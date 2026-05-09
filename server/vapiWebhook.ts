@@ -25,8 +25,8 @@ import {
 import { notifyOwner } from "./_core/notification";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
-import { fieldMgmtCalls } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { fieldMgmtCalls, callLog } from "../drizzle/schema";
+import { eq, or } from "drizzle-orm";
 
 const OWNER_ALERT_NUMBER = "+13029816191";
 
@@ -237,6 +237,23 @@ export function registerVapiWebhookRoute(app: Express): void {
 
           getDb().then(async (db) => {
             if (!db) return;
+
+            // ── Update callCommandCenter callLog if this vapiCallId matches ──
+            const callCenterStatus: string =
+              outcome === "answered" ? "completed" :
+              outcome === "no_answer" ? "no_answer" : "failed";
+
+            await db.update(callLog)
+              .set({
+                status: callCenterStatus as any,
+                vapiCallId,
+                recordingUrl: recordingUrl ?? undefined,
+                transcript: transcript ?? undefined,
+                durationSeconds: durationSeconds > 0 ? durationSeconds : undefined,
+                completedAt: endedAt,
+              })
+              .where(eq(callLog.vapiCallId, vapiCallId))
+              .catch((err: unknown) => console.error("[Vapi] callLog update error:", err));
 
             // Update fieldMgmtCalls row with outcome/transcript
             const [updatedCall] = await db.update(fieldMgmtCalls)
