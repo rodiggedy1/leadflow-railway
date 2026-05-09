@@ -3541,54 +3541,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               </button>
                             </div>
                           )}
-                          {cs.status === "running_late" && cs.cleanerJobId && (
-                            <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
-                              {clientCallDone.has(cs.cleanerJobId) ? (
-                                <span className="text-[10px] text-emerald-600 font-medium">✓ Client notified</span>
-                              ) : (
-                                <button
-                                  disabled={callingClientJobId === cs.cleanerJobId}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (!cs.cleanerJobId) return;
-                                    // Open confirmation dialog instead of calling immediately
-                                    setCallConfirmState({
-                                      cleanerJobId: cs.cleanerJobId,
-                                      clientName: cs.customerName ?? null,
-                                      etaLabel: cs.etaLabel ?? null,
-                                      detectedFromSms,
-                                      smsText,
-                                      isTestCard: cs.isTestCard ?? false,
-                                    });
-                                    // Pre-fill the editable ETA with the parsed value (24h "HH:MM")
-                                    if (cs.etaLabel) {
-                                      // Parse "3:45 PM" → "15:45" for the time input
-                                      const match = cs.etaLabel.match(/(\d{1,2}):(\d{2})\s*([AP]M)/i);
-                                      if (match) {
-                                        let h = parseInt(match[1], 10);
-                                        const m = match[2];
-                                        const ampm = match[3].toUpperCase();
-                                        if (ampm === "PM" && h < 12) h += 12;
-                                        if (ampm === "AM" && h === 12) h = 0;
-                                        setEditedEtaTime(`${String(h).padStart(2, "0")}:${m}`);
-                                      } else {
-                                        setEditedEtaTime("");
-                                      }
-                                    } else {
-                                      setEditedEtaTime("");
-                                    }
-                                  }}
-                                  className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed transition"
-                                >
-                                  {callingClientJobId === cs.cleanerJobId ? (
-                                    <><span className="animate-spin">⟳</span> Calling…</>
-                                  ) : (
-                                    <>📞 Call Client</>
-                                  )}
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          {/* HIDDEN: "Call Client" button replaced by the ⚠ AI Call button above.
+                               The underlying callClientRunningLate mutation, callConfirmState, clientCallDone,
+                               and callingClientJobId state are all still present for easy revert.
+                               To restore: uncomment the original block from git history. */}
                         </div>
                       </TooltipTrigger>
                       <TooltipContent side="right" className="max-w-[240px] space-y-0.5 text-xs">
