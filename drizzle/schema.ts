@@ -2393,3 +2393,26 @@ export const teamDayLock = mysqlTable("team_day_lock", {
   uniqTeamDateLock: uniqueIndex("uniq_team_day_lock").on(t.teamId, t.date),
 }));
 export type TeamDayLock = typeof teamDayLock.$inferSelect;
+
+/**
+ * teamDayConfig — per-team daily overrides that persist until changed.
+ * Stores max jobs cap and earliest start time for a team on a specific date.
+ * One row per (teamId, date). Upserted when dispatcher changes settings.
+ */
+export const teamDayConfig = mysqlTable("team_day_config", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Link to schedulingTeams.id */
+  teamId: int("teamId").notNull(),
+  /** Date string YYYY-MM-DD */
+  date: varchar("date", { length: 20 }).notNull(),
+  /** Max number of jobs this team can take on this day (null = no cap) */
+  maxJobs: int("maxJobs"),
+  /** Earliest start time as HH:MM (24h), e.g. "14:30" (null = no restriction) */
+  earliestStartTime: varchar("earliestStartTime", { length: 5 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  uniqTeamDateConfig: uniqueIndex("uniq_team_day_config").on(t.teamId, t.date),
+}));
+export type TeamDayConfig = typeof teamDayConfig.$inferSelect;
+export type InsertTeamDayConfig = typeof teamDayConfig.$inferInsert;

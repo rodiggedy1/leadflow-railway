@@ -24,6 +24,7 @@ import {
   scheduleJobLocks,
   teamDayUnavailability,
   teamDayLock,
+  teamDayConfig,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -53,6 +54,8 @@ interface TeamConfig {
   homeLng: number;
   maxHoursPerDay: number;
   color: string;
+  maxJobs?: number | null;         // per-day job cap (null = no cap)
+  earliestStartTime?: string | null; // "HH:MM" earliest first job start
 }
 
 interface Assignment {
@@ -247,7 +250,16 @@ function solveVRP(
     for (const t of teams) {
       const route = routes.get(t.id)!;
       const totalHours = route.reduce((s, rji) => s + jobs[rji].durationHours, 0);
-      if (totalHours >= t.maxHoursPerDay) continue; // team full
+      if (totalHours >= t.maxHoursPerDay) continue; // team full (hours)
+      if (t.maxJobs != null && route.length >= t.maxJobs) continue; // team full (job cap)
+      // Enforce earliest start time: skip this team if the job starts before the team's window
+      if (t.earliestStartTime != null) {
+        const jobDt = jobs[ji].serviceDateTime; // ISO string or null
+        if (jobDt) {
+          const jobHHMM = jobDt.slice(11, 16); // "HH:MM" from ISO datetime
+          if (jobHHMM < t.earliestStartTime) continue;
+        }
+      }
       const teamIdx = teams.indexOf(t);
       // Build the full sequence of point indices for this team: [home, job0, job1, ...]
       const seq = [teamIdx, ...route.map(rji => teamOffset + rji)];
@@ -717,6 +729,10 @@ export const schedulingRouter = router({
         ..._jobLockRows.map(l => l.jobId),
       ]);
 
+      // 3b. Load per-team daily config (max jobs + earliest start time)
+      const _dayConfigRows = await db.select().from(teamDayConfig).where(eq(teamDayConfig.date, input.date));
+      const _dayConfigMap = new Map(_dayConfigRows.map(r => [r.teamId, r]));
+
       // 4. Build all points array: [team homes..., job points...]
       const teamConfigs: TeamConfig[] = teams
         .filter(t => t.homeLat != null && t.homeLng != null)
@@ -727,6 +743,8 @@ export const schedulingRouter = router({
           homeLng: t.homeLng!,
           maxHoursPerDay: t.maxHoursPerDay ?? 8,
           color: t.color ?? "#6366f1",
+          maxJobs: _dayConfigMap.get(t.id)?.maxJobs ?? null,
+          earliestStartTime: _dayConfigMap.get(t.id)?.earliestStartTime ?? null,
         }));
 
       if (teamConfigs.length === 0) {
@@ -1104,6 +1122,46 @@ export const schedulingRouter = router({
           eq(teamDayLock.teamId, input.teamId),
           eq(teamDayLock.date, input.date),
         ));
+      return { ok: true };
+    }),
+
+  // ── Per-team daily config (max jobs + earliest start time) ────────────────
+  getTeamDayConfigs: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(teamDayConfig).where(eq(teamDayConfig.date, input.date));
+    }),
+
+  setTeamDayConfig: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      date: z.string(),
+      maxJobs: z.number().nullable(),
+      earliestStartTime: z.string().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      if (input.maxJobs === null && input.earliestStartTime === null) {
+        await db.delete(teamDayConfig)
+          .where(and(eq(teamDayConfig.teamId, input.teamId), eq(teamDayConfig.date, input.date)));
+        return { ok: true };
+      }
+      await db.insert(teamDayConfig)
+        .values({
+          teamId: input.teamId,
+          date: input.date,
+          maxJobs: input.maxJobs ?? undefined,
+          earliestStartTime: input.earliestStartTime ?? undefined,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            maxJobs: input.maxJobs ?? undefined,
+            earliestStartTime: input.earliestStartTime ?? undefined,
+          },
+        });
       return { ok: true };
     }),
 });

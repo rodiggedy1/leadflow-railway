@@ -1,3 +1,4 @@
+import React from 'react';
 /**
  * SchedulingTab.tsx
  * Geographic route optimization UI for cleaning teams.
@@ -322,6 +323,105 @@ function JobCard({
   );
 }
 
+// ── Team Day Config Button ─────────────────────────────────────────────────────
+function TeamDayConfigButton({
+  teamId, date, config, onSave,
+}: {
+  teamId: number;
+  date: string;
+  config: { maxJobs: number | null; earliestStartTime: string | null } | null;
+  onSave: (maxJobs: number | null, earliestStartTime: string | null) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [maxJobs, setMaxJobs] = React.useState<string>(config?.maxJobs != null ? String(config.maxJobs) : "");
+  const [startTime, setStartTime] = React.useState<string>(config?.earliestStartTime ?? "");
+
+  // Sync state when config changes (e.g. after save)
+  React.useEffect(() => {
+    setMaxJobs(config?.maxJobs != null ? String(config.maxJobs) : "");
+    setStartTime(config?.earliestStartTime ?? "");
+  }, [config?.maxJobs, config?.earliestStartTime]);
+
+  const hasConfig = config?.maxJobs != null || config?.earliestStartTime != null;
+
+  function handleSave() {
+    const mj = maxJobs.trim() === "" ? null : parseInt(maxJobs.trim(), 10);
+    const st = startTime.trim() === "" ? null : startTime.trim();
+    onSave(isNaN(mj as number) ? null : mj, st);
+    setOpen(false);
+  }
+
+  function handleClear() {
+    onSave(null, null);
+    setMaxJobs("");
+    setStartTime("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button
+        title="Set daily limits for this team"
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+          hasConfig
+            ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200"
+            : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200"
+        }`}
+      >
+        {hasConfig ? "⚙ Limits" : "Limits"}
+      </button>
+      {open && (
+        <div className="absolute right-0 top-7 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-52 space-y-2.5">
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Max jobs</label>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              placeholder="No limit"
+              value={maxJobs}
+              onChange={e => setMaxJobs(e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1">Earliest start</label>
+            <input
+              type="time"
+              value={startTime}
+              onChange={e => setStartTime(e.target.value)}
+              className="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={handleSave}
+              className="flex-1 text-[11px] font-medium bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700"
+            >
+              Save
+            </button>
+            {hasConfig && (
+              <button
+                onClick={handleClear}
+                className="text-[11px] font-medium text-gray-400 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={() => setOpen(false)}
+              className="text-[11px] font-medium text-gray-400 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Map renderer ──────────────────────────────────────────────────────────────
 
 function ScheduleMap({
@@ -578,6 +678,13 @@ export default function SchedulingTab() {
     onSuccess: () => utils.scheduling.getTeamLocks.invalidate({ date }),
     onError: (e) => toast.error(e.message),
   });
+  // Per-team daily config (max jobs + earliest start time)
+  const { data: teamDayConfigs = [] } = trpc.scheduling.getTeamDayConfigs.useQuery({ date });
+  const teamDayConfigMap = new Map(teamDayConfigs.map((c: { teamId: number; maxJobs: number | null; earliestStartTime: string | null }) => [c.teamId, c]));
+  const setTeamDayConfig = trpc.scheduling.setTeamDayConfig.useMutation({
+    onSuccess: () => utils.scheduling.getTeamDayConfigs.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
 
   const jobs: Job[] = (data?.jobs ?? []) as Job[];
   const teams: Team[] = (data?.teams ?? []) as Team[];
@@ -784,6 +891,14 @@ export default function SchedulingTab() {
                       >
                         {isTeamLocked ? "🔒 Locked" : "Lock"}
                       </button>
+                      <TeamDayConfigButton
+                        teamId={team.id}
+                        date={date}
+                        config={teamDayConfigMap.get(team.id) ?? null}
+                        onSave={(maxJobs, earliestStartTime) =>
+                          setTeamDayConfig.mutate({ teamId: team.id, date, maxJobs, earliestStartTime })
+                        }
+                      />
                     </div>
                   </div>
                   {/* Jobs */}
