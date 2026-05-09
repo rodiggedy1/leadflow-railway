@@ -362,18 +362,13 @@ export const callsRouter = router({
             },
             voice: {
               provider: "11labs",
-              voiceId: "21m00Tcm4TlvDq8ikWAM", // Rachel — clear professional voice
+              voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — same as working fieldMgmt calls
+              stability: 0.5,
+              similarityBoost: 0.75,
+              style: 0.3,
+              useSpeakerBoost: true,
             },
-            endCallMessage: "Thank you. Have a great day.",
-            endCallPhrases: ["goodbye", "bye", "thank you", "ok thanks"],
-            maxDurationSeconds: 120,
-            voicemailMessage: input.resolvedScript,
-            metadata: {
-              source: "call_command_center",
-              callLogId,
-              cleanerJobId: input.cleanerJobId,
-              jobDate: input.jobDate,
-            },
+            maxDurationSeconds: 25,
           },
         };
 

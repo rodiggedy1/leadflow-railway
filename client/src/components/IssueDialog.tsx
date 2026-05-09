@@ -354,7 +354,10 @@ export default function IssueDialog({
                 <button
                   onClick={() => {
                     setCallTarget("team");
-                    setCalledPhone((jobInfo as any)?.cleanerPhone ?? "");
+                    setCalledPhone((jobInfo as any)?.teamPhone ?? "");
+                    // Auto-select team-targeted template if available
+                    const teamTpl = suggestedTemplates.find(t => t.targetType === "team");
+                    if (teamTpl) setSelectedTemplateId(teamTpl.id);
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${
                     callTarget === "team"
@@ -369,6 +372,9 @@ export default function IssueDialog({
                   onClick={() => {
                     setCallTarget("client");
                     setCalledPhone(jobInfo?.customerPhone ?? "");
+                    // Auto-select client-targeted template if available
+                    const clientTpl = suggestedTemplates.find(t => t.targetType === "client");
+                    if (clientTpl) setSelectedTemplateId(clientTpl.id);
                   }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-all ${
                     callTarget === "client"
