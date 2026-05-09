@@ -36,6 +36,7 @@ interface Team {
   maxHoursPerDay: number | null;
   color: string | null;
   isActive: number;
+  minJobs?: number | null;
   maxJobs?: number | null;
   earliestStartTime?: string | null;
   homeDriveTimeSecs?: number | null;
@@ -337,46 +338,70 @@ function JobCard({
 }
 
 // ── Team Day Config Button ─────────────────────────────────────────────────────
+const TIME_PRESETS = [
+  { label: "8:30 AM", value: "08:30" },
+  { label: "9:00 AM", value: "09:00" },
+  { label: "10:00 AM", value: "10:00" },
+  { label: "12:00 PM", value: "12:00" },
+];
+
 function TeamDayConfigButton({
   teamId, date, config, onSave, onCopyToTomorrow,
 }: {
   teamId: number;
   date: string;
-  config: { maxJobs: number | null; earliestStartTime: string | null } | null;
-  onSave: (maxJobs: number | null, earliestStartTime: string | null) => void;
-  onCopyToTomorrow?: ((maxJobs: number | null, earliestStartTime: string | null) => void) | undefined;
+  config: { minJobs: number | null; maxJobs: number | null; earliestStartTime: string | null } | null;
+  onSave: (minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void;
+  onCopyToTomorrow?: ((minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void) | undefined;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [minJobs, setMinJobs] = React.useState<string>(config?.minJobs != null ? String(config.minJobs) : "");
   const [maxJobs, setMaxJobs] = React.useState<string>(config?.maxJobs != null ? String(config.maxJobs) : "");
   const [startTime, setStartTime] = React.useState<string>(config?.earliestStartTime ?? "");
   const [copied, setCopied] = React.useState(false);
 
   // Sync state when config changes (e.g. after save)
   React.useEffect(() => {
+    setMinJobs(config?.minJobs != null ? String(config.minJobs) : "");
     setMaxJobs(config?.maxJobs != null ? String(config.maxJobs) : "");
     setStartTime(config?.earliestStartTime ?? "");
-  }, [config?.maxJobs, config?.earliestStartTime]);
+  }, [config?.minJobs, config?.maxJobs, config?.earliestStartTime]);
 
-  const hasConfig = config?.maxJobs != null || config?.earliestStartTime != null;
+  const hasConfig = config?.minJobs != null || config?.maxJobs != null || config?.earliestStartTime != null;
 
   function handleSave() {
+    const mn = minJobs.trim() === "" ? null : parseInt(minJobs.trim(), 10);
     const mj = maxJobs.trim() === "" ? null : parseInt(maxJobs.trim(), 10);
     const st = startTime.trim() === "" ? null : startTime.trim();
-    onSave(isNaN(mj as number) ? null : mj, st);
+    onSave(
+      isNaN(mn as number) ? null : mn,
+      isNaN(mj as number) ? null : mj,
+      st,
+    );
     setOpen(false);
   }
 
   function handleClear() {
-    onSave(null, null);
+    onSave(null, null, null);
+    setMinJobs("");
     setMaxJobs("");
     setStartTime("");
     setOpen(false);
   }
 
   function handleCopyToTomorrow() {
-    onCopyToTomorrow?.(config?.maxJobs ?? null, config?.earliestStartTime ?? null);
+    onCopyToTomorrow?.(config?.minJobs ?? null, config?.maxJobs ?? null, config?.earliestStartTime ?? null);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  // Format HH:MM to 12-hour display
+  function formatTimeDisplay(hhmm: string) {
+    if (!hhmm) return "";
+    const [h, m] = hhmm.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2, "0")} ${period}`;
   }
 
   return (
@@ -393,54 +418,104 @@ function TeamDayConfigButton({
         {hasConfig ? "⚙ Limits" : "Limits"}
       </button>
       {open && (
-        <div className="absolute right-0 top-7 z-50 bg-white border border-gray-200 rounded-lg shadow-lg p-3 w-52 space-y-2.5">
-          <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-1">Max jobs</label>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              placeholder="No limit"
-              value={maxJobs}
-              onChange={e => setMaxJobs(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            />
+        <div className="absolute right-0 top-7 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs font-semibold text-gray-700">Team Limits</span>
+            <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
           </div>
-          <div>
-            <label className="block text-[11px] font-medium text-gray-500 mb-1">Earliest start</label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={e => setStartTime(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400"
-            />
+
+          {/* Job count row */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Min jobs</label>
+              <input
+                type="number"
+                min={0}
+                max={20}
+                placeholder="None"
+                value={minJobs}
+                onChange={e => setMinJobs(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-medium text-gray-500 mb-1">Max jobs</label>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                placeholder="None"
+                value={maxJobs}
+                onChange={e => setMaxJobs(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100"
+              />
+            </div>
           </div>
+
+          {/* Earliest start */}
+          <div>
+            <label className="block text-[11px] font-medium text-gray-500 mb-1.5">Earliest start time</label>
+            {/* Preset chips */}
+            <div className="flex flex-wrap gap-1 mb-2">
+              {TIME_PRESETS.map(p => (
+                <button
+                  key={p.value}
+                  onClick={() => setStartTime(p.value)}
+                  className={`text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                    startTime === p.value
+                      ? "bg-purple-600 text-white border-purple-600"
+                      : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {/* Time input */}
+            <div className="relative">
+              <input
+                type="time"
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
+                className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-100"
+              />
+              {startTime && (
+                <span className="absolute right-8 top-1/2 -translate-y-1/2 text-[11px] text-purple-500 font-medium pointer-events-none">
+                  {formatTimeDisplay(startTime)}
+                </span>
+              )}
+              {startTime && (
+                <button
+                  onClick={() => setStartTime("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 text-xs"
+                  title="Clear time"
+                >✕</button>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
           <div className="flex gap-2 pt-1">
             <button
               onClick={handleSave}
-              className="flex-1 text-[11px] font-medium bg-blue-600 text-white rounded px-2 py-1 hover:bg-blue-700"
+              className="flex-1 text-[11px] font-semibold bg-blue-600 text-white rounded-lg px-3 py-1.5 hover:bg-blue-700 transition-colors"
             >
               Save
             </button>
             {hasConfig && (
               <button
                 onClick={handleClear}
-                className="text-[11px] font-medium text-gray-400 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
+                className="text-[11px] font-medium text-gray-400 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-gray-50 transition-colors"
               >
-                Clear
+                Clear all
               </button>
             )}
-            <button
-              onClick={() => setOpen(false)}
-              className="text-[11px] font-medium text-gray-400 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50"
-            >
-              ✕
-            </button>
           </div>
+
           {hasConfig && onCopyToTomorrow && (
             <button
               onClick={handleCopyToTomorrow}
-              className={`w-full text-[11px] font-medium border rounded px-2 py-1 transition-colors ${
+              className={`w-full text-[11px] font-medium border rounded-lg px-2 py-1.5 transition-colors ${
                 copied
                   ? "bg-green-50 text-green-600 border-green-200"
                   : "text-gray-500 border-gray-200 hover:bg-gray-50"
@@ -884,9 +959,18 @@ export default function SchedulingTab() {
                     {/* Inline limit badges */}
                     {(() => {
                       const cfg = team;
-                      if (cfg.maxJobs == null && cfg.earliestStartTime == null) return null;
+                      if (cfg.minJobs == null && cfg.maxJobs == null && cfg.earliestStartTime == null) return null;
+                      const fmtTime = (hhmm: string) => {
+                        const [h, m] = hhmm.split(":").map(Number);
+                        return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
+                      };
                       return (
                         <div className="flex items-center gap-1">
+                          {cfg.minJobs != null && (
+                            <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
+                              min {cfg.minJobs}
+                            </span>
+                          )}
                           {cfg.maxJobs != null && (
                             <span className="text-[10px] font-medium text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
                               max {cfg.maxJobs}
@@ -894,7 +978,7 @@ export default function SchedulingTab() {
                           )}
                           {cfg.earliestStartTime != null && (
                             <span className="text-[10px] font-medium text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
-                              after {cfg.earliestStartTime}
+                              after {fmtTime(cfg.earliestStartTime)}
                             </span>
                           )}
                         </div>
@@ -944,9 +1028,9 @@ export default function SchedulingTab() {
                       <TeamDayConfigButton
                         teamId={team.id}
                         date={date}
-                        config={{ maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
-                        onSave={(maxJobs, earliestStartTime) =>
-                          setTeamLimits.mutate({ teamId: team.id, maxJobs, earliestStartTime })
+                        config={{ minJobs: team.minJobs ?? null, maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
+                        onSave={(minJobs, maxJobs, earliestStartTime) =>
+                          setTeamLimits.mutate({ teamId: team.id, minJobs, maxJobs, earliestStartTime })
                         }
                         onCopyToTomorrow={undefined}
                       />

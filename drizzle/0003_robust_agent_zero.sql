@@ -1,0 +1,1 @@
+ALTER TABLE `scheduling_teams` ADD `minJobs` int;

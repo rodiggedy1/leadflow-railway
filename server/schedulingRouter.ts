@@ -54,6 +54,7 @@ interface TeamConfig {
   homeLng: number;
   maxHoursPerDay: number;
   color: string;
+  minJobs?: number | null;         // per-day job floor (null = no floor)
   maxJobs?: number | null;         // per-day job cap (null = no cap)
   earliestStartTime?: string | null; // "HH:MM" earliest first job start
 }
@@ -285,8 +286,12 @@ function solveVRP(
         if (appendCost < minInsertCost) minInsertCost = appendCost;
       }
       // Add load-balancing penalty: penalise teams that already exceed fair share
+      // Subtract a bonus for teams below their minJobs floor to fill them preferentially
       const overload = Math.max(0, route.length - fairShare);
-      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB;
+      const floorBonus = (t.minJobs != null && route.length < t.minJobs)
+        ? (t.minJobs - route.length) * LOAD_PENALTY_PER_JOB * 2
+        : 0;
+      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus;
       if (totalCost < bestCost) { bestCost = totalCost; bestTeam = t; }
     }
     routes.get(bestTeam.id)!.push(ji);
@@ -440,6 +445,7 @@ export const schedulingRouter = router({
   setTeamLimits: agentProcedure
     .input(z.object({
       teamId: z.number(),
+      minJobs: z.number().nullable(),
       maxJobs: z.number().nullable(),
       earliestStartTime: z.string().nullable(),
     }))
@@ -447,7 +453,11 @@ export const schedulingRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
       await db.update(schedulingTeams)
-        .set({ maxJobs: input.maxJobs ?? undefined, earliestStartTime: input.earliestStartTime ?? undefined })
+        .set({
+          minJobs: input.minJobs ?? undefined,
+          maxJobs: input.maxJobs ?? undefined,
+          earliestStartTime: input.earliestStartTime ?? undefined,
+        })
         .where(eq(schedulingTeams.id, input.teamId));
       return { ok: true };
     }),
@@ -757,6 +767,7 @@ export const schedulingRouter = router({
           homeLng: t.homeLng!,
           maxHoursPerDay: t.maxHoursPerDay ?? 8,
           color: t.color ?? "#6366f1",
+          minJobs: t.minJobs ?? null,
           maxJobs: t.maxJobs ?? null,
           earliestStartTime: t.earliestStartTime ?? null,
         }));
