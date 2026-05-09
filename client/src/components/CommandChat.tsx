@@ -2971,7 +2971,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { refetchInterval: 30_000, staleTime: 15_000 }
   );
   const todayCallCount = todayCallLog.length;
-
+  // Map cleanerJobId → most recent firedAt for the "called at" indicator on team cards
+  const callLogByJobId = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const entry of todayCallLog) {
+      if (entry.cleanerJobId == null || entry.firedAt == null) continue;
+      const jobId = entry.cleanerJobId as number;
+      const firedAt = entry.firedAt as number;
+      const existing = map.get(jobId);
+      if (existing == null || firedAt > existing) {
+        map.set(jobId, firedAt);
+      }
+    }
+    return map;
+  }, [todayCallLog]);
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];
   const pinnedJobs = cmdData?.pinnedJobs ?? [];
@@ -3536,9 +3549,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-orange-500 text-white hover:bg-orange-600 transition"
                                 title="Raise issue & fire AI call"
                               >
-                                <AlertTriangle className="h-2.5 w-2.5" />
-                                AI Call
+                                <PhoneCall className="h-2.5 w-2.5" />
+                                Call with AI
                               </button>
+                              {callLogByJobId.has(cs.cleanerJobId!) && (
+                                <span className="flex items-center gap-1 text-[10px] text-slate-400">
+                                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+                                  Called {fmt12(callLogByJobId.get(cs.cleanerJobId!)!)}
+                                </span>
+                              )}
 
                             </div>
                           )}

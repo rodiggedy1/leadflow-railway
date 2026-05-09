@@ -377,9 +377,6 @@ export const callsRouter = router({
             },
             voicemailMessage: input.resolvedScript,
           },
-          server: {
-            url: ENV.vapiWebhookUrl,
-          },
         };
 
         const result = await vapiPost("/call", payload) as { id?: string };
