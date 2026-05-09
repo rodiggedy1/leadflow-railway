@@ -325,16 +325,18 @@ function JobCard({
 
 // ── Team Day Config Button ─────────────────────────────────────────────────────
 function TeamDayConfigButton({
-  teamId, date, config, onSave,
+  teamId, date, config, onSave, onCopyToTomorrow,
 }: {
   teamId: number;
   date: string;
   config: { maxJobs: number | null; earliestStartTime: string | null } | null;
   onSave: (maxJobs: number | null, earliestStartTime: string | null) => void;
+  onCopyToTomorrow: (maxJobs: number | null, earliestStartTime: string | null) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [maxJobs, setMaxJobs] = React.useState<string>(config?.maxJobs != null ? String(config.maxJobs) : "");
   const [startTime, setStartTime] = React.useState<string>(config?.earliestStartTime ?? "");
+  const [copied, setCopied] = React.useState(false);
 
   // Sync state when config changes (e.g. after save)
   React.useEffect(() => {
@@ -356,6 +358,12 @@ function TeamDayConfigButton({
     setMaxJobs("");
     setStartTime("");
     setOpen(false);
+  }
+
+  function handleCopyToTomorrow() {
+    onCopyToTomorrow(config?.maxJobs ?? null, config?.earliestStartTime ?? null);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -416,6 +424,18 @@ function TeamDayConfigButton({
               ✕
             </button>
           </div>
+          {hasConfig && (
+            <button
+              onClick={handleCopyToTomorrow}
+              className={`w-full text-[11px] font-medium border rounded px-2 py-1 transition-colors ${
+                copied
+                  ? "bg-green-50 text-green-600 border-green-200"
+                  : "text-gray-500 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              {copied ? "✓ Copied to tomorrow" : "Copy to tomorrow →"}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -916,6 +936,9 @@ export default function SchedulingTab() {
                         config={teamDayConfigMap.get(team.id) ?? null}
                         onSave={(maxJobs, earliestStartTime) =>
                           setTeamDayConfig.mutate({ teamId: team.id, date, maxJobs, earliestStartTime })
+                        }
+                        onCopyToTomorrow={(maxJobs, earliestStartTime) =>
+                          setTeamDayConfig.mutate({ teamId: team.id, date: addDays(date, 1), maxJobs, earliestStartTime })
                         }
                       />
                     </div>
