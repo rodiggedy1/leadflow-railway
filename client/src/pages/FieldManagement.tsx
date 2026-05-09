@@ -1519,13 +1519,13 @@ export default function FieldManagement() {
 
   return (
     <AdminPageGuard pageId="field-management">
-    <div className="min-h-screen bg-gray-50">
+    <div className={activeTab === "schedule" ? "h-screen overflow-hidden bg-gray-50 flex flex-col" : "min-h-screen bg-gray-50"}>
       <AdminHeader activeTab="field-management" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
       <div className={`mx-auto px-4 sm:px-6 ${
-        activeTab === "schedule" ? "py-3" : "py-8"
+        activeTab === "schedule" ? "py-3 flex-1 min-h-0 overflow-hidden flex flex-col" : "py-8"
       } ${
-        activeTab === "board" || activeTab === "tower" || activeTab === "schedule" ? "max-w-7xl" : "max-w-3xl"
+        activeTab === "board" || activeTab === "tower" || activeTab === "schedule" ? "max-w-7xl w-full" : "max-w-3xl"
       }`}>
         {/* Page header — hidden on schedule tab to save vertical space */}
         {activeTab !== "schedule" && (
@@ -1541,7 +1541,7 @@ export default function FieldManagement() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
+        <div className={`flex gap-1 bg-gray-100 rounded-xl p-1 w-fit ${activeTab === "schedule" ? "mb-3" : "mb-6"}`}>
           {(["board", "tower", "schedule", "log", "workflow"] as const).map((tab) => (
             <button
               key={tab}
@@ -1566,7 +1566,11 @@ export default function FieldManagement() {
         )}
 
         {activeTab === "log" && <LogTab />}
-        {activeTab === "schedule" && <SchedulingTab />}
+        {activeTab === "schedule" && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <SchedulingTab />
+          </div>
+        )}
       </div>
     </div>
     </AdminPageGuard>
