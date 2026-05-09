@@ -46,7 +46,7 @@ interface CallLogEntry {
   completedAt: number | null;
   durationSeconds: number | null;
   notes: string | null;
-  createdAt: Date;
+  // createdAt removed 2014 server no longer returns Date columns
 }
 
 // ── Status helpers ────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ export default function CallLogPanel({ open, onClose, jobDate }: CallLogPanelPro
     { enabled: open, refetchInterval: open ? 15_000 : false }
   );
 
-  const statusCounts = (entries as CallLogEntry[]).reduce((acc, e) => {
+  const statusCounts = (entries as unknown as CallLogEntry[]).reduce((acc, e) => {
     acc[e.status] = (acc[e.status] ?? 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -272,7 +272,7 @@ export default function CallLogPanel({ open, onClose, jobDate }: CallLogPanelPro
               <p className="text-xs text-gray-400 mt-1">Use the ⚠ button on a job card to fire a call</p>
             </div>
           ) : (
-            (entries as CallLogEntry[]).map(entry => (
+            (entries as unknown as CallLogEntry[]).map(entry => (
               <CallCard
                 key={entry.id}
                 entry={entry}
