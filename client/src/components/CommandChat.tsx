@@ -2140,8 +2140,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── AI Call Command Center state ─────────────────────────────────────────
   const [issueDialogJob, setIssueDialogJob] = useState<{ id: number; date: string } | null>(null);
   const [callLogOpen, setCallLogOpen] = useState(false);
-  // Track which cleanerJobIds had calls fired this session for card indicator
-  const [firedCallJobIds, setFiredCallJobIds] = useState<Set<number>>(new Set());
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
   // issueResolved: keyed by issueKey → true when resolved (DB-backed)
@@ -2968,17 +2966,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const todayBookingCount = todayStats?.bookedCount ?? 0;
 
   // AI Call Command Center — today's call count for badge
-  // Use a ref to track pending calls so refetchInterval can adapt without circular dependency
-  const hasPendingCallsRef = useRef(false);
   const { data: todayCallLog = [] } = trpc.calls.getCallLog.useQuery(
     { jobDate: todayDateStr, limit: 100 },
-    {
-      refetchInterval: () => hasPendingCallsRef.current ? 5_000 : 30_000,
-      staleTime: 3_000,
-    }
+    { refetchInterval: 30_000, staleTime: 15_000 }
   );
-  // Update ref after each fetch so next interval picks up the right value
-  hasPendingCallsRef.current = (todayCallLog as any[]).some(e => e.status === "fired" || e.status === "pending");
   const todayCallCount = todayCallLog.length;
 
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
@@ -3548,13 +3539,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 <AlertTriangle className="h-2.5 w-2.5" />
                                 AI Call
                               </button>
-                              {/* Show indicator if a call was fired for this job this session */}
-                              {firedCallJobIds.has(cs.cleanerJobId) && (
-                                <span className="flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 border border-blue-200">
-                                  <PhoneIncoming className="h-2.5 w-2.5" />
-                                  Called
-                                </span>
-                              )}
+
                             </div>
                           )}
                           {/* HIDDEN: "Call Client" button replaced by the ⚠ AI Call button above.
@@ -5464,15 +5449,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           onClose={() => setIssueDialogJob(null)}
           cleanerJobId={issueDialogJob.id}
           jobDate={issueDialogJob.date}
-          onCallFired={(_callLogId) => {
-            // Track which job had a call fired for card indicator
-            if (issueDialogJob) {
-              setFiredCallJobIds(prev => { const s = new Set(prev); s.add(issueDialogJob.id); return s; });
-            }
+          onCallFired={() => {
             setIssueDialogJob(null);
             setCenterView("calls");
-            // Immediately refetch so the call appears in the log without waiting 30s
-            utils.calls.getCallLog.invalidate({ jobDate: todayDateStr });
           }}
         />
       )}
