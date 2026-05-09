@@ -956,6 +956,17 @@ export const schedulingRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Find the team this job is currently assigned to (so we can recalc it after removal)
+      const existing = await db.select({ teamId: scheduleAssignments.teamId })
+        .from(scheduleAssignments)
+        .where(and(
+          eq(scheduleAssignments.jobDate, input.date),
+          eq(scheduleAssignments.cleanerJobId, input.cleanerJobId),
+        ))
+        .limit(1);
+      const sourceTeamId = existing[0]?.teamId ?? null;
+
       // Insert sentinel row (isManual=2, teamId=0) to explicitly mark as unassigned.
       // This prevents getSchedule from synthesizing an assignment from job.teamName.
       await db.insert(scheduleAssignments)
@@ -981,6 +992,12 @@ export const schedulingRouter = router({
           eq(scheduleJobLocks.date, input.date),
           eq(scheduleJobLocks.jobId, input.cleanerJobId),
         ));
+
+      // Recalculate the source team's remaining jobs so their route order and drive times stay accurate
+      if (sourceTeamId && sourceTeamId !== 0) {
+        await recalcTeamRoute(db, input.date, sourceTeamId);
+      }
+
       return { ok: true };
     }),
 
@@ -989,6 +1006,7 @@ export const schedulingRouter = router({
       date: z.string(),
       cleanerJobId: z.number(),
       teamId: z.number(),
+      sourceTeamId: z.number().optional(), // team the job is being moved FROM (for recalc)
       routeOrder: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -1129,6 +1147,12 @@ export const schedulingRouter = router({
             eq(scheduleAssignments.jobDate, input.date),
             eq(scheduleAssignments.cleanerJobId, upd.cleanerJobId),
           ));
+      }
+
+      // Step 9: Recalculate the source team (the one the job was moved FROM)
+      // so its remaining jobs get correct routeOrder and drive times.
+      if (input.sourceTeamId && input.sourceTeamId !== input.teamId) {
+        await recalcTeamRoute(db, input.date, input.sourceTeamId);
       }
 
       return { ok: true };
@@ -1334,6 +1358,93 @@ export const schedulingRouter = router({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Recalculate routeOrder, arrival/departure times, and drive times for all jobs
+ * currently assigned to a team on a given date.
+ * Sorts by serviceDateTime first, then chains unscheduled jobs at the end.
+ * Used after any manual assignment or unassignment to keep times consistent.
+ */
+async function recalcTeamRoute(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  date: string,
+  teamId: number,
+): Promise<void> {
+  // Load team home for drive-from-home calculation
+  const teamRows = await db.select().from(schedulingTeams).where(eq(schedulingTeams.id, teamId)).limit(1);
+  const team = teamRows[0];
+
+  // Load all active assignments for this team (exclude sentinel unassigned rows)
+  const teamAssignments = await db.select().from(scheduleAssignments)
+    .where(and(
+      eq(scheduleAssignments.jobDate, date),
+      eq(scheduleAssignments.teamId, teamId),
+    ));
+  // Filter out sentinel rows (isManual=2 means explicitly unassigned)
+  const activeAssignments = teamAssignments.filter(a => a.isManual !== 2);
+  if (activeAssignments.length === 0) return;
+
+  // Load job records
+  const jobIds = activeAssignments.map(a => a.cleanerJobId);
+  const jobRows = await db.select().from(cleanerJobs).where(inArray(cleanerJobs.id, jobIds));
+
+  // Sort: jobs with serviceDateTime first (chronological), then the rest
+  const withTime = jobRows
+    .filter(j => !!j.serviceDateTime)
+    .sort((a, b) => new Date(a.serviceDateTime!).getTime() - new Date(b.serviceDateTime!).getTime());
+  const withoutTime = jobRows.filter(j => !j.serviceDateTime);
+  const orderedJobs = [...withTime, ...withoutTime];
+
+  // Geocode all addresses via cache
+  const geoMap = new Map<number, { lat: number; lng: number }>();
+  for (const job of orderedJobs) {
+    if (!job.jobAddress) continue;
+    const geo = await geocodeWithCache(job.jobAddress);
+    if (geo) geoMap.set(job.id, { lat: geo.lat, lng: geo.lng });
+  }
+
+  // Build points array [home?, job0, job1, ...]
+  const hasHome = team?.homeLat != null && team?.homeLng != null;
+  const points: LatLng[] = [
+    ...(hasHome ? [{ lat: team!.homeLat!, lng: team!.homeLng! }] : []),
+    ...orderedJobs.map(j => geoMap.get(j.id) ?? { lat: 0, lng: 0 }),
+  ];
+  const homeOffset = hasHome ? 1 : 0;
+
+  let matrix: number[][] = [];
+  const geocodedCount = orderedJobs.filter(j => geoMap.has(j.id)).length;
+  if (geocodedCount >= 2 || (hasHome && geocodedCount >= 1)) {
+    try { matrix = await buildTravelMatrix(points); } catch { matrix = []; }
+  }
+
+  const BUFFER_MS = 15 * 60 * 1000;
+  let currentMs = 0;
+
+  for (let idx = 0; idx < orderedJobs.length; idx++) {
+    const job = orderedJobs[idx];
+    const durationMs = estimateDurationHours(job.serviceType, job.bedrooms) * 3600000;
+
+    const arrivalMs = job.serviceDateTime
+      ? new Date(job.serviceDateTime).getTime()
+      : (currentMs > 0 ? currentMs : Date.now());
+    const departureMs = arrivalMs + durationMs;
+    currentMs = departureMs + BUFFER_MS;
+
+    let driveTimeSecs = 0;
+    if (matrix.length > 0 && geoMap.has(job.id)) {
+      const jobMatrixIdx = homeOffset + idx;
+      const prevMatrixIdx = idx === 0 ? (hasHome ? 0 : -1) : homeOffset + (idx - 1);
+      if (prevMatrixIdx >= 0) driveTimeSecs = matrix[prevMatrixIdx]?.[jobMatrixIdx] ?? 0;
+    }
+
+    await db.update(scheduleAssignments)
+      .set({ routeOrder: idx, estimatedArrivalMs: arrivalMs, estimatedDepartureMs: departureMs, driveTimeSecs, updatedAt: new Date() })
+      .where(and(
+        eq(scheduleAssignments.jobDate, date),
+        eq(scheduleAssignments.cleanerJobId, job.id),
+      ));
+  }
+}
 
 async function persistAssignments(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, date: string, assignments: Assignment[]) {
   for (const a of assignments) {

@@ -173,6 +173,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 
 function JobCard({
   job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
+  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone,
 }: {
   job: Job;
   teams: Team[];
@@ -182,6 +183,10 @@ function JobCard({
   isLocked?: boolean;
   onLockToggle?: (locked: boolean, position?: number) => void;
   homeDriveTimeSecs?: number | null;
+  onReassignStart?: (destTeamId: number, srcTeamId: number | null) => void;
+  onReassignDone?: (destTeamId: number, srcTeamId: number | null) => void;
+  onUnassignStart?: (srcTeamId: number | null) => void;
+  onUnassignDone?: (srcTeamId: number | null) => void;
 }) {
   // Open reassign dialog on card click (in addition to map selection)
    const utils = trpc.useUtils();
@@ -189,9 +194,13 @@ function JobCard({
   const unassignJob = trpc.scheduling.unassignJob.useMutation({
     onSuccess: () => {
       utils.scheduling.getSchedule.invalidate({ date });
+      onUnassignDone?.(job.assignment?.teamId ?? null);
       toast.success("Job unassigned");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => {
+      onUnassignDone?.(job.assignment?.teamId ?? null);
+      toast.error(e.message);
+    },
   });
   const lockJobMutation = trpc.scheduling.lockJob.useMutation({
     onSuccess: () => utils.scheduling.getJobLocks.invalidate({ date }),
@@ -200,6 +209,7 @@ function JobCard({
   const manualAssign = trpc.scheduling.manualAssign.useMutation({
     onSuccess: (_data, variables) => {
       utils.scheduling.getSchedule.invalidate({ date });
+      onReassignDone?.(variables.teamId, variables.sourceTeamId ?? null);
       // Auto-lock the job to the newly assigned team so it survives the next optimize
       lockJobMutation.mutate({
         jobId: job.id,
@@ -210,7 +220,10 @@ function JobCard({
       setShowReassign(false);
       toast.success("Job reassigned & locked");
     },
-    onError: (e) => toast.error(e.message),
+    onError: (_e, variables) => {
+      onReassignDone?.(variables.teamId, variables.sourceTeamId ?? null);
+      toast.error(_e.message);
+    },
   });
 
   const a = job.assignment;
@@ -286,7 +299,12 @@ function JobCard({
               {/* Unassign button — only shown for assigned jobs */}
               {job.assignment && (
                 <button
-                  onClick={e => { e.stopPropagation(); unassignJob.mutate({ date, cleanerJobId: job.id }); }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    const srcId = job.assignment?.teamId ?? null;
+                    onUnassignStart?.(srcId);
+                    unassignJob.mutate({ date, cleanerJobId: job.id });
+                  }}
                   disabled={unassignJob.isPending}
                   className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 transition-all"
                   title="Unassign job"
@@ -309,7 +327,11 @@ function JobCard({
             {teams.filter(t => t.isActive).map(t => (
               <button
                 key={t.id}
-                onClick={() => manualAssign.mutate({ date, cleanerJobId: job.id, teamId: t.id })}
+                onClick={() => {
+                  const srcId = job.assignment?.teamId ?? null;
+                  onReassignStart?.(t.id, srcId);
+                  manualAssign.mutate({ date, cleanerJobId: job.id, teamId: t.id, sourceTeamId: srcId ?? undefined });
+                }}
                 disabled={manualAssign.isPending}
                 className="w-full flex items-center gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-300 hover:bg-gray-50 transition-all text-left"
               >
@@ -324,7 +346,12 @@ function JobCard({
               <Button
                 variant="outline"
                 className="text-red-500 border-red-200 hover:bg-red-50 hover:text-red-600"
-                onClick={() => { unassignJob.mutate({ date, cleanerJobId: job.id }); setShowReassign(false); }}
+                onClick={() => {
+                  const srcId = job.assignment?.teamId ?? null;
+                  onUnassignStart?.(srcId);
+                  unassignJob.mutate({ date, cleanerJobId: job.id });
+                  setShowReassign(false);
+                }}
                 disabled={unassignJob.isPending}
               >
                 Unassign
@@ -763,6 +790,12 @@ export default function SchedulingTab() {
   const [editingTeam, setEditingTeam] = useState<Team | undefined>(undefined);
   const [showTeamForm, setShowTeamForm] = useState(false);
   const [teamSheetOpen, setTeamSheetOpen] = useState(false);
+  // Set of teamIds currently being recalculated (show spinner on their headers)
+  const [recalculatingTeams, setRecalculatingTeams] = useState<Set<number>>(new Set());
+  const markRecalculating = (ids: number[]) =>
+    setRecalculatingTeams(prev => new Set([...Array.from(prev), ...ids]));
+  const clearRecalculating = (ids: number[]) =>
+    setRecalculatingTeams(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
 
   const { data, isLoading, refetch } = trpc.scheduling.getSchedule.useQuery(
     { date },
@@ -993,6 +1026,12 @@ export default function SchedulingTab() {
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
                     <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
+                    {recalculatingTeams.has(team.id) && (
+                      <span className="flex items-center gap-1 text-[10px] font-medium text-blue-500">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        recalculating…
+                      </span>
+                    )}
                     {/* Inline limit badges */}
                     {(() => {
                       const cfg = team;
@@ -1094,6 +1133,16 @@ export default function SchedulingTab() {
                               lockJob.mutate({ jobId: job.id, date, cleanerId, lockedPosition: position ?? pos });
                             }
                           }}
+                          onReassignStart={(destId, srcId) => {
+                            const ids = [destId, ...(srcId ? [srcId] : [])].filter(Boolean) as number[];
+                            markRecalculating(ids);
+                          }}
+                          onReassignDone={(destId, srcId) => {
+                            const ids = [destId, ...(srcId ? [srcId] : [])].filter(Boolean) as number[];
+                            clearRecalculating(ids);
+                          }}
+                          onUnassignStart={(srcId) => { if (srcId) markRecalculating([srcId]); }}
+                          onUnassignDone={(srcId) => { if (srcId) clearRecalculating([srcId]); }}
                         />
                       ))
                     )}
