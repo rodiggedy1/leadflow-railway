@@ -762,7 +762,41 @@ export const schedulingRouter = router({
         : [];
       // Exclude isManual=2 sentinel rows (explicitly unassigned jobs) — they must not be
       // treated as locked-team jobs or the VRP will skip them and they'll vanish.
-      const _existingForLockedTeams = _existingForLockedTeamsRaw.filter(e => e.isManual !== 2);
+      const _existingForLockedTeamsSaved = _existingForLockedTeamsRaw.filter(e => e.isManual !== 2);
+      const _savedLockedJobIds = new Set(_existingForLockedTeamsSaved.map(e => e.cleanerJobId));
+
+      // Synthetic fallback: if a locked team has NO saved assignment rows yet (e.g. locked before
+      // first optimize), synthesize assignments from the job's own Launch27 teamName field so the
+      // team's jobs are preserved and excluded from the VRP.
+      const _syntheticForLockedTeams: typeof _existingForLockedTeamsSaved = [];
+      for (const lockedTeamId of Array.from(_lockedTeamIds)) {
+        const lockedTeam = allTeams.find(t => t.id === lockedTeamId);
+        if (!lockedTeam) continue;
+        // Check if this team already has saved rows
+        const hasSaved = _existingForLockedTeamsSaved.some(e => e.teamId === lockedTeamId);
+        if (hasSaved) continue;
+        // Fall back to jobs whose teamName matches this team's name
+        const syntheticJobs = activeJobs.filter(j => j.teamName === lockedTeam.name);
+        syntheticJobs.forEach((j, idx) => {
+          _syntheticForLockedTeams.push({
+            id: 0,
+            jobDate: input.date,
+            cleanerJobId: j.id,
+            teamId: lockedTeamId,
+            teamName: lockedTeam.name,
+            routeOrder: idx,
+            estimatedArrivalMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : null,
+            estimatedDepartureMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() + 2 * 3600000 : null,
+            driveTimeSecs: 0,
+            isManual: 0,
+            totalDistanceMeters: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        });
+      }
+
+      const _existingForLockedTeams = [..._existingForLockedTeamsSaved, ..._syntheticForLockedTeams];
       const _lockedTeamJobIdSet = new Set(_existingForLockedTeams.map(e => e.cleanerJobId));
       const _jobLockRows = await db.select().from(scheduleJobLocks)
         .where(eq(scheduleJobLocks.date, input.date));
