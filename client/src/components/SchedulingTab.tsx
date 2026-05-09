@@ -907,7 +907,7 @@ export default function SchedulingTab() {
   const activeJobs = jobs.filter(j => j.bookingStatus !== "cancelled");
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-4">
       {/* Top bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Date nav */}
@@ -1018,9 +1018,9 @@ export default function SchedulingTab() {
           <p className="text-gray-400 text-sm mt-1">Try a different date or sync Launch27</p>
         </div>
       ) : (
-        <div className="flex gap-4 flex-1 min-h-0" style={{ height: "calc(100vh - 280px)" }}>
-          {/* Left: team job lists */}
-          <div className="w-96 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
+        <div className="flex gap-4 items-start">
+          {/* Left: team job lists — scrolls naturally with the page */}
+          <div className="w-96 shrink-0 flex flex-col gap-3 pr-1">
             {teams.filter(t => t.isActive).map(team => {
               const teamJobs = teamGroups.get(team.id) ?? [];
               const totalHours = teamJobs.reduce((s, j) => {
@@ -1196,14 +1196,16 @@ export default function SchedulingTab() {
             )}
           </div>
 
-          {/* Right: map */}
-          <div className="flex-1 min-w-0 rounded-xl overflow-hidden border border-gray-100 shadow-sm">
-            <ScheduleMap
-              jobs={jobs}
-              teams={teams}
-              selectedJobId={selectedJobId}
-              onJobSelect={setSelectedJobId}
-            />
+          {/* Right: map — sticky so it stays visible while scrolling job list */}
+          <div className="flex-1 min-w-0 sticky top-4" style={{ height: 420 }}>
+            <div className="w-full h-full rounded-xl overflow-hidden border border-gray-100 shadow-sm">
+              <ScheduleMap
+                jobs={jobs}
+                teams={teams}
+                selectedJobId={selectedJobId}
+                onJobSelect={setSelectedJobId}
+              />
+            </div>
           </div>
         </div>
       )}
