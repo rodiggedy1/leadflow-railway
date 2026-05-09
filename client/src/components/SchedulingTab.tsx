@@ -24,6 +24,7 @@ import {
   Sparkles, Settings2, ChevronLeft, ChevronRight, MapPin,
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
   GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
+  SlidersHorizontal, Power,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -469,13 +470,13 @@ function TeamDayConfigButton({
         ref={btnRef}
         title="Set daily limits for this team"
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+        className={`w-7 h-7 flex items-center justify-center rounded-full border transition-colors ${
           hasConfig
-            ? "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200"
+            ? "bg-blue-100 text-blue-600 border-blue-300 hover:bg-blue-200"
             : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200"
         }`}
       >
-        {hasConfig ? "⚙ Limits" : "Limits"}
+        <SlidersHorizontal className="w-3.5 h-3.5" />
       </button>
       {open && createPortal(
         <div ref={popoverRef} style={popoverStyle} className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
@@ -1060,43 +1061,39 @@ export default function SchedulingTab() {
                         </div>
                       );
                     })()}
-                    <div className="ml-auto flex items-center gap-2">
-                      <span className="text-xs text-gray-400">
-                        {teamJobs.length} jobs · {totalHours.toFixed(1)}h
-                        {driveLabel && <span className="text-orange-400"> · {driveLabel}</span>}
-                      </span>
-                      {team.homeAddress && (
-                        <span title={team.homeAddress ?? undefined}>
-                          <Home className="w-3 h-3 text-gray-300" />
-                        </span>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      {driveLabel && (
+                        <span className="text-[11px] font-medium text-orange-400">{driveLabel}</span>
                       )}
+                      {/* Set OFF / Available — icon button */}
                       <button
                         title={isUnavailable ? "Mark available" : "Mark unavailable for this day"}
                         onClick={() => isUnavailable
                           ? setAvailable.mutate({ teamId: team.id, date })
                           : setUnavailable.mutate({ teamId: team.id, date })
                         }
-                        className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                        className={`w-7 h-7 flex items-center justify-center rounded-full border transition-colors ${
                           isUnavailable
-                            ? "bg-red-100 text-red-600 border-red-200 hover:bg-red-200"
+                            ? "bg-red-100 text-red-500 border-red-200 hover:bg-red-200"
                             : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-orange-50 hover:text-orange-500 hover:border-orange-200"
                         }`}
                       >
-                        {isUnavailable ? "✓ OFF" : "Set OFF"}
+                        {isUnavailable ? <Power className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
                       </button>
+                      {/* Lock / Unlock — icon button */}
                       <button
                         title={isTeamLocked ? "Unlock team — optimizer can reassign" : "Lock team — optimizer won't change assignments"}
                         onClick={() => isTeamLocked
                           ? unlockTeam.mutate({ teamId: team.id, date })
                           : lockTeam.mutate({ teamId: team.id, date })
                         }
-                        className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
+                        className={`w-7 h-7 flex items-center justify-center rounded-full border transition-colors ${
                           isTeamLocked
-                            ? "bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200"
+                            ? "bg-amber-100 text-amber-600 border-amber-300 hover:bg-amber-200"
                             : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200"
                         }`}
                       >
-                        {isTeamLocked ? "🔒 Locked" : "Lock"}
+                        {isTeamLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
                       </button>
                       <TeamDayConfigButton
                         teamId={team.id}
