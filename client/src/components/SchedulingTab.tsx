@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 /**
  * SchedulingTab.tsx
  * Geographic route optimization UI for cleaning teams.
@@ -404,9 +405,39 @@ function TeamDayConfigButton({
     return `${h12}:${String(m).padStart(2, "0")} ${period}`;
   }
 
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const [popoverStyle, setPopoverStyle] = React.useState<React.CSSProperties>({});
+
+  React.useEffect(() => {
+    if (!open || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const popoverWidth = 256;
+    let left = rect.right - popoverWidth;
+    if (left < 8) left = 8;
+    setPopoverStyle({
+      position: 'fixed',
+      top: rect.bottom + 4,
+      left,
+      width: popoverWidth,
+      zIndex: 9999,
+    });
+  }, [open]);
+
+  // Close on outside click
+  React.useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
   return (
     <div className="relative">
       <button
+        ref={btnRef}
         title="Set daily limits for this team"
         onClick={() => setOpen(v => !v)}
         className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
@@ -417,8 +448,8 @@ function TeamDayConfigButton({
       >
         {hasConfig ? "⚙ Limits" : "Limits"}
       </button>
-      {open && (
-        <div className="absolute right-0 top-7 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
+      {open && createPortal(
+        <div style={popoverStyle} className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-semibold text-gray-700">Team Limits</span>
             <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
@@ -524,7 +555,8 @@ function TeamDayConfigButton({
               {copied ? "✓ Copied to tomorrow" : "Copy to tomorrow →"}
             </button>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -788,7 +820,10 @@ export default function SchedulingTab() {
   });
   // Per-team limits (max jobs + earliest start time) — stored on the team row, persist until cleared
   const setTeamLimits = trpc.scheduling.setTeamLimits.useMutation({
-    onSuccess: () => utils.scheduling.getTeams.invalidate(),
+    onSuccess: () => {
+      utils.scheduling.getTeams.invalidate();
+      utils.scheduling.getSchedule.invalidate({ date });
+    },
     onError: (e) => toast.error(e.message),
   });
 

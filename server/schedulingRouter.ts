@@ -244,15 +244,18 @@ function solveVRP(
   // Penalty per extra job above fair share = 300 seconds (5 min equivalent).
   const fairShare = (unassigned.length + Array.from(routes.values()).reduce((s, r) => s + r.length, 0)) / teams.length;
   const LOAD_PENALTY_PER_JOB = 300; // seconds — tune this to trade off balance vs drive time
+  // Large constant to make minJobs floor a hard preference (not just a soft hint)
+  const FLOOR_BONUS_PER_JOB = 100_000; // much larger than any realistic travel cost
   for (const ji of unassigned) {
     const jobPointIdx = teamOffset + ji;
-    let bestTeam = teams[0];
+    let bestTeam: TeamConfig | null = null;
     let bestCost = Infinity;
+    // First pass: respect maxJobs hard cap
     for (const t of teams) {
       const route = routes.get(t.id)!;
       const totalHours = route.reduce((s, rji) => s + jobs[rji].durationHours, 0);
       if (totalHours >= t.maxHoursPerDay) continue; // team full (hours)
-      if (t.maxJobs != null && route.length >= t.maxJobs) continue; // team full (job cap)
+      if (t.maxJobs != null && route.length >= t.maxJobs) continue; // team full (job cap — hard limit)
       // Enforce earliest start time: skip this team if the job starts before the team's window
       if (t.earliestStartTime != null) {
         const jobDt = jobs[ji].serviceDateTime; // ISO string or null
@@ -286,13 +289,23 @@ function solveVRP(
         if (appendCost < minInsertCost) minInsertCost = appendCost;
       }
       // Add load-balancing penalty: penalise teams that already exceed fair share
-      // Subtract a bonus for teams below their minJobs floor to fill them preferentially
       const overload = Math.max(0, route.length - fairShare);
+      // Strong bonus for teams below their minJobs floor — makes floor effectively a hard preference
       const floorBonus = (t.minJobs != null && route.length < t.minJobs)
-        ? (t.minJobs - route.length) * LOAD_PENALTY_PER_JOB * 2
+        ? (t.minJobs - route.length) * FLOOR_BONUS_PER_JOB
         : 0;
       const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus;
       if (totalCost < bestCost) { bestCost = totalCost; bestTeam = t; }
+    }
+    // If all teams are at maxJobs or maxHours, fall back to least-loaded team (ignore cap)
+    if (!bestTeam) {
+      let fallbackBest = teams[0];
+      let fallbackMin = Infinity;
+      for (const t of teams) {
+        const route = routes.get(t.id)!;
+        if (route.length < fallbackMin) { fallbackMin = route.length; fallbackBest = t; }
+      }
+      bestTeam = fallbackBest;
     }
     routes.get(bestTeam.id)!.push(ji);
   }
@@ -452,11 +465,12 @@ export const schedulingRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      // Use sql`NULL` for explicit null values so Drizzle doesn't skip them
       await db.update(schedulingTeams)
         .set({
-          minJobs: input.minJobs ?? undefined,
-          maxJobs: input.maxJobs ?? undefined,
-          earliestStartTime: input.earliestStartTime ?? undefined,
+          minJobs: input.minJobs,
+          maxJobs: input.maxJobs,
+          earliestStartTime: input.earliestStartTime,
         })
         .where(eq(schedulingTeams.id, input.teamId));
       return { ok: true };
