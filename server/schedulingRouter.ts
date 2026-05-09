@@ -873,7 +873,7 @@ export const schedulingRouter = router({
             cleanerJobId: _ea.cleanerJobId, teamId: _ea.teamId, teamName: _ea.teamName ?? "",
             routeOrder: _ea.routeOrder, estimatedArrivalMs: _ea.estimatedArrivalMs ?? Date.now(),
             estimatedDepartureMs: _ea.estimatedDepartureMs ?? Date.now(), driveTimeSecs: _ea.driveTimeSecs ?? 0,
-          }]);
+          }], 1);
         }
         for (const _lockRow of _jobLockRows) {
           if (_lockedTeamJobIdSet.has(_lockRow.jobId)) continue;
@@ -882,7 +882,7 @@ export const schedulingRouter = router({
             cleanerJobId: _lockRow.jobId, teamId: _lockRow.cleanerId, teamName: _lockedTeam?.name ?? "",
             routeOrder: _lockRow.lockedPosition, estimatedArrivalMs: Date.now(),
             estimatedDepartureMs: Date.now(), driveTimeSecs: 0,
-          }]);
+          }], 1);
         }
         return { assigned: simpleAssignments.length, message: `Assigned ${simpleAssignments.length} jobs (no home addresses set — add team home addresses for route optimization).` };
       }
@@ -1711,7 +1711,12 @@ async function recalcTeamRoute(
   }
 }
 
-async function persistAssignments(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, date: string, assignments: Assignment[]) {
+async function persistAssignments(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  date: string,
+  assignments: Assignment[],
+  isManual: 0 | 1 = 0,
+) {
   for (const a of assignments) {
     await db.insert(scheduleAssignments)
       .values({
@@ -1723,7 +1728,7 @@ async function persistAssignments(db: NonNullable<Awaited<ReturnType<typeof getD
         estimatedArrivalMs: a.estimatedArrivalMs,
         estimatedDepartureMs: a.estimatedDepartureMs,
         driveTimeSecs: a.driveTimeSecs,
-        isManual: 0,
+        isManual,
       })
       .onDuplicateKeyUpdate({
         set: {
@@ -1733,7 +1738,7 @@ async function persistAssignments(db: NonNullable<Awaited<ReturnType<typeof getD
           estimatedArrivalMs: a.estimatedArrivalMs,
           estimatedDepartureMs: a.estimatedDepartureMs,
           driveTimeSecs: a.driveTimeSecs,
-          isManual: 0,
+          isManual,
           updatedAt: new Date(),
         },
       });
