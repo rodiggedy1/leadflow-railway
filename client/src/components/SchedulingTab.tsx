@@ -406,6 +406,7 @@ function TeamDayConfigButton({
   }
 
   const btnRef = React.useRef<HTMLButtonElement>(null);
+  const popoverRef = React.useRef<HTMLDivElement>(null);
   const [popoverStyle, setPopoverStyle] = React.useState<React.CSSProperties>({});
 
   React.useEffect(() => {
@@ -423,11 +424,12 @@ function TeamDayConfigButton({
     });
   }, [open]);
 
-  // Close on outside click
+  // Close only when clicking outside BOTH the button AND the popover panel
   React.useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent) {
       if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
+      if (popoverRef.current && popoverRef.current.contains(e.target as Node)) return;
       setOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
@@ -449,7 +451,7 @@ function TeamDayConfigButton({
         {hasConfig ? "⚙ Limits" : "Limits"}
       </button>
       {open && createPortal(
-        <div style={popoverStyle} className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
+        <div ref={popoverRef} style={popoverStyle} className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-semibold text-gray-700">Team Limits</span>
             <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
