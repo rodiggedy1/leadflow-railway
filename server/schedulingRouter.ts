@@ -753,13 +753,16 @@ export const schedulingRouter = router({
         .from(teamDayLock)
         .where(eq(teamDayLock.date, input.date));
       const _lockedTeamIds = new Set(_teamLockRows.map(r => r.teamId));
-      const _existingForLockedTeams = _lockedTeamIds.size > 0
+      const _existingForLockedTeamsRaw = _lockedTeamIds.size > 0
         ? await db.select().from(scheduleAssignments)
             .where(and(
               eq(scheduleAssignments.jobDate, input.date),
               inArray(scheduleAssignments.teamId, Array.from(_lockedTeamIds)),
             ))
         : [];
+      // Exclude isManual=2 sentinel rows (explicitly unassigned jobs) — they must not be
+      // treated as locked-team jobs or the VRP will skip them and they'll vanish.
+      const _existingForLockedTeams = _existingForLockedTeamsRaw.filter(e => e.isManual !== 2);
       const _lockedTeamJobIdSet = new Set(_existingForLockedTeams.map(e => e.cleanerJobId));
       const _jobLockRows = await db.select().from(scheduleJobLocks)
         .where(eq(scheduleJobLocks.date, input.date));
