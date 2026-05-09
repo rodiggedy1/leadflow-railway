@@ -12,7 +12,7 @@
  *   - staleTime: 30s prevents unnecessary refetches on tab focus.
  *   - refetchIntervalInBackground: false — polling only runs when tab is visible.
  */
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
@@ -1516,15 +1516,6 @@ function LastSyncedBadge() {
 export default function FieldManagement() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
   const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower" | "schedule">("board");
-
-  useEffect(() => {
-    if (activeTab === "schedule") {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => { document.body.style.overflow = ""; };
-  }, [activeTab]);
 
   return (
     <AdminPageGuard pageId="field-management">
