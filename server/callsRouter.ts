@@ -80,7 +80,15 @@ export const callsRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       return db
-        .select()
+        .select({
+          id: callTemplates.id,
+          name: callTemplates.name,
+          triggerType: callTemplates.triggerType,
+          targetType: callTemplates.targetType,
+          scriptTemplate: callTemplates.scriptTemplate,
+          isActive: callTemplates.isActive,
+          sortOrder: callTemplates.sortOrder,
+        })
         .from(callTemplates)
         .where(eq(callTemplates.isActive, 1))
         .orderBy(callTemplates.sortOrder, callTemplates.name);
@@ -192,7 +200,15 @@ export const callsRouter = router({
       const suggestedTemplates = templates
         .filter(t => relevantTriggers.includes(t.triggerType))
         .map(t => ({
-          ...t,
+          // Only return primitive fields — avoid spreading Date columns (createdAt/updatedAt)
+          // which cause superjson deserialization crashes on the client.
+          id: t.id,
+          name: t.name,
+          triggerType: t.triggerType,
+          targetType: t.targetType,
+          scriptTemplate: t.scriptTemplate,
+          isActive: t.isActive,
+          sortOrder: t.sortOrder,
           variables: extractVariables(t.scriptTemplate),
           prefilledScript: resolveScript(t.scriptTemplate, prefillVars),
         }));
@@ -392,10 +408,31 @@ export const callsRouter = router({
         : [];
 
       return db
-        .select()
+        .select({
+          id: callLog.id,
+          cleanerJobId: callLog.cleanerJobId,
+          teamId: callLog.teamId,
+          teamName: callLog.teamName,
+          clientName: callLog.clientName,
+          calledPhone: callLog.calledPhone,
+          calledTarget: callLog.calledTarget,
+          templateId: callLog.templateId,
+          templateName: callLog.templateName,
+          resolvedScript: callLog.resolvedScript,
+          status: callLog.status,
+          vapiCallId: callLog.vapiCallId,
+          recordingUrl: callLog.recordingUrl,
+          transcript: callLog.transcript,
+          durationSeconds: callLog.durationSeconds,
+          firedBy: callLog.firedBy,
+          firedAt: callLog.firedAt,
+          completedAt: callLog.completedAt,
+          notes: callLog.notes,
+          jobDate: callLog.jobDate,
+        })
         .from(callLog)
         .where(conditions.length > 0 ? conditions[0] : undefined)
-        .orderBy(desc(callLog.createdAt))
+        .orderBy(desc(callLog.firedAt))
         .limit(input.limit);
     }),
 
@@ -412,14 +449,25 @@ export const callsRouter = router({
       const db = await getDb();
       if (!db) return [];
       return db
-        .select()
+        .select({
+          id: jobIssues.id,
+          cleanerJobId: jobIssues.cleanerJobId,
+          jobDate: jobIssues.jobDate,
+          issueType: jobIssues.issueType,
+          raisedBy: jobIssues.raisedBy,
+          raisedByName: jobIssues.raisedByName,
+          raisedAt: jobIssues.raisedAt,
+          resolvedAt: jobIssues.resolvedAt,
+          callLogId: jobIssues.callLogId,
+          notes: jobIssues.notes,
+        })
         .from(jobIssues)
         .where(and(
           eq(jobIssues.cleanerJobId, input.cleanerJobId),
           eq(jobIssues.jobDate, input.jobDate),
           isNull(jobIssues.resolvedAt),
         ))
-        .orderBy(desc(jobIssues.createdAt));
+        .orderBy(desc(jobIssues.raisedAt));
     }),
 
   /**
@@ -431,13 +479,24 @@ export const callsRouter = router({
       const db = await getDb();
       if (!db) return [];
       return db
-        .select()
+        .select({
+          id: jobIssues.id,
+          cleanerJobId: jobIssues.cleanerJobId,
+          jobDate: jobIssues.jobDate,
+          issueType: jobIssues.issueType,
+          raisedBy: jobIssues.raisedBy,
+          raisedByName: jobIssues.raisedByName,
+          raisedAt: jobIssues.raisedAt,
+          resolvedAt: jobIssues.resolvedAt,
+          callLogId: jobIssues.callLogId,
+          notes: jobIssues.notes,
+        })
         .from(jobIssues)
         .where(and(
           eq(jobIssues.jobDate, input.jobDate),
           isNull(jobIssues.resolvedAt),
         ))
-        .orderBy(desc(jobIssues.createdAt));
+        .orderBy(desc(jobIssues.raisedAt));
     }),
 
   /**

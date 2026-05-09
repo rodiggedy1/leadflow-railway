@@ -1520,3 +1520,7 @@
 - [x] Add centerView === "calls" panel showing call log inline in CommandChat center
 - [x] Wire IssueDialog and CallLogPanel into CommandChat state
 - [x] After call fired: auto-switch center view to "calls" panel
+
+## Fix AI Call Command Center
+- [ ] Diagnose raiseIssue "undefined" error — mirror proven Call Client VAPI pattern
+- [ ] Remove duplicate Call Client button from Team Status cards (AI Call replaces it)
