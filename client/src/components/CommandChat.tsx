@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -39,6 +39,8 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
+import IssueDialog from "@/components/IssueDialog";
+import CallLogPanel from "@/components/CallLogPanel";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -2134,7 +2136,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [rightTab, setRightTab] = useState<"leads" | "followups">("leads");
   const [rightSearch, setRightSearch] = useState("");
-  const [centerView, setCenterView] = useState<"chat" | "issues">("chat");
+  const [centerView, setCenterView] = useState<"chat" | "issues" | "calls">("chat");
+  // ── AI Call Command Center state ─────────────────────────────────────────
+  const [issueDialogJob, setIssueDialogJob] = useState<{ id: number; date: string } | null>(null);
+  const [callLogOpen, setCallLogOpen] = useState(false);
   // issueOwners: keyed by issueKey → owner name (DB-backed via getIssueOwnership)
   const [issueOwners, setIssueOwners] = useState<Record<string, string>>({});
   // issueResolved: keyed by issueKey → true when resolved (DB-backed)
@@ -2960,6 +2965,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const todayRevenue = todayStats?.bookedRevenue ?? 0;
   const todayBookingCount = todayStats?.bookedCount ?? 0;
 
+  // AI Call Command Center — today's call count for badge
+  const { data: todayCallLog = [] } = trpc.calls.getCallLog.useQuery(
+    { jobDate: todayDateStr, limit: 100 },
+    { refetchInterval: 30_000, staleTime: 15_000 }
+  );
+  const todayCallCount = todayCallLog.length;
+
   const snapshot = cmdData?.snapshot ?? { issue: 0, soon: 0, progress: 0, complete: 0, assigned: 0 };
   const alerts = cmdData?.alerts ?? [];
   const pinnedJobs = cmdData?.pinnedJobs ?? [];
@@ -3513,6 +3525,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}
                             </p>
                           )}
+                          {/* AI Call Command Center — ⚠ button for any job with a cleanerJobId */}
+                          {cs.cleanerJobId && (
+                            <div className="mt-1.5 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIssueDialogJob({ id: cs.cleanerJobId!, date: todayDateStr });
+                                }}
+                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-orange-500 text-white hover:bg-orange-600 transition"
+                                title="Raise issue & fire AI call"
+                              >
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                AI Call
+                              </button>
+                            </div>
+                          )}
                           {cs.status === "running_late" && cs.cleanerJobId && (
                             <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
                               {clientCallDone.has(cs.cleanerJobId) ? (
@@ -3727,6 +3755,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               >
                 <Megaphone className="h-4 w-4 text-slate-500" />
               </button>
+              {/* AI Call Command Center — Calls log button */}
+              <button
+                title="AI Call Log"
+                onClick={() => setCenterView(centerView === "calls" ? "chat" : "calls")}
+                className={cn(
+                  "relative h-9 w-9 flex items-center justify-center rounded-full border transition-colors",
+                  centerView === "calls"
+                    ? "border-orange-400 bg-orange-50 text-orange-600"
+                    : "border-slate-200 hover:bg-slate-100 text-slate-500"
+                )}
+              >
+                <PhoneIncoming className="h-4 w-4" />
+                {todayCallCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
+                    {todayCallCount > 9 ? "9+" : todayCallCount}
+                  </span>
+                )}
+              </button>
               <button
                 title="Pin"
                 className="h-9 w-9 flex items-center justify-center rounded-full border-2 border-slate-900 hover:bg-slate-100 transition-colors"
@@ -3900,6 +3946,83 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           );
         })()}
 
+        {/* AI Call Command Center — Calls center view */}
+        {centerView === "calls" && (
+          <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: "none" }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <PhoneIncoming className="h-4 w-4 text-orange-500" />
+                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">AI Call Log — Today</p>
+              </div>
+              <button
+                onClick={() => setCenterView("chat")}
+                className="text-[10px] font-semibold text-slate-400 hover:text-slate-600 transition"
+              >
+                ✕ Close
+              </button>
+            </div>
+            {todayCallLog.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
+                <PhoneIncoming className="h-10 w-10 opacity-30" />
+                <p className="text-sm font-medium">No AI calls today</p>
+                <p className="text-xs text-slate-300">Click ⚠ AI Call on a Team Status card to fire one</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(todayCallLog as any[]).map((entry) => (
+                  <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                          {entry.templateName ?? "Manual call"}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {entry.teamName ?? entry.clientName ?? "Unknown"}
+                          {entry.calledTarget === "team" ? " (team)" : " (client)"}
+                        </p>
+                      </div>
+                      <span className={cn(
+                        "shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                        entry.status === "completed" ? "bg-green-100 text-green-700 border-green-200" :
+                        entry.status === "failed" ? "bg-red-100 text-red-700 border-red-200" :
+                        entry.status === "no_answer" ? "bg-amber-100 text-amber-700 border-amber-200" :
+                        entry.status === "fired" ? "bg-blue-100 text-blue-700 border-blue-200" :
+                        "bg-gray-100 text-gray-600 border-gray-200"
+                      )}>
+                        {entry.status === "completed" ? "✓ Completed" :
+                         entry.status === "failed" ? "✕ Failed" :
+                         entry.status === "no_answer" ? "📵 No Answer" :
+                         entry.status === "fired" ? "📞 Fired" : "Pending"}
+                      </span>
+                    </div>
+                    {entry.firedAt && (
+                      <p className="text-[10px] text-slate-400 mb-2">
+                        Fired {new Date(entry.firedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}
+                        {entry.firedBy ? ` by ${entry.firedBy}` : ""}
+                        {entry.durationSeconds ? ` · ${Math.floor(entry.durationSeconds / 60)}m ${entry.durationSeconds % 60}s` : ""}
+                      </p>
+                    )}
+                    {entry.recordingUrl && (
+                      <div className="mb-2">
+                        <audio controls src={entry.recordingUrl} className="w-full h-8 rounded-xl" style={{ accentColor: "#f97316" }} />
+                      </div>
+                    )}
+                    {entry.transcript && (
+                      <details className="mt-1">
+                        <summary className="text-[10px] font-semibold text-slate-400 cursor-pointer hover:text-slate-600">Transcript</summary>
+                        <p className="text-xs text-slate-600 mt-1 leading-relaxed whitespace-pre-wrap">{entry.transcript}</p>
+                      </details>
+                    )}
+                    {entry.notes && (
+                      <p className="text-xs text-slate-500 mt-1 italic">{entry.notes}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Active Sticky Pin banner — real sticky note look (chat view only) */}
         {centerView === "chat" && activePin && (
           <div className="relative mx-4 mt-3 mb-0" style={{ transform: "rotate(-0.8deg)", filter: "drop-shadow(2px 4px 8px rgba(0,0,0,0.18))" }}>
@@ -3936,7 +4059,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
 
         {/* Conversation thread — relative wrapper for toast overlay */}
-        <div className={cn("relative flex-1 min-h-0 flex flex-col", centerView === "issues" && "hidden")}>
+        <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* @mention re-entry banner — sticky amber strip when there are unread @mentions */}
           {unreadTagIds.length > 0 && (
             <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800">
@@ -4170,7 +4293,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           />
         )}
         {/* Composer — hidden when in issues view */}
-        <div className={cn("relative shrink-0", centerView === "issues" && "hidden")}>
+        <div className={cn("relative shrink-0", (centerView === "issues" || centerView === "calls") && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
         <div className="px-5 py-4 bg-white">
@@ -5361,6 +5484,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ── AI Call Command Center — Issue Dialog ── */}
+      {issueDialogJob && (
+        <IssueDialog
+          open={!!issueDialogJob}
+          onClose={() => setIssueDialogJob(null)}
+          cleanerJobId={issueDialogJob.id}
+          jobDate={issueDialogJob.date}
+          onCallFired={() => {
+            setIssueDialogJob(null);
+            setCenterView("calls");
+          }}
+        />
+      )}
+
+      {/* ── AI Call Command Center — Call Log Sheet (alternative sheet view) ── */}
+      <CallLogPanel
+        open={callLogOpen}
+        onClose={() => setCallLogOpen(false)}
+        jobDate={todayDateStr}
+      />
     </div>
   );
 }

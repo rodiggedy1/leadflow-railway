@@ -1512,3 +1512,11 @@
 - [x] Build CallLogPanel in toolbar: list of calls for the day, status badges, recording playback
 - [x] Auto-trigger: periodic check for teams past scheduled time with no check-in, raise issue automatically (Heartbeat endpoint ready at /api/scheduled/call-center-no-checkin — register cron after deploy)
 - [x] Write vitest tests for callsRouter procedures
+
+## Move Call Command Center to OpsChat
+- [x] Keep SchedulingTab wiring as secondary access point (not removed)
+- [x] Add ⚠ AI Call button to each Team Status card in CommandChat left panel
+- [x] Add 📞 Calls button (PhoneIncoming icon) to center panel header toolbar in CommandChat
+- [x] Add centerView === "calls" panel showing call log inline in CommandChat center
+- [x] Wire IssueDialog and CallLogPanel into CommandChat state
+- [x] After call fired: auto-switch center view to "calls" panel
