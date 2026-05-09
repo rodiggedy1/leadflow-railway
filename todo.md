@@ -1528,3 +1528,10 @@
 ## Fix AI Call — phone + client template
 - [x] Join cleanerProfiles in raiseIssue to get real team phone number
 - [x] Add "Late Team — Client Notification" template to call_templates table
+
+## AI Call Command Center — Post-Call Feedback
+
+- [x] After firing a call, immediately refetch getCallLog so the calls view shows the new entry without waiting 30s
+- [x] Show a "📞 Called" indicator on the team card after a call is fired (persists until page refresh)
+- [x] Auto-switch center view to "calls" after firing (already implemented — verify it works)
+- [x] Show call status updates in real-time (poll faster when there are "fired"/"pending" calls in log)
