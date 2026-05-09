@@ -998,13 +998,14 @@ export const schedulingRouter = router({
       const team = await db.select().from(schedulingTeams).where(eq(schedulingTeams.id, input.teamId)).limit(1);
       if (!team[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Team not found" });
 
+      // Step 1: Write the new assignment first (upsert) so it's included in the recalc
       await db.insert(scheduleAssignments)
         .values({
           jobDate: input.date,
           cleanerJobId: input.cleanerJobId,
           teamId: input.teamId,
           teamName: team[0].name,
-          routeOrder: input.routeOrder ?? 0,
+          routeOrder: 0,
           isManual: 1,
           estimatedArrivalMs: Date.now(),
           estimatedDepartureMs: Date.now() + 2 * 3600 * 1000,
@@ -1014,11 +1015,121 @@ export const schedulingRouter = router({
           set: {
             teamId: input.teamId,
             teamName: team[0].name,
-            routeOrder: input.routeOrder ?? 0,
             isManual: 1,
             updatedAt: new Date(),
           },
         });
+
+      // Step 2: Load all jobs currently assigned to this team for the date
+      const teamAssignments = await db.select().from(scheduleAssignments)
+        .where(and(
+          eq(scheduleAssignments.jobDate, input.date),
+          eq(scheduleAssignments.teamId, input.teamId),
+        ));
+
+      if (teamAssignments.length === 0) return { ok: true };
+
+      // Step 3: Load the actual job records for those assignments
+      const assignedJobIds = teamAssignments.map(a => a.cleanerJobId);
+      const jobRows = await db.select().from(cleanerJobs)
+        .where(inArray(cleanerJobs.id, assignedJobIds));
+
+      // Step 4: Sort jobs by serviceDateTime (time-slot order)
+      // Jobs with a serviceDateTime come first, sorted chronologically.
+      // Jobs without a serviceDateTime (unscheduled) are appended at the end.
+      const withTime = jobRows
+        .filter(j => !!j.serviceDateTime)
+        .sort((a, b) => new Date(a.serviceDateTime!).getTime() - new Date(b.serviceDateTime!).getTime());
+      const withoutTime = jobRows.filter(j => !j.serviceDateTime);
+      const orderedJobs = [...withTime, ...withoutTime];
+
+      // Step 5: Geocode all job addresses (use cache)
+      const geoMap = new Map<number, { lat: number; lng: number }>();
+      for (const job of orderedJobs) {
+        if (!job.jobAddress) continue;
+        const geo = await geocodeWithCache(job.jobAddress);
+        if (geo) geoMap.set(job.id, { lat: geo.lat, lng: geo.lng });
+      }
+
+      // Step 6: Build points array [home?, job0, job1, ...] for Distance Matrix
+      const hasHome = team[0].homeLat != null && team[0].homeLng != null;
+      const points: LatLng[] = [
+        ...(hasHome ? [{ lat: team[0].homeLat!, lng: team[0].homeLng! }] : []),
+        ...orderedJobs.map(j => geoMap.get(j.id) ?? { lat: 0, lng: 0 }),
+      ];
+      const homeOffset = hasHome ? 1 : 0;
+
+      // Only call Distance Matrix if we have at least 2 real geocoded points
+      const geocodedCount = orderedJobs.filter(j => geoMap.has(j.id)).length;
+      let matrix: number[][] = [];
+      if (geocodedCount >= 2 || (hasHome && geocodedCount >= 1)) {
+        try {
+          matrix = await buildTravelMatrix(points);
+        } catch {
+          matrix = [];
+        }
+      }
+
+      // Step 7: Walk the ordered jobs, assign routeOrder and recalculate arrival/departure/drive
+      const BUFFER_MS = 15 * 60 * 1000;
+      let currentMs = 0;
+      const updatedAssignments: Array<{
+        cleanerJobId: number;
+        routeOrder: number;
+        estimatedArrivalMs: number;
+        estimatedDepartureMs: number;
+        driveTimeSecs: number;
+      }> = [];
+
+      orderedJobs.forEach((job, idx) => {
+        const durationHours = estimateDurationHours(job.serviceType, job.bedrooms);
+        const durationMs = durationHours * 3600000;
+
+        // Arrival time: use serviceDateTime if available, otherwise chain from previous
+        let arrivalMs: number;
+        if (job.serviceDateTime) {
+          arrivalMs = new Date(job.serviceDateTime).getTime();
+        } else {
+          arrivalMs = currentMs > 0 ? currentMs : Date.now();
+        }
+
+        const departureMs = arrivalMs + durationMs;
+        currentMs = departureMs + BUFFER_MS;
+
+        // Drive time from previous point (or home)
+        let driveTimeSecs = 0;
+        if (matrix.length > 0 && geoMap.has(job.id)) {
+          const jobMatrixIdx = homeOffset + idx;
+          const prevMatrixIdx = idx === 0 ? (hasHome ? 0 : -1) : homeOffset + (idx - 1);
+          if (prevMatrixIdx >= 0) {
+            driveTimeSecs = matrix[prevMatrixIdx]?.[jobMatrixIdx] ?? 0;
+          }
+        }
+
+        updatedAssignments.push({
+          cleanerJobId: job.id,
+          routeOrder: idx,
+          estimatedArrivalMs: arrivalMs,
+          estimatedDepartureMs: departureMs,
+          driveTimeSecs,
+        });
+      });
+
+      // Step 8: Persist updated routeOrder + times for all jobs in this team
+      for (const upd of updatedAssignments) {
+        await db.update(scheduleAssignments)
+          .set({
+            routeOrder: upd.routeOrder,
+            estimatedArrivalMs: upd.estimatedArrivalMs,
+            estimatedDepartureMs: upd.estimatedDepartureMs,
+            driveTimeSecs: upd.driveTimeSecs,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(scheduleAssignments.jobDate, input.date),
+            eq(scheduleAssignments.cleanerJobId, upd.cleanerJobId),
+          ));
+      }
 
       return { ok: true };
     }),
