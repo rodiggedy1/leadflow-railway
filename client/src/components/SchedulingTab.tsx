@@ -665,6 +665,18 @@ function ScheduleMap({
       markersRef.current.push(homeMarker);
     }
 
+    // Count total geocode requests so we can fitBounds exactly once after all complete
+    const assignedJobs = Array.from(byTeam.values()).flat().filter(j => !!j.jobAddress);
+    const unassignedJobs = byTeam.size === 0 ? jobs.slice(0, 20).filter(j => !!j.jobAddress) : [];
+    const totalGeocodes = assignedJobs.length + unassignedJobs.length;
+    let completedGeocodes = 0;
+    const maybeFitBounds = () => {
+      completedGeocodes++;
+      if (completedGeocodes === totalGeocodes && hasPoints && mapRef.current) {
+        mapRef.current.fitBounds(bounds, 60);
+      }
+    };
+
     // Draw routes + job markers
     for (const [teamId, teamJobs] of Array.from(byTeam.entries())) {
       const color = teamColorMap.get(teamId) ?? "#6366f1";
@@ -678,15 +690,11 @@ function ScheduleMap({
 
       for (let i = 0; i < teamJobs.length; i++) {
         const job = teamJobs[i];
-        // We need lat/lng — geocoding is server-side, so we use a placeholder
-        // In practice the map shows markers only for jobs with geocoded coords.
-        // We'll use the Geocoder client-side for display purposes.
         if (!job.jobAddress) continue;
 
-        // Use Geocoder to get position for display
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ address: job.jobAddress }, (results, status) => {
-          if (status !== "OK" || !results?.[0]) return;
+          if (status !== "OK" || !results?.[0]) { maybeFitBounds(); return; }
           const pos = results[0].geometry.location;
           bounds.extend(pos);
           hasPoints = true;
@@ -742,9 +750,7 @@ function ScheduleMap({
             polylinesRef.current.push(line);
           }
 
-          if (hasPoints && mapRef.current) {
-            mapRef.current.fitBounds(bounds, 60);
-          }
+          maybeFitBounds();
         });
       }
     }
@@ -752,12 +758,12 @@ function ScheduleMap({
     // If no assignments yet, show all job addresses
     if (byTeam.size === 0) {
       const geocoder = new google.maps.Geocoder();
-      for (const job of jobs.slice(0, 20)) {
-        if (!job.jobAddress) continue;
-        geocoder.geocode({ address: job.jobAddress }, (results, status) => {
-          if (status !== "OK" || !results?.[0]) return;
+      for (const job of unassignedJobs) {
+        geocoder.geocode({ address: job.jobAddress! }, (results, status) => {
+          if (status !== "OK" || !results?.[0]) { maybeFitBounds(); return; }
           const pos = results[0].geometry.location;
           bounds.extend(pos);
+          hasPoints = true;
           const marker = new google.maps.Marker({
             position: pos,
             map,
@@ -772,9 +778,14 @@ function ScheduleMap({
             },
           });
           markersRef.current.push(marker);
-          if (mapRef.current) mapRef.current.fitBounds(bounds, 60);
+          maybeFitBounds();
         });
       }
+    }
+
+    // If there are no geocodable jobs at all, fit to team homes
+    if (totalGeocodes === 0 && hasPoints && mapRef.current) {
+      mapRef.current.fitBounds(bounds, 60);
     }
   }, [jobs, teams, selectedJobId, onJobSelect]);
 
