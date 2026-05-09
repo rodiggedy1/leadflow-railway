@@ -689,6 +689,34 @@ export const schedulingRouter = router({
 
       if (geocoded.length === 0) return { assigned: 0, message: "No jobs with geocodable addresses." };
 
+      // Load locks before ANY assignment path so both simple and VRP paths respect them
+      const _teamLockRows = await db.select({ teamId: teamDayLock.teamId })
+        .from(teamDayLock)
+        .where(eq(teamDayLock.date, input.date));
+      const _lockedTeamIds = new Set(_teamLockRows.map(r => r.teamId));
+      const _existingForLockedTeams = _lockedTeamIds.size > 0
+        ? await db.select().from(scheduleAssignments)
+            .where(and(
+              eq(scheduleAssignments.jobDate, input.date),
+              inArray(scheduleAssignments.teamId, Array.from(_lockedTeamIds)),
+            ))
+        : [];
+      const _lockedTeamJobIdSet = new Set(_existingForLockedTeams.map(e => e.cleanerJobId));
+      const _jobLockRows = await db.select().from(scheduleJobLocks)
+        .where(eq(scheduleJobLocks.date, input.date));
+      const _jobLockMap = new Map(_jobLockRows.map(l => [l.jobId, l.lockedPosition]));
+      const _existingForLockedJobs = _jobLockMap.size > 0
+        ? await db.select().from(scheduleAssignments)
+            .where(and(
+              eq(scheduleAssignments.jobDate, input.date),
+              inArray(scheduleAssignments.cleanerJobId, Array.from(_jobLockMap.keys())),
+            ))
+        : [];
+      const _allLockedJobIds = new Set([
+        ...Array.from(_lockedTeamJobIdSet),
+        ..._existingForLockedJobs.map(e => e.cleanerJobId),
+      ]);
+
       // 4. Build all points array: [team homes..., job points...]
       const teamConfigs: TeamConfig[] = teams
         .filter(t => t.homeLat != null && t.homeLng != null)
@@ -740,7 +768,23 @@ export const schedulingRouter = router({
             });
           });
         }
-        await persistAssignments(db, input.date, simpleAssignments);
+        const _simpleToSave = simpleAssignments.filter(a => !_allLockedJobIds.has(a.cleanerJobId));
+        await persistAssignments(db, input.date, _simpleToSave);
+        for (const _ea of _existingForLockedTeams) {
+          await persistAssignments(db, input.date, [{
+            cleanerJobId: _ea.cleanerJobId, teamId: _ea.teamId, teamName: _ea.teamName ?? "",
+            routeOrder: _ea.routeOrder, estimatedArrivalMs: _ea.estimatedArrivalMs ?? Date.now(),
+            estimatedDepartureMs: _ea.estimatedDepartureMs ?? Date.now(), driveTimeSecs: _ea.driveTimeSecs ?? 0,
+          }]);
+        }
+        for (const _ea of _existingForLockedJobs) {
+          if (_lockedTeamJobIdSet.has(_ea.cleanerJobId)) continue;
+          await persistAssignments(db, input.date, [{
+            cleanerJobId: _ea.cleanerJobId, teamId: _ea.teamId, teamName: _ea.teamName ?? "",
+            routeOrder: _ea.routeOrder, estimatedArrivalMs: _ea.estimatedArrivalMs ?? Date.now(),
+            estimatedDepartureMs: _ea.estimatedDepartureMs ?? Date.now(), driveTimeSecs: _ea.driveTimeSecs ?? 0,
+          }]);
+        }
         return { assigned: simpleAssignments.length, message: `Assigned ${simpleAssignments.length} jobs (no home addresses set — add team home addresses for route optimization).` };
       }
 
@@ -752,39 +796,12 @@ export const schedulingRouter = router({
       // 5. Build travel matrix
       const travelMatrix = await buildTravelMatrix(allPoints);
 
-       // 6a. Load team-level locks BEFORE VRP — exclude locked-team jobs from the solver
-      const teamLockRows = await db.select({ teamId: teamDayLock.teamId })
-        .from(teamDayLock)
-        .where(eq(teamDayLock.date, input.date));
-      const lockedTeamIds = new Set(teamLockRows.map(r => r.teamId));
-      // Load existing assignments for locked teams so we can restore them after VRP
-      const existingForLockedTeams = lockedTeamIds.size > 0
-        ? await db.select().from(scheduleAssignments)
-            .where(and(
-              eq(scheduleAssignments.jobDate, input.date),
-              inArray(scheduleAssignments.teamId, Array.from(lockedTeamIds)),
-            ))
-        : [];
-      const lockedTeamJobIdSet = new Set(existingForLockedTeams.map(e => e.cleanerJobId));
-
-      // 6b. Load job-level locks BEFORE VRP — individually locked jobs must not move teams.
-      // Fetch their current assignments so we can restore them verbatim after the solver runs.
-      const jobLockRows = await db.select().from(scheduleJobLocks)
-        .where(eq(scheduleJobLocks.date, input.date));
-      const jobLockMap = new Map(jobLockRows.map(l => [l.jobId, l.lockedPosition]));
-      // Fetch current assignments for all individually-locked jobs
-      const existingForLockedJobs = jobLockMap.size > 0
-        ? await db.select().from(scheduleAssignments)
-            .where(and(
-              eq(scheduleAssignments.jobDate, input.date),
-              inArray(scheduleAssignments.cleanerJobId, Array.from(jobLockMap.keys())),
-            ))
-        : [];
-      // Build a set of all job IDs that must be excluded from VRP (team-locked OR job-locked)
-      const lockedJobIdSet = new Set([
-        ...Array.from(lockedTeamJobIdSet),
-        ...existingForLockedJobs.map(e => e.cleanerJobId),
-      ]);
+       // 6a/6b. Locks already loaded above — alias for clarity
+      const lockedTeamIds = _lockedTeamIds;
+      const existingForLockedTeams = _existingForLockedTeams;
+      const lockedTeamJobIdSet = _lockedTeamJobIdSet;
+      const existingForLockedJobs = _existingForLockedJobs;
+      const lockedJobIdSet = _allLockedJobIds;
 
       // Filter out all locked jobs from VRP input so solver doesn't touch them
       const vrpGeocodedJobs = geocoded.filter(j => !lockedJobIdSet.has(j.cleanerJobId));
