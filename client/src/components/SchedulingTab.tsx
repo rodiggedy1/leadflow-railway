@@ -673,7 +673,8 @@ function ScheduleMap({
     const maybeFitBounds = () => {
       completedGeocodes++;
       if (completedGeocodes === totalGeocodes && hasPoints && mapRef.current) {
-        mapRef.current.fitBounds(bounds, 60);
+        // Extra bottom padding shifts the cluster toward the top of the panel
+        mapRef.current.fitBounds(bounds, { top: 40, right: 60, bottom: 160, left: 60 });
       }
     };
 
@@ -785,7 +786,7 @@ function ScheduleMap({
 
     // If there are no geocodable jobs at all, fit to team homes
     if (totalGeocodes === 0 && hasPoints && mapRef.current) {
-      mapRef.current.fitBounds(bounds, 60);
+      mapRef.current.fitBounds(bounds, { top: 40, right: 60, bottom: 160, left: 60 });
     }
   }, [jobs, teams, selectedJobId, onJobSelect]);
 

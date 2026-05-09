@@ -1522,19 +1522,23 @@ export default function FieldManagement() {
     <div className="min-h-screen bg-gray-50">
       <AdminHeader activeTab="field-management" pagePermissions={pagePermissions} isAdmin={isAdmin} />
 
-      <div className={`mx-auto px-4 sm:px-6 py-8 ${
+      <div className={`mx-auto px-4 sm:px-6 ${
+        activeTab === "schedule" ? "py-3" : "py-8"
+      } ${
         activeTab === "board" || activeTab === "tower" || activeTab === "schedule" ? "max-w-7xl" : "max-w-3xl"
       }`}>
-        {/* Page header */}
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Field Management</h1>
-            <p className="text-gray-500 mt-1 text-sm">
-              Day-of workflow automation and live job communication log.
-            </p>
+        {/* Page header — hidden on schedule tab to save vertical space */}
+        {activeTab !== "schedule" && (
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Field Management</h1>
+              <p className="text-gray-500 mt-1 text-sm">
+                Day-of workflow automation and live job communication log.
+              </p>
+            </div>
+            <LastSyncedBadge />
           </div>
-          <LastSyncedBadge />
-        </div>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
