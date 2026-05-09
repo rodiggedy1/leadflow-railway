@@ -1019,8 +1019,8 @@ export default function SchedulingTab() {
         </div>
       ) : (
         <div className="flex gap-4 items-start">
-          {/* Left: team job lists — scrolls naturally with the page */}
-          <div className="w-96 shrink-0 flex flex-col gap-3 pr-1">
+          {/* Left: team job lists — scrolls independently within viewport */}
+          <div className="w-96 shrink-0 flex flex-col gap-3 pr-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
             {teams.filter(t => t.isActive).map(team => {
               const teamJobs = teamGroups.get(team.id) ?? [];
               const totalHours = teamJobs.reduce((s, j) => {
