@@ -816,6 +816,18 @@ export default function SchedulingTab() {
   const clearRecalculating = (ids: number[]) =>
     setRecalculatingTeams(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
 
+  // Suggest Slot panel
+  const [suggestInput, setSuggestInput] = useState("");
+  const [suggestAddress, setSuggestAddress] = useState("");
+  const suggestRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const [googleMapsReady, setGoogleMapsReady] = useState(false);
+
+  const { data: suggestData, isFetching: suggestFetching } = trpc.scheduling.suggestSlots.useQuery(
+    { address: suggestAddress, date },
+    { enabled: suggestAddress.length > 5, staleTime: 60_000 }
+  );
+
   const { data, isLoading, refetch } = trpc.scheduling.getSchedule.useQuery(
     { date },
     { staleTime: 30_000, refetchOnWindowFocus: false }
@@ -1002,6 +1014,84 @@ export default function SchedulingTab() {
             {optimize.isPending ? "Optimizing…" : hasAssignments ? "Re-optimize" : "Optimize Routes"}
           </Button>
         </div>
+      </div>
+
+      {/* Suggest Slot panel */}
+      <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+        <div className="flex items-center gap-3">
+          <MapPin className="w-4 h-4 text-indigo-500 shrink-0" />
+          <span className="text-sm font-medium text-gray-700 shrink-0">Find best slot</span>
+          <div className="relative flex-1">
+            <input
+              ref={suggestRef}
+              type="text"
+              value={suggestInput}
+              onChange={e => setSuggestInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && suggestInput.trim()) setSuggestAddress(suggestInput.trim()); }}
+              placeholder="Enter customer address…"
+              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 bg-gray-50"
+            />
+            {suggestFetching && (
+              <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-gray-400" />
+            )}
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 text-xs"
+            disabled={!suggestInput.trim() || suggestFetching}
+            onClick={() => setSuggestAddress(suggestInput.trim())}
+          >
+            Search
+          </Button>
+          {suggestAddress && (
+            <button
+              className="shrink-0 text-gray-400 hover:text-gray-600"
+              onClick={() => { setSuggestInput(""); setSuggestAddress(""); }}
+              title="Clear"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Results */}
+        {suggestData && suggestData.slots.length > 0 && (
+          <div className="mt-3 space-y-1.5">
+            <div className="text-[11px] text-gray-400 font-medium uppercase tracking-wide mb-1">
+              Best slots for {suggestData.geocodedAddress}
+            </div>
+            {suggestData.slots.map((slot, i) => (
+              <div
+                key={slot.teamId}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100"
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ background: slot.teamColor }}
+                />
+                <span className="text-sm font-medium text-gray-800 flex-1 truncate">{slot.teamName}</span>
+                {slot.suggestedTimeMs && (
+                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {new Date(slot.suggestedTimeMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                )}
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  i === 0 ? 'bg-green-50 text-green-700 border border-green-200' :
+                  i === 1 ? 'bg-blue-50 text-blue-600 border border-blue-200' :
+                  'bg-gray-100 text-gray-500 border border-gray-200'
+                }`}>
+                  +{Math.round(slot.addedDriveSecs / 60)} min drive
+                </span>
+                <span className="text-[10px] text-gray-400">{slot.totalTeamJobs} jobs</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {suggestData && suggestData.slots.length === 0 && (
+          <div className="mt-2 text-sm text-gray-400">No available teams for this date.</div>
+        )}
       </div>
 
       {/* Main content */}

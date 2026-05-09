@@ -1392,6 +1392,234 @@ export const schedulingRouter = router({
         });
       return { ok: true };
     }),
+
+  // ── Suggest best time slots for a new job address ────────────────────────────
+  suggestSlots: agentProcedure
+    .input(z.object({ address: z.string(), date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // 1. Geocode the new address
+      const newGeo = await geocodeWithCache(input.address);
+      if (!newGeo) throw new TRPCError({ code: "BAD_REQUEST", message: "Could not geocode address" });
+      const newPoint: LatLng = { lat: newGeo.lat, lng: newGeo.lng };
+
+      // 2. Load all jobs for the date with their assignments
+      const jobs = await db.select().from(cleanerJobs).where(eq(cleanerJobs.jobDate, input.date));
+      const jobIds = jobs.map(j => j.id);
+      const assignments = jobIds.length > 0
+        ? await db.select().from(scheduleAssignments)
+            .where(and(
+              eq(scheduleAssignments.jobDate, input.date),
+              inArray(scheduleAssignments.cleanerJobId, jobIds),
+            ))
+        : [];
+      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teamByName = new Map(teams.map(t => [t.name, t]));
+      const assignmentMap = new Map(assignments.filter(a => a.isManual !== 2).map(a => [a.cleanerJobId, a]));
+
+      // 3. Geocode all job addresses from cache
+      const jobAddresses = jobs.map(j => j.jobAddress?.trim().toLowerCase()).filter(Boolean) as string[];
+      const geoCacheRows = jobAddresses.length > 0
+        ? await db.select().from(jobGeoCache).where(inArray(jobGeoCache.addressKey, jobAddresses))
+        : [];
+      const geoByAddress = new Map(geoCacheRows.map(g => [g.addressKey, g]));
+
+      // 4. Build per-team ordered job lists (same logic as getSchedule)
+      type TeamRoute = {
+        team: typeof teams[0];
+        orderedJobs: Array<{ id: number; serviceDateTime: string | null; geo: LatLng | null }>;
+        jobCount: number;
+      };
+      const teamRoutes: TeamRoute[] = [];
+
+      for (const team of teams) {
+        // Get jobs assigned to this team (saved assignments first, then synthetic from teamName)
+        const teamJobs = jobs.filter(j => {
+          const asgn = assignmentMap.get(j.id);
+          if (asgn) return asgn.teamId === team.id;
+          // synthetic: no saved assignment, job's teamName matches
+          return !assignmentMap.has(j.id) && j.teamName === team.name && teamByName.has(j.teamName);
+        });
+
+        // Sort by routeOrder (saved) or serviceDateTime
+        teamJobs.sort((a, b) => {
+          const ao = assignmentMap.get(a.id)?.routeOrder ?? 999;
+          const bo = assignmentMap.get(b.id)?.routeOrder ?? 999;
+          if (ao !== bo) return ao - bo;
+          const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
+          const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
+          return ta - tb;
+        });
+
+        const orderedJobs = teamJobs.map(j => ({
+          id: j.id,
+          serviceDateTime: j.serviceDateTime,
+          geo: (() => {
+            const g = geoByAddress.get(j.jobAddress?.trim().toLowerCase() ?? "");
+            return g ? { lat: g.lat, lng: g.lng } : null;
+          })(),
+        }));
+
+        teamRoutes.push({ team, orderedJobs, jobCount: orderedJobs.length });
+      }
+
+      // 5. For each team, compute cheapest insertion cost at each gap
+      type SlotResult = {
+        teamId: number;
+        teamName: string;
+        teamColor: string;
+        insertPosition: number; // 0 = before first job, N = after job N-1
+        suggestedTimeMs: number | null;
+        addedDriveSecs: number;
+        totalTeamJobs: number;
+      };
+      const slots: SlotResult[] = [];
+
+      // Collect all points we need drive times for: [newPoint] vs [prev, next] pairs
+      // We'll batch all distance matrix calls across all teams
+      type DrivePair = { fromLat: number; fromLng: number; toLat: number; toLng: number };
+      const allPairs: DrivePair[] = [];
+      type TeamGapSpec = {
+        teamIdx: number;
+        gapIdx: number; // position in route (0 = home→new→job0, N = jobN-1→new→jobN)
+        prevPoint: LatLng | null; // null = home
+        nextPoint: LatLng | null; // null = end of route
+        prevJobDepartureMs: number | null;
+        pairIdxPrevToNew: number;
+        pairIdxNewToNext: number;
+        pairIdxPrevToNext: number; // existing cost to remove
+      };
+      const gapSpecs: TeamGapSpec[] = [];
+
+      for (let ti = 0; ti < teamRoutes.length; ti++) {
+        const { team, orderedJobs } = teamRoutes[ti];
+        // Check maxJobs cap
+        const cap = team.maxJobs ?? 999;
+        if (orderedJobs.length >= cap) continue;
+
+        const homePoint: LatLng | null = team.homeLat != null && team.homeLng != null
+          ? { lat: team.homeLat, lng: team.homeLng }
+          : null;
+
+        // Gaps: 0 = insert before first job (after home), ..., N = insert after last job
+        const gapCount = orderedJobs.length + 1;
+        for (let g = 0; g < gapCount; g++) {
+          const prevPoint = g === 0 ? homePoint : (orderedJobs[g - 1].geo ?? null);
+          const nextPoint = g < orderedJobs.length ? (orderedJobs[g].geo ?? null) : null;
+
+          // We need: prev→new, new→next, prev→next (to compute delta)
+          const pairIdxPrevToNew = allPairs.length;
+          allPairs.push({ fromLat: (prevPoint ?? newPoint).lat, fromLng: (prevPoint ?? newPoint).lng, toLat: newPoint.lat, toLng: newPoint.lng });
+
+          const pairIdxNewToNext = allPairs.length;
+          if (nextPoint) {
+            allPairs.push({ fromLat: newPoint.lat, fromLng: newPoint.lng, toLat: nextPoint.lat, toLng: nextPoint.lng });
+          } else {
+            allPairs.push({ fromLat: newPoint.lat, fromLng: newPoint.lng, toLat: newPoint.lat, toLng: newPoint.lng }); // placeholder
+          }
+
+          const pairIdxPrevToNext = allPairs.length;
+          if (prevPoint && nextPoint) {
+            allPairs.push({ fromLat: prevPoint.lat, fromLng: prevPoint.lng, toLat: nextPoint.lat, toLng: nextPoint.lng });
+          } else {
+            allPairs.push({ fromLat: newPoint.lat, fromLng: newPoint.lng, toLat: newPoint.lat, toLng: newPoint.lng }); // placeholder
+          }
+
+          // Estimate suggested time: use next job's serviceDateTime if available, else prev job's departure + drive
+          const nextJobTime = g < orderedJobs.length ? orderedJobs[g].serviceDateTime : null;
+          const prevJobDep = g > 0 && orderedJobs[g - 1].serviceDateTime
+            ? new Date(orderedJobs[g - 1].serviceDateTime!).getTime() + 2 * 3600000
+            : null;
+          const suggestedTimeMs = nextJobTime
+            ? new Date(nextJobTime).getTime()
+            : prevJobDep;
+
+          gapSpecs.push({
+            teamIdx: ti,
+            gapIdx: g,
+            prevPoint,
+            nextPoint,
+            prevJobDepartureMs: prevJobDep,
+            pairIdxPrevToNew,
+            pairIdxNewToNext,
+            pairIdxPrevToNext,
+            suggestedTimeMs: suggestedTimeMs ?? null,
+          } as TeamGapSpec & { suggestedTimeMs: number | null });
+        }
+      }
+
+      // 6. Batch distance matrix for all pairs (haversine fallback)
+      const driveSecs: number[] = new Array(allPairs.length).fill(0);
+      if (allPairs.length > 0) {
+        try {
+          const CHUNK = 10;
+          for (let i = 0; i < allPairs.length; i += CHUNK) {
+            const chunk = allPairs.slice(i, i + CHUNK);
+            const origins = chunk.map(p => `${p.fromLat},${p.fromLng}`).join("|");
+            const destinations = chunk.map(p => `${p.toLat},${p.toLng}`).join("|");
+            const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+              origins,
+              destinations,
+              mode: "driving",
+              units: "metric",
+            });
+            if (result.status === "OK") {
+              chunk.forEach((pair, idx) => {
+                const el = result.rows[idx]?.elements[idx];
+                if (el?.status === "OK") {
+                  driveSecs[i + idx] = el.duration.value;
+                } else {
+                  driveSecs[i + idx] = Math.round(haversineMeters({ lat: pair.fromLat, lng: pair.fromLng }, { lat: pair.toLat, lng: pair.toLng }) / 10);
+                }
+              });
+            } else {
+              chunk.forEach((pair, idx) => {
+                driveSecs[i + idx] = Math.round(haversineMeters({ lat: pair.fromLat, lng: pair.fromLng }, { lat: pair.toLat, lng: pair.toLng }) / 10);
+              });
+            }
+          }
+        } catch {
+          allPairs.forEach((pair, idx) => {
+            driveSecs[idx] = Math.round(haversineMeters({ lat: pair.fromLat, lng: pair.fromLng }, { lat: pair.toLat, lng: pair.toLng }) / 10);
+          });
+        }
+      }
+
+      // 7. Compute insertion cost for each gap
+      for (const spec of gapSpecs as Array<TeamGapSpec & { suggestedTimeMs: number | null }>) {
+        const { team, orderedJobs } = teamRoutes[spec.teamIdx];
+        const prevToNew = driveSecs[spec.pairIdxPrevToNew];
+        const newToNext = spec.nextPoint ? driveSecs[spec.pairIdxNewToNext] : 0;
+        const prevToNext = (spec.prevPoint && spec.nextPoint) ? driveSecs[spec.pairIdxPrevToNext] : 0;
+        const addedDriveSecs = prevToNew + newToNext - prevToNext;
+
+        slots.push({
+          teamId: team.id,
+          teamName: team.name,
+          teamColor: team.color ?? "#6366f1",
+          insertPosition: spec.gapIdx,
+          suggestedTimeMs: spec.suggestedTimeMs,
+          addedDriveSecs: Math.max(0, addedDriveSecs),
+          totalTeamJobs: orderedJobs.length,
+        });
+      }
+
+      // 8. Deduplicate: keep only the best gap per team, then sort by addedDriveSecs
+      const bestByTeam = new Map<number, SlotResult>();
+      for (const s of slots) {
+        const existing = bestByTeam.get(s.teamId);
+        if (!existing || s.addedDriveSecs < existing.addedDriveSecs) {
+          bestByTeam.set(s.teamId, s);
+        }
+      }
+      const ranked = Array.from(bestByTeam.values())
+        .sort((a, b) => a.addedDriveSecs - b.addedDriveSecs)
+        .slice(0, 5);
+
+      return { slots: ranked, geocodedAddress: newGeo.formattedAddress };
+    }),
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
