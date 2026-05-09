@@ -30,6 +30,24 @@ import { eq, or } from "drizzle-orm";
 
 const OWNER_ALERT_NUMBER = "+13029816191";
 
+// Deduplication: track which vapiCallIds have already fired the "call received" notification.
+// VAPI can send multiple status-update events with status=in-progress for the same call.
+// We only want to notify once per call. The Set is in-memory — fine because calls are
+// short-lived (minutes) and the server process is long-lived. Entries are pruned after 1 hour.
+const notifiedCallIds = new Set<string>();
+const notifiedCallTimestamps = new Map<string, number>();
+const NOTIFY_DEDUP_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function pruneNotifiedCalls(): void {
+  const now = Date.now();
+  for (const [id, ts] of Array.from(notifiedCallTimestamps.entries())) {
+    if (now - ts > NOTIFY_DEDUP_TTL_MS) {
+      notifiedCallIds.delete(id);
+      notifiedCallTimestamps.delete(id);
+    }
+  }
+}
+
 // Vapi native format
 interface VapiToolCallNative {
   id: string;
@@ -336,6 +354,18 @@ export function registerVapiWebhookRoute(app: Express): void {
           if (isOutboundAlertCall || isBusinessNumberCaller) {
             console.log(`[Vapi] status-update in-progress — skipping owner SMS (outbound/internal call, phoneNumberId=${callPhoneNumberId}, caller=${callerPhone})`);
             return res.json({ received: true });
+          }
+
+          // Deduplicate: only fire once per vapiCallId
+          const vapiCallIdForNotify = callObj?.id as string | undefined;
+          if (vapiCallIdForNotify) {
+            if (notifiedCallIds.has(vapiCallIdForNotify)) {
+              console.log(`[Vapi] status-update in-progress — already notified for callId=${vapiCallIdForNotify}, skipping duplicate`);
+              return res.json({ received: true });
+            }
+            notifiedCallIds.add(vapiCallIdForNotify);
+            notifiedCallTimestamps.set(vapiCallIdForNotify, Date.now());
+            pruneNotifiedCalls();
           }
 
           const displayPhone = callerPhone || "unknown number";
