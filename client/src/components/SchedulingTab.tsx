@@ -850,6 +850,25 @@ export default function SchedulingTab() {
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
                     <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
+                    {/* Inline limit badges */}
+                    {(() => {
+                      const cfg = teamDayConfigMap.get(team.id);
+                      if (!cfg) return null;
+                      return (
+                        <div className="flex items-center gap-1">
+                          {cfg.maxJobs != null && (
+                            <span className="text-[10px] font-medium text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                              max {cfg.maxJobs}
+                            </span>
+                          )}
+                          {cfg.earliestStartTime != null && (
+                            <span className="text-[10px] font-medium text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                              after {cfg.earliestStartTime}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="ml-auto flex items-center gap-2">
                       <span className="text-xs text-gray-400">
                         {teamJobs.length} jobs · {totalHours.toFixed(1)}h
