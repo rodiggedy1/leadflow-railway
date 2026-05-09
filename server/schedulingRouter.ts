@@ -234,10 +234,12 @@ function solveVRP(
   }
 
   // ── Phase 2: Insert unassigned jobs into best team by insertion cost ─────────
-  // Insertion cost = extra total drive time added to the team's day by inserting
-  // this job at its cheapest position in the route. This is better than nearest-
-  // neighbor because it accounts for the full route context, not just proximity
-  // to a single job.
+  // Cost = drive insertion cost + load-balancing penalty.
+  // The load penalty discourages piling jobs onto already-heavy teams so that
+  // jobs spread more evenly. Fair share = totalJobs / numTeams.
+  // Penalty per extra job above fair share = 300 seconds (5 min equivalent).
+  const fairShare = (unassigned.length + Array.from(routes.values()).reduce((s, r) => s + r.length, 0)) / teams.length;
+  const LOAD_PENALTY_PER_JOB = 300; // seconds — tune this to trade off balance vs drive time
   for (const ji of unassigned) {
     const jobPointIdx = teamOffset + ji;
     let bestTeam = teams[0];
@@ -270,7 +272,10 @@ function solveVRP(
         const appendCost = travelMatrix[last]?.[jobPointIdx] ?? Infinity;
         if (appendCost < minInsertCost) minInsertCost = appendCost;
       }
-      if (minInsertCost < bestCost) { bestCost = minInsertCost; bestTeam = t; }
+      // Add load-balancing penalty: penalise teams that already exceed fair share
+      const overload = Math.max(0, route.length - fairShare);
+      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB;
+      if (totalCost < bestCost) { bestCost = totalCost; bestTeam = t; }
     }
     routes.get(bestTeam.id)!.push(ji);
   }
