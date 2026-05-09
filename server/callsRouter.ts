@@ -13,7 +13,7 @@ import { z } from "zod";
 import { router, agentProcedure, opsChatProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { callTemplates, callLog, jobIssues, cleanerJobs, scheduleAssignments, schedulingTeams } from "../drizzle/schema";
+import { callTemplates, callLog, jobIssues, cleanerJobs, cleanerProfiles, scheduleAssignments, schedulingTeams } from "../drizzle/schema";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
@@ -127,10 +127,22 @@ export const callsRouter = router({
           serviceDateTime: cleanerJobs.serviceDateTime,
           cleanerName: cleanerJobs.cleanerName,
           teamId: cleanerJobs.teamId,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
         })
         .from(cleanerJobs)
         .where(eq(cleanerJobs.id, input.cleanerJobId))
         .limit(1);
+
+      // ── 1b. Fetch cleaner phone from cleanerProfiles ─────────────────────
+      let teamPhone: string | null = null;
+      if (job?.cleanerProfileId) {
+        const [profile] = await db
+          .select({ phone: cleanerProfiles.phone })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+          .limit(1);
+        teamPhone = profile?.phone ?? null;
+      }
 
       // ── 2. Get ETA from schedule assignment if available ─────────────────
       let estimatedArrivalMs: number | null = null;
@@ -233,7 +245,8 @@ export const callsRouter = router({
           ? {
               teamName: job.teamName,
               customerName: job.customerName,
-              customerPhone: job.customerPhone,
+              customerPhone: job.customerPhone ?? null,
+              teamPhone: teamPhone ?? null,
               jobAddress: job.jobAddress,
               scheduledTime,
             }

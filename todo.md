@@ -1524,3 +1524,7 @@
 ## Fix AI Call Command Center
 - [ ] Diagnose raiseIssue "undefined" error — mirror proven Call Client VAPI pattern
 - [ ] Remove duplicate Call Client button from Team Status cards (AI Call replaces it)
+
+## Fix AI Call — phone + client template
+- [x] Join cleanerProfiles in raiseIssue to get real team phone number
+- [x] Add "Late Team — Client Notification" template to call_templates table

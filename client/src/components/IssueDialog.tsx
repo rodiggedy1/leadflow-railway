@@ -150,18 +150,16 @@ export default function IssueDialog({
       setShowVarEditor(false);
     }
   }, [open]);
-
-  // ── Pre-fill phone when job info loads ───────────────────────────────────
+  // ── Pre-fill phone when job info loads ───────────────────────────────────────
   useEffect(() => {
     if (!jobInfo) return;
     if (callTarget === "team") {
-      setCalledPhone((jobInfo as any).cleanerPhone ?? "");
+      // teamPhone is fetched from cleanerProfiles.phone server-side
+      setCalledPhone((jobInfo as any).teamPhone ?? "");
     } else {
       setCalledPhone(jobInfo.customerPhone ?? "");
     }
-  }, [jobInfo, callTarget]);
-
-  // ── Resolve script when vars or template change ───────────────────────────
+  }, [jobInfo, callTarget]); // ── Resolve script when vars or template change ───────────────────────────
   useEffect(() => {
     if (!selectedTemplate) return;
     let script = selectedTemplate.scriptTemplate;
