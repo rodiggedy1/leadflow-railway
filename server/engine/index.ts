@@ -144,7 +144,14 @@ export async function processLeadReplyV2(
 
   console.log(`[Engine] Step 2 advance: ${context.stage} → ${advance.nextStage} | usedDefault=${advance.replyContext.usedDefault} | stuck=${isStuck ? stuckCount + 1 : 0}`);
 
-  // ── REACTIVATION_TIME override (scripted closing message from DB) ──────────
+  // ── Disengagement override ────────────────────────────────────────────────────
+  // Lead stepped back ("Not ready", "I'll get back to you", etc.)
+  // Send one fixed message and go DONE. No LLM involved.
+  if (advance.replyContext.defaultDescription === "disengagement") {
+    return { reply: "Our team will reach out!", nextStage: "DONE" };
+  }
+
+  // ── REACTIVATION_TIME override (scripted closing message from DB) ──────────────────
   if (context.stage === "REACTIVATION_TIME") {
     const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
     const finalReply = await getTemplate("reactivation_closing", { "[Name]": firstName });

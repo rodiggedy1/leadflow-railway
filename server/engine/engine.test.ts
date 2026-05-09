@@ -111,9 +111,11 @@ describe("advanceStage — AVAILABILITY", () => {
     expect(result.replyContext.usedDefault).toBe(true);
   });
 
-  it("stays on AVAILABILITY when no day info", () => {
+  it("goes to DONE (disengagement) when no engagement signals at AVAILABILITY", () => {
+    // "Not ready", "I'll get back to you", etc. — AI sends one goodbye, then silent
     const result = advanceStage("AVAILABILITY", emptySignals(), ctx("AVAILABILITY"));
-    expect(result.nextStage).toBe("AVAILABILITY");
+    expect(result.nextStage).toBe("DONE");
+    expect(result.replyContext.defaultDescription).toBe("disengagement");
   });
 
   it("moves to FUTURE_BOOKING when lead wants future booking", () => {

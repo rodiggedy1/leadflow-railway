@@ -255,13 +255,16 @@ describe("processLeadReplyV2 — Flow B (Jade) integration", () => {
     expect(result.extractedData?.callPreference).toBe("now");
   });
 
-  it("Flow B AVAILABILITY stays when lead is vague (no specific day)", async () => {
+  it("Flow B AVAILABILITY goes to DONE (disengagement) when no engagement signals", async () => {
+    // When extraction returns no engagement signals, the disengagement guard fires.
+    // Engine returns fixed "Our team will reach out!" without calling LLM for reply.
     const ctx = makeContext({ smsFlow: "B", stage: "AVAILABILITY" });
     mockLLM.mockResolvedValueOnce(makeExtractionResponse({ isFlexible: false, dayPreference: null }));
-    mockLLM.mockResolvedValueOnce(makeReplyResponse("Of course! What specific day works best for you?"));
+    // No second LLM call needed — disengagement override bypasses LLM reply step
 
-    const result = await processLeadReplyV2("as soon as possible", ctx);
-    expect(result.nextStage).toBe("AVAILABILITY");
+    const result = await processLeadReplyV2("not ready", ctx);
+    expect(result.nextStage).toBe("DONE");
+    expect(result.reply).toBe("Our team will reach out!");
   });
 
   it("WIDGET_SIZING→AVAILABILITY: advances on special scope 'only the basement'", async () => {
