@@ -2244,6 +2244,10 @@ export const schedulingTeams = mysqlTable("scheduling_teams", {
   isActive: int("isActive").default(1).notNull(),
   /** Color hex for map display (e.g. "#FF6B35") */
   color: varchar("color", { length: 10 }).default("#6366f1"),
+  /** Max jobs per day — optimizer hard cap (null = no limit) */
+  maxJobs: int("maxJobs"),
+  /** Earliest start time HH:MM — optimizer skips jobs before this time (null = no restriction) */
+  earliestStartTime: varchar("earliestStartTime", { length: 5 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

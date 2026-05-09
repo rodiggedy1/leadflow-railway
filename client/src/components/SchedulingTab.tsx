@@ -36,6 +36,8 @@ interface Team {
   maxHoursPerDay: number | null;
   color: string | null;
   isActive: number;
+  maxJobs?: number | null;
+  earliestStartTime?: string | null;
   homeDriveTimeSecs?: number | null;
 }
 
@@ -331,7 +333,7 @@ function TeamDayConfigButton({
   date: string;
   config: { maxJobs: number | null; earliestStartTime: string | null } | null;
   onSave: (maxJobs: number | null, earliestStartTime: string | null) => void;
-  onCopyToTomorrow: (maxJobs: number | null, earliestStartTime: string | null) => void;
+  onCopyToTomorrow?: ((maxJobs: number | null, earliestStartTime: string | null) => void) | undefined;
 }) {
   const [open, setOpen] = React.useState(false);
   const [maxJobs, setMaxJobs] = React.useState<string>(config?.maxJobs != null ? String(config.maxJobs) : "");
@@ -361,7 +363,7 @@ function TeamDayConfigButton({
   }
 
   function handleCopyToTomorrow() {
-    onCopyToTomorrow(config?.maxJobs ?? null, config?.earliestStartTime ?? null);
+    onCopyToTomorrow?.(config?.maxJobs ?? null, config?.earliestStartTime ?? null);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -424,7 +426,7 @@ function TeamDayConfigButton({
               ✕
             </button>
           </div>
-          {hasConfig && (
+          {hasConfig && onCopyToTomorrow && (
             <button
               onClick={handleCopyToTomorrow}
               className={`w-full text-[11px] font-medium border rounded px-2 py-1 transition-colors ${
@@ -698,11 +700,9 @@ export default function SchedulingTab() {
     onSuccess: () => utils.scheduling.getTeamLocks.invalidate({ date }),
     onError: (e) => toast.error(e.message),
   });
-  // Per-team daily config (max jobs + earliest start time)
-  const { data: teamDayConfigs = [] } = trpc.scheduling.getTeamDayConfigs.useQuery({ date });
-  const teamDayConfigMap = new Map(teamDayConfigs.map((c: { teamId: number; maxJobs: number | null; earliestStartTime: string | null }) => [c.teamId, c]));
-  const setTeamDayConfig = trpc.scheduling.setTeamDayConfig.useMutation({
-    onSuccess: () => utils.scheduling.getTeamDayConfigs.invalidate({ date }),
+  // Per-team limits (max jobs + earliest start time) — stored on the team row, persist until cleared
+  const setTeamLimits = trpc.scheduling.setTeamLimits.useMutation({
+    onSuccess: () => utils.scheduling.getTeams.invalidate(),
     onError: (e) => toast.error(e.message),
   });
 
@@ -872,8 +872,8 @@ export default function SchedulingTab() {
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
                     {/* Inline limit badges */}
                     {(() => {
-                      const cfg = teamDayConfigMap.get(team.id);
-                      if (!cfg) return null;
+                      const cfg = team;
+                      if (cfg.maxJobs == null && cfg.earliestStartTime == null) return null;
                       return (
                         <div className="flex items-center gap-1">
                           {cfg.maxJobs != null && (
@@ -933,13 +933,11 @@ export default function SchedulingTab() {
                       <TeamDayConfigButton
                         teamId={team.id}
                         date={date}
-                        config={teamDayConfigMap.get(team.id) ?? null}
+                        config={{ maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
                         onSave={(maxJobs, earliestStartTime) =>
-                          setTeamDayConfig.mutate({ teamId: team.id, date, maxJobs, earliestStartTime })
+                          setTeamLimits.mutate({ teamId: team.id, maxJobs, earliestStartTime })
                         }
-                        onCopyToTomorrow={(maxJobs, earliestStartTime) =>
-                          setTeamDayConfig.mutate({ teamId: team.id, date: addDays(date, 1), maxJobs, earliestStartTime })
-                        }
+                        onCopyToTomorrow={undefined}
                       />
                     </div>
                   </div>

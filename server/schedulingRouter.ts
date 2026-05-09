@@ -437,6 +437,20 @@ export const schedulingRouter = router({
       }
     }),
 
+  setTeamLimits: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      maxJobs: z.number().nullable(),
+      earliestStartTime: z.string().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.update(schedulingTeams)
+        .set({ maxJobs: input.maxJobs ?? undefined, earliestStartTime: input.earliestStartTime ?? undefined })
+        .where(eq(schedulingTeams.id, input.teamId));
+      return { ok: true };
+    }),
   deleteTeam: agentProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
@@ -743,8 +757,8 @@ export const schedulingRouter = router({
           homeLng: t.homeLng!,
           maxHoursPerDay: t.maxHoursPerDay ?? 8,
           color: t.color ?? "#6366f1",
-          maxJobs: _dayConfigMap.get(t.id)?.maxJobs ?? null,
-          earliestStartTime: _dayConfigMap.get(t.id)?.earliestStartTime ?? null,
+          maxJobs: t.maxJobs ?? null,
+          earliestStartTime: t.earliestStartTime ?? null,
         }));
 
       if (teamConfigs.length === 0) {
