@@ -704,17 +704,12 @@ export const schedulingRouter = router({
       const _lockedTeamJobIdSet = new Set(_existingForLockedTeams.map(e => e.cleanerJobId));
       const _jobLockRows = await db.select().from(scheduleJobLocks)
         .where(eq(scheduleJobLocks.date, input.date));
-      const _jobLockMap = new Map(_jobLockRows.map(l => [l.jobId, l.lockedPosition]));
-      const _existingForLockedJobs = _jobLockMap.size > 0
-        ? await db.select().from(scheduleAssignments)
-            .where(and(
-              eq(scheduleAssignments.jobDate, input.date),
-              inArray(scheduleAssignments.cleanerJobId, Array.from(_jobLockMap.keys())),
-            ))
-        : [];
+      // _jobLockRows contains cleanerId (= teamId at lock time) and lockedPosition
+      // We do NOT query schedule_assignments for locked jobs — the assignment may have been
+      // moved by a previous optimize run. Instead we use cleanerId from the lock row directly.
       const _allLockedJobIds = new Set([
         ...Array.from(_lockedTeamJobIdSet),
-        ..._existingForLockedJobs.map(e => e.cleanerJobId),
+        ..._jobLockRows.map(l => l.jobId),
       ]);
 
       // 4. Build all points array: [team homes..., job points...]
@@ -777,12 +772,13 @@ export const schedulingRouter = router({
             estimatedDepartureMs: _ea.estimatedDepartureMs ?? Date.now(), driveTimeSecs: _ea.driveTimeSecs ?? 0,
           }]);
         }
-        for (const _ea of _existingForLockedJobs) {
-          if (_lockedTeamJobIdSet.has(_ea.cleanerJobId)) continue;
+        for (const _lockRow of _jobLockRows) {
+          if (_lockedTeamJobIdSet.has(_lockRow.jobId)) continue;
+          const _lockedTeam = teams.find(t => t.id === _lockRow.cleanerId);
           await persistAssignments(db, input.date, [{
-            cleanerJobId: _ea.cleanerJobId, teamId: _ea.teamId, teamName: _ea.teamName ?? "",
-            routeOrder: _ea.routeOrder, estimatedArrivalMs: _ea.estimatedArrivalMs ?? Date.now(),
-            estimatedDepartureMs: _ea.estimatedDepartureMs ?? Date.now(), driveTimeSecs: _ea.driveTimeSecs ?? 0,
+            cleanerJobId: _lockRow.jobId, teamId: _lockRow.cleanerId, teamName: _lockedTeam?.name ?? "",
+            routeOrder: _lockRow.lockedPosition, estimatedArrivalMs: Date.now(),
+            estimatedDepartureMs: Date.now(), driveTimeSecs: 0,
           }]);
         }
         return { assigned: simpleAssignments.length, message: `Assigned ${simpleAssignments.length} jobs (no home addresses set — add team home addresses for route optimization).` };
@@ -800,7 +796,6 @@ export const schedulingRouter = router({
       const lockedTeamIds = _lockedTeamIds;
       const existingForLockedTeams = _existingForLockedTeams;
       const lockedTeamJobIdSet = _lockedTeamJobIdSet;
-      const existingForLockedJobs = _existingForLockedJobs;
       const lockedJobIdSet = _allLockedJobIds;
 
       // Filter out all locked jobs from VRP input so solver doesn't touch them
@@ -831,18 +826,20 @@ export const schedulingRouter = router({
           driveTimeSecs: ea.driveTimeSecs ?? 0,
         });
       }
-      // Re-add individually job-locked assignments as-is (same team, same routeOrder)
-      for (const ea of existingForLockedJobs) {
+      // Re-add individually job-locked assignments using the team from the lock row (cleanerId).
+      // Do NOT use schedule_assignments — it may reflect a previous bad optimize run.
+      for (const lockRow of _jobLockRows) {
         // Skip if already covered by a team-level lock (avoid duplicates)
-        if (lockedTeamJobIdSet.has(ea.cleanerJobId)) continue;
+        if (lockedTeamJobIdSet.has(lockRow.jobId)) continue;
+        const lockedTeam = teams.find(t => t.id === lockRow.cleanerId);
         assignments.push({
-          cleanerJobId: ea.cleanerJobId,
-          teamId: ea.teamId,
-          teamName: ea.teamName ?? "",
-          routeOrder: ea.routeOrder,
-          estimatedArrivalMs: ea.estimatedArrivalMs ?? Date.now(),
-          estimatedDepartureMs: ea.estimatedDepartureMs ?? Date.now(),
-          driveTimeSecs: ea.driveTimeSecs ?? 0,
+          cleanerJobId: lockRow.jobId,
+          teamId: lockRow.cleanerId,
+          teamName: lockedTeam?.name ?? "",
+          routeOrder: lockRow.lockedPosition,
+          estimatedArrivalMs: Date.now(),
+          estimatedDepartureMs: Date.now(),
+          driveTimeSecs: 0,
         });
       }
       // 7. Preserve manual overrides
@@ -856,8 +853,8 @@ export const schedulingRouter = router({
       for (const ea of existingForLockedTeams) {
         manualJobIds.add(ea.cleanerJobId);
       }
-      for (const ea of existingForLockedJobs) {
-        manualJobIds.add(ea.cleanerJobId);
+      for (const lockRow of _jobLockRows) {
+        manualJobIds.add(lockRow.jobId);
       }
       // 7b. Job-locked jobs were excluded from VRP entirely and restored verbatim above.
       // Their routeOrder from the existing assignment is already correct — no re-ordering needed.
