@@ -26,6 +26,7 @@ export interface LeadSignals {
   quotedPrice: string | null;
   isPositiveReply: boolean;
   isUrgent: boolean;
+  isComplaint: boolean;
 }
 
 export const LEAD_SIGNALS_JSON_SCHEMA = {
@@ -51,12 +52,13 @@ export const LEAD_SIGNALS_JSON_SCHEMA = {
       quotedPrice:        { type: ["string", "null"], description: "Price quoted if mentioned (numeric string). null if not mentioned." },
       isPositiveReply:    { type: "boolean", description: "true if the lead expressed general agreement or interest (yes, sure, sounds good, let's do it, great, ok, definitely, absolutely, etc.)" },
       isUrgent:           { type: "boolean", description: "true if the lead wants service as soon as possible (ASAP, as soon as you can, right away, urgent, etc.)" },
+      isComplaint:        { type: "boolean", description: "true if the message is a complaint, grievance, or service issue — e.g. cleaner didn't show up, bad cleaning, damage, late arrival, wrong date, overcharge, or any expression of dissatisfaction with a past or current service." },
     },
     required: [
       "bedrooms", "bathrooms", "timeSlot", "dayPreference", "address",
       "callPreference", "specialScope", "optOut", "isFlexible", "hasTiming", "questions",
       "wantsFutureBooking", "isExistingCustomer", "serviceType", "quotedPrice",
-      "isPositiveReply", "isUrgent",
+      "isPositiveReply", "isUrgent", "isComplaint",
     ],
     additionalProperties: false,
   },
@@ -91,6 +93,7 @@ EXTRACTION RULES:
 - isExistingCustomer: true if they mention an existing booking or need support.
 - isPositiveReply: true if the lead said yes, sure, sounds good, ok, great, let's do it, definitely, absolutely, or any general agreement.
 - isUrgent: true if the lead said ASAP, as soon as possible, as soon as you can, right away, urgent, or similar urgency signals.
+- isComplaint: true if the message is a complaint or service issue — cleaner didn't show up, bad cleaning, damage, late arrival, wrong date, overcharge, or any dissatisfaction with a past or current service. Also true for messages that are clearly not about booking a new service.
 
 Return ONLY valid JSON. No explanation, no markdown.`;
 }

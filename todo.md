@@ -1537,3 +1537,4 @@
 - [x] Show call status updates in real-time (poll faster when there are "fired"/"pending" calls in log)
 - [x] Rename "⚠ AI Call" button to "Call with AI" on team cards in CommandChat
 - [x] Show "AI called at [time]" indicator on team card after a call is fired (from call log data, persists across refresh)
+- [x] Add intent detection guard: if inbound message shows no booking intent (complaint, no-show, cancellation, existing customer issue), AI must not respond — flag for human review instead

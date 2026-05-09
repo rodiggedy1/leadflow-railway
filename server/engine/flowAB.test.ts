@@ -53,6 +53,7 @@ function makeExtractionResponse(signals: Partial<LeadSignals>) {
     address: null, callPreference: null, specialScope: null, optOut: false,
     isFlexible: false, questions: [], wantsFutureBooking: false,
     isExistingCustomer: false, serviceType: null, quotedPrice: null,
+    isPositiveReply: false, isUrgent: false, hasTiming: false, isComplaint: false,
     ...signals,
   };
   return { choices: [{ message: { content: JSON.stringify(full) } }] };

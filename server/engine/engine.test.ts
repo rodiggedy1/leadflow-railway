@@ -29,6 +29,10 @@ function emptySignals(overrides: Partial<LeadSignals> = {}): LeadSignals {
     isExistingCustomer: false,
     serviceType: null,
     quotedPrice: null,
+    isPositiveReply: false,
+    isUrgent: false,
+    hasTiming: false,
+    isComplaint: false,
     ...overrides,
   };
 }

@@ -108,7 +108,14 @@ export async function processLeadReplyV2(
     return { reply: fallbackReply, nextStage: context.stage };
   }
 
-  console.log(`[Engine] Step 1 signals: timeSlot=${signals.timeSlot}, dayPref=${signals.dayPreference}, isFlexible=${signals.isFlexible}, questions=${signals.questions.length}`);
+  console.log(`[Engine] Step 1 signals: timeSlot=${signals.timeSlot}, dayPref=${signals.dayPreference}, isFlexible=${signals.isFlexible}, questions=${signals.questions.length}, isExistingCustomer=${signals.isExistingCustomer}, isComplaint=${signals.isComplaint}`);
+
+  // ── Intent guard: do NOT respond if message is a complaint or existing-customer issue ──
+  // These are not new booking inquiries — a human must handle them.
+  if (signals.isComplaint || signals.isExistingCustomer) {
+    console.log(`[Engine] Skipping AI reply — non-booking intent detected (isComplaint=${signals.isComplaint}, isExistingCustomer=${signals.isExistingCustomer}) from ${context.leadPhone}`);
+    return null;
+  }
 
   // ── Step 2: ADVANCE (deterministic) ───────────────────────────────────────
   let advance = advanceStage(context.stage, signals, context);
