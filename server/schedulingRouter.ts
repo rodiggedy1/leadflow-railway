@@ -57,6 +57,7 @@ interface TeamConfig {
   minJobs?: number | null;         // per-day job floor (null = no floor)
   maxJobs?: number | null;         // per-day job cap (null = no cap)
   earliestStartTime?: string | null; // "HH:MM" earliest first job start
+  lockedJobCount?: number;          // jobs already locked to this team (excluded from VRP pool)
 }
 
 interface Assignment {
@@ -251,11 +252,14 @@ function solveVRP(
     let bestTeam: TeamConfig | null = null;
     let bestCost = Infinity;
     // First pass: respect maxJobs hard cap
+    // totalJobCount = locked jobs already on this team + jobs assigned so far by VRP
     for (const t of teams) {
       const route = routes.get(t.id)!;
+      const locked = t.lockedJobCount ?? 0;
+      const totalJobCount = locked + route.length; // total jobs this team will have
       const totalHours = route.reduce((s, rji) => s + jobs[rji].durationHours, 0);
       if (totalHours >= t.maxHoursPerDay) continue; // team full (hours)
-      if (t.maxJobs != null && route.length >= t.maxJobs) continue; // team full (job cap — hard limit)
+      if (t.maxJobs != null && totalJobCount >= t.maxJobs) continue; // team full (job cap — hard limit vs total)
       // Enforce earliest start time: skip this team if the job starts before the team's window
       if (t.earliestStartTime != null) {
         const jobDt = jobs[ji].serviceDateTime; // ISO string or null
@@ -289,10 +293,10 @@ function solveVRP(
         if (appendCost < minInsertCost) minInsertCost = appendCost;
       }
       // Add load-balancing penalty: penalise teams that already exceed fair share
-      const overload = Math.max(0, route.length - fairShare);
-      // Strong bonus for teams below their minJobs floor — makes floor effectively a hard preference
-      const floorBonus = (t.minJobs != null && route.length < t.minJobs)
-        ? (t.minJobs - route.length) * FLOOR_BONUS_PER_JOB
+      const overload = Math.max(0, totalJobCount - fairShare);
+      // Strong bonus for teams below their minJobs floor — compare against total job count
+      const floorBonus = (t.minJobs != null && totalJobCount < t.minJobs)
+        ? (t.minJobs - totalJobCount) * FLOOR_BONUS_PER_JOB
         : 0;
       const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus;
       if (totalCost < bestCost) { bestCost = totalCost; bestTeam = t; }
@@ -863,7 +867,20 @@ export const schedulingRouter = router({
       // Filter out all locked jobs from VRP input so solver doesn't touch them
       const vrpGeocodedJobs = geocoded.filter(j => !lockedJobIdSet.has(j.cleanerJobId));
       // Exclude locked teams from VRP so solver cannot assign new jobs to them
-      const vrpTeamConfigs = teamConfigs.filter(t => !lockedTeamIds.has(t.id));
+      // Compute how many jobs are already locked to each team so maxJobs/minJobs
+      // are enforced against the TOTAL (locked + newly assigned), not just new ones.
+      const lockedCountByTeam = new Map<number, number>();
+      for (const ea of existingForLockedTeams) {
+        lockedCountByTeam.set(ea.teamId, (lockedCountByTeam.get(ea.teamId) ?? 0) + 1);
+      }
+      for (const lockRow of _jobLockRows) {
+        // Skip jobs already counted via team-level lock
+        if (lockedTeamJobIdSet.has(lockRow.jobId)) continue;
+        lockedCountByTeam.set(lockRow.cleanerId, (lockedCountByTeam.get(lockRow.cleanerId) ?? 0) + 1);
+      }
+      const vrpTeamConfigs = teamConfigs
+        .filter(t => !lockedTeamIds.has(t.id))
+        .map(t => ({ ...t, lockedJobCount: lockedCountByTeam.get(t.id) ?? 0 }));
       // Rebuild allPoints and travelMatrix for the filtered job set
       const vrpAllPoints: LatLng[] = [
         ...vrpTeamConfigs.map(t => ({ lat: t.homeLat, lng: t.homeLng })),
