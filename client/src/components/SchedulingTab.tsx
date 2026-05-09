@@ -23,7 +23,7 @@ import { toast } from "sonner";
 import {
   Sparkles, Settings2, ChevronLeft, ChevronRight, MapPin,
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
-  GripVertical, RotateCcw, Lock, Unlock, X,
+  GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1043,20 +1043,20 @@ export default function SchedulingTab() {
                       return (
                         <div className="flex items-center gap-1">
                           {cfg.minJobs != null && (
-                            <span className="text-[10px] font-medium text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
-                              min {cfg.minJobs}
-                            </span>
-                          )}
-                          {cfg.maxJobs != null && (
-                            <span className="text-[10px] font-medium text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                              max {cfg.maxJobs}
-                            </span>
-                          )}
-                          {cfg.earliestStartTime != null && (
-                            <span className="text-[10px] font-medium text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
-                              after {fmtTime(cfg.earliestStartTime)}
-                            </span>
-                          )}
+                             <span title={`Min ${cfg.minJobs} jobs`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
+                               <ArrowDown className="w-2.5 h-2.5" />{cfg.minJobs}
+                             </span>
+                           )}
+                           {cfg.maxJobs != null && (
+                             <span title={`Max ${cfg.maxJobs} jobs`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                               <ArrowUp className="w-2.5 h-2.5" />{cfg.maxJobs}
+                             </span>
+                           )}
+                           {cfg.earliestStartTime != null && (
+                             <span title={`Start after ${fmtTime(cfg.earliestStartTime)}`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                               <Timer className="w-2.5 h-2.5" />{fmtTime(cfg.earliestStartTime)}
+                             </span>
+                           )}
                         </div>
                       );
                     })()}
