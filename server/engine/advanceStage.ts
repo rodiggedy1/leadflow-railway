@@ -75,26 +75,6 @@ export function advanceStage(
     return { nextStage: "FUTURE_BOOKING", persistedData: persisted, replyContext: replyCtx };
   }
 
-  // ── Disengagement guard ────────────────────────────────────────────────────
-  // If the lead has zero engagement signals — no timing, no rooms, no address,
-  // no positive reply, no urgency, no questions — they are stepping back.
-  // Could be "Not ready", "I'll get back to you", "maybe later", a complaint,
-  // or just not interested. We don't know why and we don't assume.
-  // Send ONE graceful acknowledgment and go DONE. AI never replies again.
-  // Exception: WIDGET_SIZING needs room counts so we can't exit on silence there.
-  const hasAnyEngagement = !!(signals.dayPreference || signals.timeSlot || signals.isFlexible ||
-    signals.isUrgent || signals.isPositiveReply || signals.hasTiming ||
-    signals.bedrooms || signals.bathrooms || signals.address || signals.specialScope ||
-    signals.questions.length > 0);
-  // Only apply disengagement guard to stages where a non-engaging reply means "not interested".
-  // Do NOT apply to CONFIRMATION, ADDRESS, SLOT_CHOICE, TIME_PREF — those stages expect
-  // short replies that may not have timing/room signals.
-  const DISENGAGEMENT_ELIGIBLE_STAGES = new Set(["QUOTE_SENT", "AVAILABILITY", "REACTIVATION"]);
-  if (!hasAnyEngagement && DISENGAGEMENT_ELIGIBLE_STAGES.has(stage)) {
-    console.log(`[advanceStage] Disengagement detected at stage=${stage} — transitioning to DONE`);
-    return { nextStage: "DONE", persistedData: persisted, replyContext: { ...replyCtx, usedDefault: true, defaultDescription: "disengagement" } };
-  }
-
   // ── Persist any extracted data regardless of stage ─────────────────────────
   if (signals.bedrooms)    persisted.bedrooms    = signals.bedrooms;
   if (signals.bathrooms)   persisted.bathrooms   = signals.bathrooms;
