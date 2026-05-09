@@ -441,11 +441,17 @@ function TeamDayConfigButton({
     if (!open || !btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
     const popoverWidth = 256;
+    const popoverHeight = 320; // estimated height
     let left = rect.right - popoverWidth;
     if (left < 8) left = 8;
+    // Flip above the button if there isn't enough space below
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow >= popoverHeight + 8
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - popoverHeight - 4);
     setPopoverStyle({
       position: 'fixed',
-      top: rect.bottom + 4,
+      top,
       left,
       width: popoverWidth,
       zIndex: 9999,
