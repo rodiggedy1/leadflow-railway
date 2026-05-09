@@ -191,11 +191,22 @@ function JobCard({
     },
     onError: (e) => toast.error(e.message),
   });
+  const lockJobMutation = trpc.scheduling.lockJob.useMutation({
+    onSuccess: () => utils.scheduling.getJobLocks.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
   const manualAssign = trpc.scheduling.manualAssign.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       utils.scheduling.getSchedule.invalidate({ date });
+      // Auto-lock the job to the newly assigned team so it survives the next optimize
+      lockJobMutation.mutate({
+        jobId: job.id,
+        date,
+        cleanerId: variables.teamId,
+        lockedPosition: job.assignment?.routeOrder ?? 0,
+      });
       setShowReassign(false);
-      toast.success("Job reassigned");
+      toast.success("Job reassigned & locked");
     },
     onError: (e) => toast.error(e.message),
   });
