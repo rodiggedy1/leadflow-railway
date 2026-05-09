@@ -117,6 +117,7 @@ export default function IssueDialog({
   const [callTarget, setCallTarget] = useState<"team" | "client">("team");
   const [calledPhone, setCalledPhone] = useState("");
   const [showVarEditor, setShowVarEditor] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // ── Server mutations ─────────────────────────────────────────────────────
   const raiseIssue = trpc.calls.raiseIssue.useMutation();
@@ -202,16 +203,22 @@ export default function IssueDialog({
   }
 
   // ── Step 3: fire call ─────────────────────────────────────────────────────
-  async function handleFireCall() {
+  function handleFireCallClick() {
     if (!issueId || !selectedTemplate || !resolvedScript || !calledPhone) {
       toast.error("Please fill in all required fields");
       return;
     }
+    setShowConfirm(true);
+  }
+
+  async function handleFireCall() {
+    setShowConfirm(false);
+    if (!issueId || !selectedTemplate) return;
     await fireCall.mutateAsync({
-      issueId,
+      issueId: issueId!,
       cleanerJobId,
       jobDate,
-      templateId: selectedTemplate.id,
+      templateId: selectedTemplate!.id,
       resolvedScript,
       calledTarget: callTarget,
       calledPhone,
@@ -222,6 +229,7 @@ export default function IssueDialog({
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <>
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -414,7 +422,7 @@ export default function IssueDialog({
           </Button>
           {step === "review" && (
             <Button
-              onClick={handleFireCall}
+              onClick={handleFireCallClick}
               disabled={fireCall.isPending || !calledPhone || !resolvedScript}
               className="gap-2 bg-orange-600 hover:bg-orange-700 text-white"
             >
@@ -428,5 +436,39 @@ export default function IssueDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* ── Confirmation popup ── */}
+    <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PhoneCall className="w-5 h-5 text-orange-500" />
+            Confirm Call
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-gray-600">
+            Placing a call to <span className="font-semibold">{callTarget === "team" ? jobInfo?.teamName ?? "Team" : jobInfo?.customerName ?? "Client"}</span>
+          </p>
+          <p className="text-sm font-mono bg-gray-50 rounded px-3 py-2 text-gray-800">{calledPhone}</p>
+          <p className="text-xs text-gray-400 italic line-clamp-3">{resolvedScript}</p>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+          <Button
+            onClick={handleFireCall}
+            disabled={fireCall.isPending}
+            className="gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+          >
+            {fireCall.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Calling…</>
+            ) : (
+              <><PhoneCall className="w-4 h-4" /> Confirm &amp; Call</>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

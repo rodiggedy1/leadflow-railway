@@ -368,7 +368,14 @@ export const callsRouter = router({
               style: 0.3,
               useSpeakerBoost: true,
             },
-            maxDurationSeconds: 25,
+            maxDurationSeconds: 40,
+            voicemailDetection: {
+              provider: "twilio",
+              voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"],
+              enabled: true,
+              machineDetectionTimeout: 8,
+            },
+            voicemailMessage: input.resolvedScript,
           },
         };
 
