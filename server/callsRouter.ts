@@ -126,7 +126,6 @@ export const callsRouter = router({
           jobAddress: cleanerJobs.jobAddress,
           serviceDateTime: cleanerJobs.serviceDateTime,
           cleanerName: cleanerJobs.cleanerName,
-          cleanerPhone: (cleanerJobs as any).cleanerPhone,
           teamId: cleanerJobs.teamId,
         })
         .from(cleanerJobs)
@@ -237,7 +236,6 @@ export const callsRouter = router({
               customerPhone: job.customerPhone,
               jobAddress: job.jobAddress,
               scheduledTime,
-              cleanerPhone: (job as any).cleanerPhone ?? null,
             }
           : null,
       };
