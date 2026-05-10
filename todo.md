@@ -1544,3 +1544,5 @@
 - [x] Store assignment rationale per job in schedule_assignments
 - [x] Add info icon + rationale popup on each job card in schedule page
 - [x] Add recurring / new client / move-in-move-out badges to schedule page job cards
+- [x] Show frequency label under address on schedule page job cards
+- [x] Add badge filter bar to schedule page (filter by New / Recurring / Move In/Out)

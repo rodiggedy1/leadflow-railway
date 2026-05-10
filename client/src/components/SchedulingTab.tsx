@@ -284,8 +284,18 @@ function JobCard({
                 <MapPin className="w-3 h-3 shrink-0" />
                 <span className="truncate">{job.jobAddress ?? "No address"}</span>
               </div>
-              {job.serviceType && (
-                <div className="text-xs text-gray-400 mt-0.5 truncate">{job.serviceType}</div>
+              {(job.serviceType || job.frequency) && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {job.serviceType && (
+                    <span className="text-xs text-gray-400 truncate">{job.serviceType}</span>
+                  )}
+                  {job.frequency && (
+                    <>
+                      {job.serviceType && <span className="text-gray-300 text-xs">·</span>}
+                      <span className="text-xs text-indigo-400 font-medium truncate">{job.frequency.replace(/\s*\(.*?\)/g, "").trim()}</span>
+                    </>
+                  )}
+                </div>
               )}
               {!job.assignment && (
                 <div className="flex items-center gap-1 mt-1 text-xs font-medium text-amber-600">
@@ -1033,11 +1043,25 @@ export default function SchedulingTab() {
   const teams: Team[] = (data?.teams ?? []) as Team[];
   const hasAssignments = data?.hasAssignments ?? false;
 
-  // Group jobs by assigned team
+  // Badge filter state
+  const [badgeFilter, setBadgeFilter] = useState<"new" | "recurring" | "moveinout" | null>(null);
+
+  // Filter jobs by active badge filter
+  const filteredJobs = badgeFilter === "new" ? jobs.filter(j => j.isNewClient)
+    : badgeFilter === "recurring" ? jobs.filter(j => j.isRecurring)
+    : badgeFilter === "moveinout" ? jobs.filter(j => j.isMoveInOut)
+    : jobs;
+
+  // Counts for badge filter pills
+  const newCount = jobs.filter(j => j.isNewClient).length;
+  const recurringCount = jobs.filter(j => j.isRecurring).length;
+  const moveInOutCount = jobs.filter(j => j.isMoveInOut).length;
+
+  // Group jobs by assigned team (use filteredJobs so badge filter applies)
   const teamGroups = new Map<number | null, Job[]>();
   teamGroups.set(null, []);
   for (const t of teams) teamGroups.set(t.id, []);
-  for (const job of jobs) {
+  for (const job of filteredJobs) {
     const tid = job.assignment?.teamId ?? null;
     if (!teamGroups.has(tid)) teamGroups.set(tid, []);
     teamGroups.get(tid)!.push(job);
@@ -1056,6 +1080,52 @@ export default function SchedulingTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Badge filter bar */}
+      {(newCount > 0 || recurringCount > 0 || moveInOutCount > 0) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-400 font-medium">Filter:</span>
+          <button
+            onClick={() => setBadgeFilter(badgeFilter === "new" ? null : "new")}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+              badgeFilter === "new"
+                ? "bg-emerald-500 text-white border-emerald-500"
+                : "bg-emerald-50 text-emerald-600 border-emerald-200 hover:border-emerald-400"
+            }`}
+          >
+            New <span className="opacity-70">{newCount}</span>
+          </button>
+          <button
+            onClick={() => setBadgeFilter(badgeFilter === "recurring" ? null : "recurring")}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+              badgeFilter === "recurring"
+                ? "bg-blue-500 text-white border-blue-500"
+                : "bg-blue-50 text-blue-600 border-blue-200 hover:border-blue-400"
+            }`}
+          >
+            Recurring <span className="opacity-70">{recurringCount}</span>
+          </button>
+          {moveInOutCount > 0 && (
+            <button
+              onClick={() => setBadgeFilter(badgeFilter === "moveinout" ? null : "moveinout")}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                badgeFilter === "moveinout"
+                  ? "bg-purple-500 text-white border-purple-500"
+                  : "bg-purple-50 text-purple-600 border-purple-200 hover:border-purple-400"
+              }`}
+            >
+              Move In/Out <span className="opacity-70">{moveInOutCount}</span>
+            </button>
+          )}
+          {badgeFilter && (
+            <button
+              onClick={() => setBadgeFilter(null)}
+              className="text-xs text-gray-400 hover:text-gray-600 underline"
+            >
+              Clear filter
+            </button>
+          )}
+        </div>
+      )}
       {/* Top bar */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Date nav */}
