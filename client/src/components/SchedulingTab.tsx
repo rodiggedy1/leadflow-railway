@@ -413,7 +413,11 @@ function JobCard({
                 <Sparkles className="w-3.5 h-3.5 text-blue-500" />
                 <span className="text-xs font-semibold text-blue-700">Why this works</span>
               </div>
-              <p className="text-sm text-gray-700 leading-snug">{a.rationale.summary}</p>
+              <p className="text-sm text-gray-700 leading-snug">
+                {(!a.rationale.wasLocked && a.rationale.summary?.toLowerCase().includes('existing launch27'))
+                  ? `Best route fit — assigned by optimizer`
+                  : a.rationale.summary}
+              </p>
             </div>
             {/* Factors weighed */}
             <div className="px-4 pb-1">

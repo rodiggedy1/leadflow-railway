@@ -1552,3 +1552,4 @@
 - [x] Add home-return tiebreaker to VRP optimizer (last-position bonus for jobs on the way home, weighted after cluster fit)
 - [x] Add home-return factor row to rationale popup
 - [x] Add conflict count badge to team header
+- [x] Fix rationale popup: sanitize stale "Existing Launch27 assignment" summary text when wasLocked=false (show generic optimizer summary instead)
