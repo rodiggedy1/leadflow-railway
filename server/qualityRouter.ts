@@ -1637,6 +1637,7 @@ export const qualityRouter = router({
               serviceType: serviceNames || null,
               bedrooms: booking.bedrooms ?? null,
               bathrooms: booking.bathrooms ?? null,
+              frequency: booking.frequency || null,
               bookingStatus: booking.bookingStatus,
               customerNotes: booking.customerNotes || null,
               staffNotes: booking.staffNotes || null,

@@ -57,6 +57,10 @@ interface Job {
   serviceDateTime: string | null;
   teamName: string | null;
   bookingStatus: string | null;
+  frequency?: string | null;
+  isNewClient?: boolean;
+  isMoveInOut?: boolean;
+  isRecurring?: boolean;
   assignment: {
     teamId: number;
     teamName: string | null;
@@ -261,10 +265,19 @@ function JobCard({
           <div className="flex items-start gap-2">
             <GripVertical className="w-4 h-4 text-gray-300 mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
                 <span className="font-medium text-sm text-gray-900 truncate">{job.customerName ?? "Unknown"}</span>
                 {a?.isManual === 1 && (
                   <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-amber-300 text-amber-600">Manual</Badge>
+                )}
+                {job.isNewClient && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-emerald-400 text-emerald-600 bg-emerald-50">New</Badge>
+                )}
+                {job.isRecurring && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-blue-300 text-blue-600 bg-blue-50">Recurring</Badge>
+                )}
+                {job.isMoveInOut && (
+                  <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-purple-300 text-purple-600 bg-purple-50">Move In/Out</Badge>
                 )}
               </div>
               <div className="flex items-center gap-1 text-xs text-gray-400">

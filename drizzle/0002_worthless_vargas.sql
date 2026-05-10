@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_jobs` ADD `frequency` varchar(100);

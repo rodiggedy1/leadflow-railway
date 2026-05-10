@@ -1543,3 +1543,4 @@
 - [x] Add team rating as secondary tiebreaker in VRP optimizer
 - [x] Store assignment rationale per job in schedule_assignments
 - [x] Add info icon + rationale popup on each job card in schedule page
+- [x] Add recurring / new client / move-in-move-out badges to schedule page job cards

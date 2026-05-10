@@ -714,6 +714,7 @@ export const schedulingRouter = router({
         }
       }
 
+      // Build a helper to detect job type badges from the job's fields
       const enriched = jobs.map(j => {
         const savedAssignment = assignmentMap.get(j.id);
         // isManual=2 is a sentinel meaning "explicitly unassigned" — treat as no assignment
@@ -739,8 +740,15 @@ export const schedulingRouter = router({
             }
           : null;
         const baseAssignment = isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment);
+        // Compute badge flags
+        const isNewClient = j.bookingStatus === "new";
+        const isMoveInOut = /move.?in|move.?out/i.test(j.serviceType ?? "");
+        const isRecurring = !!j.frequency && !/one.?time/i.test(j.frequency);
         return {
           ...j,
+          isNewClient,
+          isMoveInOut,
+          isRecurring,
           assignment: baseAssignment ? { ...baseAssignment, rationale: parsedRationale } : null,
         };
       });
