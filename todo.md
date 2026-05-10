@@ -1553,3 +1553,4 @@
 - [x] Add home-return factor row to rationale popup
 - [x] Add conflict count badge to team header
 - [x] Fix rationale popup: sanitize stale "Existing Launch27 assignment" summary text when wasLocked=false (show generic optimizer summary instead)
+- [x] Fix root cause: locked/inserted split in solveVRP used teamName+serviceDateTime (true for ALL Launch27 jobs) — now uses jobRationale.has(ji) so only genuinely locked jobs get wasLocked=true rationale

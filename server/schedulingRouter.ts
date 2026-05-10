@@ -401,9 +401,12 @@ function solveVRP(
     const team = teams.find(t => t.id === teamId)!;
     const teamIdx = teams.findIndex(t => t.id === teamId);
 
-    // Separate locked (have Launch27 team + serviceDateTime) from newly inserted
-    const locked = route.filter(ji => !!jobs[ji].serviceDateTime && !!jobs[ji].teamName);
-    const inserted = route.filter(ji => !jobs[ji].serviceDateTime || !jobs[ji].teamName);
+    // Separate time-ordered jobs (have a real serviceDateTime for display) from VRP-placed jobs.
+    // Use jobRationale.has(ji) to detect VRP-placed jobs — ALL jobs from Launch27 have both
+    // serviceDateTime and teamName, so the old teamName check incorrectly marked every job as
+    // "locked" (Existing Launch27 assignment). VRP-placed jobs always have a rationale entry.
+    const inserted = route.filter(ji => jobRationale.has(ji));
+    const locked = route.filter(ji => !jobRationale.has(ji) && !!jobs[ji].serviceDateTime);
 
     // Sort locked jobs chronologically
     locked.sort((a, b) =>
