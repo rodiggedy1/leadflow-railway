@@ -85,6 +85,8 @@ interface AssignmentRationale {
   floorBonus: number;
   /** Whether this job was locked (existing assignment preserved) */
   wasLocked: boolean;
+  /** Home-return bonus applied (seconds equivalent) */
+  homeReturnBonus?: number;
   /** Human-readable summary */
   summary: string;
 }
@@ -326,7 +328,25 @@ function solveVRP(
       const ratingBonus = t.avgRating != null
         ? (t.avgRating - 3.0) * RATING_BONUS_PER_STAR
         : 0;
-      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus - ratingBonus;
+      // Tertiary home-return bonus: if this job is appended last AND the team has a home,
+      // reward jobs that reduce the end-of-day drive back home.
+      // Weight = 12% of the home-return drive saved — small enough to never override
+      // cluster fit or route geometry, but meaningful as a final tiebreaker.
+      const HOME_RETURN_WEIGHT = 0.12;
+      let homeReturnBonus = 0;
+      if (t.homeLat != null && t.homeLng != null) {
+        const teamHomeIdx = teams.indexOf(t); // home is at teamIdx in travelMatrix
+        const last = seq[seq.length - 1];
+        // Current cost of last job → home (without the new job)
+        const currentLastToHome = travelMatrix[last]?.[teamHomeIdx] ?? 0;
+        // Cost if new job is appended last: last→new + new→home
+        const newLastToHome = (travelMatrix[last]?.[jobPointIdx] ?? Infinity)
+          + (travelMatrix[jobPointIdx]?.[teamHomeIdx] ?? 0);
+        // Bonus = how much the home-return leg is reduced by placing this job last
+        const homeReturnSaving = currentLastToHome - newLastToHome;
+        homeReturnBonus = homeReturnSaving * HOME_RETURN_WEIGHT;
+      }
+      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus - ratingBonus - homeReturnBonus;
       if (totalCost < bestCost) {
         bestCost = totalCost;
         bestTeam = t;
@@ -338,6 +358,7 @@ function solveVRP(
         if (ratingStr) summary += `, team rated ${ratingStr}⭐`;
         if (floorBonus > 0) summary += `, team needs more jobs`;
         if (overloadSecs > 0) summary += `, load-balanced`;
+        if (homeReturnBonus > 0) summary += `, on the way home`;
         jobRationale.set(ji, {
           driveCostSecs: minInsertCost,
           ratingBonus: Math.round(ratingBonus),
@@ -345,6 +366,7 @@ function solveVRP(
           loadPenaltySecs: Math.round(overloadSecs),
           floorBonus: Math.round(floorBonus),
           wasLocked: false,
+          homeReturnBonus: Math.round(homeReturnBonus),
           summary,
         });
       }
