@@ -1550,3 +1550,5 @@
 - [x] Add red time-conflict alert on job cards when two jobs on same team overlap
 - [x] Fix rationale bug: unassigned jobs with serviceDateTime incorrectly labeled "Existing Launch27 assignment" — now only shows Existing assignment row when wasLocked=true
 - [x] Add home-return tiebreaker to VRP optimizer (last-position bonus for jobs on the way home, weighted after cluster fit)
+- [x] Add home-return factor row to rationale popup
+- [x] Add conflict count badge to team header

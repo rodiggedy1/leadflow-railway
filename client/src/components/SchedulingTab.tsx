@@ -76,6 +76,7 @@ interface Job {
       loadPenaltySecs: number;
       floorBonus: number;
       wasLocked: boolean;
+      homeReturnBonus?: number;
       summary: string;
     } | null;
   } | null;
@@ -459,6 +460,15 @@ function JobCard({
                   <div>
                     <p className="text-sm font-semibold text-gray-800">Existing assignment</p>
                     <p className="text-xs text-gray-400">Preserved from Launch27</p>
+                  </div>
+                </div>
+              )}
+              {(a.rationale.homeReturnBonus != null && a.rationale.homeReturnBonus > 0) && (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                  <Home className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">On the way home</p>
+                    <p className="text-xs text-gray-400">Reduces end-of-day commute · saves ~{Math.round(a.rationale.homeReturnBonus / 60)} min equivalent</p>
                   </div>
                 </div>
               )}
@@ -1385,6 +1395,7 @@ export default function SchedulingTab() {
 
               const isUnavailable = unavailableSet.has(team.id);
               const isTeamLocked = lockedTeamSet.has(team.id);
+              const teamConflictCount = teamJobs.filter(j => conflictJobIds.has(j.id)).length;
               return (
                 <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${isUnavailable ? "opacity-50 border-red-200" : "border-gray-100"}`}>
                   {/* Team header */}
@@ -1392,6 +1403,14 @@ export default function SchedulingTab() {
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
                     <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
+                    {teamConflictCount > 0 && (
+                      <span
+                        title={`${teamConflictCount} job${teamConflictCount > 1 ? 's have' : ' has'} a time conflict — ask clients to adjust`}
+                        className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded"
+                      >
+                        ⚠ {teamConflictCount} conflict{teamConflictCount > 1 ? 's' : ''}
+                      </span>
+                    )}
                     {team.avgRating != null && (
                       <span
                         title={`Avg rating: ${team.avgRating.toFixed(2)} ⭐ from ${team.ratingCount} job${team.ratingCount === 1 ? '' : 's'}`}
