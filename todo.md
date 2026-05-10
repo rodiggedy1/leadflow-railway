@@ -1557,3 +1557,4 @@
 - [x] Add "Lock All" button to scheduling tab header — locks all assigned jobs using existing single-job lock procedure
 - [x] Fix VRP: first job per team must be closest to home, subsequent jobs chain from there (nearest-neighbor from current position, not insertion into arbitrary route)
 - [x] Fix FLOOR_BONUS_PER_JOB: was 100,000s (overrode geography entirely), reduced to 1,200s (20 min equivalent) so geography always wins when distance difference is significant
+- [x] Fix VRP distribution: two-pass approach — first pass seeds every team below minJobs floor with their closest available job, second pass fills remaining jobs by geography+chaining

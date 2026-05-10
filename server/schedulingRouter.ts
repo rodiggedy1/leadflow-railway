@@ -274,7 +274,59 @@ function solveVRP(
   // the distance difference is significant.
   const FLOOR_BONUS_PER_JOB = 1_200; // seconds — strong preference but geography dominates
 
-  // Sort unassigned jobs so that jobs closest to ANY team's home are processed first.
+  // ── Pre-seed pass: guarantee every team hits its minJobs floor before extras are assigned ──
+  // For each team that has fewer jobs than its minJobs minimum, assign its single closest
+  // available job (home→job distance). This runs repeatedly until no team is below floor
+  // or no jobs remain. Only after every team has its minimum do we proceed to the main loop.
+  const jobRationale = new Map<number, AssignmentRationale>();
+  {
+    let progress = true;
+    while (progress && unassigned.length > 0) {
+      progress = false;
+      for (const t of teams) {
+        const route = routes.get(t.id)!;
+        const locked = t.lockedJobCount ?? 0;
+        const totalJobCount = locked + route.length;
+        if (t.minJobs == null || totalJobCount >= t.minJobs) continue;
+        // This team is below its floor — find its closest available job
+        const teamIdx = teams.indexOf(t);
+        let bestJi = -1;
+        let bestDist = Infinity;
+        for (const ji of unassigned) {
+          // Respect maxJobs hard cap
+          if (t.maxJobs != null && totalJobCount >= t.maxJobs) break;
+          // Respect hours cap
+          const totalHours = route.reduce((s, rji) => s + jobs[rji].durationHours, 0);
+          if (totalHours >= t.maxHoursPerDay) break;
+          // Respect earliest start time
+          if (t.earliestStartTime != null) {
+            const jobDt = jobs[ji].serviceDateTime;
+            if (jobDt && jobDt.slice(11, 16) < t.earliestStartTime) continue;
+          }
+          const dist = route.length === 0
+            ? (travelMatrix[teamIdx]?.[teamOffset + ji] ?? Infinity)
+            : (travelMatrix[teamOffset + route[route.length - 1]]?.[teamOffset + ji] ?? Infinity);
+          if (dist < bestDist) { bestDist = dist; bestJi = ji; }
+        }
+        if (bestJi === -1) continue;
+        // Assign this job to the team
+        unassigned.splice(unassigned.indexOf(bestJi), 1);
+        route.push(bestJi);
+        jobRationale.set(bestJi, {
+          driveCostSecs: Math.round(bestDist),
+          ratingBonus: 0,
+          teamAvgRating: t.avgRating ?? null,
+          loadPenaltySecs: 0,
+          floorBonus: 0,
+          wasLocked: false,
+          summary: `Assigned to meet team minimum (${Math.round(bestDist / 60)} min drive)`,
+        });
+        progress = true;
+      }
+    }
+  }
+
+  // Sort remaining unassigned jobs so that jobs closest to ANY team's home are processed first.
   // This prevents a team that already has a distant job from "stealing" a nearby job
   // via low insertion cost before the geographically correct team gets a chance.
   unassigned.sort((a, b) => {
@@ -283,8 +335,6 @@ function solveVRP(
     return minHomeA - minHomeB;
   });
 
-  // Track rationale per job index
-  const jobRationale = new Map<number, AssignmentRationale>();
   for (const ji of unassigned) {
     const jobPointIdx = teamOffset + ji;
     let bestTeam: TeamConfig | null = null;
