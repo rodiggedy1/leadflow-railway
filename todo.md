@@ -1559,3 +1559,4 @@
 - [x] Fix FLOOR_BONUS_PER_JOB: was 100,000s (overrode geography entirely), reduced to 1,200s (20 min equivalent) so geography always wins when distance difference is significant
 - [x] Fix VRP distribution: two-pass approach — first pass seeds every team below minJobs floor with their closest available job, second pass fills remaining jobs by geography+chaining
 - [x] Post-optimize summary banner: total drive time, teams below minJobs floor, conflict count
+- [x] Fix VRP route ordering: after optimization, sort each team's jobs chronologically by serviceDateTime before assigning routeOrder

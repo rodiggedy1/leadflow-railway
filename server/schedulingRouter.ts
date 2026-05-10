@@ -476,33 +476,47 @@ function solveVRP(
     const inserted = route.filter(ji => jobRationale.has(ji));
     const locked = route.filter(ji => !jobRationale.has(ji) && !!jobs[ji].serviceDateTime);
 
-    // Sort locked jobs chronologically
-    locked.sort((a, b) =>
-      new Date(jobs[a].serviceDateTime!).getTime() - new Date(jobs[b].serviceDateTime!).getTime()
-    );
+    // Merge ALL jobs (locked + inserted) and sort the combined list chronologically.
+    // Jobs with a serviceDateTime come first in time order; jobs without a time go last.
+    // This ensures the final routeOrder reflects actual appointment times (8:30 → 2:30 → 4:30)
+    // regardless of the order the VRP inserted them.
+    const allRouteJobs = [...locked, ...inserted];
+    allRouteJobs.sort((a, b) => {
+      const ta = jobs[a].serviceDateTime ? new Date(jobs[a].serviceDateTime!).getTime() : Infinity;
+      const tb = jobs[b].serviceDateTime ? new Date(jobs[b].serviceDateTime!).getTime() : Infinity;
+      return ta - tb;
+    });
 
-    // Determine end time of last locked job (for appending inserted jobs after)
-    const lastLockedEndMs = locked.length > 0
-      ? new Date(jobs[locked[locked.length - 1]].serviceDateTime!).getTime()
-        + jobs[locked[locked.length - 1]].durationHours * 3600000
-      : Date.now();
-
-    // Emit locked jobs — use real serviceDateTime as arrival
-    locked.forEach((ji, order) => {
+    // Emit all jobs in chronological order
+    let currentMs = 0;
+    allRouteJobs.forEach((ji, order) => {
       const job = jobs[ji];
-      const startMs = new Date(job.serviceDateTime!).getTime();
+      const isLockedJob = !jobRationale.has(ji);
+
+      let startMs: number;
+      if (job.serviceDateTime) {
+        startMs = new Date(job.serviceDateTime).getTime();
+      } else {
+        startMs = currentMs > 0 ? currentMs : Date.now();
+      }
       const endMs = startMs + job.durationHours * 3600000;
-      const prevIdx = order === 0 ? teamIdx : teamOffset + locked[order - 1];
+      currentMs = endMs + BUFFER_MS;
+
+      const prevIdx = order === 0 ? teamIdx : teamOffset + allRouteJobs[order - 1];
       const driveSecs = travelMatrix[prevIdx]?.[teamOffset + ji] ?? 0;
-      const lockedRationale: AssignmentRationale = {
-        driveCostSecs: driveSecs,
-        ratingBonus: 0,
-        teamAvgRating: team.avgRating ?? null,
-        loadPenaltySecs: 0,
-        floorBonus: 0,
-        wasLocked: true,
-        summary: `Existing Launch27 assignment to ${team.name} — preserved`,
-      };
+
+      const rationale: AssignmentRationale | undefined = isLockedJob
+        ? {
+            driveCostSecs: driveSecs,
+            ratingBonus: 0,
+            teamAvgRating: team.avgRating ?? null,
+            loadPenaltySecs: 0,
+            floorBonus: 0,
+            wasLocked: true,
+            summary: `Existing Launch27 assignment to ${team.name} — preserved`,
+          }
+        : jobRationale.get(ji);
+
       assignments.push({
         cleanerJobId: job.cleanerJobId,
         teamId,
@@ -511,30 +525,7 @@ function solveVRP(
         estimatedArrivalMs: startMs,
         estimatedDepartureMs: endMs,
         driveTimeSecs: driveSecs,
-        rationale: lockedRationale,
-      });
-    });
-
-    // Emit inserted (unassigned) jobs — appended after locked jobs
-    let currentMs = lastLockedEndMs + BUFFER_MS;
-    inserted.forEach((ji, i) => {
-      const job = jobs[ji];
-      const startMs = currentMs;
-      const endMs = startMs + job.durationHours * 3600000;
-      currentMs = endMs + BUFFER_MS;
-      const prevIdx = locked.length > 0 && i === 0
-        ? teamOffset + locked[locked.length - 1]
-        : i === 0 ? teamIdx : teamOffset + inserted[i - 1];
-      const driveSecs = travelMatrix[prevIdx]?.[teamOffset + ji] ?? 0;
-      assignments.push({
-        cleanerJobId: job.cleanerJobId,
-        teamId,
-        teamName: team.name,
-        routeOrder: locked.length + i,
-        estimatedArrivalMs: startMs,
-        estimatedDepartureMs: endMs,
-        driveTimeSecs: driveSecs,
-        rationale: jobRationale.get(ji),
+        rationale,
       });
     });
   }
