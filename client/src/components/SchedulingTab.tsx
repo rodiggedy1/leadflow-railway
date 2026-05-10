@@ -986,9 +986,11 @@ export default function SchedulingTab() {
     setRecalculatingTeams(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
 
   // Post-optimize summary banner
+  const prevDriveMinsRef = useRef<number | null>(null);
   const [optimizeSummary, setOptimizeSummary] = useState<{
     assigned: number;
     totalDriveMins: number;
+    driveDeltaMins: number | null; // positive = more drive, negative = less drive
     conflictCount: number;
     teamsUnderFloor: string[];
   } | null>(null);
@@ -1011,11 +1013,18 @@ export default function SchedulingTab() {
   );
 
   const optimize = trpc.scheduling.optimizeDay.useMutation({
+    onMutate: () => {
+      // Snapshot current total drive time before optimize runs
+      const currentDriveMins = Math.round(
+        (data?.jobs ?? []).reduce((s: number, j: Job) => s + (j.assignment?.driveTimeSecs ?? 0), 0) / 60
+      );
+      prevDriveMinsRef.current = currentDriveMins > 0 ? currentDriveMins : null;
+    },
     onSuccess: (result) => {
       utils.scheduling.getSchedule.invalidate({ date });
       utils.scheduling.getJobLocks.invalidate({ date });
       // Banner will be populated after schedule data refreshes via useEffect below
-      setOptimizeSummary({ assigned: result.assigned, totalDriveMins: 0, conflictCount: 0, teamsUnderFloor: [] });
+      setOptimizeSummary({ assigned: result.assigned, totalDriveMins: 0, driveDeltaMins: null, conflictCount: 0, teamsUnderFloor: [] });
     },
     onError: (e) => toast.error(e.message),
   });
@@ -1141,10 +1150,13 @@ export default function SchedulingTab() {
     const totalDriveMins = Math.round(
       jobs.reduce((s, j) => s + (j.assignment?.driveTimeSecs ?? 0), 0) / 60
     );
+    const driveDeltaMins = prevDriveMinsRef.current != null && totalDriveMins > 0
+      ? totalDriveMins - prevDriveMinsRef.current
+      : null;
     const teamsUnderFloor = teams
       .filter(t => t.isActive && t.minJobs != null && (teamGroups.get(t.id)?.length ?? 0) < t.minJobs)
       .map(t => t.name);
-    setOptimizeSummary(prev => prev ? { ...prev, totalDriveMins, conflictCount: conflictJobIds.size, teamsUnderFloor } : null);
+    setOptimizeSummary(prev => prev ? { ...prev, totalDriveMins, driveDeltaMins, conflictCount: conflictJobIds.size, teamsUnderFloor } : null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -1355,6 +1367,16 @@ export default function SchedulingTab() {
                 {optimizeSummary.totalDriveMins >= 60
                   ? `${(optimizeSummary.totalDriveMins / 60).toFixed(1)}h total drive`
                   : `${optimizeSummary.totalDriveMins}m total drive`}
+              </span>
+            )}
+            {optimizeSummary.driveDeltaMins != null && optimizeSummary.driveDeltaMins !== 0 && (
+              <span className={`flex items-center gap-0.5 font-medium text-xs px-1.5 py-0.5 rounded ${
+                optimizeSummary.driveDeltaMins < 0
+                  ? 'text-green-700 bg-green-100'
+                  : 'text-amber-700 bg-amber-100'
+              }`}>
+                {optimizeSummary.driveDeltaMins < 0 ? '↓' : '↑'}
+                {Math.abs(optimizeSummary.driveDeltaMins)}m vs last run
               </span>
             )}
             {optimizeSummary.conflictCount > 0 ? (

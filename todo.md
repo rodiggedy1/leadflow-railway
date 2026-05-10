@@ -1560,3 +1560,4 @@
 - [x] Fix VRP distribution: two-pass approach — first pass seeds every team below minJobs floor with their closest available job, second pass fills remaining jobs by geography+chaining
 - [x] Post-optimize summary banner: total drive time, teams below minJobs floor, conflict count
 - [x] Fix VRP route ordering: after optimization, sort each team's jobs chronologically by serviceDateTime before assigning routeOrder
+- [x] Drive time delta in post-optimize banner: show ↓/↑ Xm vs previous run
