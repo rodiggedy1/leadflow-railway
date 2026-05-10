@@ -1429,7 +1429,7 @@ export const schedulingRouter = router({
       // 4. Build per-team ordered job lists (same logic as getSchedule)
       type TeamRoute = {
         team: typeof teams[0];
-        orderedJobs: Array<{ id: number; serviceDateTime: string | null; geo: LatLng | null }>;
+        orderedJobs: Array<{ id: number; serviceDateTime: string | null; geo: LatLng | null; serviceType: string | null; bedrooms: number | null }>;
         jobCount: number;
       };
       const teamRoutes: TeamRoute[] = [];
@@ -1456,6 +1456,8 @@ export const schedulingRouter = router({
         const orderedJobs = teamJobs.map(j => ({
           id: j.id,
           serviceDateTime: j.serviceDateTime,
+          serviceType: j.serviceType ?? null,
+          bedrooms: j.bedrooms ?? null,
           geo: (() => {
             const g = geoByAddress.get(j.jobAddress?.trim().toLowerCase() ?? "");
             return g ? { lat: g.lat, lng: g.lng } : null;
@@ -1527,14 +1529,21 @@ export const schedulingRouter = router({
             allPairs.push({ fromLat: newPoint.lat, fromLng: newPoint.lng, toLat: newPoint.lat, toLng: newPoint.lng }); // placeholder
           }
 
-          // Estimate suggested time: use next job's serviceDateTime if available, else prev job's departure + drive
-          const nextJobTime = g < orderedJobs.length ? orderedJobs[g].serviceDateTime : null;
-          const prevJobDep = g > 0 && orderedJobs[g - 1].serviceDateTime
-            ? new Date(orderedJobs[g - 1].serviceDateTime!).getTime() + 2 * 3600000
+          // Estimate suggested time:
+          // - prevJobEndMs = prevJob.serviceDateTime + estimatedDuration (not hardcoded 2h)
+          // - The suggested start for the new job must be >= prevJobEndMs + driveFromPrevToNew
+          // - It must also be <= nextJob.serviceDateTime - newJobDuration - driveFromNewToNext
+          // We compute prevJobEndMs here; drive time will be added in step 7 after distance matrix.
+          const prevJob = g > 0 ? orderedJobs[g - 1] : null;
+          const prevJobEndMs = prevJob?.serviceDateTime
+            ? new Date(prevJob.serviceDateTime).getTime() + estimateDurationHours(prevJob.serviceType, prevJob.bedrooms) * 3600000
             : null;
-          const suggestedTimeMs = nextJobTime
-            ? new Date(nextJobTime).getTime()
-            : prevJobDep;
+          const nextJobTime = g < orderedJobs.length ? orderedJobs[g].serviceDateTime : null;
+          // Store prevJobEndMs so step 7 can add drive time to it
+          const prevJobDep = prevJobEndMs;
+          // Initial suggestion: earliest possible = prevJobEnd (drive time added in step 7)
+          // Will be clamped against nextJobStart in step 7
+          const suggestedTimeMs = prevJobEndMs ?? (nextJobTime ? new Date(nextJobTime).getTime() : null);
 
           gapSpecs.push({
             teamIdx: ti,
@@ -1595,12 +1604,43 @@ export const schedulingRouter = router({
         const prevToNext = (spec.prevPoint && spec.nextPoint) ? driveSecs[spec.pairIdxPrevToNext] : 0;
         const addedDriveSecs = prevToNew + newToNext - prevToNext;
 
+        // Compute the earliest the new job can start:
+        //   = prevJobEnd + driveFromPrevToNew
+        // Then clamp: if a next job exists, the new job must also finish before it starts.
+        // suggestedTimeMs from the spec is already prevJobEnd (or null if no prev job).
+        let finalSuggestedTimeMs: number | null = spec.suggestedTimeMs;
+        if (spec.suggestedTimeMs !== null) {
+          // Add drive time from prev to new job
+          finalSuggestedTimeMs = spec.suggestedTimeMs + prevToNew * 1000;
+        }
+        // If there's a next job, verify the new job can finish before it starts
+        if (finalSuggestedTimeMs !== null && spec.nextPoint) {
+          const nextJobIdx = spec.gapIdx;
+          const nextJob = nextJobIdx < orderedJobs.length ? orderedJobs[nextJobIdx] : null;
+          if (nextJob?.serviceDateTime) {
+            const nextJobStartMs = new Date(nextJob.serviceDateTime).getTime();
+            // New job must finish (+ drive to next) before next job starts
+            // If it can't fit, the slot is not viable — mark as null so the UI can hide it
+            // (addedDriveSecs will be high anyway, pushing it to the bottom of rankings)
+            if (finalSuggestedTimeMs >= nextJobStartMs) {
+              finalSuggestedTimeMs = null; // impossible to fit
+            }
+          }
+        }
+        // If no prev job, fall back to next job's start time as the suggestion
+        if (finalSuggestedTimeMs === null && spec.gapIdx < orderedJobs.length) {
+          const nextJob = orderedJobs[spec.gapIdx];
+          if (nextJob?.serviceDateTime) {
+            finalSuggestedTimeMs = new Date(nextJob.serviceDateTime).getTime();
+          }
+        }
+
         slots.push({
           teamId: team.id,
           teamName: team.name,
           teamColor: team.color ?? "#6366f1",
           insertPosition: spec.gapIdx,
-          suggestedTimeMs: spec.suggestedTimeMs,
+          suggestedTimeMs: finalSuggestedTimeMs,
           addedDriveSecs: Math.max(0, addedDriveSecs),
           totalTeamJobs: orderedJobs.length,
         });

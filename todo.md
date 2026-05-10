@@ -1538,3 +1538,4 @@
 - [x] Rename "⚠ AI Call" button to "Call with AI" on team cards in CommandChat
 - [x] Show "AI called at [time]" indicator on team card after a call is fired (from call log data, persists across refresh)
 - [x] Add intent detection guard: if inbound message shows no booking intent (complaint, no-show, cancellation, existing customer issue), AI must not respond — flag for human review instead
+- [x] Fix suggestSlots to account for job duration + drive time — prevJobEnd now uses estimateDurationHours() instead of hardcoded 2h; suggested time = prevJobEnd + driveToNew; slots where new job can't fit before next job start are marked null
