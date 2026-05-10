@@ -1107,11 +1107,13 @@ export default function SchedulingTab() {
     if (!teamGroups.has(tid)) teamGroups.set(tid, []);
     teamGroups.get(tid)!.push(job);
   }
-  // Sort each group by earliest arrival time first (falls back to routeOrder)
+  // Sort each group by serviceDateTime first (source of truth), then estimatedArrivalMs, then routeOrder
   for (const [, group] of Array.from(teamGroups.entries())) {
     group.sort((a, b) => {
-      const aTime = a.assignment?.estimatedArrivalMs ?? (a.assignment?.routeOrder ?? 999) * 1e12;
-      const bTime = b.assignment?.estimatedArrivalMs ?? (b.assignment?.routeOrder ?? 999) * 1e12;
+      const aTime = a.serviceDateTime ? new Date(a.serviceDateTime).getTime()
+        : a.assignment?.estimatedArrivalMs ?? (a.assignment?.routeOrder ?? 999) * 1e12;
+      const bTime = b.serviceDateTime ? new Date(b.serviceDateTime).getTime()
+        : b.assignment?.estimatedArrivalMs ?? (b.assignment?.routeOrder ?? 999) * 1e12;
       return aTime - bTime;
     });
   }
