@@ -40,24 +40,7 @@ import {
   runPostStartEscalation,
   sendClientEtaApproachingSms,
 } from "./fieldMgmtEngine";
-import { getDb, resetDb } from "./db";
-
-/**
- * Returns true if the error looks like a stale/dropped DB connection.
- * TiDB and MySQL drop idle connections; this lets all cron jobs self-heal.
- */
-function isDbConnectionError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const m = err.message;
-  return (
-    m.includes('Failed query') ||
-    m.includes('ECONNRESET') ||
-    m.includes('ETIMEDOUT') ||
-    m.includes('ECONNREFUSED') ||
-    m.includes('Connection lost') ||
-    m.includes('PROTOCOL_CONNECTION_LOST')
-  );
-}
+import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
 import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
@@ -302,7 +285,6 @@ export function startInternalCron(): void {
       await recordHeartbeat("nightly-sync", summary, result.inserted > 0);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (isDbConnectionError(err)) { console.warn('[InternalCron] NightlySync — DB connection error, resetting pool.'); resetDb(); }
       console.error("[InternalCron] NightlySync failed:", msg);
       await recordHeartbeat("nightly-sync", `error: ${msg}`, false);
       // recordSyncRun is already called inside runNightlySync on error,
@@ -492,12 +474,6 @@ export function startInternalCron(): void {
       await recordHeartbeat("field-mgmt", summary, didWork);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      // If the error looks like a stale/dropped DB connection, reset the singleton
-      // so the next cron tick gets a fresh connection (TiDB drops idle connections).
-      if (isDbConnectionError(err)) {
-        console.warn('[InternalCron] FieldMgmt — DB connection error detected, resetting connection pool for next run.');
-        resetDb();
-      }
       console.error("[InternalCron] FieldMgmt cron failed:", msg);
       await recordHeartbeat("field-mgmt", `error: ${msg}`, false);
     }
