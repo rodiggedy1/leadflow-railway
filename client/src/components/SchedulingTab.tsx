@@ -44,6 +44,8 @@ interface Team {
   maxJobs?: number | null;
   earliestStartTime?: string | null;
   homeDriveTimeSecs?: number | null;
+  avgRating?: number | null;
+  ratingCount?: number;
 }
 
 interface Job {
@@ -1168,6 +1170,14 @@ export default function SchedulingTab() {
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
                     <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
+                    {team.avgRating != null && (
+                      <span
+                        title={`Avg rating: ${team.avgRating.toFixed(2)} ⭐ from ${team.ratingCount} job${team.ratingCount === 1 ? '' : 's'}`}
+                        className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded"
+                      >
+                        ⭐ {team.avgRating.toFixed(1)}
+                      </span>
+                    )}
                     {recalculatingTeams.has(team.id) && (
                       <span className="flex items-center gap-1 text-[10px] font-medium text-blue-500">
                         <Loader2 className="w-3 h-3 animate-spin" />

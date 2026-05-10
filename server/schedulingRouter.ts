@@ -692,9 +692,23 @@ export const schedulingRouter = router({
           }
         }
       }
+      // Compute all-time average customer rating per team (by teamName on cleanerJobs)
+      const ratingRows = await db
+        .select({
+          teamName: cleanerJobs.teamName,
+          avgRating: sql<number>`AVG(${cleanerJobs.customerRating})`,
+          ratingCount: sql<number>`COUNT(${cleanerJobs.customerRating})`,
+        })
+        .from(cleanerJobs)
+        .where(sql`${cleanerJobs.customerRating} IS NOT NULL AND ${cleanerJobs.teamName} IS NOT NULL`)
+        .groupBy(cleanerJobs.teamName);
+      const ratingByTeamName = new Map(ratingRows.map(r => [r.teamName, { avgRating: Number(r.avgRating), ratingCount: Number(r.ratingCount) }]));
+
       const teamsWithHomeDrive = teams.map(t => ({
         ...t,
         homeDriveTimeSecs: homeDriveByTeam.get(t.id) ?? null,
+        avgRating: ratingByTeamName.get(t.name)?.avgRating ?? null,
+        ratingCount: ratingByTeamName.get(t.name)?.ratingCount ?? 0,
       }));
 
       return { jobs: enriched, teams: teamsWithHomeDrive, hasAssignments: assignments.length > 0 };
