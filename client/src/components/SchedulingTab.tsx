@@ -453,13 +453,15 @@ function JobCard({
                   </div>
                 </div>
               )}
-              <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
-                <Lock className="w-4 h-4 text-gray-400 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-800">Existing assignment</p>
-                  <p className="text-xs text-gray-400">{a.rationale.wasLocked ? "Preserved from Launch27" : "Avoids breaking confirmed jobs"}</p>
+              {a.rationale.wasLocked && (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                  <Lock className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Existing assignment</p>
+                    <p className="text-xs text-gray-400">Preserved from Launch27</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>,
