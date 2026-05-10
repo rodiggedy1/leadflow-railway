@@ -1142,13 +1142,19 @@ export const schedulingRouter = router({
         // Skip if already covered by a team-level lock (avoid duplicates)
         if (lockedTeamJobIdSet.has(lockRow.jobId)) continue;
         const lockedTeam = teams.find(t => t.id === lockRow.cleanerId);
+        const lockedJobRow = activeJobs.find(j => j.id === lockRow.jobId);
+        const arrivalMs = lockedJobRow?.serviceDateTime
+          ? new Date(lockedJobRow.serviceDateTime).getTime()
+          : Date.now();
+        const durationHours = estimateDurationHours(lockedJobRow?.serviceType ?? null, lockedJobRow?.bedrooms ?? null);
+        const departureMs = arrivalMs + durationHours * 3600000;
         assignments.push({
           cleanerJobId: lockRow.jobId,
           teamId: lockRow.cleanerId,
           teamName: lockedTeam?.name ?? "",
           routeOrder: lockRow.lockedPosition,
-          estimatedArrivalMs: Date.now(),
-          estimatedDepartureMs: Date.now(),
+          estimatedArrivalMs: arrivalMs,
+          estimatedDepartureMs: departureMs,
           driveTimeSecs: 0,
         });
       }

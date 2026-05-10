@@ -1561,3 +1561,4 @@
 - [x] Post-optimize summary banner: total drive time, teams below minJobs floor, conflict count
 - [x] Fix VRP route ordering: after optimization, sort each team's jobs chronologically by serviceDateTime before assigning routeOrder
 - [x] Drive time delta in post-optimize banner: show ↓/↑ Xm vs previous run
+- [x] Fix locked jobs out of order: estimatedArrivalMs was Date.now() for job-locked assignments, now uses actual serviceDateTime so client sort is correct
