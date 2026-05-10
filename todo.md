@@ -1556,3 +1556,4 @@
 - [x] Fix root cause: locked/inserted split in solveVRP used teamName+serviceDateTime (true for ALL Launch27 jobs) — now uses jobRationale.has(ji) so only genuinely locked jobs get wasLocked=true rationale
 - [x] Add "Lock All" button to scheduling tab header — locks all assigned jobs using existing single-job lock procedure
 - [x] Fix VRP: first job per team must be closest to home, subsequent jobs chain from there (nearest-neighbor from current position, not insertion into arbitrary route)
+- [x] Fix FLOOR_BONUS_PER_JOB: was 100,000s (overrode geography entirely), reduced to 1,200s (20 min equivalent) so geography always wins when distance difference is significant

@@ -268,8 +268,11 @@ function solveVRP(
   // its closest job first, then chains subsequent jobs from that position.
   const fairShare = (unassigned.length + Array.from(routes.values()).reduce((s, r) => s + r.length, 0)) / teams.length;
   const LOAD_PENALTY_PER_JOB = 300; // seconds — tune this to trade off balance vs drive time
-  // Large constant to make minJobs floor a hard preference (not just a soft hint)
-  const FLOOR_BONUS_PER_JOB = 100_000; // much larger than any realistic travel cost
+  // Floor bonus: encourages teams to hit their minJobs target but must NOT override
+  // a large geographic disadvantage. A 15-minute drive penalty = ~900s. We cap the
+  // floor bonus at ~1200s per job (20 min equivalent) so geography always wins when
+  // the distance difference is significant.
+  const FLOOR_BONUS_PER_JOB = 1_200; // seconds — strong preference but geography dominates
 
   // Sort unassigned jobs so that jobs closest to ANY team's home are processed first.
   // This prevents a team that already has a distant job from "stealing" a nearby job
