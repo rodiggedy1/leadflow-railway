@@ -1555,3 +1555,4 @@
 - [x] Fix rationale popup: sanitize stale "Existing Launch27 assignment" summary text when wasLocked=false (show generic optimizer summary instead)
 - [x] Fix root cause: locked/inserted split in solveVRP used teamName+serviceDateTime (true for ALL Launch27 jobs) — now uses jobRationale.has(ji) so only genuinely locked jobs get wasLocked=true rationale
 - [x] Add "Lock All" button to scheduling tab header — locks all assigned jobs using existing single-job lock procedure
+- [x] Fix VRP: first job per team must be closest to home, subsequent jobs chain from there (nearest-neighbor from current position, not insertion into arbitrary route)

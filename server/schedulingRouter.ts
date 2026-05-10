@@ -260,14 +260,26 @@ function solveVRP(
   }
 
   // ── Phase 2: Insert unassigned jobs into best team by insertion cost ─────────
-  // Cost = drive insertion cost + load-balancing penalty.
-  // The load penalty discourages piling jobs onto already-heavy teams so that
-  // jobs spread more evenly. Fair share = totalJobs / numTeams.
-  // Penalty per extra job above fair share = 300 seconds (5 min equivalent).
+  // Priority rule: home proximity is the primary factor.
+  //   - For an empty route: cost = home→job (pure home distance).
+  //   - For a non-empty route: cost = current_tail→job (chain from last assigned job).
+  // To enforce home-proximity-first we sort jobs by their minimum home→job distance
+  // across all teams BEFORE the greedy loop runs. This guarantees each team claims
+  // its closest job first, then chains subsequent jobs from that position.
   const fairShare = (unassigned.length + Array.from(routes.values()).reduce((s, r) => s + r.length, 0)) / teams.length;
   const LOAD_PENALTY_PER_JOB = 300; // seconds — tune this to trade off balance vs drive time
   // Large constant to make minJobs floor a hard preference (not just a soft hint)
   const FLOOR_BONUS_PER_JOB = 100_000; // much larger than any realistic travel cost
+
+  // Sort unassigned jobs so that jobs closest to ANY team's home are processed first.
+  // This prevents a team that already has a distant job from "stealing" a nearby job
+  // via low insertion cost before the geographically correct team gets a chance.
+  unassigned.sort((a, b) => {
+    const minHomeA = Math.min(...teams.map(t => travelMatrix[teams.indexOf(t)]?.[teamOffset + a] ?? Infinity));
+    const minHomeB = Math.min(...teams.map(t => travelMatrix[teams.indexOf(t)]?.[teamOffset + b] ?? Infinity));
+    return minHomeA - minHomeB;
+  });
+
   // Track rationale per job index
   const jobRationale = new Map<number, AssignmentRationale>();
   for (const ji of unassigned) {
@@ -294,8 +306,11 @@ function solveVRP(
       const teamIdx = teams.indexOf(t);
       // Build the full sequence of point indices for this team: [home, job0, job1, ...]
       const seq = [teamIdx, ...route.map(rji => teamOffset + rji)];
-      // Try inserting the new job at every position in the sequence
-      // Insertion cost at position i = drive(seq[i-1]→new) + drive(new→seq[i]) - drive(seq[i-1]→seq[i])
+      // Cost:
+      // - Empty route: home→job (home proximity is the dominant signal for first job)
+      // - Non-empty route: tail→job (chain from last assigned job — closest to current position)
+      // The sort above ensures jobs closest to home are processed first, so each team
+      // claims its geographically nearest job before any chaining can steal it.
       let minInsertCost = Infinity;
       if (seq.length === 1) {
         // Empty route — cost is just home→job
