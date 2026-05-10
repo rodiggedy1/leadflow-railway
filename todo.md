@@ -1546,3 +1546,5 @@
 - [x] Add recurring / new client / move-in-move-out badges to schedule page job cards
 - [x] Show frequency label under address on schedule page job cards
 - [x] Add badge filter bar to schedule page (filter by New / Recurring / Move In/Out)
+- [x] Fix rationale misclassifying optimizer-placed jobs as "Existing Launch27 assignment" (confirmed correct — it IS a Launch27 assignment; noted for user)
+- [x] Add red time-conflict alert on job cards when two jobs on same team overlap

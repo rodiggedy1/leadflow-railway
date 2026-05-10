@@ -191,7 +191,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 
 function JobCard({
   job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
-  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick,
+  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, hasConflict,
 }: {
   job: Job;
   teams: Team[];
@@ -206,6 +206,7 @@ function JobCard({
   onUnassignStart?: (srcTeamId: number | null) => void;
   onUnassignDone?: (srcTeamId: number | null) => void;
   onIssueClick?: () => void;
+  hasConflict?: boolean;
 }) {
   // Open reassign dialog on card click (in addition to map selection)
   const utils = trpc.useUtils();
@@ -258,7 +259,7 @@ function JobCard({
       <div
         onClick={() => { onSelect(); setShowReassign(true); }}
         className={`group relative bg-white rounded-xl border transition-all cursor-pointer hover:shadow-md ${
-          isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : isLocked ? "border-amber-200 bg-amber-50/30" : !job.assignment ? "border-amber-300 bg-amber-50/40 hover:border-amber-400" : "border-gray-100 hover:border-gray-200"
+          hasConflict ? "border-red-400 bg-red-50/40 ring-1 ring-red-200" : isSelected ? "border-indigo-400 shadow-md ring-1 ring-indigo-200" : isLocked ? "border-amber-200 bg-amber-50/30" : !job.assignment ? "border-amber-300 bg-amber-50/40 hover:border-amber-400" : "border-gray-100 hover:border-gray-200"
         }`}
       >
         <div className="p-3">
@@ -300,6 +301,12 @@ function JobCard({
               {!job.assignment && (
                 <div className="flex items-center gap-1 mt-1 text-xs font-medium text-amber-600">
                   <span>Tap to assign</span>
+                </div>
+              )}
+              {hasConflict && (
+                <div className="flex items-center gap-1 mt-1 text-xs font-medium text-red-600">
+                  <AlertCircle className="w-3 h-3 shrink-0" />
+                  <span>Time conflict — ask client to adjust</span>
                 </div>
               )}
               <div className="flex items-center gap-3 mt-1.5">
@@ -1078,6 +1085,31 @@ export default function SchedulingTab() {
   const unassigned = teamGroups.get(null) ?? [];
   const activeJobs = jobs.filter(j => j.bookingStatus !== "cancelled");
 
+  // Detect time conflicts: jobs on the same team whose booked times overlap
+  const conflictJobIds = new Set<number>();
+  for (const [, group] of Array.from(teamGroups.entries())) {
+    for (let i = 0; i < group.length; i++) {
+      for (let j = i + 1; j < group.length; j++) {
+        const a = group[i];
+        const b = group[j];
+        if (!a.serviceDateTime || !b.serviceDateTime) continue;
+        const aStart = new Date(a.serviceDateTime).getTime();
+        const bStart = new Date(b.serviceDateTime).getTime();
+        // Estimate duration from serviceType string (e.g. "3 bedroom" → 3h), default 2h
+        const parseBeds = (st: string | null) => { const m = st?.match(/(\d+)\s*bed/i); return m ? parseInt(m[1]) : 0; };
+        const aDurMs = Math.max(2, parseBeds(a.serviceType)) * 3600000;
+        const bDurMs = Math.max(2, parseBeds(b.serviceType)) * 3600000;
+        const aEnd = aStart + aDurMs;
+        const bEnd = bStart + bDurMs;
+        // Overlap if one starts before the other ends
+        if (aStart < bEnd && bStart < aEnd) {
+          conflictJobIds.add(a.id);
+          conflictJobIds.add(b.id);
+        }
+      }
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Badge filter bar */}
@@ -1459,6 +1491,7 @@ export default function SchedulingTab() {
                           isSelected={selectedJobId === job.id}
                           onSelect={() => setSelectedJobId(job.id === selectedJobId ? null : job.id)}
                           isLocked={lockedJobIds.has(job.id)}
+                          hasConflict={conflictJobIds.has(job.id)}
                           homeDriveTimeSecs={idx === 0 ? (team as any).homeDriveTimeSecs ?? null : null}
                           onIssueClick={() => setIssueDialogJob({ id: job.id, date })}
                           onLockToggle={(locked, position) => {
