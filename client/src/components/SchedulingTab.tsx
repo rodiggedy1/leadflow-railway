@@ -1271,6 +1271,40 @@ export default function SchedulingTab() {
             )}
           </Button>
 
+          {/* Lock All button */}
+          {(() => {
+            const assignedUnlocked = activeJobs.filter(
+              j => j.assignment && j.assignment.teamId && !lockedJobIds.has(j.id)
+            );
+            if (assignedUnlocked.length === 0) return null;
+            return (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  for (const j of assignedUnlocked) {
+                    await lockJob.mutateAsync({
+                      jobId: j.id,
+                      date,
+                      cleanerId: j.assignment!.teamId,
+                      lockedPosition: j.assignment!.routeOrder ?? 0,
+                    });
+                  }
+                  toast.success(`Locked ${assignedUnlocked.length} job${assignedUnlocked.length !== 1 ? "s" : ""}`);
+                }}
+                disabled={lockJob.isPending}
+                className="gap-1.5"
+                title="Lock all assigned jobs so they won't move when you optimize"
+              >
+                {lockJob.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Lock className="w-4 h-4" />
+                )}
+                Lock All
+              </Button>
+            );
+          })()}
+
           {/* Optimize button */}
           <Button
             onClick={() => optimize.mutate({ date })}
