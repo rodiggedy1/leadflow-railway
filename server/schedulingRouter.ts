@@ -58,6 +58,7 @@ interface TeamConfig {
   maxJobs?: number | null;         // per-day job cap (null = no cap)
   earliestStartTime?: string | null; // "HH:MM" earliest first job start
   lockedJobCount?: number;          // jobs already locked to this team (excluded from VRP pool)
+  avgRating?: number | null;        // all-time average customer rating (1-5)
 }
 
 interface Assignment {
@@ -68,6 +69,24 @@ interface Assignment {
   estimatedArrivalMs: number;
   estimatedDepartureMs: number;
   driveTimeSecs: number;
+  rationale?: AssignmentRationale;
+}
+
+interface AssignmentRationale {
+  /** Drive/insertion cost in seconds */
+  driveCostSecs: number;
+  /** Rating bonus applied (positive = bonus for high rating) in seconds equivalent */
+  ratingBonus: number;
+  /** Team avg rating at time of assignment */
+  teamAvgRating: number | null;
+  /** Load balance penalty in seconds equivalent */
+  loadPenaltySecs: number;
+  /** Floor bonus applied (large value if team was below minJobs) */
+  floorBonus: number;
+  /** Whether this job was locked (existing assignment preserved) */
+  wasLocked: boolean;
+  /** Human-readable summary */
+  summary: string;
 }
 
 // ── Geocoding helper ──────────────────────────────────────────────────────────
@@ -247,6 +266,8 @@ function solveVRP(
   const LOAD_PENALTY_PER_JOB = 300; // seconds — tune this to trade off balance vs drive time
   // Large constant to make minJobs floor a hard preference (not just a soft hint)
   const FLOOR_BONUS_PER_JOB = 100_000; // much larger than any realistic travel cost
+  // Track rationale per job index
+  const jobRationale = new Map<number, AssignmentRationale>();
   for (const ji of unassigned) {
     const jobPointIdx = teamOffset + ji;
     let bestTeam: TeamConfig | null = null;
@@ -298,8 +319,35 @@ function solveVRP(
       const floorBonus = (t.minJobs != null && totalJobCount < t.minJobs)
         ? (t.minJobs - totalJobCount) * FLOOR_BONUS_PER_JOB
         : 0;
-      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus;
-      if (totalCost < bestCost) { bestCost = totalCost; bestTeam = t; }
+      // Secondary rating bonus: higher-rated teams get a small cost reduction.
+      // Scale: each star above 3.0 = 60s cost reduction (max ~120s for 5-star vs 3-star).
+      // This only breaks ties — route geometry still dominates.
+      const RATING_BONUS_PER_STAR = 60; // seconds per star above baseline
+      const ratingBonus = t.avgRating != null
+        ? (t.avgRating - 3.0) * RATING_BONUS_PER_STAR
+        : 0;
+      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus - ratingBonus;
+      if (totalCost < bestCost) {
+        bestCost = totalCost;
+        bestTeam = t;
+        // Record rationale for this candidate (will be overwritten if a better team is found)
+        const overloadSecs = overload * LOAD_PENALTY_PER_JOB;
+        const ratingStr = t.avgRating != null ? t.avgRating.toFixed(1) : null;
+        const driveMins = Math.round(minInsertCost / 60);
+        let summary = `Best route fit (${driveMins} min drive cost)`;
+        if (ratingStr) summary += `, team rated ${ratingStr}⭐`;
+        if (floorBonus > 0) summary += `, team needs more jobs`;
+        if (overloadSecs > 0) summary += `, load-balanced`;
+        jobRationale.set(ji, {
+          driveCostSecs: minInsertCost,
+          ratingBonus: Math.round(ratingBonus),
+          teamAvgRating: t.avgRating ?? null,
+          loadPenaltySecs: Math.round(overloadSecs),
+          floorBonus: Math.round(floorBonus),
+          wasLocked: false,
+          summary,
+        });
+      }
     }
     // If all teams are at maxJobs or maxHours, fall back to least-loaded team (ignore cap)
     if (!bestTeam) {
@@ -310,6 +358,15 @@ function solveVRP(
         if (route.length < fallbackMin) { fallbackMin = route.length; fallbackBest = t; }
       }
       bestTeam = fallbackBest;
+      jobRationale.set(ji, {
+        driveCostSecs: 0,
+        ratingBonus: 0,
+        teamAvgRating: bestTeam.avgRating ?? null,
+        loadPenaltySecs: 0,
+        floorBonus: 0,
+        wasLocked: false,
+        summary: 'Fallback assignment — all teams at capacity',
+      });
     }
     routes.get(bestTeam.id)!.push(ji);
   }
@@ -344,6 +401,15 @@ function solveVRP(
       const endMs = startMs + job.durationHours * 3600000;
       const prevIdx = order === 0 ? teamIdx : teamOffset + locked[order - 1];
       const driveSecs = travelMatrix[prevIdx]?.[teamOffset + ji] ?? 0;
+      const lockedRationale: AssignmentRationale = {
+        driveCostSecs: driveSecs,
+        ratingBonus: 0,
+        teamAvgRating: team.avgRating ?? null,
+        loadPenaltySecs: 0,
+        floorBonus: 0,
+        wasLocked: true,
+        summary: `Existing Launch27 assignment to ${team.name} — preserved`,
+      };
       assignments.push({
         cleanerJobId: job.cleanerJobId,
         teamId,
@@ -352,6 +418,7 @@ function solveVRP(
         estimatedArrivalMs: startMs,
         estimatedDepartureMs: endMs,
         driveTimeSecs: driveSecs,
+        rationale: lockedRationale,
       });
     });
 
@@ -374,6 +441,7 @@ function solveVRP(
         estimatedArrivalMs: startMs,
         estimatedDepartureMs: endMs,
         driveTimeSecs: driveSecs,
+        rationale: jobRationale.get(ji),
       });
     });
   }
@@ -650,6 +718,11 @@ export const schedulingRouter = router({
         const savedAssignment = assignmentMap.get(j.id);
         // isManual=2 is a sentinel meaning "explicitly unassigned" — treat as no assignment
         const isExplicitlyUnassigned = savedAssignment?.isManual === 2;
+        // Parse rationale JSON from saved assignment
+        let parsedRationale: AssignmentRationale | null = null;
+        if (savedAssignment?.rationale) {
+          try { parsedRationale = JSON.parse(savedAssignment.rationale); } catch { /* ignore */ }
+        }
         // If no saved assignment yet, synthesize one from the job's own Launch27 teamName
         const syntheticAssignment = !savedAssignment && !isExplicitlyUnassigned && j.teamName && teamByName.has(j.teamName)
           ? {
@@ -662,11 +735,13 @@ export const schedulingRouter = router({
               estimatedDepartureMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() + 2 * 3600000 : null,
               driveTimeSecs: estimatedDriveMap.get(j.id) ?? null,
               isManual: 0,
+              rationale: null as AssignmentRationale | null,
             }
           : null;
+        const baseAssignment = isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment);
         return {
           ...j,
-          assignment: isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment),
+          assignment: baseAssignment ? { ...baseAssignment, rationale: parsedRationale } : null,
         };
       });
 
@@ -804,6 +879,7 @@ export const schedulingRouter = router({
             driveTimeSecs: 0,
             isManual: 0,
             totalDistanceMeters: null,
+            rationale: null,
             createdAt: new Date(),
             updatedAt: new Date(),
           });
@@ -827,6 +903,17 @@ export const schedulingRouter = router({
       const _dayConfigMap = new Map(_dayConfigRows.map(r => [r.teamId, r]));
 
       // 4. Build all points array: [team homes..., job points...]
+      // Fetch all-time avg ratings per team name for the rating bonus in VRP
+      const _ratingRows = await db
+        .select({
+          teamName: cleanerJobs.teamName,
+          avgRating: sql<number>`AVG(${cleanerJobs.customerRating})`,
+        })
+        .from(cleanerJobs)
+        .where(sql`${cleanerJobs.customerRating} IS NOT NULL AND ${cleanerJobs.teamName} IS NOT NULL`)
+        .groupBy(cleanerJobs.teamName);
+      const _ratingByTeamName = new Map(_ratingRows.map(r => [r.teamName, Number(r.avgRating)]));
+
       const teamConfigs: TeamConfig[] = teams
         .filter(t => t.homeLat != null && t.homeLng != null)
         .map(t => ({
@@ -839,6 +926,7 @@ export const schedulingRouter = router({
           minJobs: t.minJobs ?? null,
           maxJobs: t.maxJobs ?? null,
           earliestStartTime: t.earliestStartTime ?? null,
+          avgRating: _ratingByTeamName.get(t.name) ?? null,
         }));
 
       if (teamConfigs.length === 0) {
@@ -1778,6 +1866,7 @@ async function persistAssignments(db: NonNullable<Awaited<ReturnType<typeof getD
         estimatedDepartureMs: a.estimatedDepartureMs,
         driveTimeSecs: a.driveTimeSecs,
         isManual: 0,
+        rationale: a.rationale ? JSON.stringify(a.rationale) : null,
       })
       .onDuplicateKeyUpdate({
         set: {
@@ -1788,6 +1877,7 @@ async function persistAssignments(db: NonNullable<Awaited<ReturnType<typeof getD
           estimatedDepartureMs: a.estimatedDepartureMs,
           driveTimeSecs: a.driveTimeSecs,
           isManual: 0,
+          rationale: a.rationale ? JSON.stringify(a.rationale) : null,
           updatedAt: new Date(),
         },
       });

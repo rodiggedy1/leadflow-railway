@@ -2287,6 +2287,8 @@ export const scheduleAssignments = mysqlTable("schedule_assignments", {
   isManual: int("isManual").default(0).notNull(),
   /** Total route distance for this team on this day (meters) */
   totalDistanceMeters: int("totalDistanceMeters"),
+  /** JSON blob storing the rationale for this assignment (factors weighed by the optimizer) */
+  rationale: text("rationale"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({

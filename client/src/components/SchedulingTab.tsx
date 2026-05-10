@@ -65,6 +65,15 @@ interface Job {
     estimatedDepartureMs: number | null;
     driveTimeSecs: number | null;
     isManual: number;
+    rationale: {
+      driveCostSecs: number;
+      ratingBonus: number;
+      teamAvgRating: number | null;
+      loadPenaltySecs: number;
+      floorBonus: number;
+      wasLocked: boolean;
+      summary: string;
+    } | null;
   } | null;
 }
 
@@ -238,6 +247,7 @@ function JobCard({
   // For the first job in a team, show drive time from home; for subsequent jobs, show job-to-job drive time
   const rawDriveSecs = homeDriveTimeSecs != null ? homeDriveTimeSecs : (a?.driveTimeSecs ?? null);
   const driveStr = formatDrive(rawDriveSecs);
+  const [showRationale, setShowRationale] = useState(false);
 
   return (
     <>
@@ -294,6 +304,16 @@ function JobCard({
               >
                 {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
               </button>
+              {/* Rationale info button — only shown when rationale is available */}
+              {a?.rationale && (
+                <button
+                  onClick={e => { e.stopPropagation(); setShowRationale(true); }}
+                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-50 transition-all"
+                  title="Why this assignment?"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                </button>
+              )}
               {/* Reassign button */}
               <button
                 onClick={e => { e.stopPropagation(); setShowReassign(true); }}
@@ -330,6 +350,91 @@ function JobCard({
           </div>
         </div>
       </div>
+
+      {/* Rationale popup */}
+      {a?.rationale && createPortal(
+        <div
+          className={`fixed inset-0 z-[9999] flex items-end sm:items-center justify-center transition-all ${showRationale ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+          onClick={() => setShowRationale(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 mb-4 sm:mb-0 overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 pt-4 pb-2">
+              <span className="text-[11px] font-bold tracking-widest text-gray-400 uppercase">AI Assignment</span>
+              <button onClick={() => setShowRationale(false)} className="p-1 rounded-full hover:bg-gray-100">
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+            {/* Recommended team */}
+            <div className="mx-4 mb-3 p-3 rounded-xl border border-gray-100 flex items-center justify-between">
+              <div>
+                <p className="font-bold text-sm text-gray-900">{a.teamName}</p>
+                <p className="text-xs text-gray-400">Recommended team</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-300" />
+            </div>
+            {/* Why this works */}
+            <div className="mx-4 mb-3 p-3 rounded-xl border border-blue-100 bg-blue-50/40">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                <span className="text-xs font-semibold text-blue-700">Why this works</span>
+              </div>
+              <p className="text-sm text-gray-700 leading-snug">{a.rationale.summary}</p>
+            </div>
+            {/* Factors weighed */}
+            <div className="px-4 pb-1">
+              <span className="text-[11px] font-bold tracking-widest text-gray-400 uppercase">Factors Weighed</span>
+            </div>
+            <div className="mx-4 mb-4 space-y-1">
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Distance / route fit</p>
+                  <p className="text-xs text-gray-400">{Math.round(a.rationale.driveCostSecs / 60)} min insertion cost</p>
+                </div>
+              </div>
+              {a.rationale.teamAvgRating != null && (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                  <span className="text-base shrink-0">⭐</span>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Team quality score</p>
+                    <p className="text-xs text-gray-400">{a.rationale.teamAvgRating.toFixed(1)} avg rating · {a.rationale.ratingBonus > 0 ? `+${a.rationale.ratingBonus}s bonus` : a.rationale.ratingBonus < 0 ? `${a.rationale.ratingBonus}s penalty` : "neutral"}</p>
+                  </div>
+                </div>
+              )}
+              {a.rationale.loadPenaltySecs > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                  <Users className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Load balancing</p>
+                    <p className="text-xs text-gray-400">+{Math.round(a.rationale.loadPenaltySecs / 60)} min penalty for overloaded team</p>
+                  </div>
+                </div>
+              )}
+              {a.rationale.floorBonus > 0 && (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                  <ArrowDown className="w-4 h-4 text-green-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-800">Min jobs floor</p>
+                    <p className="text-xs text-gray-400">Team preferred — below minimum job target</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100">
+                <Lock className="w-4 h-4 text-gray-400 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Existing assignment</p>
+                  <p className="text-xs text-gray-400">{a.rationale.wasLocked ? "Preserved from Launch27" : "Avoids breaking confirmed jobs"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       <Dialog open={showReassign} onOpenChange={setShowReassign}>
         <DialogContent className="max-w-sm">

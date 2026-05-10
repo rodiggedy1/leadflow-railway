@@ -1,0 +1,1 @@
+ALTER TABLE `schedule_assignments` ADD `rationale` text;
