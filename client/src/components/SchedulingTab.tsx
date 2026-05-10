@@ -985,6 +985,14 @@ export default function SchedulingTab() {
   const clearRecalculating = (ids: number[]) =>
     setRecalculatingTeams(prev => { const s = new Set(prev); ids.forEach(id => s.delete(id)); return s; });
 
+  // Post-optimize summary banner
+  const [optimizeSummary, setOptimizeSummary] = useState<{
+    assigned: number;
+    totalDriveMins: number;
+    conflictCount: number;
+    teamsUnderFloor: string[];
+  } | null>(null);
+
   // Suggest Slot panel
   const [suggestInput, setSuggestInput] = useState("");
   const [suggestAddress, setSuggestAddress] = useState("");
@@ -1006,7 +1014,8 @@ export default function SchedulingTab() {
     onSuccess: (result) => {
       utils.scheduling.getSchedule.invalidate({ date });
       utils.scheduling.getJobLocks.invalidate({ date });
-      toast.success(result.message);
+      // Banner will be populated after schedule data refreshes via useEffect below
+      setOptimizeSummary({ assigned: result.assigned, totalDriveMins: 0, conflictCount: 0, teamsUnderFloor: [] });
     },
     onError: (e) => toast.error(e.message),
   });
@@ -1125,6 +1134,19 @@ export default function SchedulingTab() {
       }
     }
   }
+
+  // After optimize, once schedule data has refreshed, fill in real drive/conflict/floor numbers
+  useEffect(() => {
+    if (!optimizeSummary) return;
+    const totalDriveMins = Math.round(
+      jobs.reduce((s, j) => s + (j.assignment?.driveTimeSecs ?? 0), 0) / 60
+    );
+    const teamsUnderFloor = teams
+      .filter(t => t.isActive && t.minJobs != null && (teamGroups.get(t.id)?.length ?? 0) < t.minJobs)
+      .map(t => t.name);
+    setOptimizeSummary(prev => prev ? { ...prev, totalDriveMins, conflictCount: conflictJobIds.size, teamsUnderFloor } : null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1320,6 +1342,48 @@ export default function SchedulingTab() {
           </Button>
         </div>
       </div>
+
+      {/* Post-optimize summary banner */}
+      {optimizeSummary && (
+        <div className="flex items-center gap-4 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5 text-sm">
+          <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+          <div className="flex items-center gap-4 flex-1 flex-wrap">
+            <span className="font-medium text-indigo-700">{optimizeSummary.assigned} jobs assigned</span>
+            {optimizeSummary.totalDriveMins > 0 && (
+              <span className="text-indigo-600 flex items-center gap-1">
+                <Timer className="w-3.5 h-3.5" />
+                {optimizeSummary.totalDriveMins >= 60
+                  ? `${(optimizeSummary.totalDriveMins / 60).toFixed(1)}h total drive`
+                  : `${optimizeSummary.totalDriveMins}m total drive`}
+              </span>
+            )}
+            {optimizeSummary.conflictCount > 0 ? (
+              <span className="text-red-600 font-medium flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {optimizeSummary.conflictCount} conflict{optimizeSummary.conflictCount > 1 ? 's' : ''}
+              </span>
+            ) : optimizeSummary.totalDriveMins > 0 ? (
+              <span className="text-green-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                No conflicts
+              </span>
+            ) : null}
+            {optimizeSummary.teamsUnderFloor.length > 0 && (
+              <span className="text-amber-600 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                {optimizeSummary.teamsUnderFloor.join(', ')} below minimum
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => setOptimizeSummary(null)}
+            className="text-indigo-400 hover:text-indigo-600 shrink-0"
+            title="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Suggest Slot panel */}
       <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
