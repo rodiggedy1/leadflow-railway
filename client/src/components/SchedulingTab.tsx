@@ -304,11 +304,11 @@ function JobCard({
               >
                 {isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
               </button>
-              {/* Rationale info button — only shown when rationale is available */}
+              {/* Rationale info button — always visible when rationale is available */}
               {a?.rationale && (
                 <button
                   onClick={e => { e.stopPropagation(); setShowRationale(true); }}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-blue-50 transition-all"
+                  className="p-1 rounded hover:bg-blue-50 transition-all"
                   title="Why this assignment?"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-blue-400" />
