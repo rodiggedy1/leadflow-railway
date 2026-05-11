@@ -1072,6 +1072,16 @@ export const cleanerRouter = router({
         submittedAt: Date.now(),
       });
 
+      // Notify owner
+      const cleanerName = ctx.cleaner.cleanerName ?? "A cleaner";
+      const availMsg = input.isAvailable
+        ? `${cleanerName} confirmed availability for ${tomorrowStr} — up to ${input.maxJobs && input.maxJobs >= 10 ? "4+" : input.maxJobs ?? "?"} job(s)${input.note ? `. Note: ${input.note}` : ""}`
+        : `${cleanerName} is NOT available for ${tomorrowStr}${input.note ? `. Reason: ${input.note}` : ""}`;
+      await notifyOwner({
+        title: `Check-in: ${cleanerName} — ${input.isAvailable ? "✅ Available" : "❌ Not Available"} ${tomorrowStr}`,
+        content: availMsg,
+      }).catch(() => {}); // non-blocking
+
       return { success: true, availabilityDate: tomorrowStr };
     }),
 

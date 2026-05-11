@@ -1430,45 +1430,59 @@ export default function SchedulingTab() {
 
       {/* Tomorrow's Availability Check-ins */}
       {checkins.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">📋</span>
-            <span className="text-sm font-semibold text-gray-800">
-              Team Availability for {formatDate(tomorrowDate)}
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <span className="text-sm">📋</span>
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              Tomorrow ({formatDate(tomorrowDate)})
             </span>
-            <span className="ml-auto text-xs text-gray-400">{checkins.length} response{checkins.length !== 1 ? 's' : ''}</span>
-          </div>
-          <div className="space-y-2">
-            {checkins.map(c => (
-              <div key={c.id} className={`flex items-start gap-3 px-3 py-2 rounded-lg border ${
-                c.isAvailable
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : 'bg-red-50 border-red-200'
-              }`}>
-                <span className="text-base shrink-0 mt-0.5">{c.isAvailable ? '✅' : '❌'}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-gray-900">{c.cleanerName ?? 'Unknown'}</span>
-                    {c.isAvailable && c.maxJobs != null && (
-                      <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                        up to {c.maxJobs >= 10 ? '4+' : c.maxJobs} job{c.maxJobs !== 1 ? 's' : ''}
-                      </span>
+            <div className="flex flex-wrap gap-1.5 ml-2">
+              {checkins.map(c => {
+                const initials = (c.cleanerName ?? 'U').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+                const jobLabel = c.isAvailable
+                  ? `${c.maxJobs != null && c.maxJobs >= 10 ? '4+' : c.maxJobs ?? '?'} job${c.maxJobs !== 1 ? 's' : ''}`
+                  : 'Off';
+                const tooltipText = c.isAvailable
+                  ? `✅ ${c.cleanerName} — up to ${jobLabel}${c.note ? ` · ${c.note}` : ''}`
+                  : `❌ ${c.cleanerName} — Not available${c.note ? ` · ${c.note}` : ''}`;
+                return (
+                  <div
+                    key={c.id}
+                    title={tooltipText}
+                    className={`group relative flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold cursor-default select-none transition-all ${
+                      c.isAvailable
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                        : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
+                    }`}
+                  >
+                    <span>{c.isAvailable ? '✅' : '❌'}</span>
+                    <span>{initials}</span>
+                    {c.isAvailable && (
+                      <span className={`text-[10px] font-medium ${
+                        c.isAvailable ? 'text-emerald-500' : 'text-red-400'
+                      }`}>{jobLabel}</span>
                     )}
-                    {!c.isAvailable && (
-                      <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
-                        Not available
-                      </span>
-                    )}
+                    {/* Hover tooltip */}
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 hidden group-hover:block">
+                      <div className="bg-gray-900 text-white text-[11px] rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg max-w-[220px] text-center">
+                        <div className="font-semibold">{c.cleanerName ?? 'Unknown'}</div>
+                        {c.isAvailable ? (
+                          <div className="text-emerald-300">✅ Available · up to {jobLabel}</div>
+                        ) : (
+                          <div className="text-red-300">❌ Not available</div>
+                        )}
+                        {c.note && <div className="text-gray-300 mt-0.5 text-[10px] whitespace-normal">{c.note}</div>}
+                        <div className="text-gray-400 text-[10px] mt-0.5">
+                          {c.submittedAt ? new Date(c.submittedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) : ''}
+                        </div>
+                      </div>
+                      <div className="w-2 h-2 bg-gray-900 rotate-45 mx-auto -mt-1" />
+                    </div>
                   </div>
-                  {c.note && (
-                    <p className="text-xs text-gray-500 mt-0.5 truncate" title={c.note}>{c.note}</p>
-                  )}
-                </div>
-                <span className="text-[10px] text-gray-400 shrink-0 mt-0.5">
-                  {c.submittedAt ? new Date(c.submittedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) : ''}
-                </span>
-              </div>
-            ))}
+                );
+              })}
+            </div>
+            <span className="ml-auto text-[10px] text-gray-400">{checkins.length}/{checkins.length} responded</span>
           </div>
         </div>
       )}
