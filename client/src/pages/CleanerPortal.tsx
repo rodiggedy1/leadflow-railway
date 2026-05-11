@@ -1784,7 +1784,7 @@ function CheckinModal({
                 Important Reminder
               </p>
               <p className="text-amber-400/80 text-xs leading-relaxed">
-                If you said you're available but need to cancel, please notify your manager as early as possible. Last-minute cancellations may result in penalties per your service agreement.
+                If you said you're available but cancel, this will incur a charge equal to the total cost of all of your cancelled appointments.
               </p>
             </div>
 
