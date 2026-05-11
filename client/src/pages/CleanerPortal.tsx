@@ -1858,8 +1858,9 @@ export default function CleanerPortal() {
     // Read directly from query data — jobs variable is defined after this function
     const allJobsNow = (jobsQuery.data ?? []) as Job[];
     const activeJobs = allJobsNow.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
-    const remainingIncomplete = activeJobs.filter(j => j.id !== completedJobId && j.bookingStatus !== "completed");
-    if (activeJobs.length > 0 && remainingIncomplete.length === 0) {
+    const previouslyCompleted = activeJobs.filter(j => j.id !== completedJobId && j.bookingStatus === "completed");
+    // Fire on the FIRST job completed (no other jobs were completed before this one)
+    if (activeJobs.length > 0 && previouslyCompleted.length === 0) {
       setShowCheckin(true);
     }
   };
