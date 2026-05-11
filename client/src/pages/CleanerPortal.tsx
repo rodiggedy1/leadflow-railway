@@ -1412,7 +1412,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
       </Dialog>
 
       {/* ── Post-completion "What's Next" modal ─────────────────────────── */}
-      <Dialog open={showPostComplete} onOpenChange={setShowPostComplete}>
+      <Dialog open={showPostComplete} onOpenChange={(open) => { setShowPostComplete(open); if (!open) onMarkedComplete(); }}>
         <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-sm mx-auto rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-white text-lg flex items-center gap-2">
@@ -1463,7 +1463,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               variant="outline"
               size="sm"
               className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
-              onClick={() => { setShowPostComplete(false); onMarkedComplete(); }}
+              onClick={() => setShowPostComplete(false)}
             >
               Done
             </Button>
