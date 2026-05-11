@@ -580,6 +580,28 @@ export function registerWebhookRoutes(app: Express) {
           const newSessionId = (newIns as any).insertId ?? null;
           console.log(`[Webhook] New inbound-sms session created — sessionId=${newSessionId}, phone=${fromPhone}`);
 
+          // Create a quote_leads entry so this lead appears in the Lead Drawer immediately
+          try {
+            const [qlIns] = await db.insert(quoteLeads).values({
+              name: fromPhone, // no name yet — phone as placeholder
+              phone: fromPhone,
+              email: null,
+              serviceType: null,
+              bedrooms: null,
+              bathrooms: null,
+              smsSent: 0,
+            } as any);
+            const newLeadId = (qlIns as any).insertId ?? null;
+            if (newLeadId && newSessionId) {
+              await db.update(conversationSessions)
+                .set({ quoteLeadId: newLeadId })
+                .where(eq(conversationSessions.id, newSessionId));
+            }
+            console.log(`[Webhook] Created quoteLeads row ${newLeadId} for inbound-sms ${fromPhone}`);
+          } catch (qlErr) {
+            console.error('[Webhook] Failed to create quoteLeads row for inbound-sms:', qlErr);
+          }
+
           // Notify the team so they know a new cold inbound arrived
           try {
             await db.insert(opsChatMessages).values({
