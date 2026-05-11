@@ -267,7 +267,7 @@ function solveVRP(
   // across all teams BEFORE the greedy loop runs. This guarantees each team claims
   // its closest job first, then chains subsequent jobs from that position.
   const fairShare = (unassigned.length + Array.from(routes.values()).reduce((s, r) => s + r.length, 0)) / teams.length;
-  const LOAD_PENALTY_PER_JOB = 300; // seconds — tune this to trade off balance vs drive time
+  const LOAD_PENALTY_PER_JOB = 600; // seconds — raised from 300 to 600 to discourage overloading one team
   // Floor bonus: encourages teams to hit their minJobs target but must NOT override
   // a large geographic disadvantage. A 15-minute drive penalty = ~900s. We cap the
   // floor bonus at ~1200s per job (20 min equivalent) so geography always wins when
@@ -414,7 +414,17 @@ function solveVRP(
         const homeReturnSaving = currentLastToHome - newLastToHome;
         homeReturnBonus = homeReturnSaving * HOME_RETURN_WEIGHT;
       }
-      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB - floorBonus - ratingBonus - homeReturnBonus;
+      // Same-slot stacking penalty: discourage assigning two jobs at the same hour to one team.
+      // A cleaner can only be in one place — if a team already has a job at the same hour,
+      // add a 900s (15 min equivalent) penalty to prefer spreading across time slots.
+      // Uses the "HH" portion of serviceDateTime (ISO string) for comparison.
+      const SAME_SLOT_PENALTY = 900; // seconds — optimizer accepts up to 15 min extra drive to avoid same-slot stacking
+      const jobHour = jobs[ji].serviceDateTime?.slice(11, 13) ?? null;
+      const sameSlotCount = jobHour
+        ? route.filter(rji => jobs[rji].serviceDateTime?.slice(11, 13) === jobHour).length
+        : 0;
+      const sameSlotPenalty = sameSlotCount * SAME_SLOT_PENALTY;
+      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB + sameSlotPenalty - floorBonus - ratingBonus - homeReturnBonus;
       if (totalCost < bestCost) {
         bestCost = totalCost;
         bestTeam = t;
@@ -426,6 +436,7 @@ function solveVRP(
         if (ratingStr) summary += `, team rated ${ratingStr}⭐`;
         if (floorBonus > 0) summary += `, team needs more jobs`;
         if (overloadSecs > 0) summary += `, load-balanced`;
+        if (sameSlotPenalty > 0) summary += `, spread across time slots`;
         if (homeReturnBonus > 0) summary += `, on the way home`;
         jobRationale.set(ji, {
           driveCostSecs: minInsertCost,
