@@ -1082,6 +1082,37 @@ export const cleanerRouter = router({
         content: availMsg,
       }).catch(() => {}); // non-blocking
 
+      // Post check-in card to CommandChat
+      (async () => {
+        try {
+          const jobsLabel = input.isAvailable
+            ? `up to ${input.maxJobs && input.maxJobs >= 10 ? "4+" : input.maxJobs ?? "?"} job${input.maxJobs !== 1 ? "s" : ""}`
+            : "not available";
+          const body = input.isAvailable
+            ? `📋 ${cleanerName} — ✅ Available tomorrow · ${jobsLabel}${input.note ? ` · ${input.note}` : ""}`
+            : `📋 ${cleanerName} — ❌ Not available tomorrow${input.note ? ` · ${input.note}` : ""}`;
+          await db.insert(opsChatMessages).values({
+            channel: "command",
+            cleanerJobId: null,
+            authorName: cleanerName,
+            authorRole: "cleaner",
+            body,
+            quickAction: "checkin_availability",
+            metadata: JSON.stringify({
+              cleanerName,
+              isAvailable: input.isAvailable,
+              maxJobs: input.maxJobs,
+              note: input.note,
+              availabilityDate: tomorrowStr,
+            }),
+          });
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message", { channel: "command" });
+        } catch (err) {
+          console.error("[submitCheckin] Failed to post CommandChat card:", err);
+        }
+      })();
+
       return { success: true, availabilityDate: tomorrowStr };
     }),
 
