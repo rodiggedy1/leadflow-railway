@@ -348,27 +348,29 @@ export async function runEscalationCalls(
 
     called++;
 
-    // Store in fieldMgmtCalls so the end-of-call webhook can update it
+    // Store in fieldMgmtCalls synchronously (awaited) so the end-of-call webhook guard
+    // can always find it before the call ends (race condition fix for short calls).
     if (result.vapiCallId) {
-      await db
-        .insert(fieldMgmtCalls)
-        .values({
-          cleanerJobId: cleaner.jobIds[0], // primary job
-          step: "schedule_escalation",
-          vapiCallId: result.vapiCallId,
-          calledPhone: cleaner.phone.startsWith("+")
-            ? cleaner.phone
-            : `+1${cleaner.phone.replace(/\D/g, "")}`,
-          outcome: "no_answer", // will be updated by end-of-call webhook
-          durationSeconds: 0,
-          transcript: null,
-          summary: null,
-          endedReason: null,
-          recordingUrl: null,
-        })
-        .catch((err: unknown) => {
-          console.error("[Escalation] Failed to insert fieldMgmtCalls row:", err);
-        });
+      try {
+        await db
+          .insert(fieldMgmtCalls)
+          .values({
+            cleanerJobId: cleaner.jobIds[0], // primary job
+            step: "schedule_escalation",
+            vapiCallId: result.vapiCallId,
+            calledPhone: cleaner.phone.startsWith("+")
+              ? cleaner.phone
+              : `+1${cleaner.phone.replace(/\D/g, "")}`,
+            outcome: "no_answer", // will be updated by end-of-call webhook
+            durationSeconds: 0,
+            transcript: null,
+            summary: null,
+            endedReason: null,
+            recordingUrl: null,
+          });
+      } catch (err: unknown) {
+        console.error("[Escalation] Failed to insert fieldMgmtCalls row:", err);
+      }
     }
 
     // Small delay between calls to avoid rate limiting

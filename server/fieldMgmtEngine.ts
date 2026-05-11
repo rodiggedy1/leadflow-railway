@@ -207,24 +207,27 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
     const result = await vapiPost("/call", payload) as { id?: string };
     const vapiCallId = result?.id ?? null;
     console.log(`[FieldMgmt] Escalation call placed to ${normalizedTarget}. VAPI call ID: ${vapiCallId ?? "unknown"}`);
-    // Store the call record in fieldMgmtCalls so we can update it when the end-of-call report arrives
+    // Store the call record in fieldMgmtCalls BEFORE returning so the end-of-call webhook
+    // guard can always find it (avoids race condition on short 20-25s calls).
     if (cleanerJobId && vapiCallId) {
       const db = await getDb();
       if (db) {
-        await db.insert(fieldMgmtCalls).values({
-          cleanerJobId,
-          step: step ?? "noshow_call",
-          vapiCallId,
-          calledPhone: normalizedTarget,
-          outcome: "no_answer", // will be updated by end-of-call webhook
-          durationSeconds: 0,
-          transcript: null,
-          summary: null,
-          endedReason: null,
-          recordingUrl: null,
-        }).catch((err: unknown) => {
+        try {
+          await db.insert(fieldMgmtCalls).values({
+            cleanerJobId,
+            step: step ?? "noshow_call",
+            vapiCallId,
+            calledPhone: normalizedTarget,
+            outcome: "no_answer", // will be updated by end-of-call webhook
+            durationSeconds: 0,
+            transcript: null,
+            summary: null,
+            endedReason: null,
+            recordingUrl: null,
+          });
+        } catch (err: unknown) {
           console.error("[FieldMgmt] Failed to insert fieldMgmtCalls row:", err);
-        });
+        }
       }
     }
 
@@ -2139,27 +2142,29 @@ async function placeCheckinCall(
     const result = await vapiPost("/call", payload) as { id?: string };
     const vapiCallId = result?.id ?? null;
     console.log(`[FieldMgmt] Check-in call (${step}) placed to ${cleanerName} (${normalizedPhone}) for job ${cleanerJobId}. VAPI ID: ${vapiCallId ?? "unknown"}`);
+    // Insert fieldMgmtCalls row synchronously (awaited) so the end-of-call webhook guard
+    // can always find it before the call ends (race condition fix for short 20s calls).
     if (vapiCallId) {
       const db = await getDb();
       if (db) {
-        await db.insert(fieldMgmtCalls).values({
-          cleanerJobId,
-          step,
-          vapiCallId,
-          calledPhone: normalizedPhone,
-          outcome: "no_answer",
-          durationSeconds: 0,
-          transcript: null,
-          summary: null,
-          endedReason: null,
-          recordingUrl: null,
-        }).catch((err: unknown) => {
+        try {
+          await db.insert(fieldMgmtCalls).values({
+            cleanerJobId,
+            step,
+            vapiCallId,
+            calledPhone: normalizedPhone,
+            outcome: "no_answer",
+            durationSeconds: 0,
+            transcript: null,
+            summary: null,
+            endedReason: null,
+            recordingUrl: null,
+          });
+        } catch (err: unknown) {
           console.error("[FieldMgmt] Failed to insert fieldMgmtCalls row:", err);
-        });
+        }
       }
     }
-    // Row was already inserted by tryClaimStep before this function was called.
-    // Just confirm success (no-op since success=1 is the default, but explicit for clarity).
     await updateStepOutcome(cleanerJobId, step, true);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
