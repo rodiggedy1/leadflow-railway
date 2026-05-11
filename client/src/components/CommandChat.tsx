@@ -1891,6 +1891,57 @@ const MessageList = memo(function MessageList({
                 }
                 // ── Skip cleaner_status cards — rendered in sidebar instead
                 if (msg.quickAction === "cleaner_status") return null;
+                // ── Check-in availability card ─────────────────────────────────────────
+                if (msg.quickAction === "checkin_availability") {
+                  let meta: { cleanerName?: string; isAvailable?: boolean; maxJobs?: number | null; note?: string | null; availabilityDate?: string } = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch {}
+                  const isAvail = meta.isAvailable;
+                  const jobsLabel = isAvail
+                    ? `up to ${meta.maxJobs != null && meta.maxJobs >= 10 ? "4+" : meta.maxJobs ?? "?"} job${meta.maxJobs !== 1 ? "s" : ""}`
+                    : null;
+                  const dateLabel = meta.availabilityDate
+                    ? new Date(meta.availabilityDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                    : "tomorrow";
+                  const timeLabel = msg.createdAt
+                    ? msg.createdAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })
+                    : "";
+                  return (
+                    <div
+                      key={msg.id}
+                      ref={(el) => { if (el) cmdMsgRefMap.current.set(msg.id, el); else cmdMsgRefMap.current.delete(msg.id); }}
+                      className="w-full my-1"
+                    >
+                      <div className={`flex items-start gap-3 px-4 py-3 rounded-2xl border-l-4 ${
+                        isAvail
+                          ? "bg-teal-50 border-teal-400"
+                          : "bg-red-50 border-red-400"
+                      }`}>
+                        <span className="text-xl shrink-0 mt-0.5">{isAvail ? "✅" : "❌"}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-bold text-slate-800">{meta.cleanerName ?? msg.from}</span>
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                              isAvail
+                                ? "bg-teal-100 text-teal-700 border-teal-200"
+                                : "bg-red-100 text-red-700 border-red-200"
+                            }`}>
+                              {isAvail ? `✅ Available ${dateLabel}` : `❌ Off ${dateLabel}`}
+                            </span>
+                            {isAvail && jobsLabel && (
+                              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-teal-50 text-teal-600 border border-teal-200">
+                                📋 {jobsLabel}
+                              </span>
+                            )}
+                          </div>
+                          {meta.note && (
+                            <p className="text-xs text-slate-500 mt-1 italic">"{meta.note}"</p>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0 mt-0.5 whitespace-nowrap">{timeLabel}</span>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
