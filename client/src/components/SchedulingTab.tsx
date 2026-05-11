@@ -990,10 +990,10 @@ export default function SchedulingTab() {
   const [callLogOpen, setCallLogOpen] = useState(false);
   const { data: dayIssues = [] } = trpc.calls.getDayIssues.useQuery({ jobDate: date }, { refetchInterval: 30_000 });
 
-  // Tomorrow's check-ins — fetch for the day AFTER the selected date
+  // Check-ins for the selected date — cleaners submitted these the day before
   const tomorrowDate = addDays(date, 1);
   const { data: checkins = [] } = trpc.cleaner.getCheckinsForDate.useQuery(
-    { date: tomorrowDate },
+    { date: date },
     { refetchInterval: 60_000 }
   );
 
@@ -1434,7 +1434,7 @@ export default function SchedulingTab() {
           <div className="flex items-center gap-2">
             <span className="text-sm">📋</span>
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-              Tomorrow ({formatDate(tomorrowDate)})
+              Tomorrow — {formatDate(date)}
             </span>
             <div className="flex flex-wrap gap-1.5 ml-2">
               {checkins.map(c => {
