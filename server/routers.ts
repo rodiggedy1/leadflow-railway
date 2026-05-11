@@ -113,7 +113,15 @@ export const appRouter = router({
         //      stays at REACTIVATION even after a reply, so we check the message log.
         const sourceFilter = and(
           // Never show CS inbox sessions or hiring sessions in the lead list
-          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'cs_initiated', 'hiring_interview', 'schedule_confirm'))`,
+          // Exception: cs_initiated sessions with lead-like stages (AI-initiated quote outreach) DO show in leads
+          sql`(
+            ${conversationSessions.leadSource} IS NULL OR
+            ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'schedule_confirm') AND
+            NOT (
+              ${conversationSessions.leadSource} = 'cs_initiated' AND
+              ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD')
+            )
+          )`,
           // Never show pure review-flow sessions in the lead list
           sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
           or(
