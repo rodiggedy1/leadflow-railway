@@ -990,6 +990,13 @@ export default function SchedulingTab() {
   const [callLogOpen, setCallLogOpen] = useState(false);
   const { data: dayIssues = [] } = trpc.calls.getDayIssues.useQuery({ jobDate: date }, { refetchInterval: 30_000 });
 
+  // Tomorrow's check-ins — fetch for the day AFTER the selected date
+  const tomorrowDate = addDays(date, 1);
+  const { data: checkins = [] } = trpc.cleaner.getCheckinsForDate.useQuery(
+    { date: tomorrowDate },
+    { refetchInterval: 60_000 }
+  );
+
   // Set of teamIds currently being recalculated (show spinner on their headers)
   const [recalculatingTeams, setRecalculatingTeams] = useState<Set<number>>(new Set());
   const markRecalculating = (ids: number[]) =>
@@ -1418,6 +1425,51 @@ export default function SchedulingTab() {
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* Tomorrow's Availability Check-ins */}
+      {checkins.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-base">📋</span>
+            <span className="text-sm font-semibold text-gray-800">
+              Team Availability for {formatDate(tomorrowDate)}
+            </span>
+            <span className="ml-auto text-xs text-gray-400">{checkins.length} response{checkins.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="space-y-2">
+            {checkins.map(c => (
+              <div key={c.id} className={`flex items-start gap-3 px-3 py-2 rounded-lg border ${
+                c.isAvailable
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-red-50 border-red-200'
+              }`}>
+                <span className="text-base shrink-0 mt-0.5">{c.isAvailable ? '✅' : '❌'}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-gray-900">{c.cleanerName ?? 'Unknown'}</span>
+                    {c.isAvailable && c.maxJobs != null && (
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        up to {c.maxJobs >= 10 ? '4+' : c.maxJobs} job{c.maxJobs !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                    {!c.isAvailable && (
+                      <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">
+                        Not available
+                      </span>
+                    )}
+                  </div>
+                  {c.note && (
+                    <p className="text-xs text-gray-500 mt-0.5 truncate" title={c.note}>{c.note}</p>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400 shrink-0 mt-0.5">
+                  {c.submittedAt ? new Date(c.submittedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) : ''}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

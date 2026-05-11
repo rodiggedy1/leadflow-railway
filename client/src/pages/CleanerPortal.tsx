@@ -1553,9 +1553,260 @@ function WeekJobRow({
 
 // ── Main Portal ───────────────────────────────────────────────────────────────
 
+// ── End-of-day Check-in Modal ────────────────────────────────────────────────
+
+type CheckinStep = "availability" | "details" | "confirmed";
+
+function CheckinModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [step, setStep] = useState<CheckinStep>("availability");
+  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [maxJobs, setMaxJobs] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+  const [submittedData, setSubmittedData] = useState<{ isAvailable: boolean; maxJobs: number | null; note: string } | null>(null);
+
+  const submitCheckin = trpc.cleaner.submitCheckin.useMutation({
+    onSuccess: () => {
+      setSubmittedData({ isAvailable: isAvailable!, maxJobs, note });
+      setStep("confirmed");
+    },
+    onError: (err) => toast.error(`Check-in failed: ${err.message}`),
+  });
+
+  const handleAvailabilityChoice = (available: boolean) => {
+    setIsAvailable(available);
+    setStep("details");
+  };
+
+  const handleSubmit = () => {
+    if (isAvailable === null) return;
+    if (isAvailable && maxJobs === null) {
+      toast.warning("Please select how many jobs you can do tomorrow.");
+      return;
+    }
+    submitCheckin.mutate({
+      isAvailable,
+      maxJobs: isAvailable ? maxJobs : null,
+      note: note.trim() || null,
+    });
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
+      {/* Header */}
+      <div className="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">End of Day</p>
+          <h2 className="text-white font-semibold text-base leading-tight">Tomorrow's Availability</h2>
+        </div>
+        {step === "confirmed" && (
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1 rounded"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-4 py-6 max-w-lg mx-auto w-full">
+
+        {/* ── Step 1: Availability choice ─── */}
+        {step === "availability" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="text-5xl mb-4">🌙</div>
+              <h3 className="text-white text-2xl font-bold">Great work today!</h3>
+              <p className="text-slate-400 text-base">Are you working tomorrow?</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mt-8">
+              <button
+                onClick={() => handleAvailabilityChoice(true)}
+                className="flex flex-col items-center gap-3 p-6 bg-emerald-900/40 border-2 border-emerald-600/60 rounded-2xl hover:bg-emerald-900/60 hover:border-emerald-500 transition-all active:scale-95"
+              >
+                <span className="text-4xl">✅</span>
+                <span className="text-emerald-300 font-bold text-lg">Yes</span>
+                <span className="text-emerald-500 text-xs text-center">I'm available tomorrow</span>
+              </button>
+              <button
+                onClick={() => handleAvailabilityChoice(false)}
+                className="flex flex-col items-center gap-3 p-6 bg-slate-800 border-2 border-slate-600 rounded-2xl hover:bg-slate-700 hover:border-slate-500 transition-all active:scale-95"
+              >
+                <span className="text-4xl">❌</span>
+                <span className="text-slate-300 font-bold text-lg">No</span>
+                <span className="text-slate-500 text-xs text-center">I'm not available</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2a: Available — job count + note ─── */}
+        {step === "details" && isAvailable === true && (
+          <div className="space-y-6">
+            <div className="text-center space-y-1">
+              <div className="text-4xl mb-3">📋</div>
+              <h3 className="text-white text-xl font-bold">How many jobs can you do?</h3>
+              <p className="text-slate-400 text-sm">This helps us plan tomorrow's schedule.</p>
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setMaxJobs(n === 4 ? 10 : n)}
+                  className={`py-5 rounded-2xl border-2 font-bold text-xl transition-all active:scale-95 ${
+                    (n === 4 ? maxJobs !== null && maxJobs >= 4 : maxJobs === n)
+                      ? "bg-emerald-600 border-emerald-500 text-white"
+                      : "bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500"
+                  }`}
+                >
+                  {n === 4 ? "4+" : n}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-slate-300 text-sm font-medium block">Note (optional)</label>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="e.g. Available after 9am, prefer East side..."
+                rows={3}
+                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-emerald-500"
+                maxLength={500}
+              />
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base h-auto"
+                onClick={handleSubmit}
+                disabled={submitCheckin.isPending || maxJobs === null}
+              >
+                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                Submit Availability
+              </Button>
+              <button
+                onClick={() => setStep("availability")}
+                className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
+              >
+                ← Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2b: Not available — reason ─── */}
+        {step === "details" && isAvailable === false && (
+          <div className="space-y-6">
+            <div className="text-center space-y-1">
+              <div className="text-4xl mb-3">📝</div>
+              <h3 className="text-white text-xl font-bold">Let us know why</h3>
+              <p className="text-slate-400 text-sm">This helps the team plan coverage.</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-slate-300 text-sm font-medium block">Reason (optional)</label>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="e.g. Doctor appointment, family commitment..."
+                rows={4}
+                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500"
+                maxLength={500}
+              />
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 text-base h-auto"
+                onClick={handleSubmit}
+                disabled={submitCheckin.isPending}
+              >
+                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Submit
+              </Button>
+              <button
+                onClick={() => setStep("availability")}
+                className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
+              >
+                ← Back
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3: Confirmed ─── */}
+        {step === "confirmed" && submittedData && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="text-5xl mb-4">🎉</div>
+              <h3 className="text-white text-2xl font-bold">All set!</h3>
+              <p className="text-slate-400 text-base">Your availability has been submitted.</p>
+            </div>
+
+            {/* Summary */}
+            <div className="bg-slate-800 border border-slate-700 rounded-2xl p-4 space-y-3">
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest">What you submitted</p>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{submittedData.isAvailable ? "✅" : "❌"}</span>
+                <div>
+                  <p className="text-white font-semibold">
+                    {submittedData.isAvailable ? "Available tomorrow" : "Not available tomorrow"}
+                  </p>
+                  {submittedData.isAvailable && submittedData.maxJobs !== null && (
+                    <p className="text-slate-400 text-sm">
+                      Up to {submittedData.maxJobs >= 10 ? "4+" : submittedData.maxJobs} job{submittedData.maxJobs !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {submittedData.note && (
+                <div className="pt-1 border-t border-slate-700">
+                  <p className="text-slate-500 text-xs mb-1">Note</p>
+                  <p className="text-slate-300 text-sm">{submittedData.note}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Cancellation disclaimer */}
+            <div className="bg-amber-950/50 border border-amber-700/40 rounded-2xl p-4">
+              <p className="text-amber-300 font-semibold text-sm flex items-center gap-2 mb-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                Important Reminder
+              </p>
+              <p className="text-amber-400/80 text-xs leading-relaxed">
+                If you said you're available but need to cancel, please notify your manager as early as possible. Last-minute cancellations may result in penalties per your service agreement.
+              </p>
+            </div>
+
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base h-auto"
+              onClick={onClose}
+            >
+              Done
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Portal ───────────────────────────────────────────────────────────────
+
 export default function CleanerPortal() {
   const [date, setDate] = useState(getTodayET);
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
+  const [showCheckin, setShowCheckin] = useState(false);
   const utils = trpc.useUtils();
 
   const meQuery = trpc.cleaner.me.useQuery(undefined, {
@@ -1596,6 +1847,20 @@ export default function CleanerPortal() {
   const refetch = () => {
     utils.cleaner.myJobs.invalidate({ date });
     utils.cleaner.myJobsRange.invalidate();
+  };
+
+  // Called from JobCard after a job is marked complete.
+  // Checks if this was the last active job of the day — if so, shows the check-in modal.
+  const handleJobMarkedComplete = (completedJobId: number) => {
+    refetch();
+    // Only trigger on today's date
+    if (date !== getTodayET()) return;
+    const currentJobs = (jobsQuery.data ?? []) as Job[];
+    const activeJobs = currentJobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
+    const remainingIncomplete = activeJobs.filter(j => j.id !== completedJobId && j.bookingStatus !== "completed");
+    if (remainingIncomplete.length === 0 && activeJobs.length > 0) {
+      setShowCheckin(true);
+    }
   };
 
   // weekDays must be computed before any early returns (hooks rule)
@@ -1655,6 +1920,7 @@ export default function CleanerPortal() {
   const isToday = date === getTodayET();
 
   return (
+    <>
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
@@ -1885,7 +2151,7 @@ export default function CleanerPortal() {
                 job={job}
                 allJobs={jobs}
                 onPhotoUploaded={refetch}
-                onMarkedComplete={refetch}
+                onMarkedComplete={() => handleJobMarkedComplete(job.id)}
                 onStatusUpdated={refetch}
                 payRules={payRules}
                 activeCustomRules={activeCustomRules}
@@ -1927,9 +2193,13 @@ export default function CleanerPortal() {
             )}
           </div>
         )}
-          </>
+           </>
         )}
       </div>
     </div>
+
+    {/* End-of-day check-in modal — fullscreen takeover */}
+    <CheckinModal open={showCheckin} onClose={() => setShowCheckin(false)} />
+    </>
   );
 }

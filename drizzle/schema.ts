@@ -2584,3 +2584,30 @@ export const jobIssues = mysqlTable("job_issues", {
 }));
 export type JobIssue = typeof jobIssues.$inferSelect;
 export type InsertJobIssue = typeof jobIssues.$inferInsert;
+
+// ── End-of-day availability check-in ────────────────────────────────────────
+// Submitted by cleaners after completing their last job of the day.
+// Records whether they're available tomorrow and how many jobs they can take.
+export const teamAvailabilityCheckins = mysqlTable("team_availability_checkins", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The cleanerProfiles.id of the team that submitted this */
+  cleanerProfileId: int("cleanerProfileId").notNull(),
+  /** The date the check-in was submitted (YYYY-MM-DD — today's date) */
+  submittedForDate: varchar("submittedForDate", { length: 20 }).notNull(),
+  /** The date this availability applies to (YYYY-MM-DD — tomorrow) */
+  availabilityDate: varchar("availabilityDate", { length: 20 }).notNull(),
+  /** Whether the team is available tomorrow */
+  isAvailable: tinyint("isAvailable").notNull(),
+  /** How many jobs they can do (null if not available) */
+  maxJobs: int("maxJobs"),
+  /** Optional note from the cleaner */
+  note: text("note"),
+  /** Unix ms when submitted */
+  submittedAt: bigint("submittedAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxCleanerDate: index("idx_tac_cleaner_date").on(t.cleanerProfileId, t.availabilityDate),
+  idxAvailDate: index("idx_tac_avail_date").on(t.availabilityDate),
+}));
+export type TeamAvailabilityCheckin = typeof teamAvailabilityCheckins.$inferSelect;
+export type InsertTeamAvailabilityCheckin = typeof teamAvailabilityCheckins.$inferInsert;

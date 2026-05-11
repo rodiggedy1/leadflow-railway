@@ -1563,3 +1563,7 @@
 - [x] Drive time delta in post-optimize banner: show ↓/↑ Xm vs previous run
 - [x] Fix locked jobs out of order: estimatedArrivalMs was Date.now() for job-locked assignments, now uses actual serviceDateTime so client sort is correct
 - [x] Improve drive time labels on job cards: first="🏠 17m from home", middle="🚗 27m drive to get here", last="🚗 24m drive to get here" + show home return time
+- [x] End-of-day check-in: DB schema (teamAvailabilityCheckins table)
+- [x] End-of-day check-in: tRPC procedures (submitCheckin, getCheckinsForDate)
+- [x] End-of-day check-in: fullscreen modal in cleaner portal (triggers on last job complete)
+- [x] End-of-day check-in: surface availability responses on scheduling page

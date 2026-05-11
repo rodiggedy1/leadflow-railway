@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts, teamAvailabilityCheckins } from "../drizzle/schema";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -1029,6 +1029,82 @@ export const cleanerRouter = router({
       }
       const magicUrl = `${input.origin}/auth/cleaner-callback?token=${rawToken}`;
       return { url: magicUrl, cleanerName: cleaner.name };
+    }),
+
+  /**
+   * cleaner.submitCheckin — submit end-of-day availability check-in for tomorrow.
+   * Upserts: if a check-in for this cleaner+date already exists, it's replaced.
+   */
+  submitCheckin: cleanerProcedure
+    .input(z.object({
+      isAvailable: z.boolean(),
+      maxJobs: z.number().int().min(1).max(10).nullable(),
+      note: z.string().max(500).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const now = new Date();
+      // submittedForDate = today, availabilityDate = tomorrow
+      const todayStr = now.toISOString().slice(0, 10);
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+      // Delete any existing check-in for this cleaner+tomorrow before inserting
+      await db
+        .delete(teamAvailabilityCheckins)
+        .where(
+          and(
+            eq(teamAvailabilityCheckins.cleanerProfileId, ctx.cleaner.cleanerId),
+            eq(teamAvailabilityCheckins.availabilityDate, tomorrowStr),
+          )
+        );
+
+      await db.insert(teamAvailabilityCheckins).values({
+        cleanerProfileId: ctx.cleaner.cleanerId,
+        submittedForDate: todayStr,
+        availabilityDate: tomorrowStr,
+        isAvailable: input.isAvailable ? 1 : 0,
+        maxJobs: input.maxJobs,
+        note: input.note,
+        submittedAt: Date.now(),
+      });
+
+      return { success: true, availabilityDate: tomorrowStr };
+    }),
+
+  /**
+   * cleaner.getCheckinsForDate — fetch all check-ins for a given availability date.
+   * Admin/agent only.
+   */
+  getCheckinsForDate: agentProcedure
+    .input(z.object({ date: z.string() })) // YYYY-MM-DD
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const rows = await db
+        .select({
+          id: teamAvailabilityCheckins.id,
+          cleanerProfileId: teamAvailabilityCheckins.cleanerProfileId,
+          cleanerName: cleanerProfiles.name,
+          isAvailable: teamAvailabilityCheckins.isAvailable,
+          maxJobs: teamAvailabilityCheckins.maxJobs,
+          note: teamAvailabilityCheckins.note,
+          submittedAt: teamAvailabilityCheckins.submittedAt,
+          availabilityDate: teamAvailabilityCheckins.availabilityDate,
+        })
+        .from(teamAvailabilityCheckins)
+        .leftJoin(cleanerProfiles, eq(cleanerProfiles.id, teamAvailabilityCheckins.cleanerProfileId))
+        .where(eq(teamAvailabilityCheckins.availabilityDate, input.date))
+        .orderBy(teamAvailabilityCheckins.submittedAt);
+
+      return rows.map(r => ({
+        ...r,
+        isAvailable: r.isAvailable === 1,
+      }));
     }),
 
   listProfiles: agentProcedure.query(async () => {
