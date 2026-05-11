@@ -1463,7 +1463,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               variant="outline"
               size="sm"
               className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
-              onClick={() => setShowPostComplete(false)}
+              onClick={() => { setShowPostComplete(false); onMarkedComplete(); }}
             >
               Done
             </Button>
@@ -1855,10 +1855,11 @@ export default function CleanerPortal() {
     refetch();
     // Only trigger on today's date
     if (date !== getTodayET()) return;
-    const currentJobs = (jobsQuery.data ?? []) as Job[];
-    const activeJobs = currentJobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
+    // Read directly from query data — jobs variable is defined after this function
+    const allJobsNow = (jobsQuery.data ?? []) as Job[];
+    const activeJobs = allJobsNow.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
     const remainingIncomplete = activeJobs.filter(j => j.id !== completedJobId && j.bookingStatus !== "completed");
-    if (remainingIncomplete.length === 0 && activeJobs.length > 0) {
+    if (activeJobs.length > 0 && remainingIncomplete.length === 0) {
       setShowCheckin(true);
     }
   };
