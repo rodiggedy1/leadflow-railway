@@ -192,7 +192,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 
 function JobCard({
   job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
-  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, hasConflict,
+  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, hasConflict, isLastJob,
 }: {
   job: Job;
   teams: Team[];
@@ -208,6 +208,7 @@ function JobCard({
   onUnassignDone?: (srcTeamId: number | null) => void;
   onIssueClick?: () => void;
   hasConflict?: boolean;
+  isLastJob?: boolean;
 }) {
   // Open reassign dialog on card click (in addition to map selection)
   const utils = trpc.useUtils();
@@ -253,6 +254,10 @@ function JobCard({
   // For the first job in a team, show drive time from home; for subsequent jobs, show job-to-job drive time
   const rawDriveSecs = homeDriveTimeSecs != null ? homeDriveTimeSecs : (a?.driveTimeSecs ?? null);
   const driveStr = formatDrive(rawDriveSecs);
+  // Home return time for last job — use homeReturnBonus from rationale (it's the actual home-return drive time in secs)
+  const homeReturnSecs = isLastJob && a?.rationale?.homeReturnBonus && a.rationale.homeReturnBonus > 0
+    ? a.rationale.homeReturnBonus
+    : null;
   const [showRationale, setShowRationale] = useState(false);
 
   return (
@@ -318,10 +323,17 @@ function JobCard({
                   </div>
                 )}
                 {driveStr && (
-                  <div className="text-xs text-gray-400">
-                    {homeDriveTimeSecs != null
-                      ? `${driveStr.replace(" drive", "")} from home`
-                      : driveStr}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-gray-400">
+                      {homeDriveTimeSecs != null
+                        ? `🏠 ${driveStr.replace(" drive", "")} from home`
+                        : `🚗 ${driveStr.replace(" drive", "")} drive to get here`}
+                    </span>
+                    {homeReturnSecs && (
+                      <span className="text-xs text-gray-400">
+                        · 🏠 {Math.round(homeReturnSecs / 60)}m home
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -1640,6 +1652,7 @@ export default function SchedulingTab() {
                           isLocked={lockedJobIds.has(job.id)}
                           hasConflict={conflictJobIds.has(job.id)}
                           homeDriveTimeSecs={idx === 0 ? (team as any).homeDriveTimeSecs ?? null : null}
+                          isLastJob={idx === teamJobs.length - 1}
                           onIssueClick={() => setIssueDialogJob({ id: job.id, date })}
                           onLockToggle={(locked, position) => {
                             if (locked) {
