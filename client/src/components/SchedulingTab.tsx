@@ -1482,7 +1482,15 @@ export default function SchedulingTab() {
                 );
               })}
             </div>
-            <span className="ml-auto text-[10px] text-gray-400">{checkins.length}/{checkins.length} responded</span>
+            {(() => {
+              const activeTeamCount = teams.filter(t => t.isActive).length;
+              const notResponded = activeTeamCount - checkins.length;
+              return notResponded > 0 ? (
+                <span className="ml-auto text-[10px] text-amber-500 font-medium">{notResponded} not responded</span>
+              ) : (
+                <span className="ml-auto text-[10px] text-emerald-500 font-medium">All responded ✅</span>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1600,6 +1608,7 @@ export default function SchedulingTab() {
               const isUnavailable = unavailableSet.has(team.id);
               const isTeamLocked = lockedTeamSet.has(team.id);
               const teamConflictCount = teamJobs.filter(j => conflictJobIds.has(j.id)).length;
+              const teamCheckin = checkins.find(c => (c.cleanerName ?? '').toLowerCase() === team.name.toLowerCase());
               return (
                 <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${isUnavailable ? "opacity-50 border-red-200" : "border-gray-100"}`}>
                   {/* Team header */}
@@ -1607,6 +1616,24 @@ export default function SchedulingTab() {
                     <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
                     <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
                     {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
+                    {teamCheckin && (
+                      <span
+                        title={teamCheckin.isAvailable
+                          ? `✅ Confirmed — up to ${teamCheckin.maxJobs != null && teamCheckin.maxJobs >= 10 ? '4+' : teamCheckin.maxJobs ?? '?'} jobs${teamCheckin.note ? ` · ${teamCheckin.note}` : ''}`
+                          : `❌ Not available${teamCheckin.note ? ` · ${teamCheckin.note}` : ''}`
+                        }
+                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                          teamCheckin.isAvailable
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-red-50 text-red-600 border-red-200'
+                        }`}
+                      >
+                        {teamCheckin.isAvailable ? '✅' : '❌'}
+                        {teamCheckin.isAvailable && teamCheckin.maxJobs != null && (
+                          <span className="ml-0.5">{teamCheckin.maxJobs >= 10 ? '4+' : teamCheckin.maxJobs}j</span>
+                        )}
+                      </span>
+                    )}
                     {teamConflictCount > 0 && (
                       <span
                         title={`${teamConflictCount} job${teamConflictCount > 1 ? 's have' : ' has'} a time conflict — ask clients to adjust`}
