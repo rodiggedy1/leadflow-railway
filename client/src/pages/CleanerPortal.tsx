@@ -1620,6 +1620,10 @@ function MorningAvailabilityPrompt({
     hourET < 10 ? `Good morning, ${cleanerName.split(" ")[0]}! ☀️` :
     hourET < 12 ? `Hey ${cleanerName.split(" ")[0]}, almost lunchtime! 🌤` :
     `Hey ${cleanerName.split(" ")[0]}! 👋`;
+  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 13"
+  const tomorrowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  tomorrowET.setDate(tomorrowET.getDate() + 1);
+  const tomorrowLabel = tomorrowET.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   if (!open) return null;
 
@@ -1653,8 +1657,8 @@ function MorningAvailabilityPrompt({
         {step === "availability" && (
           <div className="space-y-6">
             <div className="text-center space-y-2">
-              <div className="text-5xl mb-4">📅</div>
-              <h3 className="text-white text-2xl font-bold">Are you working tomorrow?</h3>
+              <div className="text-5xl mb-4">🌅</div>
+              <h3 className="text-white text-2xl font-bold">Are you working tomorrow, {tomorrowLabel}?</h3>
               <p className="text-slate-400 text-sm">This helps us plan the schedule.</p>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-8">
@@ -1813,6 +1817,10 @@ function CheckinModal({
     });
   };
 
+  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 13"
+  const tomorrowETCheckin = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  tomorrowETCheckin.setDate(tomorrowETCheckin.getDate() + 1);
+  const tomorrowLabelCheckin = tomorrowETCheckin.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   if (!open) return null;
 
   return (
@@ -1841,7 +1849,7 @@ function CheckinModal({
             <div className="text-center space-y-2">
               <div className="text-5xl mb-4">🌙</div>
               <h3 className="text-white text-2xl font-bold">Great work today!</h3>
-              <p className="text-slate-400 text-base">Are you working tomorrow?</p>
+              <p className="text-slate-400 text-base">Are you working tomorrow, {tomorrowLabelCheckin}?</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-8">
