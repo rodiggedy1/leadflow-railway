@@ -4,7 +4,7 @@
  * Individual cleaner portal. Login with phone + password.
  * Shows today's jobs (with date browsing), pay breakdown, ratings, photo upload, mark complete.
  */
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1553,9 +1553,226 @@ function WeekJobRow({
 
 // ── Main Portal ───────────────────────────────────────────────────────────────
 
-// ── End-of-day Check-in Modal ────────────────────────────────────────────────
+// ── Morning Availability Prompt ──────────────────────────────────────────────
+/**
+ * Full-screen morning prompt shown at 7:29 AM ET if the cleaner hasn't yet
+ * submitted tomorrow's availability. Blocks back-button navigation.
+ */
+function MorningAvailabilityPrompt({
+  open,
+  cleanerName,
+  onSubmitted,
+}: {
+  open: boolean;
+  cleanerName: string;
+  onSubmitted: () => void;
+}) {
+  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [maxJobs, setMaxJobs] = useState<number | null>(null);
+  const [note, setNote] = useState("");
+  const [step, setStep] = useState<"greeting" | "availability" | "details" | "confirmed">("greeting");
 
-type CheckinStep = "availability" | "details" | "confirmed";
+  const submitCheckin = trpc.cleaner.submitCheckin.useMutation({
+    onSuccess: () => {
+      setStep("confirmed");
+      setTimeout(onSubmitted, 2200);
+    },
+    onError: (err) => toast.error(`Submission failed: ${err.message}`),
+  });
+
+  // Block back-button navigation while prompt is open
+  useEffect(() => {
+    if (!open) return;
+    // Push a dummy history entry so back button hits it first
+    window.history.pushState({ morningPrompt: true }, "");
+    const onPopState = (e: PopStateEvent) => {
+      if (e.state?.morningPrompt) return; // already at our entry
+      // User hit back — re-push to keep modal open
+      window.history.pushState({ morningPrompt: true }, "");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [open]);
+
+  const handleAvailabilityChoice = (available: boolean) => {
+    setIsAvailable(available);
+    setStep("details");
+  };
+
+  const handleSubmit = () => {
+    if (isAvailable === null) return;
+    if (isAvailable && maxJobs === null) {
+      toast.warning("Please select how many jobs you can do tomorrow.");
+      return;
+    }
+    submitCheckin.mutate({
+      isAvailable,
+      maxJobs: isAvailable ? maxJobs : null,
+      note: note.trim() || null,
+    });
+  };
+
+  // Time-aware greeting
+  const hourET = parseInt(
+    new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" })
+  );
+  const greeting =
+    hourET < 10 ? `Good morning, ${cleanerName.split(" ")[0]}! ☀️` :
+    hourET < 12 ? `Hey ${cleanerName.split(" ")[0]}, almost lunchtime! 🌤` :
+    `Hey ${cleanerName.split(" ")[0]}! 👋`;
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
+      {/* No header — full immersive experience */}
+      <div className="flex-1 overflow-y-auto flex flex-col px-4 py-8 max-w-lg mx-auto w-full">
+
+        {/* ── Step: Greeting ─── */}
+        {step === "greeting" && (
+          <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
+            <div className="text-7xl animate-bounce">🌅</div>
+            <div className="space-y-2">
+              <h2 className="text-white text-3xl font-bold">{greeting}</h2>
+              <p className="text-slate-400 text-base leading-relaxed">
+                Before you crush it today —<br />
+                let us know if you're working tomorrow<br />
+                so we can build your schedule.
+              </p>
+            </div>
+            <Button
+              className="w-full max-w-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl mt-4"
+              onClick={() => setStep("availability")}
+            >
+              Let's do it →
+            </Button>
+          </div>
+        )}
+
+        {/* ── Step: Availability choice ─── */}
+        {step === "availability" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="text-5xl mb-4">📅</div>
+              <h3 className="text-white text-2xl font-bold">Are you working tomorrow?</h3>
+              <p className="text-slate-400 text-sm">This helps us plan the schedule.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mt-8">
+              <button
+                onClick={() => handleAvailabilityChoice(true)}
+                className="flex flex-col items-center gap-3 p-6 bg-emerald-900/40 border-2 border-emerald-600/60 rounded-2xl hover:bg-emerald-900/60 hover:border-emerald-500 transition-all active:scale-95"
+              >
+                <span className="text-4xl">✅</span>
+                <span className="text-emerald-300 font-bold text-lg">Yes</span>
+                <span className="text-emerald-500 text-xs text-center">I'm available</span>
+              </button>
+              <button
+                onClick={() => handleAvailabilityChoice(false)}
+                className="flex flex-col items-center gap-3 p-6 bg-slate-800 border-2 border-slate-600 rounded-2xl hover:bg-slate-700 hover:border-slate-500 transition-all active:scale-95"
+              >
+                <span className="text-4xl">❌</span>
+                <span className="text-slate-300 font-bold text-lg">No</span>
+                <span className="text-slate-500 text-xs text-center">Not available</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step: Details ─── */}
+        {step === "details" && isAvailable === true && (
+          <div className="space-y-6">
+            <div className="text-center space-y-1">
+              <div className="text-4xl mb-3">📋</div>
+              <h3 className="text-white text-xl font-bold">How many jobs can you do?</h3>
+              <p className="text-slate-400 text-sm">This helps us plan tomorrow's schedule.</p>
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map(n => (
+                <button
+                  key={n}
+                  onClick={() => setMaxJobs(n === 4 ? 10 : n)}
+                  className={`py-5 rounded-2xl border-2 font-bold text-xl transition-all active:scale-95 ${
+                    (n === 4 ? maxJobs !== null && maxJobs >= 4 : maxJobs === n)
+                      ? "bg-emerald-600 border-emerald-500 text-white"
+                      : "bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500"
+                  }`}
+                >
+                  {n === 4 ? "4+" : n}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <label className="text-slate-300 text-sm font-medium block">Note (optional)</label>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="e.g. Available after 9am, prefer East side..."
+                rows={3}
+                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-emerald-500"
+                maxLength={500}
+              />
+            </div>
+            <div className="space-y-3 pt-2">
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base h-auto"
+                onClick={handleSubmit}
+                disabled={submitCheckin.isPending || maxJobs === null}
+              >
+                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                Submit Availability
+              </Button>
+              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">← Back</button>
+            </div>
+          </div>
+        )}
+
+        {step === "details" && isAvailable === false && (
+          <div className="space-y-6">
+            <div className="text-center space-y-1">
+              <div className="text-4xl mb-3">📝</div>
+              <h3 className="text-white text-xl font-bold">Let us know why</h3>
+              <p className="text-slate-400 text-sm">This helps the team plan coverage.</p>
+            </div>
+            <div className="space-y-2">
+              <label className="text-slate-300 text-sm font-medium block">Reason (optional)</label>
+              <textarea
+                value={note}
+                onChange={e => setNote(e.target.value)}
+                placeholder="e.g. Doctor appointment, family commitment..."
+                rows={4}
+                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500"
+                maxLength={500}
+              />
+            </div>
+            <div className="space-y-3 pt-2">
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 text-base h-auto"
+                onClick={handleSubmit}
+                disabled={submitCheckin.isPending}
+              >
+                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Submit
+              </Button>
+              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">← Back</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step: Confirmed ─── */}
+        {step === "confirmed" && (
+          <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
+            <div className="text-6xl">🎉</div>
+            <h3 className="text-white text-2xl font-bold">You're all set!</h3>
+            <p className="text-slate-400 text-base">Your availability has been recorded.<br />Go have a great day!</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── End-of-day Check-in Modal ────────────────────────────────────────────────
+type CheckinStep = "availability" | "details" | "confirmed";;
 
 function CheckinModal({
   open,
@@ -1807,11 +2024,38 @@ export default function CleanerPortal() {
   const [date, setDate] = useState(getTodayET);
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
   const [showCheckin, setShowCheckin] = useState(false);
+  const [showMorningPrompt, setShowMorningPrompt] = useState(false);
   const utils = trpc.useUtils();
 
   const meQuery = trpc.cleaner.me.useQuery(undefined, {
     retry: false,
   });
+
+  // Check if this cleaner has already submitted tomorrow's availability
+  const availabilityCheckQuery = trpc.cleaner.hasSubmittedTomorrowAvailability.useQuery(
+    undefined,
+    { enabled: !!meQuery.data }
+  );
+
+  // Show morning prompt at 7:29 AM ET if availability not yet submitted
+  useEffect(() => {
+    if (!meQuery.data) return;
+    if (availabilityCheckQuery.isLoading || availabilityCheckQuery.data === undefined) return;
+    if (availabilityCheckQuery.data.submitted) return; // already done
+
+    // Check current ET time
+    const nowET = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+    const etDate = new Date(nowET);
+    const hours = etDate.getHours();
+    const minutes = etDate.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+    // Show from 7:29 AM (449 min) through end of day (1439 min)
+    const SHOW_FROM = 7 * 60 + 29; // 7:29 AM ET
+    if (totalMinutes >= SHOW_FROM) {
+      setShowMorningPrompt(true);
+    }
+  }, [meQuery.data, availabilityCheckQuery.data, availabilityCheckQuery.isLoading]);
+
   const jobsQuery = trpc.cleaner.myJobs.useQuery(
     { date },
     { enabled: !!meQuery.data }
@@ -1938,7 +2182,26 @@ export default function CleanerPortal() {
         >
           <LogOut className="w-4 h-4" />
         </Button>
-      </header>
+       </header>
+
+      {/* Sticky availability reminder banner — shown if not yet submitted and past 7:29 AM ET */}
+      {!availabilityCheckQuery.data?.submitted && !showMorningPrompt && (() => {
+        const nowET = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+        const etDate = new Date(nowET);
+        const totalMinutes = etDate.getHours() * 60 + etDate.getMinutes();
+        return totalMinutes >= 7 * 60 + 29;
+      })() && (
+        <div
+          className="bg-amber-600/20 border-b border-amber-500/40 px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-amber-600/30 transition-colors"
+          onClick={() => setShowMorningPrompt(true)}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-amber-400 text-base">⚠️</span>
+            <span className="text-amber-200 text-sm font-medium">You haven't submitted tomorrow's availability yet</span>
+          </div>
+          <span className="text-amber-400 text-xs font-semibold">Tap →</span>
+        </div>
+      )}
 
       <div className="max-w-lg mx-auto px-4 py-5 space-y-5">
         {/* Earnings summary cards */}
@@ -2202,6 +2465,16 @@ export default function CleanerPortal() {
 
     {/* End-of-day check-in modal — fullscreen takeover */}
     <CheckinModal open={showCheckin} onClose={() => setShowCheckin(false)} />
+
+    {/* Morning availability prompt — fullscreen, shown at 7:29 AM ET if not yet submitted */}
+    <MorningAvailabilityPrompt
+      open={showMorningPrompt}
+      cleanerName={meQuery.data?.name ?? ""}
+      onSubmitted={() => {
+        setShowMorningPrompt(false);
+        availabilityCheckQuery.refetch();
+      }}
+    />
     </>
   );
 }

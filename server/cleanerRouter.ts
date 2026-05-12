@@ -1148,6 +1148,35 @@ export const cleanerRouter = router({
       }));
     }),
 
+  /**
+   * cleaner.hasSubmittedTomorrowAvailability — check if this cleaner has already
+   * submitted availability for tomorrow. Used by the portal to decide whether to
+   * show the morning prompt.
+   */
+  hasSubmittedTomorrowAvailability: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return { submitted: false };
+
+    // Compute tomorrow in UTC (server stores dates as YYYY-MM-DD UTC)
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    const rows = await db
+      .select({ id: teamAvailabilityCheckins.id })
+      .from(teamAvailabilityCheckins)
+      .where(
+        and(
+          eq(teamAvailabilityCheckins.cleanerProfileId, ctx.cleaner.cleanerId),
+          eq(teamAvailabilityCheckins.availabilityDate, tomorrowStr),
+        )
+      )
+      .limit(1);
+
+    return { submitted: rows.length > 0, tomorrowDate: tomorrowStr };
+  }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
