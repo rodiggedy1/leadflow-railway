@@ -1620,10 +1620,11 @@ function MorningAvailabilityPrompt({
     hourET < 10 ? `Good morning, ${cleanerName.split(" ")[0]}! ☀️` :
     hourET < 12 ? `Hey ${cleanerName.split(" ")[0]}, almost lunchtime! 🌤` :
     `Hey ${cleanerName.split(" ")[0]}! 👋`;
-  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 13"
-  const tomorrowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  tomorrowET.setDate(tomorrowET.getDate() + 1);
-  const tomorrowLabel = tomorrowET.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 14"
+  // Uses Intl.DateTimeFormat.formatToParts so the ET date is correct regardless of the cleaner's device timezone
+  const _etParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const _etTomorrow = new Date(parseInt(_etParts.find(p => p.type === "year")!.value), parseInt(_etParts.find(p => p.type === "month")!.value) - 1, parseInt(_etParts.find(p => p.type === "day")!.value) + 1);
+  const tomorrowLabel = _etTomorrow.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 
   if (!open) return null;
 
@@ -1817,10 +1818,10 @@ function CheckinModal({
     });
   };
 
-  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 13"
-  const tomorrowETCheckin = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
-  tomorrowETCheckin.setDate(tomorrowETCheckin.getDate() + 1);
-  const tomorrowLabelCheckin = tomorrowETCheckin.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 14"
+  const _etPartsCheckin = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const _etTomorrowCheckin = new Date(parseInt(_etPartsCheckin.find(p => p.type === "year")!.value), parseInt(_etPartsCheckin.find(p => p.type === "month")!.value) - 1, parseInt(_etPartsCheckin.find(p => p.type === "day")!.value) + 1);
+  const tomorrowLabelCheckin = _etTomorrowCheckin.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
   if (!open) return null;
 
   return (
