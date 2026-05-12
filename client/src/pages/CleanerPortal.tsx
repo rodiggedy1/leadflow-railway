@@ -2050,10 +2050,11 @@ export default function CleanerPortal() {
     const minutes = etDate.getMinutes();
     const totalMinutes = hours * 60 + minutes;
     // Show from 7:29 AM (449 min) through end of day (1439 min)
-    const SHOW_FROM = 7 * 60 + 29; // 7:29 AM ET
-    if (totalMinutes >= SHOW_FROM) {
-      setShowMorningPrompt(true);
-    }
+    // TEMP: time gate removed for testing — restore before production
+    // const SHOW_FROM = 7 * 60 + 29; // 7:29 AM ET
+    // if (totalMinutes >= SHOW_FROM) {
+    setShowMorningPrompt(true);
+    // }
   }, [meQuery.data, availabilityCheckQuery.data, availabilityCheckQuery.isLoading]);
 
   const jobsQuery = trpc.cleaner.myJobs.useQuery(
@@ -2189,7 +2190,7 @@ export default function CleanerPortal() {
         const nowET = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
         const etDate = new Date(nowET);
         const totalMinutes = etDate.getHours() * 60 + etDate.getMinutes();
-        return totalMinutes >= 7 * 60 + 29;
+        return true; // TEMP: always show banner for testing — restore to: totalMinutes >= 7 * 60 + 29
       })() && (
         <div
           className="bg-amber-600/20 border-b border-amber-500/40 px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-amber-600/30 transition-colors"
