@@ -2112,7 +2112,8 @@ export default function CleanerPortal() {
     const activeJobs = allJobsNow.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
     const previouslyCompleted = activeJobs.filter(j => j.id !== completedJobId && j.bookingStatus === "completed");
     // Fire on the FIRST job completed (no other jobs were completed before this one)
-    if (activeJobs.length > 0 && previouslyCompleted.length === 0) {
+    // Skip if they already submitted morning availability
+    if (activeJobs.length > 0 && previouslyCompleted.length === 0 && !availabilityCheckQuery.data?.submitted) {
       setShowCheckin(true);
     }
   };
