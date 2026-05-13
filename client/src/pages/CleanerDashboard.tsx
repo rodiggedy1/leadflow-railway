@@ -1296,7 +1296,7 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
 function CleanerProfilesSection() {
   const { data: cleaners, refetch } = trpc.quality.listCleaners.useQuery();
   const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: "", phone: "", email: "", payPercent: "", language: "en" as "en" | "es" | "pt" });
+  const [form, setForm] = useState({ name: "", phone: "", email: "", payPercent: "" });
   const utils = trpc.useUtils();
 
   const updateCleaner = trpc.quality.updateCleaner.useMutation({
@@ -1316,7 +1316,6 @@ function CleanerProfilesSection() {
       phone: c.phone ?? "",
       email: c.email ?? "",
       payPercent: c.payPercent ?? "",
-      language: ((c as any).language ?? "en") as "en" | "es" | "pt",
     });
   }
 
@@ -1328,7 +1327,6 @@ function CleanerProfilesSection() {
       phone: form.phone || undefined,
       email: form.email || undefined,
       payPercent: form.payPercent || undefined,
-      language: form.language,
     });
   }
 
@@ -1389,18 +1387,6 @@ function CleanerProfilesSection() {
                           className="h-8 text-sm"
                         />
                       </div>
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground block mb-1">Portal Language</label>
-                        <select
-                          value={form.language}
-                          onChange={e => setForm(f => ({ ...f, language: e.target.value as "en" | "es" | "pt" }))}
-                          className="h-8 text-sm w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                        >
-                          <option value="en">🇺🇸 English (default)</option>
-                          <option value="es">🇪🇸 Español</option>
-                          <option value="pt">🇧🇷 Português</option>
-                        </select>
-                      </div>
                     </div>
                     <div className="flex gap-2 pt-1">
                       <Button
@@ -1430,7 +1416,7 @@ function CleanerProfilesSection() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {c.phone ? c.phone : "—"} · {c.email ?? "no email"} · {c.payPercent ? `${c.payPercent}% pay` : "pay % not set"} · {(c as any).language === "es" ? "🇪🇸 ES" : (c as any).language === "pt" ? "🇧🇷 PT" : "🇺🇸 EN"}
+                        {c.phone ? c.phone : "—"} · {c.email ?? "no email"} · {c.payPercent ? `${c.payPercent}% pay` : "pay % not set"}
                       </p>
                     </div>
                     <Button

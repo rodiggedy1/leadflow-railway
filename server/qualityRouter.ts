@@ -974,7 +974,6 @@ export const qualityRouter = router({
         email: z.string().email().optional(),
         payPercent: z.string().optional(),
         isActive: z.number().optional(),
-        language: z.enum(["en", "es", "pt"]).optional(),
       })
     )
     .mutation(async ({ input }) => {

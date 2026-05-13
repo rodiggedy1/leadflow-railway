@@ -1011,8 +1011,6 @@ export const cleanerProfiles = mysqlTable("cleaner_profiles", {
   isActive: int("isActive").default(1).notNull(),
   /** Bcrypt hash of the cleaner's portal password (null = no portal access yet) */
   passwordHash: varchar("passwordHash", { length: 255 }),
-  /** Portal display language: 'en' | 'es' | 'pt'. Defaults to English. */
-  language: varchar("language", { length: 5 }).default("en").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

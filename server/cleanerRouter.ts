@@ -103,23 +103,8 @@ export const cleanerRouter = router({
       .limit(1);
     const cleaner = rows[0];
     if (!cleaner || !cleaner.isActive) return null;
-    return { id: cleaner.id, name: cleaner.name, phone: cleaner.phone, language: (cleaner.language ?? "en") as "en" | "es" | "pt" };
+    return { id: cleaner.id, name: cleaner.name, phone: cleaner.phone };
   }),
-
-  /**
-   * cleaner.updateLanguage — persist the cleaner's preferred portal language.
-   */
-  updateLanguage: cleanerProcedure
-    .input(z.object({ language: z.enum(["en", "es", "pt"]) }))
-    .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      await db
-        .update(cleanerProfiles)
-        .set({ language: input.language })
-        .where(eq(cleanerProfiles.id, ctx.cleaner.cleanerId));
-      return { success: true };
-    }),
 
   /**
    * cleaner.myJobs — get all jobs for the authenticated cleaner on a given date.
