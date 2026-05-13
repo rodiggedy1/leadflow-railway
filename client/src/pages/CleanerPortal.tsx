@@ -55,7 +55,7 @@ function formatTime(iso: string | null | undefined): string {
 }
 
 function StarRating({ rating }: { rating: number | null }) {
-  if (!rating) return <span className="text-muted-foreground text-sm">No rating yet</span>;
+  if (!rating) return <span className="text-muted-foreground text-sm">{t("rating.none")}</span>;
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map(i => (
@@ -123,10 +123,10 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             disabled={loginMutation.isPending || !email || !password}
           >
             {loginMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Sign In
+            {t("login.signIn")}
           </Button>
           <p className="text-center text-slate-500 text-xs">
-            Contact your manager if you need access.
+            {t("login.contact")}
           </p>
         </CardContent>
       </Card>
@@ -232,13 +232,13 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-md max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white text-base font-bold">Payout Rules</DialogTitle>
+          <DialogTitle className="text-white text-base font-bold">{t("payRules.dialogTitle")}</DialogTitle>
         </DialogHeader>
         <p className="text-slate-400 text-xs -mt-2 mb-4">
           {cleanerName ? (
-            <>Here’s how your pay works, <span className="text-white font-semibold">{cleanerName.split(" ")[0]}</span>. No surprises.</>
+            <>{t("payRules.introName")} <span className="text-white font-semibold">{cleanerName.split(" ")[0]}</span>. No surprises.</>
           ) : (
-            "Here’s exactly how your pay is calculated — no surprises."
+            t("payRules.introNoName")
           )}
         </p>
         <div className="space-y-5">
@@ -539,9 +539,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   }
                 }}
                 disabled={uncompleting}
-                title="Undo completion"
+                title={t("job.undoCompletion")}
               >
-                {uncompleting ? <Loader2 className="w-3 h-3 animate-spin inline" /> : "Undo"}
+                {uncompleting ? <Loader2 className="w-3 h-3 animate-spin inline" /> : t("job.undoButton")}
               </button>
             </>
           )}
@@ -649,15 +649,15 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <div className="bg-slate-900 px-4 pt-4 pb-3">
             <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-1">Pay Summary</p>
-                <p className="text-white font-bold text-lg leading-tight">Know exactly what this job can pay</p>
-                <p className="text-slate-400 text-xs mt-1">Cleaner-friendly breakdown with guaranteed pay, upside, and any deductions that could reduce final payout.</p>
+                <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest mb-1">{t("pay.summary")}</p>
+                <p className="text-white font-bold text-lg leading-tight">{t("pay.summaryTitle")}</p>
+                <p className="text-slate-400 text-xs mt-1">{t("pay.summaryDesc")}</p>
               </div>
               <button
                 onClick={() => setShowPayoutRules(true)}
                 className="shrink-0 mt-1 text-[11px] font-semibold text-slate-300 border border-slate-600 rounded-lg px-2.5 py-1.5 hover:bg-slate-800 hover:border-slate-500 transition-colors whitespace-nowrap"
               >
-                View payout rules
+                {t("pay.viewPayoutRules")}
               </button>
             </div>
           </div>
@@ -673,27 +673,27 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <div className="grid grid-cols-2 gap-2 px-3 py-3 bg-slate-900/80">
             {/* Base Pay */}
             <div className="rounded-xl p-3 border border-teal-700/40 bg-teal-900/20">
-              <p className="text-teal-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Base Pay</p>
+              <p className="text-teal-400 text-[10px] font-semibold uppercase tracking-widest mb-1">{t("pay.basePay")}</p>
               <p className="text-teal-300 font-bold text-xl">{formatCurrency(summaryBasePay.toFixed(2))}</p>
-              <p className="text-slate-400 text-[11px] mt-1">What you have locked in</p>
+              <p className="text-slate-400 text-[11px] mt-1">{t("pay.lockedIn")}</p>
             </div>
             {/* Likely Pay */}
             <div className="rounded-xl p-3 border border-slate-600/40 bg-slate-800/60">
-              <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Likely Pay</p>
+              <p className="text-slate-400 text-[10px] font-semibold uppercase tracking-widest mb-1">{t("pay.likelyPay")}</p>
               <p className="text-white font-bold text-xl">{formatCurrency(summaryLikelyPay.toFixed(2))}</p>
-              <p className="text-slate-400 text-[11px] mt-1">Best-case: 5 stars + photo bonus</p>
+              <p className="text-slate-400 text-[11px] mt-1">{t("pay.likelyDesc")}</p>
             </div>
             {/* Potential Earnings */}
             <div className="rounded-xl p-3 border border-purple-700/40 bg-purple-900/20">
-              <p className="text-purple-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Potential Earnings</p>
+              <p className="text-purple-400 text-[10px] font-semibold uppercase tracking-widest mb-1">{t("pay.potentialEarnings")}</p>
               <p className="text-purple-300 font-bold text-xl">{formatCurrency(summaryPotentialPay.toFixed(2))}</p>
-              <p className="text-slate-400 text-[11px] mt-1">Including all available bonuses</p>
+              <p className="text-slate-400 text-[11px] mt-1">{t("pay.potentialDesc")}</p>
             </div>
             {/* Risk Floor */}
             <div className="rounded-xl p-3 border border-red-800/40 bg-red-900/20">
-              <p className="text-red-400 text-[10px] font-semibold uppercase tracking-widest mb-1">Risk Floor</p>
+              <p className="text-red-400 text-[10px] font-semibold uppercase tracking-widest mb-1">{t("pay.riskFloor")}</p>
               <p className="text-red-300 font-bold text-xl">{formatCurrency(Math.max(0, summaryRiskFloor).toFixed(2))}</p>
-              <p className="text-slate-400 text-[11px] mt-1">If penalties hit</p>
+              <p className="text-slate-400 text-[11px] mt-1">{t("pay.riskDesc")}</p>
             </div>
           </div>
 
@@ -702,7 +702,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             onClick={() => setShowBonusDetails(v => !v)}
             className="w-full flex items-center justify-center gap-1.5 py-2.5 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors border-t border-slate-800/60"
           >
-            <span>{showBonusDetails ? "Hide bonus details ↑" : "See bonus details ↓"}</span>
+            <span>{showBonusDetails ? t("pay.hideBonusDetails") : t("pay.showBonusDetails")}</span>
           </button>
 
           {/* Detailed line items — collapsible */}
@@ -712,11 +712,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <div className="flex justify-between items-start px-4 py-3">
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-slate-100 text-sm font-semibold">Base Pay</p>
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-900/50 text-teal-300 border border-teal-700/40">Standard</span>
+                <p className="text-slate-100 text-sm font-semibold">{t("pay.basePay")}</p>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-teal-900/50 text-teal-300 border border-teal-700/40">{t("pay.standard")}</span>
               </div>
               <p className="text-slate-500 text-xs mt-0.5">{job.serviceType ?? "Cleaning service"}</p>
-              <p className="text-slate-600 text-xs">Base pay for completing this job</p>
+              <p className="text-slate-600 text-xs">{t("pay.basePayDesc")}</p>
             </div>
             <span className="text-white font-bold text-base">{formatCurrency(summaryBasePay.toFixed(2))}</span>
           </div>
@@ -731,9 +731,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
 
             let label = "Rating Bonus";
             let reason = `+$${payRules?.fiveStarBonus ?? 10} for 5 stars · -$${payRules?.lowRatingDeduction ?? 20} for 3 stars or below`;
-            let badge = <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">Pending</span>;
+            let badge = <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">{t("pay.pending")}</span>;
             let amountEl = <span className="text-slate-400 text-sm font-semibold">${payRules?.fiveStarBonus ?? 10}.00</span>;
-            let downsideEl = <span className="text-red-400 text-xs">Downside -${payRules?.lowRatingDeduction ?? 20}.00</span>;
+            let downsideEl = <span className="text-red-400 text-xs">{t("pay.downside")} -${payRules?.lowRatingDeduction ?? 20}.00</span>;
 
             if (!isPending) {
               if (rating === 5 && !isMissed) {
@@ -747,10 +747,10 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 reason = "No bonus or penalty at this level";
               }
               badge = isBonus
-                ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">Earned</span>
+                ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">{t("pay.earned")}</span>
                 : isPenalty
-                  ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">Applied</span>
-                  : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">No change</span>;
+                  ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">{t("pay.applied")}</span>
+                  : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">{t("pay.noChange")}</span>;
               amountEl = <span className={`text-sm font-semibold ${isBonus ? "text-emerald-400" : isPenalty ? "text-red-400" : "text-slate-400"}`}>{isBonus ? "+" : ""}{ratingAdj !== 0 ? formatCurrency(ratingAdj.toFixed(2)) : "—"}</span>;
               downsideEl = <></>;
             }
@@ -760,7 +760,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{label}</p></div>
                   <p className="text-slate-500 text-xs mt-0.5">{reason}</p>
-                  <p className="text-slate-600 text-xs">Final after customer rating</p>
+                  <p className="text-slate-600 text-xs">{t("pay.finalAfterRating")}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   {amountEl}
@@ -777,16 +777,16 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             const isActionNeeded = !hasPhoto && !isComplete;
             const isPenaltyApplied = !hasPhoto && isComplete;
             const badge = isEarned
-              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">Earned</span>
+              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">{t("pay.earned")}</span>
               : isPenaltyApplied
-                ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">Applied</span>
-                : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/40">Action needed</span>;
+                ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">{t("pay.applied")}</span>
+                : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/40">{t("pay.actionNeeded")}</span>;
             return (
               <div className="flex justify-between items-start px-4 py-3">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{hasPhoto ? "Photo Bonus" : "Photo Bonus"}</p></div>
                   <p className="text-slate-500 text-xs mt-0.5">+${payRules?.photoBonus ?? 5} when after photos are uploaded · -${payRules?.noPhotoPenalty ?? 10} if missing</p>
-                  <p className="text-slate-600 text-xs">Upload photos before marking complete</p>
+                  <p className="text-slate-600 text-xs">{t("pay.uploadBeforeComplete")}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   {isPending ? (
@@ -794,7 +794,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   ) : (
                     <span className={`text-sm font-semibold ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>{hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}</span>
                   )}
-                  {!hasPhoto && !isComplete && <div><span className="text-red-400 text-xs">Downside -${payRules?.noPhotoPenalty ?? 10}.00</span></div>}
+                  {!hasPhoto && !isComplete && <div><span className="text-red-400 text-xs">{t("pay.downside")} -${payRules?.noPhotoPenalty ?? 10}.00</span></div>}
                 </div>
               </div>
             );
@@ -805,13 +805,13 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             const isApplied = job.recleanPenalty != null;
             const badge = isApplied
               ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-900/50 text-red-300 border border-red-700/40">Applied</span>
-              : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">Pending</span>;
+              : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">{t("pay.pending")}</span>;
             return (
               <div className="flex justify-between items-start px-4 py-3">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">Reclean Deduction</p></div>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{t("pay.recleanDeduction")}</p></div>
                   <p className="text-slate-500 text-xs mt-0.5">-${payRules?.recleanPenalty ?? 30} if the job requires a reclean</p>
-                  <p className="text-slate-600 text-xs">Avoided when there are no issues</p>
+                  <p className="text-slate-600 text-xs">{t("pay.recleanAvoided")}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   {recleanPending ? (
@@ -828,12 +828,12 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           {(() => {
             const isEarned = streakBonus > 0;
             const badge = isEarned
-              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">Earned</span>
+              ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 border border-emerald-700/40">{t("pay.earned")}</span>
               : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-600">{t("job.locked")}</span>;
             return (
               <div className="flex justify-between items-start px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">Streak Bonus</p></div>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{t("pay.streakBonus")}</p></div>
                   <p className="text-slate-500 text-xs mt-0.5">+${payRules?.streakBonus ?? 50} after {streakTarget} clean jobs with no issues</p>
                   {!isEarned && streakRemaining > 0 && (
                     <p className="text-slate-500 text-xs">{streakRemaining !== 1 ? t("job.streakProgressPlural", { current: streakRemaining }) : t("job.streakProgress", { current: streakRemaining })}</p>
@@ -910,7 +910,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           {/* Final total */}
           <div className="flex justify-between items-center px-4 py-4 bg-slate-900/60">
             <div>
-              <span className="text-white font-bold text-base">Total Pay</span>
+              <span className="text-white font-bold text-base">{t("pay.totalPay")}</span>
               {!isPayFinalized && (
                 <p className="text-slate-500 text-xs mt-0.5">{t("job.previewFinal")}</p>
               )}
@@ -961,7 +961,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
 
         {/* Job Status Buttons */}
         <div className="space-y-2">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">Job Status</p>
+          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">{t("job.statusLabel")}</p>
           <div className="flex flex-wrap gap-1.5">
             {JOB_STATUSES.map(s => {
               const isActive = job.jobStatus === s.key;
@@ -1027,10 +1027,10 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           {/* Issue note input — note is required before submitting */}
           {showIssueInput && (
             <div className="space-y-1.5 mt-1">
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">What's the issue? <span className="text-red-500">*</span></p>
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">{t("job.issueQuestion")} <span className="text-red-500">*</span></p>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Describe the issue (required)"
+                  placeholder={t("job.issueDescPlaceholder")}
                   value={issueNote}
                   onChange={e => setIssueNote(e.target.value)}
                   className={`bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm h-8 ${
@@ -1054,11 +1054,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   }}
                   disabled={statusMutation.isPending || !issueNote.trim()}
                 >
-                  Report
+                  {t("job.reportButton")}
                 </Button>
               </div>
               {issueNote.trim() === "" && (
-                <p className="text-[11px] text-red-400">A description is required to report an issue.</p>
+                <p className="text-[11px] text-red-400">{t("job.issueRequired")}</p>
               )}
             </div>
           )}
@@ -1087,14 +1087,14 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                       : "text-orange-300 border-orange-600/50 bg-orange-900/30 hover:bg-orange-800/50"
                   }`}
                 >
-                  Update ETA
+                  {t("job.updateEta")}
                 </button>
               </div>
               {/* Stale ETA banner — shown when ETA has passed by more than 30 min */}
               {job.etaTimestamp !== null && job.etaTimestamp < Date.now() - 30 * 60 * 1000 && (
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-900/30 border border-amber-600/40 rounded-lg">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <p className="text-amber-300 text-xs flex-1">ETA has passed — tap <strong>Update ETA</strong> to notify your client.</p>
+                  <p className="text-amber-300 text-xs flex-1">{t("job.etaStaleBanner")}</p>
                 </div>
               )}
             </div>
@@ -1230,7 +1230,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 ? "bg-blue-950/30 border-blue-700/40"
                 : "bg-orange-950/30 border-orange-700/40"
             }`}>
-              <p className="text-xs text-slate-400 mb-2 font-medium">Or enter an exact arrival time:</p>
+              <p className="text-xs text-slate-400 mb-2 font-medium">{t("eta.exactTime")}</p>
               <div className="flex gap-2 items-center">
                 {/* Compute the current time in HH:MM (device local) for the min attribute */}
                 <input
@@ -1298,7 +1298,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                       : "bg-orange-700 text-white border-orange-500 hover:bg-orange-600"
                   }`}
                 >
-                  {statusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Set"}
+                  {statusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : t("eta.setButton")}
                 </button>
               </div>
             </div>
@@ -1314,7 +1314,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               }}
               disabled={statusMutation.isPending}
             >
-              Cancel
+              {t("eta.cancel")}
             </Button>
           </div>
         </DialogContent>
@@ -1326,7 +1326,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <DialogHeader>
             <DialogTitle className="text-white text-lg flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              Mark Job Complete?
+              {t("complete.title")}
             </DialogTitle>
           </DialogHeader>
 
@@ -1336,8 +1336,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               <div className="flex items-start gap-3 p-3 bg-amber-950/60 border border-amber-600/40 rounded-xl">
                 <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-amber-300">No photos uploaded</p>
-                  <p className="text-xs text-amber-400/80 mt-0.5">No photo upload will cost you $20 and miss out on making $10 extra. We strongly recommend uploading photos.</p>
+                  <p className="text-sm font-semibold text-amber-300">{t("complete.noPhotos")}</p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">{t("complete.noPhotoWarning")}</p>
                 </div>
               </div>
             )}
@@ -1346,8 +1346,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <div className="flex items-start gap-3 p-3 bg-emerald-950/40 border border-emerald-700/40 rounded-xl">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-emerald-300">You are completing: {job.customerName ?? "this job"}</p>
-                <p className="text-xs text-emerald-400/80 mt-0.5">Your client will receive a completion text message.</p>
+                <p className="text-sm font-semibold text-emerald-300">{t("complete.youAreCompleting")} {job.customerName ?? "this job"}</p>
+                <p className="text-xs text-emerald-400/80 mt-0.5">{t("complete.clientNotified")}</p>
               </div>
             </div>
 
@@ -1362,9 +1362,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <div className="flex items-start gap-3 p-3 bg-red-950/60 border border-red-600/50 rounded-xl">
                   <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-red-300">Wrong job?</p>
+                    <p className="text-sm font-semibold text-red-300">{t("complete.wrongJob")}</p>
                     <p className="text-xs text-red-400/80 mt-0.5">
-                      Your active job appears to be <strong className="text-red-200">{activeOther.customerName ?? "another client"}</strong> — are you sure you're completing the right one?
+                      {t("complete.wrongJobDesc", { name: activeOther.customerName ?? "another client" })}
                     </p>
                   </div>
                 </div>
@@ -1374,7 +1374,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             {/* Irreversible warning */}
             <div className="flex items-start gap-3 p-3 bg-slate-800 border border-slate-700 rounded-xl">
               <AlertCircle className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-slate-300">Once marked complete, the job is closed.</p>
+              <p className="text-xs text-slate-300">{t("complete.onceClosed")}</p>
             </div>
 
             {/* Action buttons */}
@@ -1391,7 +1391,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   }}
                 >
                   <Camera className="w-3.5 h-3.5 mr-1.5" />
-                  Upload Photos First
+                  {t("complete.uploadFirst")}
                 </Button>
               )}
               <Button
@@ -1400,7 +1400,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 className={`${job.photos.length === 0 ? "" : "flex-1"} border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent`}
                 onClick={() => setShowCompleteConfirm(false)}
               >
-                Cancel
+                {t("complete.cancel")}
               </Button>
               <Button
                 size="sm"
@@ -1408,7 +1408,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 onClick={confirmMarkComplete}
               >
                 <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                {job.photos.length === 0 ? "Complete Anyway" : "Yes, Mark Complete"}
+                {job.photos.length === 0 ? t("complete.completeAnyway") : t("complete.confirm")}
               </Button>
             </div>
           </div>
@@ -1421,7 +1421,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <DialogHeader>
             <DialogTitle className="text-white text-lg flex items-center gap-2">
               <span className="text-2xl">🎉</span>
-              Job Complete!
+              {t("postComplete.jobComplete")}
             </DialogTitle>
           </DialogHeader>
 
@@ -1430,10 +1430,10 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <div className="p-4 bg-amber-950/60 border border-amber-500/40 rounded-xl">
               <p className="text-amber-300 font-bold text-sm flex items-center gap-2 mb-1">
                 <span className="text-lg">⭐</span>
-                Earn an extra $${payRules?.googleReviewBonus ?? 50} — Ask for a 5-star Google review
+                {t("postComplete.reviewEarn", { amount: payRules?.googleReviewBonus ?? 50 })}
               </p>
               <p className="text-amber-400/80 text-xs">
-                Before you leave, ask the client: <span className="italic text-amber-200">"We'd really appreciate it if you could leave us a quick Google review — it only takes 30 seconds!"</span>
+                {t("postComplete.reviewScriptIntro")} <span className="italic text-amber-200">"{t("postComplete.reviewScript")}"</span>
               </p>
             </div>
 
@@ -1443,7 +1443,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               if (!nextJob) return null;
               return (
                 <div className="p-4 bg-slate-800 border border-slate-700 rounded-xl">
-                  <p className="text-slate-300 font-semibold text-sm mb-1">Next job: {nextJob.customerName ?? "Client"}</p>
+                  <p className="text-slate-300 font-semibold text-sm mb-1">{t("postComplete.nextJobLabel")} {nextJob.customerName ?? "Client"}</p>
                   <p className="text-slate-500 text-xs mb-3">{nextJob.jobAddress ?? ""}</p>
                   <Button
                     size="sm"
