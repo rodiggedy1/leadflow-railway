@@ -169,12 +169,12 @@ type Job = {
 };
 
 const JOB_STATUSES = [
-  { key: "on_the_way",       label: "On the Way",              color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
-  { key: "in_progress",      label: "In Progress",             color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
-  { key: "finishing_up",     label: "Finishing Up",            color: "bg-teal-600/30 text-teal-300 border-teal-600/40",     activeColor: "bg-teal-600 text-white" },
-  { key: "wrapping_up",      label: "Finishing Previous Job",  color: "bg-violet-600/30 text-violet-300 border-violet-600/40", activeColor: "bg-violet-600 text-white" },
-  { key: "running_late",     label: "Running Late",            color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
-  { key: "issue_at_property",label: "Issue at Property",       color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
+  { key: "on_the_way",       i18nKey: "job.status.on_the_way",          color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
+  { key: "in_progress",      i18nKey: "job.status.in_progress",         color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
+  { key: "finishing_up",     i18nKey: "job.status.finishing_up",        color: "bg-teal-600/30 text-teal-300 border-teal-600/40",     activeColor: "bg-teal-600 text-white" },
+  { key: "wrapping_up",      i18nKey: "job.status.wrapping_up",         color: "bg-violet-600/30 text-violet-300 border-violet-600/40", activeColor: "bg-violet-600 text-white" },
+  { key: "running_late",     i18nKey: "job.status.running_late",        color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
+  { key: "issue_at_property",i18nKey: "job.status.issue_at_property",   color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
 ] as const;
 
 function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerName }: {
@@ -534,7 +534,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               <button
                 className="text-slate-500 hover:text-amber-400 transition-colors text-xs underline underline-offset-2 disabled:opacity-40"
                 onClick={() => {
-                  if (window.confirm("Undo completion? The job will go back to In Progress.")) {
+                  if (window.confirm(t("job.undoConfirm"))) {
                     setUncompleting(true);
                     uncompleteMutation.mutate({ cleanerJobId: job.id });
                   }
@@ -1017,7 +1017,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   } ${statusMutation.isPending ? "opacity-50 cursor-not-allowed" : "hover:opacity-100 cursor-pointer"}`}
                 >
                   {isPending ? <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-current animate-pulse inline-block" /> …</span> : (
-                    isActive ? <span className="inline-flex items-center gap-1">✓ {s.label}</span> : s.label
+                    isActive ? <span className="inline-flex items-center gap-1">✓ {t(s.i18nKey)}</span> : t(s.i18nKey)
                   )}
                 </button>
               );
@@ -1072,8 +1072,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     : "text-orange-300 bg-orange-900/20 border-orange-700/30"
                 }`}>
                   {job.etaTimestamp
-                    ? `Arrives ~${new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
-                    : job.jobStatus === "on_the_way" ? "On the Way" : "Running Late"
+                    ? t("job.arrivesAt", { time: new Date(job.etaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) })
+                    : job.jobStatus === "on_the_way" ? t("job.status.on_the_way") : t("job.status.running_late")
                   }
                 </p>
                 <button
@@ -1127,9 +1127,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Camera className="w-3.5 h-3.5 mr-1.5" />}
             {uploading
               ? uploadProgress && uploadProgress.total > 1
-                ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…`
-                : "Uploading…"
-              : "Add Photo"}
+                ? t("job.uploadingProgress", { current: uploadProgress.current, total: uploadProgress.total })
+                : t("job.uploading")
+              : t("job.addPhoto")}
           </Button>
           {!isComplete && (
             <Button
@@ -1143,7 +1143,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               disabled={completing}
             >
               {completing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}
-              {completing ? "Saving…" : "Mark Complete"}
+              {completing ? t("job.saving") : t("job.markComplete")}
             </Button>
           )}
         </div>
@@ -1167,11 +1167,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <DialogTitle className="text-white text-xl flex items-center gap-2">
               {etaModalFor === "on_the_way" ? (
                 <>
-                  <span className="text-2xl">🚗</span> On the Way
+                  <span className="text-2xl">🚗</span> {t("job.status.on_the_way")}
                 </>
               ) : (
                 <>
-                  <span className="text-2xl">⏰</span> Running Late
+                  <span className="text-2xl">⏰</span> {t("job.status.running_late")}
                 </>
               )}
             </DialogTitle>
