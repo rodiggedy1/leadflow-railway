@@ -1567,3 +1567,11 @@
 - [x] End-of-day check-in: tRPC procedures (submitCheckin, getCheckinsForDate)
 - [x] End-of-day check-in: fullscreen modal in cleaner portal (triggers on last job complete)
 - [x] End-of-day check-in: surface availability responses on scheduling page
+- [x] Add `language` field (en/es/pt, default en) to cleaner_profiles DB
+- [x] Build portalTranslations.ts with 126 keys across English, Spanish, Portuguese
+- [x] Wire translations into Cleaner Portal — all UI text uses t() calls
+- [x] Add language switcher (globe icon) in Cleaner Portal header
+- [x] Cleaner language preference persisted in localStorage + synced to DB
+- [x] Server language setting loaded on portal mount (admin setting takes effect on next load)
+- [x] Add Portal Language dropdown to Cleaner Profiles edit form in Quality/CleanerDashboard
+- [x] Show language flag badge (🇺🇸/🇪🇸/🇧🇷) in cleaner profile list view

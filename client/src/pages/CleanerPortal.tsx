@@ -5,6 +5,7 @@
  * Shows today's jobs (with date browsing), pay breakdown, ratings, photo upload, mark complete.
  */
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { createPortalT, PORTAL_LANGS, type PortalLang } from "@/lib/portalTranslations";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { toast } from "sonner";
 import {
   Camera, Star, CheckCircle2, Clock, MapPin, DollarSign,
   ChevronLeft, ChevronRight, Upload, Loader2, LogOut, User,
-  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X
+  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X, Globe
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,12 +71,13 @@ function StarRating({ rating }: { rating: number | null }) {
 
 // ── Login Form ────────────────────────────────────────────────────────────────
 
-function LoginForm({ onLogin }: { onLogin: () => void }) {
+function LoginForm({ onLogin, lang = "en" }: { onLogin: () => void; lang?: PortalLang }) {
+  const t = createPortalT(lang);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const loginMutation = trpc.cleaner.login.useMutation({
     onSuccess: () => {
-      toast.success("Welcome back!");
+      toast.success(t("login.welcome"));
       onLogin();
     },
     onError: (err) => toast.error(err.message),
@@ -88,15 +90,15 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
           <div className="mx-auto w-14 h-14 bg-emerald-500/20 rounded-full flex items-center justify-center mb-3">
             <User className="w-7 h-7 text-emerald-400" />
           </div>
-          <CardTitle className="text-white text-xl">Cleaner Portal</CardTitle>
-          <p className="text-slate-400 text-sm">Maids in Black</p>
+          <CardTitle className="text-white text-xl">{t("login.title")}</CardTitle>
+          <p className="text-slate-400 text-sm">{t("login.subtitle")}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="text-slate-300 text-sm font-medium block mb-1.5">Email</label>
+            <label className="text-slate-300 text-sm font-medium block mb-1.5">{t("login.email")}</label>
             <Input
               type="email"
-              placeholder="cleaner@example.com"
+              placeholder={t("login.email.placeholder")}
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 focus:border-emerald-500"
@@ -105,7 +107,7 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             />
           </div>
           <div>
-            <label className="text-slate-300 text-sm font-medium block mb-1.5">Password</label>
+            <label className="text-slate-300 text-sm font-medium block mb-1.5">{t("login.password")}</label>
             <Input
               type="password"
               placeholder="••••••••"
@@ -121,10 +123,10 @@ function LoginForm({ onLogin }: { onLogin: () => void }) {
             disabled={loginMutation.isPending || !email || !password}
           >
             {loginMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Sign In
+            {t("login.signIn")}
           </Button>
           <p className="text-center text-slate-500 text-xs">
-            Contact your manager if you need access.
+            {t("login.contact")}
           </p>
         </CardContent>
       </Card>
@@ -165,59 +167,71 @@ type Job = {
   customRules?: Array<{ id: number; label: string; amount: string; type: string }>;
 };
 
-const JOB_STATUSES = [
-  { key: "on_the_way",       label: "On the Way",              color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
-  { key: "in_progress",      label: "In Progress",             color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
-  { key: "finishing_up",     label: "Finishing Up",            color: "bg-teal-600/30 text-teal-300 border-teal-600/40",     activeColor: "bg-teal-600 text-white" },
-  { key: "wrapping_up",      label: "Finishing Previous Job",  color: "bg-violet-600/30 text-violet-300 border-violet-600/40", activeColor: "bg-violet-600 text-white" },
-  { key: "running_late",     label: "Running Late",            color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
-  { key: "issue_at_property",label: "Issue at Property",       color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
-] as const;
+const JOB_STATUS_COLORS = {
+  on_the_way:        { color: "bg-blue-600/30 text-blue-300 border-blue-600/40",     activeColor: "bg-blue-600 text-white" },
+  in_progress:       { color: "bg-amber-600/30 text-amber-300 border-amber-600/40",  activeColor: "bg-amber-500 text-white" },
+  finishing_up:      { color: "bg-teal-600/30 text-teal-300 border-teal-600/40",     activeColor: "bg-teal-600 text-white" },
+  wrapping_up:       { color: "bg-violet-600/30 text-violet-300 border-violet-600/40", activeColor: "bg-violet-600 text-white" },
+  running_late:      { color: "bg-orange-600/30 text-orange-300 border-orange-600/40", activeColor: "bg-orange-500 text-white" },
+  issue_at_property: { color: "bg-red-600/30 text-red-300 border-red-600/40",       activeColor: "bg-red-600 text-white" },
+} as const;
+type JobStatusKey = keyof typeof JOB_STATUS_COLORS;
+function getJobStatuses(t: ReturnType<typeof createPortalT>) {
+  return [
+    { key: "on_the_way" as JobStatusKey,       label: t("status.on_the_way"),       ...JOB_STATUS_COLORS.on_the_way },
+    { key: "in_progress" as JobStatusKey,      label: t("status.in_progress"),      ...JOB_STATUS_COLORS.in_progress },
+    { key: "finishing_up" as JobStatusKey,     label: t("status.finishing_up"),     ...JOB_STATUS_COLORS.finishing_up },
+    { key: "wrapping_up" as JobStatusKey,      label: t("status.wrapping_up"),      ...JOB_STATUS_COLORS.wrapping_up },
+    { key: "running_late" as JobStatusKey,     label: t("status.running_late"),     ...JOB_STATUS_COLORS.running_late },
+    { key: "issue_at_property" as JobStatusKey,label: t("status.issue_at_property"),...JOB_STATUS_COLORS.issue_at_property },
+  ];
+}
 
-function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerName }: {
+function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerName, t }: {
   open: boolean;
   onClose: () => void;
   payRules?: { fiveStarBonus: number; lowRatingDeduction: number; photoBonus: number; noPhotoPenalty: number; streakBonus: number; streakTarget: number; recleanPenalty: number } | null;
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   cleanerName?: string;
+  t: ReturnType<typeof createPortalT>;
 }) {
   const rules = [
     {
-      title: "Base Pay",
+      title: t("payoutRules.sectionBasePay"),
       color: "teal",
       items: [
-        { label: "Base pay", desc: "You earn this just by completing the job. It's locked in the moment you're assigned.", positive: true },
+        { label: t("pay.basePayLabel"), desc: t("payoutRules.basePayDesc"), positive: true },
       ],
     },
     {
-      title: "Rating Bonus / Penalty",
+      title: t("payoutRules.sectionRating"),
       color: "yellow",
       items: [
-        { label: `+$${payRules?.fiveStarBonus ?? 10} — 5-star rating`, desc: "Customer gives you a perfect score. Keep communication high and leave the home spotless.", positive: true },
-        { label: `No change — 4-star rating`, desc: "Good job, no bonus or penalty at this level.", positive: null },
-        { label: `-$${payRules?.lowRatingDeduction ?? 20} — 3 stars or below`, desc: "Customer reports an issue or gives a low score. Avoid by double-checking your work before leaving.", positive: false },
+        { label: t("payoutRules.fiveStarLabel", { bonus: String(payRules?.fiveStarBonus ?? 10) }), desc: t("payoutRules.fiveStarDesc"), positive: true },
+        { label: t("payoutRules.fourStarLabel"), desc: t("payoutRules.fourStarDesc"), positive: null },
+        { label: t("payoutRules.lowRatingLabel", { penalty: String(payRules?.lowRatingDeduction ?? 20) }), desc: t("payoutRules.lowRatingDesc"), positive: false },
       ],
     },
     {
-      title: "Photo Bonus / Penalty",
+      title: t("payoutRules.sectionPhoto"),
       color: "blue",
       items: [
-        { label: `+$${payRules?.photoBonus ?? 5} — Photos uploaded`, desc: "Upload at least one after-photo before marking the job complete. Takes 30 seconds and earns you extra.", positive: true },
-        { label: `-$${payRules?.noPhotoPenalty ?? 10} — No photos`, desc: "If you mark complete without uploading photos, this deduction applies automatically.", positive: false },
+        { label: t("payoutRules.photoLabel", { bonus: String(payRules?.photoBonus ?? 5) }), desc: t("payoutRules.photoDesc"), positive: true },
+        { label: t("payoutRules.noPhotoLabel", { penalty: String(payRules?.noPhotoPenalty ?? 10) }), desc: t("payoutRules.noPhotoDesc"), positive: false },
       ],
     },
     {
-      title: "Reclean Deduction",
+      title: t("payoutRules.sectionReclean"),
       color: "red",
       items: [
-        { label: `-$${payRules?.recleanPenalty ?? 30} — Job requires a reclean`, desc: "If the customer reports a serious issue and a reclean is needed, this is applied. Avoid by doing a thorough walkthrough before leaving.", positive: false },
+        { label: t("payoutRules.recleanLabel", { penalty: String(payRules?.recleanPenalty ?? 30) }), desc: t("payoutRules.recleanDesc"), positive: false },
       ],
     },
     {
-      title: "Streak Bonus",
+      title: t("payoutRules.sectionStreak"),
       color: "purple",
       items: [
-        { label: `+$${payRules?.streakBonus ?? 50} — ${payRules?.streakTarget ?? 10} clean jobs in a row`, desc: `Complete ${payRules?.streakTarget ?? 10} consecutive jobs with no complaints and a rating of 4+ to unlock this bonus. Your streak resets if you get a complaint or low rating.`, positive: true },
+        { label: t("payoutRules.streakLabel", { bonus: String(payRules?.streakBonus ?? 50), target: String(payRules?.streakTarget ?? 10) }), desc: t("payoutRules.streakDesc", { target: String(payRules?.streakTarget ?? 10) }), positive: true },
       ],
     },
   ];
@@ -261,7 +275,7 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
           ))}
           {(customBonuses.length > 0 || customDeductions.length > 0) && (
             <div>
-              <p className="text-slate-300 text-xs font-semibold uppercase tracking-widest mb-2">Special Rules</p>
+              <p className="text-slate-300 text-xs font-semibold uppercase tracking-widest mb-2">{t("payoutRules.sectionSpecial")}</p>
               <div className="space-y-2">
                 {customBonuses.map(r => (
                   <div key={r.id} className="flex gap-3 items-start">
@@ -317,7 +331,7 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
   );
 }
 
-function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName }: {
+function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName, t }: {
   job: Job;
   allJobs: Job[];
   onPhotoUploaded: () => void;
@@ -327,6 +341,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
   cleanerName?: string;
+  t: ReturnType<typeof createPortalT>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPayoutRules, setShowPayoutRules] = useState(false);
@@ -594,8 +609,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
         {hasChecklist && (
           <div className="bg-slate-900/80 border border-slate-600 rounded-lg p-3">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider">✅ Job Checklist</p>
-              <span className="text-xs text-slate-500">{checklist!.filter(i => i.checked).length}/{checklist!.length} done</span>
+              <p className="text-slate-300 text-xs font-semibold uppercase tracking-wider">{t("job.checklist")}</p>
+              <span className="text-xs text-slate-500">{t("job.checklistDone", { done: String(checklist!.filter(i => i.checked).length), total: String(checklist!.length) })}</span>
             </div>
             <div className="space-y-2">
               {checklist!.map((item, idx) => (
@@ -633,7 +648,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             </div>
             {!allChecked && (
               <p className="text-amber-400 text-xs mt-2 flex items-center gap-1">
-                ⚠️ Complete all items above before marking the job done
+                {t("job.checklistWarning")}
               </p>
             )}
           </div>
@@ -658,6 +673,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             </div>
           </div>
           <PayoutRulesModal
+            t={t}
             open={showPayoutRules}
             onClose={() => setShowPayoutRules(false)}
             payRules={payRules}
@@ -698,7 +714,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             onClick={() => setShowBonusDetails(v => !v)}
             className="w-full flex items-center justify-center gap-1.5 py-2.5 text-slate-400 hover:text-slate-200 text-xs font-semibold transition-colors border-t border-slate-800/60"
           >
-            <span>{showBonusDetails ? "Hide bonus details ↑" : "See bonus details ↓"}</span>
+            <span>{showBonusDetails ? t("pay.hideBonusDetails") : t("pay.seeBonusDetails")}</span>
           </button>
 
           {/* Detailed line items — collapsible */}
@@ -780,9 +796,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             return (
               <div className="flex justify-between items-start px-4 py-3">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{hasPhoto ? "Photo Bonus" : "Photo Bonus"}</p></div>
-                  <p className="text-slate-500 text-xs mt-0.5">+${payRules?.photoBonus ?? 5} when after photos are uploaded · -${payRules?.noPhotoPenalty ?? 10} if missing</p>
-                  <p className="text-slate-600 text-xs">Upload photos before marking complete</p>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{t("pay.photoBonus")}</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">{t("pay.photoBonusDesc", { bonus: String(payRules?.photoBonus ?? 5), penalty: String(payRules?.noPhotoPenalty ?? 10) })}</p>
+                  <p className="text-slate-600 text-xs">{t("pay.photoBonusUpload")}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   {isPending ? (
@@ -790,7 +806,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   ) : (
                     <span className={`text-sm font-semibold ${hasPhoto ? "text-emerald-400" : "text-red-400"}`}>{hasPhoto ? "+" : ""}{formatCurrency(photoAdj.toFixed(2))}</span>
                   )}
-                  {!hasPhoto && !isComplete && <div><span className="text-red-400 text-xs">Downside -${payRules?.noPhotoPenalty ?? 10}.00</span></div>}
+                  {!hasPhoto && !isComplete && <div><span className="text-red-400 text-xs">{t("pay.photoBonusDownside", { penalty: String(payRules?.noPhotoPenalty ?? 10) })}</span></div>}
                 </div>
               </div>
             );
@@ -805,9 +821,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             return (
               <div className="flex justify-between items-start px-4 py-3">
                 <div>
-                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">Reclean Deduction</p></div>
-                  <p className="text-slate-500 text-xs mt-0.5">-${payRules?.recleanPenalty ?? 30} if the job requires a reclean</p>
-                  <p className="text-slate-600 text-xs">Avoided when there are no issues</p>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{t("pay.recleanDeduction")}</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">{t("pay.recleanDesc", { penalty: String(payRules?.recleanPenalty ?? 30) })}</p>
+                  <p className="text-slate-600 text-xs">{t("pay.recleanAvoided")}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
                   {recleanPending ? (
@@ -829,17 +845,17 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             return (
               <div className="flex justify-between items-start px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">Streak Bonus</p></div>
-                  <p className="text-slate-500 text-xs mt-0.5">+${payRules?.streakBonus ?? 50} after {streakTarget} clean jobs with no issues</p>
+                  <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{t("pay.streakBonus")}</p></div>
+                  <p className="text-slate-500 text-xs mt-0.5">{t("pay.streakBonusDesc", { bonus: String(payRules?.streakBonus ?? 50), target: String(streakTarget) })}</p>
                   {!isEarned && streakRemaining > 0 && (
-                    <p className="text-slate-500 text-xs">{streakRemaining} more clean job{streakRemaining !== 1 ? "s" : ""} to unlock</p>
+                    <p className="text-slate-500 text-xs">{streakRemaining !== 1 ? t("pay.streakRemainingPlural", { count: String(streakRemaining) }) : t("pay.streakRemaining", { count: String(streakRemaining) })}</p>
                   )}
                   {/* Progress bar */}
                   {!isEarned && (
                     <div className="mt-2">
                       <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                        <span>Progress</span>
-                        <span>{streakProgress} / {streakTarget} jobs</span>
+                        <span>{t("pay.streakProgress")}</span>
+                        <span>{t("pay.streakProgressLabel", { current: String(streakProgress), target: String(streakTarget) })}</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
                         <div
@@ -867,7 +883,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
                     manualAdj > 0 ? "bg-emerald-900/50 text-emerald-300 border-emerald-700/40" : "bg-red-900/50 text-red-300 border-red-700/40"
                   }`}>Applied</span>
-                  <p className="text-slate-100 text-sm font-semibold">{manualAdj > 0 ? "Adjustment (Bonus)" : "Adjustment (Deduction)"}</p>
+                  <p className="text-slate-100 text-sm font-semibold">{manualAdj > 0 ? t("pay.adjustmentBonus") : t("pay.adjustmentDeduction")}</p>
                 </div>
                 {job.manualAdjustmentNote && (
                   <p className="text-slate-500 text-xs mt-0.5">{job.manualAdjustmentNote}</p>
@@ -959,7 +975,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
         <div className="space-y-2">
           <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest">Job Status</p>
           <div className="flex flex-wrap gap-1.5">
-            {JOB_STATUSES.map(s => {
+            {getJobStatuses(t).map(s => {
               const isActive = job.jobStatus === s.key;
               const isPending = statusMutation.isPending && statusMutation.variables?.status === s.key;
 
@@ -1023,10 +1039,10 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           {/* Issue note input — note is required before submitting */}
           {showIssueInput && (
             <div className="space-y-1.5 mt-1">
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">What's the issue? <span className="text-red-500">*</span></p>
+              <p className="text-xs font-semibold text-red-400 uppercase tracking-wide">{t("issue.label")} <span className="text-red-500">*</span></p>
               <div className="flex gap-2">
                 <Input
-                  placeholder="Describe the issue (required)"
+                  placeholder={t("issue.placeholder")}
                   value={issueNote}
                   onChange={e => setIssueNote(e.target.value)}
                   className={`bg-slate-700 border-slate-600 text-white placeholder:text-slate-500 text-sm h-8 ${
@@ -1050,11 +1066,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   }}
                   disabled={statusMutation.isPending || !issueNote.trim()}
                 >
-                  Report
+                  {t("issue.report")}
                 </Button>
               </div>
               {issueNote.trim() === "" && (
-                <p className="text-[11px] text-red-400">A description is required to report an issue.</p>
+                <p className="text-[11px] text-red-400">{t("issue.required")}</p>
               )}
             </div>
           )}
@@ -1083,14 +1099,14 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                       : "text-orange-300 border-orange-600/50 bg-orange-900/30 hover:bg-orange-800/50"
                   }`}
                 >
-                  Update ETA
+                  {t("eta.updateEta")}
                 </button>
               </div>
               {/* Stale ETA banner — shown when ETA has passed by more than 30 min */}
               {job.etaTimestamp !== null && job.etaTimestamp < Date.now() - 30 * 60 * 1000 && (
                 <div className="flex items-center gap-2 px-2 py-1.5 bg-amber-900/30 border border-amber-600/40 rounded-lg">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <p className="text-amber-300 text-xs flex-1">ETA has passed — tap <strong>Update ETA</strong> to notify your client.</p>
+                  <p className="text-amber-300 text-xs flex-1">{t("eta.staleWarning")}</p>
                 </div>
               )}
             </div>
@@ -1122,9 +1138,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Camera className="w-3.5 h-3.5 mr-1.5" />}
             {uploading
               ? uploadProgress && uploadProgress.total > 1
-                ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…`
-                : "Uploading…"
-              : "Add Photo"}
+                ? t("job.uploadingProgress", { current: String(uploadProgress.current), total: String(uploadProgress.total) })
+                : t("job.uploading")
+              : t("job.addPhoto")}
           </Button>
           {!isComplete && (
             <Button
@@ -1138,7 +1154,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               disabled={completing}
             >
               {completing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />}
-              {completing ? "Saving…" : "Mark Complete"}
+              {completing ? t("job.saving") : t("job.markComplete")}
             </Button>
           )}
         </div>
@@ -1162,11 +1178,11 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <DialogTitle className="text-white text-xl flex items-center gap-2">
               {etaModalFor === "on_the_way" ? (
                 <>
-                  <span className="text-2xl">🚗</span> On the Way
+                  <span className="text-2xl">🚗</span> {t("eta.onTheWayLabel")}
                 </>
               ) : (
                 <>
-                  <span className="text-2xl">⏰</span> Running Late
+                  <span className="text-2xl">⏰</span> {t("eta.runningLateLabel")}
                 </>
               )}
             </DialogTitle>
@@ -1182,12 +1198,12 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               <p className={`text-sm font-semibold ${
                 etaModalFor === "on_the_way" ? "text-blue-200" : "text-orange-200"
               }`}>
-                When will you arrive at {nextJobEtaTarget?.customerName ?? job.customerName ?? "your client"}'s home?
+                {t("eta.question", { name: nextJobEtaTarget?.customerName ?? job.customerName ?? "your client" })}
               </p>
               <p className={`text-xs mt-1 font-semibold ${
                 etaModalFor === "on_the_way" ? "text-blue-400" : "text-orange-400"
               }`}>
-                ⚠ Your client will be texted this arrival time immediately. Only select a time you can 100% guarantee.
+                {t("eta.warning")}
               </p>
             </div>
 
@@ -1294,7 +1310,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                       : "bg-orange-700 text-white border-orange-500 hover:bg-orange-600"
                   }`}
                 >
-                  {statusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Set"}
+                  {statusMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : t("eta.set")}
                 </button>
               </div>
             </div>
@@ -1310,7 +1326,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               }}
               disabled={statusMutation.isPending}
             >
-              Cancel
+              {t("checkin.cancel")}
             </Button>
           </div>
         </DialogContent>
@@ -1322,7 +1338,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <DialogHeader>
             <DialogTitle className="text-white text-lg flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              Mark Job Complete?
+              {t("complete.title")}
             </DialogTitle>
           </DialogHeader>
 
@@ -1332,8 +1348,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               <div className="flex items-start gap-3 p-3 bg-amber-950/60 border border-amber-600/40 rounded-xl">
                 <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-semibold text-amber-300">No photos uploaded</p>
-                  <p className="text-xs text-amber-400/80 mt-0.5">No photo upload will cost you $20 and miss out on making $10 extra. We strongly recommend uploading photos.</p>
+                  <p className="text-sm font-semibold text-amber-300">{t("complete.noPhotos")}</p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">{t("complete.noPhotosBody")}</p>
                 </div>
               </div>
             )}
@@ -1342,8 +1358,8 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <div className="flex items-start gap-3 p-3 bg-emerald-950/40 border border-emerald-700/40 rounded-xl">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-emerald-300">You are completing: {job.customerName ?? "this job"}</p>
-                <p className="text-xs text-emerald-400/80 mt-0.5">Your client will receive a completion text message.</p>
+                <p className="text-sm font-semibold text-emerald-300">{t("complete.completing", { name: job.customerName ?? "this job" })}</p>
+                <p className="text-xs text-emerald-400/80 mt-0.5">{t("complete.completingBody")}</p>
               </div>
             </div>
 
@@ -1358,9 +1374,9 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <div className="flex items-start gap-3 p-3 bg-red-950/60 border border-red-600/50 rounded-xl">
                   <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-sm font-semibold text-red-300">Wrong job?</p>
+                    <p className="text-sm font-semibold text-red-300">{t("complete.wrongJob")}</p>
                     <p className="text-xs text-red-400/80 mt-0.5">
-                      Your active job appears to be <strong className="text-red-200">{activeOther.customerName ?? "another client"}</strong> — are you sure you're completing the right one?
+                      {t("complete.wrongJobBody", { name: activeOther.customerName ?? "another client" })}
                     </p>
                   </div>
                 </div>
@@ -1370,7 +1386,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             {/* Irreversible warning */}
             <div className="flex items-start gap-3 p-3 bg-slate-800 border border-slate-700 rounded-xl">
               <AlertCircle className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
-              <p className="text-xs text-slate-300">Once marked complete, the job is closed.</p>
+              <p className="text-xs text-slate-300">{t("complete.irreversible")}</p>
             </div>
 
             {/* Action buttons */}
@@ -1387,7 +1403,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   }}
                 >
                   <Camera className="w-3.5 h-3.5 mr-1.5" />
-                  Upload Photos First
+                  {t("complete.uploadFirst")}
                 </Button>
               )}
               <Button
@@ -1396,7 +1412,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 className={`${job.photos.length === 0 ? "" : "flex-1"} border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent`}
                 onClick={() => setShowCompleteConfirm(false)}
               >
-                Cancel
+                {t("complete.cancel")}
               </Button>
               <Button
                 size="sm"
@@ -1404,7 +1420,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 onClick={confirmMarkComplete}
               >
                 <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                {job.photos.length === 0 ? "Complete Anyway" : "Yes, Mark Complete"}
+                {job.photos.length === 0 ? t("complete.completeAnyway") : t("complete.yesMarkComplete")}
               </Button>
             </div>
           </div>
@@ -1417,7 +1433,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
           <DialogHeader>
             <DialogTitle className="text-white text-lg flex items-center gap-2">
               <span className="text-2xl">🎉</span>
-              Job Complete!
+              {t("postComplete.title").replace("🎉 ", "")}
             </DialogTitle>
           </DialogHeader>
 
@@ -1426,10 +1442,10 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <div className="p-4 bg-amber-950/60 border border-amber-500/40 rounded-xl">
               <p className="text-amber-300 font-bold text-sm flex items-center gap-2 mb-1">
                 <span className="text-lg">⭐</span>
-                Earn an extra $${payRules?.googleReviewBonus ?? 50} — Ask for a 5-star Google review
+                {t("postComplete.reviewAsk", { bonus: String(payRules?.googleReviewBonus ?? 50) }).replace("⭐ ", "")}
               </p>
               <p className="text-amber-400/80 text-xs">
-                Before you leave, ask the client: <span className="italic text-amber-200">"We'd really appreciate it if you could leave us a quick Google review — it only takes 30 seconds!"</span>
+                {t("postComplete.reviewBody")}
               </p>
             </div>
 
@@ -1439,7 +1455,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               if (!nextJob) return null;
               return (
                 <div className="p-4 bg-slate-800 border border-slate-700 rounded-xl">
-                  <p className="text-slate-300 font-semibold text-sm mb-1">Next job: {nextJob.customerName ?? "Client"}</p>
+                  <p className="text-slate-300 font-semibold text-sm mb-1">{t("postComplete.nextJob", { name: nextJob.customerName ?? "Client" })}</p>
                   <p className="text-slate-500 text-xs mb-3">{nextJob.jobAddress ?? ""}</p>
                   <Button
                     size="sm"
@@ -1453,7 +1469,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                       setShowEtaModal(true);
                     }}
                   >
-                    Set "On the Way" for Next Job
+                    {t("postComplete.setOnTheWay")}
                   </Button>
                 </div>
               );
@@ -1465,7 +1481,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               className="w-full border-slate-600 text-slate-300 hover:bg-slate-800 bg-transparent"
               onClick={() => setShowPostComplete(false)}
             >
-              Done
+              {t("postComplete.done")}
             </Button>
           </div>
         </DialogContent>
@@ -1562,10 +1578,12 @@ function MorningAvailabilityPrompt({
   open,
   cleanerName,
   onSubmitted,
+  t,
 }: {
   open: boolean;
   cleanerName: string;
   onSubmitted: () => void;
+  t: ReturnType<typeof createPortalT>;
 }) {
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [maxJobs, setMaxJobs] = useState<number | null>(null);
@@ -1602,7 +1620,7 @@ function MorningAvailabilityPrompt({
   const handleSubmit = () => {
     if (isAvailable === null) return;
     if (isAvailable && maxJobs === null) {
-      toast.warning("Please select how many jobs you can do tomorrow.");
+      toast.warning(t("availability.selectMaxJobs"));
       return;
     }
     submitCheckin.mutate({
@@ -1616,10 +1634,11 @@ function MorningAvailabilityPrompt({
   const hourET = parseInt(
     new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" })
   );
+  const firstName = cleanerName.split(" ")[0];
   const greeting =
-    hourET < 10 ? `Good morning, ${cleanerName.split(" ")[0]}! ☀️` :
-    hourET < 12 ? `Hey ${cleanerName.split(" ")[0]}, almost lunchtime! 🌤` :
-    `Hey ${cleanerName.split(" ")[0]}! 👋`;
+    hourET < 10 ? t("availability.greetingMorning", { name: firstName }) :
+    hourET < 12 ? t("availability.greetingMidMorning", { name: firstName }) :
+    t("availability.greetingAfternoon", { name: firstName });
   // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 14"
   // Uses Intl.DateTimeFormat.formatToParts so the ET date is correct regardless of the cleaner's device timezone
   const _etParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -1640,16 +1659,14 @@ function MorningAvailabilityPrompt({
             <div className="space-y-2">
               <h2 className="text-white text-3xl font-bold">{greeting}</h2>
               <p className="text-slate-400 text-base leading-relaxed">
-                Before you crush it today —<br />
-                let us know if you're working tomorrow<br />
-                so we can build your schedule.
+                {t("availability.greetingBody")}
               </p>
             </div>
             <Button
               className="w-full max-w-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl mt-4"
               onClick={() => setStep("availability")}
             >
-              Let's do it →
+              {t("availability.letsDoIt")}
             </Button>
           </div>
         )}
@@ -1659,8 +1676,8 @@ function MorningAvailabilityPrompt({
           <div className="space-y-6">
             <div className="text-center space-y-2">
               <div className="text-5xl mb-4">🌅</div>
-              <h3 className="text-white text-2xl font-bold">Are you working tomorrow, {tomorrowLabel}?</h3>
-              <p className="text-slate-400 text-sm">This helps us plan the schedule.</p>
+              <h3 className="text-white text-2xl font-bold">{t("availability.question", { date: tomorrowLabel })}</h3>
+              <p className="text-slate-400 text-sm">{t("availability.questionSub")}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-8">
               <button
@@ -1688,7 +1705,7 @@ function MorningAvailabilityPrompt({
           <div className="space-y-6">
             <div className="text-center space-y-1">
               <div className="text-4xl mb-3">📋</div>
-              <h3 className="text-white text-xl font-bold">How many jobs can you do?</h3>
+              <h3 className="text-white text-xl font-bold">{t("availability.howMany")}</h3>
               <p className="text-slate-400 text-sm">This helps us plan tomorrow's schedule.</p>
             </div>
             <div className="grid grid-cols-4 gap-3">
@@ -1782,9 +1799,11 @@ type CheckinStep = "availability" | "details" | "confirmed";;
 function CheckinModal({
   open,
   onClose,
+  t,
 }: {
   open: boolean;
   onClose: () => void;
+  t: ReturnType<typeof createPortalT>;
 }) {
   const [step, setStep] = useState<CheckinStep>("availability");
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
@@ -1924,7 +1943,7 @@ function CheckinModal({
                 onClick={() => setStep("availability")}
                 className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
               >
-                ← Back
+                {t("availability.back")}
               </button>
             </div>
           </div>
@@ -1986,18 +2005,18 @@ function CheckinModal({
                 <span className="text-2xl">{submittedData.isAvailable ? "✅" : "❌"}</span>
                 <div>
                   <p className="text-white font-semibold">
-                    {submittedData.isAvailable ? "Available tomorrow" : "Not available tomorrow"}
+                    {submittedData.isAvailable ? t("checkin.availableTomorrow") : t("checkin.notAvailableTomorrow")}
                   </p>
                   {submittedData.isAvailable && submittedData.maxJobs !== null && (
                     <p className="text-slate-400 text-sm">
-                      Up to {submittedData.maxJobs >= 10 ? "4+" : submittedData.maxJobs} job{submittedData.maxJobs !== 1 ? "s" : ""}
+                      {t("checkin.upTo", { count: String(submittedData.maxJobs >= 10 ? "4+" : submittedData.maxJobs) })}
                     </p>
                   )}
                 </div>
               </div>
               {submittedData.note && (
                 <div className="pt-1 border-t border-slate-700">
-                  <p className="text-slate-500 text-xs mb-1">Note</p>
+                  <p className="text-slate-500 text-xs mb-1">{t("checkin.note")}</p>
                   <p className="text-slate-300 text-sm">{submittedData.note}</p>
                 </div>
               )}
@@ -2007,10 +2026,10 @@ function CheckinModal({
             <div className="bg-amber-950/50 border border-amber-700/40 rounded-2xl p-4">
               <p className="text-amber-300 font-semibold text-sm flex items-center gap-2 mb-1.5">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                Important Reminder
+                {t("checkin.importantReminder")}
               </p>
               <p className="text-amber-400/80 text-xs leading-relaxed">
-                If you said you're available but cancel, this will incur a charge equal to the total cost of all of your cancelled appointments.
+                {t("checkin.cancellationWarning")}
               </p>
             </div>
 
@@ -2018,7 +2037,7 @@ function CheckinModal({
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base h-auto"
               onClick={onClose}
             >
-              Done
+              {t("checkin.done")}
             </Button>
           </div>
         )}
@@ -2034,6 +2053,12 @@ export default function CleanerPortal() {
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
   const [showCheckin, setShowCheckin] = useState(false);
   const [showMorningPrompt, setShowMorningPrompt] = useState(false);
+  // Language state — persisted in localStorage so it survives page refresh
+  const [lang, setLang] = useState<PortalLang>(() => {
+    const stored = localStorage.getItem("portal_lang");
+    return (stored === "es" || stored === "pt") ? stored : "en";
+  });
+  const t = createPortalT(lang);
   const utils = trpc.useUtils();
 
   const meQuery = trpc.cleaner.me.useQuery(undefined, {
@@ -2096,6 +2121,12 @@ export default function CleanerPortal() {
   const logoutMutation = trpc.cleaner.logout.useMutation({
     onSuccess: () => utils.cleaner.me.invalidate(),
   });
+  const updateLangMutation = trpc.cleaner.updateLanguage.useMutation();
+  const handleLangChange = (newLang: PortalLang) => {
+    setLang(newLang);
+    localStorage.setItem("portal_lang", newLang);
+    updateLangMutation.mutate({ language: newLang });
+  };
 
   const refetch = () => {
     utils.cleaner.myJobs.invalidate({ date });
@@ -2141,10 +2172,20 @@ export default function CleanerPortal() {
 
   // Not logged in
   if (!meQuery.data) {
-    return <LoginForm onLogin={() => utils.cleaner.me.invalidate()} />;
+    return <LoginForm onLogin={() => utils.cleaner.me.invalidate()} lang={lang} />;
   }
 
   const cleaner = meQuery.data;
+  // Sync lang from server profile on first load (server is source of truth for team language)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const serverLang = cleaner?.language as PortalLang | undefined;
+  // Apply server language once on mount (don't override local switch)
+  const [serverLangApplied, setServerLangApplied] = useState(false);
+  if (serverLang && !serverLangApplied) {
+    setLang(serverLang);
+    localStorage.setItem("portal_lang", serverLang);
+    setServerLangApplied(true);
+  }
   const allJobs = (jobsQuery.data ?? []) as Job[];
   // Split: active jobs (show full card) vs removed (show stripped badge card)
   const jobs = allJobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
@@ -2181,17 +2222,48 @@ export default function CleanerPortal() {
       {/* Header */}
       <header className="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div>
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">Maids in Black</p>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{t("header.brand")}</p>
           <h1 className="text-white font-semibold text-base leading-tight">{cleaner.name}</h1>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-slate-400 hover:text-white"
-          onClick={() => logoutMutation.mutate()}
-        >
-          <LogOut className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* Language switcher */}
+          <div className="relative group">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-slate-400 hover:text-white px-2"
+              title="Language / Idioma / Idioma"
+            >
+              <Globe className="w-4 h-4" />
+              <span className="text-xs ml-1">{PORTAL_LANGS.find(l => l.value === lang)?.flag}</span>
+            </Button>
+            <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden hidden group-hover:block min-w-[130px]">
+              {PORTAL_LANGS.map(l => (
+                <button
+                  key={l.value}
+                  onClick={() => handleLangChange(l.value)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                    lang === l.value
+                      ? "bg-emerald-900/50 text-emerald-300"
+                      : "text-slate-300 hover:bg-slate-700"
+                  }`}
+                >
+                  <span>{l.flag}</span>
+                  <span>{l.label}</span>
+                  {lang === l.value && <span className="ml-auto text-emerald-400 text-xs">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-slate-400 hover:text-white"
+            onClick={() => logoutMutation.mutate()}
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
+        </div>
        </header>
 
       {/* Sticky availability reminder banner — shown if not yet submitted and past 7:29 AM ET */}
@@ -2207,9 +2279,9 @@ export default function CleanerPortal() {
         >
           <div className="flex items-center gap-2">
             <span className="text-amber-400 text-base">⚠️</span>
-            <span className="text-amber-200 text-sm font-medium">You haven't submitted tomorrow's availability yet</span>
+            <span className="text-amber-200 text-sm font-medium">{t("availability.banner")}</span>
           </div>
-          <span className="text-amber-400 text-xs font-semibold">Tap →</span>
+          <span className="text-amber-400 text-xs font-semibold">{t("availability.bannerTap")}</span>
         </div>
       )}
 
@@ -2219,18 +2291,18 @@ export default function CleanerPortal() {
           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
             <div className="flex items-center gap-2 mb-1">
               <DollarSign className="w-4 h-4 text-emerald-400" />
-              <span className="text-slate-400 text-xs font-medium">Today</span>
+              <span className="text-slate-400 text-xs font-medium">{t("earnings.today")}</span>
             </div>
             <p className="text-emerald-400 text-2xl font-bold">${todayEarnings.toFixed(2)}</p>
-            <p className="text-slate-500 text-xs mt-0.5">{jobs.length} job{jobs.length !== 1 ? "s" : ""} · {completedToday} done</p>
+            <p className="text-slate-500 text-xs mt-0.5">{jobs.length !== 1 ? t("earnings.jobsSummaryPlural", { count: String(jobs.length), completed: String(completedToday) }) : t("earnings.jobsSummary", { count: String(jobs.length), completed: String(completedToday) })}</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-blue-400" />
-              <span className="text-slate-400 text-xs font-medium">This Week</span>
+              <span className="text-slate-400 text-xs font-medium">{t("earnings.thisWeek")}</span>
             </div>
             <p className="text-blue-400 text-2xl font-bold">${weekEarnings.toFixed(2)}</p>
-            <p className="text-slate-500 text-xs mt-0.5">{weekJobs.length} job{weekJobs.length !== 1 ? "s" : ""}</p>
+            <p className="text-slate-500 text-xs mt-0.5">{weekJobs.length !== 1 ? t("earnings.weekJobsPlural", { count: String(weekJobs.length) }) : t("earnings.weekJobs", { count: String(weekJobs.length) })}</p>
           </div>
         </div>
 
@@ -2254,7 +2326,7 @@ export default function CleanerPortal() {
             }`}
             onClick={() => setActiveTab("today")}
           >
-            Today
+            {t("tabs.today")}
           </button>
           <button
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
@@ -2271,7 +2343,7 @@ export default function CleanerPortal() {
           <div className="space-y-4">
             {/* Weekly grand total */}
             <div className="bg-gradient-to-r from-blue-900/40 to-slate-800 rounded-xl p-4 border border-blue-700/30">
-              <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-1">Week Total</p>
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-1">{t("week.total")}</p>
               <p className="text-blue-400 text-3xl font-bold">${weekEarnings.toFixed(2)}</p>
               <p className="text-slate-500 text-xs mt-1">
                 {formatDate(weekStart)} – {formatDate(weekEnd)}
@@ -2281,15 +2353,15 @@ export default function CleanerPortal() {
             {/* How Your Pay Works */}
             {payRules && (
               <div className="bg-slate-800/60 rounded-xl border border-slate-700/50 p-4">
-                <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">How Your Pay Works</p>
+                <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">{t("week.howYourPayWorks")}</p>
                 <div className="space-y-2">
                   {([
-                    { label: "5-Star Rating", value: `+$${payRules.fiveStarBonus}`, color: "text-emerald-400" },
-                    { label: "Completion Photo", value: `+$${payRules.photoBonus}`, color: "text-emerald-400" },
-                    { label: `Streak Bonus (every ${payRules.streakTarget} jobs)`, value: `+$${payRules.streakBonus}`, color: "text-emerald-400" },
-                    { label: "Low Rating (\u22643 stars)", value: `-$${payRules.lowRatingDeduction}`, color: "text-red-400" },
-                    { label: "No Photo", value: `-$${payRules.noPhotoPenalty}`, color: "text-red-400" },
-                    { label: "Reclean / Poor Service", value: `-$${payRules.recleanPenalty}`, color: "text-red-400" },
+                    { label: t("week.fiveStar"), value: `+$${payRules.fiveStarBonus}`, color: "text-emerald-400" },
+                    { label: t("week.completionPhoto"), value: `+$${payRules.photoBonus}`, color: "text-emerald-400" },
+                    { label: t("week.streakBonus", { target: String(payRules.streakTarget) }), value: `+$${payRules.streakBonus}`, color: "text-emerald-400" },
+                    { label: t("week.lowRating"), value: `-$${payRules.lowRatingDeduction}`, color: "text-red-400" },
+                    { label: t("week.noPhoto"), value: `-$${payRules.noPhotoPenalty}`, color: "text-red-400" },
+                    { label: t("week.reclean"), value: `-$${payRules.recleanPenalty}`, color: "text-red-400" },
                   ] as { label: string; value: string; color: string }[]).map(row => (
                     <div key={row.label} className="flex items-center justify-between text-sm">
                       <span className="text-slate-400">{row.label}</span>
@@ -2311,7 +2383,7 @@ export default function CleanerPortal() {
                     ))}
                   </>
                 )}
-                <p className="text-slate-600 text-xs mt-3">Bonuses and deductions are applied automatically when your job is rated.</p>
+                <p className="text-slate-600 text-xs mt-3">{t("pay.bonusesAutoApplied")}</p>
               </div>
             )}
 
@@ -2432,13 +2504,14 @@ export default function CleanerPortal() {
                 activeCustomRules={activeCustomRules}
                 streakInfo={streakInfo}
                 cleanerName={cleaner.name}
+                t={t}
               />
             ))}
 
             {/* Removed / rescheduled jobs — stripped card */}
             {removedJobs.length > 0 && (
               <div className="space-y-2">
-                <p className="text-slate-600 text-xs font-semibold uppercase tracking-widest px-1">Removed from Schedule</p>
+                <p className="text-slate-600 text-xs font-semibold uppercase tracking-widest px-1">{t("removed.sectionTitle")}</p>
                 {removedJobs.map(job => {
                   const isRescheduled = job.bookingStatus === "rescheduled";
                   return (
@@ -2474,12 +2547,13 @@ export default function CleanerPortal() {
     </div>
 
     {/* End-of-day check-in modal — fullscreen takeover */}
-    <CheckinModal open={showCheckin} onClose={() => setShowCheckin(false)} />
+    <CheckinModal open={showCheckin} t={t} onClose={() => setShowCheckin(false)} />
 
     {/* Morning availability prompt — fullscreen, shown at 7:29 AM ET if not yet submitted */}
     <MorningAvailabilityPrompt
       open={showMorningPrompt}
       cleanerName={meQuery.data?.name ?? ""}
+      t={t}
       onSubmitted={() => {
         setShowMorningPrompt(false);
         availabilityCheckQuery.refetch();
