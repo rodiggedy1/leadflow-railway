@@ -2160,6 +2160,15 @@ export default function CleanerPortal() {
     }
     return days;
   }, [weekJobs0, weekStart]);
+  // Sync server language preference once loaded — MUST be before any early returns (Rules of Hooks)
+  useEffect(() => {
+    const serverLang = meQuery.data?.language as PortalLang | undefined;
+    if (serverLang) {
+      setLang(serverLang);
+      localStorage.setItem("portal_lang", serverLang);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meQuery.data?.language]);
 
   // Not yet loaded
   if (meQuery.isLoading) {
