@@ -1,0 +1,632 @@
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+
+const en = {
+  translation: {
+    // Login
+    "login.title": "Cleaner Portal",
+    "login.subtitle": "Maids in Black",
+    "login.email": "Email",
+    "login.emailPlaceholder": "cleaner@example.com",
+    "login.password": "Password",
+    "login.passwordPlaceholder": "••••••••",
+    "login.signIn": "Sign In",
+    "login.signingIn": "Signing in…",
+    "login.welcome": "Welcome back!",
+
+    // Header
+    "header.brand": "Maids in Black",
+
+    // Availability banner
+    "banner.notSubmitted": "You haven't submitted tomorrow's availability yet",
+    "banner.tap": "Tap →",
+
+    // Earnings tiles
+    "earnings.today": "Today",
+    "earnings.thisWeek": "This Week",
+    "earnings.avgToday": "avg today",
+    "earnings.jobs": "job",
+    "earnings.jobsPlural": "jobs",
+    "earnings.done": "done",
+
+    // Tabs
+    "tabs.today": "Today",
+    "tabs.thisWeek": "This Week",
+
+    // Date nav
+    "date.today": "Today",
+    "date.jumpToToday": "Jump to Today",
+    "date.noJobs": "No jobs scheduled",
+    "date.noJobsFor": "for",
+
+    // Week view
+    "week.total": "Week Total",
+    "week.howPayWorks": "How Your Pay Works",
+    "week.fiveStar": "5-Star Rating",
+    "week.completionPhoto": "Completion Photo",
+    "week.streakBonus": "Streak Bonus (every {{n}} jobs)",
+    "week.lowRating": "Low Rating (≤3 stars)",
+    "week.noPhoto": "No Photo",
+    "week.reclean": "Reclean / Poor Service",
+    "week.bonusesNote": "Bonuses and deductions are applied automatically when your job is rated.",
+    "week.noJobs": "No jobs",
+    "week.preview": "Preview",
+    "week.todayBadge": "Today",
+
+    // Job card status
+    "job.status.scheduled": "Scheduled",
+    "job.status.on_the_way": "On the Way",
+    "job.status.in_progress": "In Progress",
+    "job.status.completed": "Completed",
+    "job.status.rescheduled": "Rescheduled",
+    "job.status.cancelled": "Cancelled",
+
+    // Job card actions
+    "job.setOnTheWay": "Set On the Way",
+    "job.startJob": "Start Job",
+    "job.markComplete": "Mark Complete",
+    "job.uploadPhoto": "Upload Photo",
+    "job.viewPhotos": "View Photos",
+    "job.addPhoto": "Add Photo",
+    "job.photoUploaded": "Photo uploaded",
+    "job.photoError": "Failed to upload photo",
+    "job.noPhotos": "No photos yet",
+    "job.uploadTip": "Upload a photo to earn +${{amount}}",
+
+    // Job card details
+    "job.basePay": "Base Pay",
+    "job.fiveStarBonus": "5-Star Bonus",
+    "job.lowRatingDeduction": "Low Rating Deduction",
+    "job.photoBonus": "Photo Bonus",
+    "job.noPenalty": "No Photo Penalty",
+    "job.streakBonus": "Streak Bonus",
+    "job.manualBonus": "Adjustment (Bonus)",
+    "job.manualDeduction": "Adjustment (Deduction)",
+    "job.recleanPenalty": "Reclean Penalty",
+    "job.totalPay": "Total Pay",
+    "job.previewFinal": "Preview — final once rated",
+    "job.earned": "Earned",
+    "job.locked": "Locked",
+    "job.available": "Available",
+    "job.risk": "Risk",
+    "job.applied": "Applied",
+    "job.progress": "Progress",
+    "job.streakProgress": "{{current}} more clean job to unlock",
+    "job.streakProgressPlural": "{{current}} more clean jobs to unlock",
+    "job.specialRules": "Special Rules",
+
+    // Job card notes
+    "job.clientNotes": "Client Notes",
+    "job.checklist": "Checklist",
+    "job.checklistDone": "All done",
+
+    // ETA modal
+    "eta.title": "Set ETA",
+    "eta.onTheWay": "Set On the Way",
+    "eta.arriving": "Arriving in",
+    "eta.confirm": "Confirm",
+    "eta.cancel": "Cancel",
+    "eta.sent": "ETA sent to client",
+
+    // Complete confirmation modal
+    "complete.title": "Mark Job Complete?",
+    "complete.subtitle": "This will notify the client and lock your pay.",
+    "complete.confirm": "Yes, Mark Complete",
+    "complete.cancel": "Cancel",
+    "complete.completing": "Completing…",
+    "complete.issueReport": "Report an Issue",
+    "complete.issueTitle": "Report Issue",
+    "complete.issueLabel": "What happened?",
+    "complete.issuePlaceholder": "Describe the issue…",
+    "complete.issueSubmit": "Submit Report",
+    "complete.issueSubmitting": "Submitting…",
+    "complete.issueSuccess": "Issue reported",
+
+    // Post-complete modal
+    "postComplete.title": "Job Complete! 🎉",
+    "postComplete.great": "Great work,",
+    "postComplete.nextJob": "Set On the Way for Next Job",
+    "postComplete.done": "Done",
+    "postComplete.photoReminder": "Don't forget to upload a photo to earn +${{amount}}!",
+    "postComplete.askReview": "Ask for a Google Review",
+    "postComplete.reviewBonus": "+${{amount}} bonus if they leave one!",
+
+    // Removed from schedule
+    "removed.header": "Removed from Schedule",
+
+    // Payout rules modal
+    "payRules.title": "How Your Pay Works",
+    "payRules.close": "Close",
+    "payRules.tipsTitle": "Tips to maximize your pay",
+    "payRules.tip1Title": "Upload photos before leaving",
+    "payRules.tip1Desc": "Takes 30 seconds and earns you +${{amount}}. Open the job card, tap the camera icon, and snap a few after-photos.",
+    "payRules.tip2Title": "Ask the customer if everything looks good",
+    "payRules.tip2Desc": "A quick check-in before you leave gives the customer a chance to flag anything small — so it doesn't turn into a complaint or reclean.",
+    "payRules.tip3Title": "Protect your streak",
+    "payRules.tip3Desc": "Every clean job with no issues moves you closer to the +${{amount}} streak bonus. One complaint resets it, so consistency is key.",
+
+    // Morning availability prompt
+    "morning.greeting.morning": "Good morning",
+    "morning.greeting.afternoon": "Good afternoon",
+    "morning.greeting.evening": "Good evening",
+    "morning.title": "Before you crush it today",
+    "morning.subtitle": "Let us know if you're working tomorrow",
+    "morning.letsDoIt": "Let's do it →",
+    "morning.skipForNow": "Skip for now",
+    "morning.availabilityQuestion": "Are you working tomorrow,",
+    "morning.availabilitySubtitle": "Let us know so we can plan the schedule.",
+    "morning.yes": "Yes ✅",
+    "morning.no": "Not tomorrow ❌",
+    "morning.howMany": "How many jobs can you take?",
+    "morning.howManySubtitle": "This helps us plan tomorrow's schedule.",
+    "morning.noteLabel": "Note (optional)",
+    "morning.notePlaceholder": "e.g. Available after 9am, prefer East side…",
+    "morning.submitAvailability": "Submit Availability",
+    "morning.back": "← Back",
+    "morning.whyNotTitle": "Let us know why",
+    "morning.whyNotSubtitle": "This helps the team plan coverage.",
+    "morning.reasonLabel": "Reason (optional)",
+    "morning.reasonPlaceholder": "e.g. Doctor appointment, family commitment…",
+    "morning.submit": "Submit",
+    "morning.allSet": "All set!",
+    "morning.submitted": "Your availability has been submitted.",
+    "morning.whatYouSubmitted": "What you submitted",
+    "morning.availableTomorrow": "Available tomorrow",
+    "morning.notAvailableTomorrow": "Not available tomorrow",
+    "morning.maxJobs": "Up to {{n}} job",
+    "morning.maxJobsPlural": "Up to {{n}} jobs",
+    "morning.close": "Close",
+
+    // Evening check-in modal
+    "checkin.title": "Quick Check-in",
+    "checkin.question": "Are you working tomorrow,",
+    "checkin.subtitle": "Let us know so we can plan the schedule.",
+    "checkin.yes": "Yes ✅",
+    "checkin.no": "Not tomorrow ❌",
+    "checkin.howMany": "How many jobs can you take?",
+    "checkin.howManySubtitle": "This helps us plan tomorrow's schedule.",
+    "checkin.noteLabel": "Note (optional)",
+    "checkin.notePlaceholder": "e.g. Available after 9am, prefer East side…",
+    "checkin.submitAvailability": "Submit Availability",
+    "checkin.back": "← Back",
+    "checkin.whyNotTitle": "Let us know why",
+    "checkin.whyNotSubtitle": "This helps the team plan coverage.",
+    "checkin.reasonLabel": "Reason (optional)",
+    "checkin.reasonPlaceholder": "e.g. Doctor appointment, family commitment…",
+    "checkin.submit": "Submit",
+    "checkin.allSet": "All set! 🎉",
+    "checkin.submitted": "Your availability has been submitted.",
+    "checkin.close": "Close",
+
+    // Language switcher
+    "lang.en": "English",
+    "lang.es": "Español",
+    "lang.pt": "Português",
+
+    // No rating
+    "rating.none": "No rating yet",
+  },
+};
+
+const es = {
+  translation: {
+    // Login
+    "login.title": "Portal de Limpiadores",
+    "login.subtitle": "Maids in Black",
+    "login.email": "Correo electrónico",
+    "login.emailPlaceholder": "limpiador@ejemplo.com",
+    "login.password": "Contraseña",
+    "login.passwordPlaceholder": "••••••••",
+    "login.signIn": "Iniciar sesión",
+    "login.signingIn": "Iniciando sesión…",
+    "login.welcome": "¡Bienvenido de vuelta!",
+
+    // Header
+    "header.brand": "Maids in Black",
+
+    // Availability banner
+    "banner.notSubmitted": "Aún no has enviado tu disponibilidad para mañana",
+    "banner.tap": "Toca →",
+
+    // Earnings tiles
+    "earnings.today": "Hoy",
+    "earnings.thisWeek": "Esta semana",
+    "earnings.avgToday": "promedio hoy",
+    "earnings.jobs": "trabajo",
+    "earnings.jobsPlural": "trabajos",
+    "earnings.done": "completados",
+
+    // Tabs
+    "tabs.today": "Hoy",
+    "tabs.thisWeek": "Esta semana",
+
+    // Date nav
+    "date.today": "Hoy",
+    "date.jumpToToday": "Ir a hoy",
+    "date.noJobs": "Sin trabajos programados",
+    "date.noJobsFor": "para",
+
+    // Week view
+    "week.total": "Total de la semana",
+    "week.howPayWorks": "Cómo funciona tu pago",
+    "week.fiveStar": "Calificación de 5 estrellas",
+    "week.completionPhoto": "Foto de finalización",
+    "week.streakBonus": "Bono de racha (cada {{n}} trabajos)",
+    "week.lowRating": "Calificación baja (≤3 estrellas)",
+    "week.noPhoto": "Sin foto",
+    "week.reclean": "Relimpieza / Servicio deficiente",
+    "week.bonusesNote": "Los bonos y deducciones se aplican automáticamente cuando se califica tu trabajo.",
+    "week.noJobs": "Sin trabajos",
+    "week.preview": "Vista previa",
+    "week.todayBadge": "Hoy",
+
+    // Job card status
+    "job.status.scheduled": "Programado",
+    "job.status.on_the_way": "En camino",
+    "job.status.in_progress": "En progreso",
+    "job.status.completed": "Completado",
+    "job.status.rescheduled": "Reprogramado",
+    "job.status.cancelled": "Cancelado",
+
+    // Job card actions
+    "job.setOnTheWay": "Marcar en camino",
+    "job.startJob": "Iniciar trabajo",
+    "job.markComplete": "Marcar completo",
+    "job.uploadPhoto": "Subir foto",
+    "job.viewPhotos": "Ver fotos",
+    "job.addPhoto": "Agregar foto",
+    "job.photoUploaded": "Foto subida",
+    "job.photoError": "Error al subir la foto",
+    "job.noPhotos": "Sin fotos aún",
+    "job.uploadTip": "Sube una foto para ganar +${{amount}}",
+
+    // Job card details
+    "job.basePay": "Pago base",
+    "job.fiveStarBonus": "Bono de 5 estrellas",
+    "job.lowRatingDeduction": "Deducción por calificación baja",
+    "job.photoBonus": "Bono por foto",
+    "job.noPenalty": "Penalización por no foto",
+    "job.streakBonus": "Bono de racha",
+    "job.manualBonus": "Ajuste (Bono)",
+    "job.manualDeduction": "Ajuste (Deducción)",
+    "job.recleanPenalty": "Penalización por relimpieza",
+    "job.totalPay": "Pago total",
+    "job.previewFinal": "Vista previa — final cuando sea calificado",
+    "job.earned": "Ganado",
+    "job.locked": "Bloqueado",
+    "job.available": "Disponible",
+    "job.risk": "Riesgo",
+    "job.applied": "Aplicado",
+    "job.progress": "Progreso",
+    "job.streakProgress": "{{current}} trabajo más para desbloquear",
+    "job.streakProgressPlural": "{{current}} trabajos más para desbloquear",
+    "job.specialRules": "Reglas especiales",
+
+    // Job card notes
+    "job.clientNotes": "Notas del cliente",
+    "job.checklist": "Lista de verificación",
+    "job.checklistDone": "Todo listo",
+
+    // ETA modal
+    "eta.title": "Establecer hora de llegada",
+    "eta.onTheWay": "Marcar en camino",
+    "eta.arriving": "Llegando en",
+    "eta.confirm": "Confirmar",
+    "eta.cancel": "Cancelar",
+    "eta.sent": "Hora de llegada enviada al cliente",
+
+    // Complete confirmation modal
+    "complete.title": "¿Marcar trabajo completo?",
+    "complete.subtitle": "Esto notificará al cliente y bloqueará tu pago.",
+    "complete.confirm": "Sí, marcar completo",
+    "complete.cancel": "Cancelar",
+    "complete.completing": "Completando…",
+    "complete.issueReport": "Reportar un problema",
+    "complete.issueTitle": "Reportar problema",
+    "complete.issueLabel": "¿Qué pasó?",
+    "complete.issuePlaceholder": "Describe el problema…",
+    "complete.issueSubmit": "Enviar reporte",
+    "complete.issueSubmitting": "Enviando…",
+    "complete.issueSuccess": "Problema reportado",
+
+    // Post-complete modal
+    "postComplete.title": "¡Trabajo completo! 🎉",
+    "postComplete.great": "¡Buen trabajo,",
+    "postComplete.nextJob": "Marcar en camino para el siguiente trabajo",
+    "postComplete.done": "Listo",
+    "postComplete.photoReminder": "¡No olvides subir una foto para ganar +${{amount}}!",
+    "postComplete.askReview": "Pedir una reseña en Google",
+    "postComplete.reviewBonus": "+${{amount}} de bono si dejan una reseña!",
+
+    // Removed from schedule
+    "removed.header": "Eliminado del horario",
+
+    // Payout rules modal
+    "payRules.title": "Cómo funciona tu pago",
+    "payRules.close": "Cerrar",
+    "payRules.tipsTitle": "Consejos para maximizar tu pago",
+    "payRules.tip1Title": "Sube fotos antes de irte",
+    "payRules.tip1Desc": "Toma 30 segundos y te gana +${{amount}}. Abre la tarjeta del trabajo, toca el ícono de cámara y toma algunas fotos finales.",
+    "payRules.tip2Title": "Pregunta al cliente si todo está bien",
+    "payRules.tip2Desc": "Un chequeo rápido antes de irte le da al cliente la oportunidad de señalar algo pequeño, para que no se convierta en una queja o relimpieza.",
+    "payRules.tip3Title": "Protege tu racha",
+    "payRules.tip3Desc": "Cada trabajo limpio sin problemas te acerca más al bono de +${{amount}} de racha. Una queja la reinicia, así que la consistencia es clave.",
+
+    // Morning availability prompt
+    "morning.greeting.morning": "Buenos días",
+    "morning.greeting.afternoon": "Buenas tardes",
+    "morning.greeting.evening": "Buenas noches",
+    "morning.title": "Antes de empezar el día",
+    "morning.subtitle": "Dinos si trabajarás mañana",
+    "morning.letsDoIt": "¡Vamos! →",
+    "morning.skipForNow": "Omitir por ahora",
+    "morning.availabilityQuestion": "¿Trabajas mañana,",
+    "morning.availabilitySubtitle": "Dinos para que podamos planificar el horario.",
+    "morning.yes": "Sí ✅",
+    "morning.no": "No mañana ❌",
+    "morning.howMany": "¿Cuántos trabajos puedes tomar?",
+    "morning.howManySubtitle": "Esto nos ayuda a planificar el horario de mañana.",
+    "morning.noteLabel": "Nota (opcional)",
+    "morning.notePlaceholder": "ej. Disponible después de las 9am, prefiero el lado Este…",
+    "morning.submitAvailability": "Enviar disponibilidad",
+    "morning.back": "← Atrás",
+    "morning.whyNotTitle": "Dinos por qué",
+    "morning.whyNotSubtitle": "Esto ayuda al equipo a planificar la cobertura.",
+    "morning.reasonLabel": "Razón (opcional)",
+    "morning.reasonPlaceholder": "ej. Cita médica, compromiso familiar…",
+    "morning.submit": "Enviar",
+    "morning.allSet": "¡Todo listo!",
+    "morning.submitted": "Tu disponibilidad ha sido enviada.",
+    "morning.whatYouSubmitted": "Lo que enviaste",
+    "morning.availableTomorrow": "Disponible mañana",
+    "morning.notAvailableTomorrow": "No disponible mañana",
+    "morning.maxJobs": "Hasta {{n}} trabajo",
+    "morning.maxJobsPlural": "Hasta {{n}} trabajos",
+    "morning.close": "Cerrar",
+
+    // Evening check-in modal
+    "checkin.title": "Verificación rápida",
+    "checkin.question": "¿Trabajas mañana,",
+    "checkin.subtitle": "Dinos para que podamos planificar el horario.",
+    "checkin.yes": "Sí ✅",
+    "checkin.no": "No mañana ❌",
+    "checkin.howMany": "¿Cuántos trabajos puedes tomar?",
+    "checkin.howManySubtitle": "Esto nos ayuda a planificar el horario de mañana.",
+    "checkin.noteLabel": "Nota (opcional)",
+    "checkin.notePlaceholder": "ej. Disponible después de las 9am, prefiero el lado Este…",
+    "checkin.submitAvailability": "Enviar disponibilidad",
+    "checkin.back": "← Atrás",
+    "checkin.whyNotTitle": "Dinos por qué",
+    "checkin.whyNotSubtitle": "Esto ayuda al equipo a planificar la cobertura.",
+    "checkin.reasonLabel": "Razón (opcional)",
+    "checkin.reasonPlaceholder": "ej. Cita médica, compromiso familiar…",
+    "checkin.submit": "Enviar",
+    "checkin.allSet": "¡Todo listo! 🎉",
+    "checkin.submitted": "Tu disponibilidad ha sido enviada.",
+    "checkin.close": "Cerrar",
+
+    // Language switcher
+    "lang.en": "English",
+    "lang.es": "Español",
+    "lang.pt": "Português",
+
+    // No rating
+    "rating.none": "Sin calificación aún",
+  },
+};
+
+const pt = {
+  translation: {
+    // Login
+    "login.title": "Portal da Faxineira",
+    "login.subtitle": "Maids in Black",
+    "login.email": "E-mail",
+    "login.emailPlaceholder": "faxineira@exemplo.com",
+    "login.password": "Senha",
+    "login.passwordPlaceholder": "••••••••",
+    "login.signIn": "Entrar",
+    "login.signingIn": "Entrando…",
+    "login.welcome": "Bem-vinda de volta!",
+
+    // Header
+    "header.brand": "Maids in Black",
+
+    // Availability banner
+    "banner.notSubmitted": "Você ainda não enviou sua disponibilidade para amanhã",
+    "banner.tap": "Toque →",
+
+    // Earnings tiles
+    "earnings.today": "Hoje",
+    "earnings.thisWeek": "Esta semana",
+    "earnings.avgToday": "média hoje",
+    "earnings.jobs": "serviço",
+    "earnings.jobsPlural": "serviços",
+    "earnings.done": "concluídos",
+
+    // Tabs
+    "tabs.today": "Hoje",
+    "tabs.thisWeek": "Esta semana",
+
+    // Date nav
+    "date.today": "Hoje",
+    "date.jumpToToday": "Ir para hoje",
+    "date.noJobs": "Nenhum serviço agendado",
+    "date.noJobsFor": "para",
+
+    // Week view
+    "week.total": "Total da semana",
+    "week.howPayWorks": "Como funciona seu pagamento",
+    "week.fiveStar": "Avaliação 5 estrelas",
+    "week.completionPhoto": "Foto de conclusão",
+    "week.streakBonus": "Bônus de sequência (a cada {{n}} serviços)",
+    "week.lowRating": "Avaliação baixa (≤3 estrelas)",
+    "week.noPhoto": "Sem foto",
+    "week.reclean": "Relimpeza / Serviço ruim",
+    "week.bonusesNote": "Bônus e deduções são aplicados automaticamente quando seu serviço é avaliado.",
+    "week.noJobs": "Sem serviços",
+    "week.preview": "Prévia",
+    "week.todayBadge": "Hoje",
+
+    // Job card status
+    "job.status.scheduled": "Agendado",
+    "job.status.on_the_way": "A caminho",
+    "job.status.in_progress": "Em andamento",
+    "job.status.completed": "Concluído",
+    "job.status.rescheduled": "Reagendado",
+    "job.status.cancelled": "Cancelado",
+
+    // Job card actions
+    "job.setOnTheWay": "Marcar a caminho",
+    "job.startJob": "Iniciar serviço",
+    "job.markComplete": "Marcar concluído",
+    "job.uploadPhoto": "Enviar foto",
+    "job.viewPhotos": "Ver fotos",
+    "job.addPhoto": "Adicionar foto",
+    "job.photoUploaded": "Foto enviada",
+    "job.photoError": "Falha ao enviar foto",
+    "job.noPhotos": "Sem fotos ainda",
+    "job.uploadTip": "Envie uma foto para ganhar +${{amount}}",
+
+    // Job card details
+    "job.basePay": "Pagamento base",
+    "job.fiveStarBonus": "Bônus 5 estrelas",
+    "job.lowRatingDeduction": "Dedução por avaliação baixa",
+    "job.photoBonus": "Bônus por foto",
+    "job.noPenalty": "Penalidade por falta de foto",
+    "job.streakBonus": "Bônus de sequência",
+    "job.manualBonus": "Ajuste (Bônus)",
+    "job.manualDeduction": "Ajuste (Dedução)",
+    "job.recleanPenalty": "Penalidade por relimpeza",
+    "job.totalPay": "Pagamento total",
+    "job.previewFinal": "Prévia — final após avaliação",
+    "job.earned": "Ganho",
+    "job.locked": "Bloqueado",
+    "job.available": "Disponível",
+    "job.risk": "Risco",
+    "job.applied": "Aplicado",
+    "job.progress": "Progresso",
+    "job.streakProgress": "{{current}} serviço a mais para desbloquear",
+    "job.streakProgressPlural": "{{current}} serviços a mais para desbloquear",
+    "job.specialRules": "Regras especiais",
+
+    // Job card notes
+    "job.clientNotes": "Notas do cliente",
+    "job.checklist": "Lista de verificação",
+    "job.checklistDone": "Tudo pronto",
+
+    // ETA modal
+    "eta.title": "Definir hora de chegada",
+    "eta.onTheWay": "Marcar a caminho",
+    "eta.arriving": "Chegando em",
+    "eta.confirm": "Confirmar",
+    "eta.cancel": "Cancelar",
+    "eta.sent": "Hora de chegada enviada ao cliente",
+
+    // Complete confirmation modal
+    "complete.title": "Marcar serviço como concluído?",
+    "complete.subtitle": "Isso notificará o cliente e bloqueará seu pagamento.",
+    "complete.confirm": "Sim, marcar concluído",
+    "complete.cancel": "Cancelar",
+    "complete.completing": "Concluindo…",
+    "complete.issueReport": "Reportar um problema",
+    "complete.issueTitle": "Reportar problema",
+    "complete.issueLabel": "O que aconteceu?",
+    "complete.issuePlaceholder": "Descreva o problema…",
+    "complete.issueSubmit": "Enviar relatório",
+    "complete.issueSubmitting": "Enviando…",
+    "complete.issueSuccess": "Problema reportado",
+
+    // Post-complete modal
+    "postComplete.title": "Serviço concluído! 🎉",
+    "postComplete.great": "Bom trabalho,",
+    "postComplete.nextJob": "Marcar a caminho para o próximo serviço",
+    "postComplete.done": "Pronto",
+    "postComplete.photoReminder": "Não esqueça de enviar uma foto para ganhar +${{amount}}!",
+    "postComplete.askReview": "Pedir avaliação no Google",
+    "postComplete.reviewBonus": "+${{amount}} de bônus se deixarem uma avaliação!",
+
+    // Removed from schedule
+    "removed.header": "Removido do horário",
+
+    // Payout rules modal
+    "payRules.title": "Como funciona seu pagamento",
+    "payRules.close": "Fechar",
+    "payRules.tipsTitle": "Dicas para maximizar seu pagamento",
+    "payRules.tip1Title": "Envie fotos antes de sair",
+    "payRules.tip1Desc": "Leva 30 segundos e rende +${{amount}}. Abra o cartão do serviço, toque no ícone da câmera e tire algumas fotos finais.",
+    "payRules.tip2Title": "Pergunte ao cliente se está tudo bem",
+    "payRules.tip2Desc": "Uma verificação rápida antes de sair dá ao cliente a chance de apontar algo pequeno — para que não vire uma reclamação ou relimpeza.",
+    "payRules.tip3Title": "Proteja sua sequência",
+    "payRules.tip3Desc": "Cada serviço limpo sem problemas te aproxima do bônus de +${{amount}} de sequência. Uma reclamação reinicia, então a consistência é fundamental.",
+
+    // Morning availability prompt
+    "morning.greeting.morning": "Bom dia",
+    "morning.greeting.afternoon": "Boa tarde",
+    "morning.greeting.evening": "Boa noite",
+    "morning.title": "Antes de arrasar hoje",
+    "morning.subtitle": "Nos diga se você vai trabalhar amanhã",
+    "morning.letsDoIt": "Vamos lá →",
+    "morning.skipForNow": "Pular por agora",
+    "morning.availabilityQuestion": "Você vai trabalhar amanhã,",
+    "morning.availabilitySubtitle": "Nos diga para que possamos planejar o horário.",
+    "morning.yes": "Sim ✅",
+    "morning.no": "Não amanhã ❌",
+    "morning.howMany": "Quantos serviços você pode fazer?",
+    "morning.howManySubtitle": "Isso nos ajuda a planejar o horário de amanhã.",
+    "morning.noteLabel": "Observação (opcional)",
+    "morning.notePlaceholder": "ex. Disponível após as 9h, prefiro o lado Leste…",
+    "morning.submitAvailability": "Enviar disponibilidade",
+    "morning.back": "← Voltar",
+    "morning.whyNotTitle": "Nos diga o motivo",
+    "morning.whyNotSubtitle": "Isso ajuda a equipe a planejar a cobertura.",
+    "morning.reasonLabel": "Motivo (opcional)",
+    "morning.reasonPlaceholder": "ex. Consulta médica, compromisso familiar…",
+    "morning.submit": "Enviar",
+    "morning.allSet": "Tudo certo!",
+    "morning.submitted": "Sua disponibilidade foi enviada.",
+    "morning.whatYouSubmitted": "O que você enviou",
+    "morning.availableTomorrow": "Disponível amanhã",
+    "morning.notAvailableTomorrow": "Não disponível amanhã",
+    "morning.maxJobs": "Até {{n}} serviço",
+    "morning.maxJobsPlural": "Até {{n}} serviços",
+    "morning.close": "Fechar",
+
+    // Evening check-in modal
+    "checkin.title": "Verificação rápida",
+    "checkin.question": "Você vai trabalhar amanhã,",
+    "checkin.subtitle": "Nos diga para que possamos planejar o horário.",
+    "checkin.yes": "Sim ✅",
+    "checkin.no": "Não amanhã ❌",
+    "checkin.howMany": "Quantos serviços você pode fazer?",
+    "checkin.howManySubtitle": "Isso nos ajuda a planejar o horário de amanhã.",
+    "checkin.noteLabel": "Observação (opcional)",
+    "checkin.notePlaceholder": "ex. Disponível após as 9h, prefiro o lado Leste…",
+    "checkin.submitAvailability": "Enviar disponibilidade",
+    "checkin.back": "← Voltar",
+    "checkin.whyNotTitle": "Nos diga o motivo",
+    "checkin.whyNotSubtitle": "Isso ajuda a equipe a planejar a cobertura.",
+    "checkin.reasonLabel": "Motivo (opcional)",
+    "checkin.reasonPlaceholder": "ex. Consulta médica, compromisso familiar…",
+    "checkin.submit": "Enviar",
+    "checkin.allSet": "Tudo certo! 🎉",
+    "checkin.submitted": "Sua disponibilidade foi enviada.",
+    "checkin.close": "Fechar",
+
+    // Language switcher
+    "lang.en": "English",
+    "lang.es": "Español",
+    "lang.pt": "Português",
+
+    // No rating
+    "rating.none": "Sem avaliação ainda",
+  },
+};
+
+i18n.use(initReactI18next).init({
+  resources: { en, es, pt },
+  lng: "en",
+  fallbackLng: "en",
+  interpolation: { escapeValue: false },
+});
+
+export default i18n;
