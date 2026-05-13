@@ -1622,10 +1622,11 @@ function MorningAvailabilityPrompt({
   const hourET = parseInt(
     new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" })
   );
-  const greeting =
-    hourET < 10 ? `Good morning, ${cleanerName.split(" ")[0]}! ☀️` :
-    hourET < 12 ? `Hey ${cleanerName.split(" ")[0]}, almost lunchtime! 🌤` :
-    `Hey ${cleanerName.split(" ")[0]}! 👋`;
+  const greetingWord =
+    hourET < 12 ? t("morning.greeting.morning") :
+    hourET < 17 ? t("morning.greeting.afternoon") :
+    t("morning.greeting.evening");
+  const greeting = `${greetingWord}, ${cleanerName.split(" ")[0]}! 👋`;
   // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 14"
   // Uses Intl.DateTimeFormat.formatToParts so the ET date is correct regardless of the cleaner's device timezone
   const _etParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -1646,16 +1647,16 @@ function MorningAvailabilityPrompt({
             <div className="space-y-2">
               <h2 className="text-white text-3xl font-bold">{greeting}</h2>
               <p className="text-slate-400 text-base leading-relaxed">
-                Before you crush it today —<br />
-                let us know if you're working tomorrow<br />
-                so we can build your schedule.
+                {t("morning.title")} —<br />
+                {t("morning.subtitle")}<br />
+                {t("morning.scheduleNote")}
               </p>
             </div>
             <Button
               className="w-full max-w-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl mt-4"
               onClick={() => setStep("availability")}
             >
-              Let's do it →
+              {t("morning.letsDoIt")}
             </Button>
           </div>
         )}
@@ -1665,8 +1666,8 @@ function MorningAvailabilityPrompt({
           <div className="space-y-6">
             <div className="text-center space-y-2">
               <div className="text-5xl mb-4">🌅</div>
-              <h3 className="text-white text-2xl font-bold">Are you working tomorrow, {tomorrowLabel}?</h3>
-              <p className="text-slate-400 text-sm">This helps us plan the schedule.</p>
+              <h3 className="text-white text-2xl font-bold">{t("morning.availabilityQuestion")} {tomorrowLabel}?</h3>
+              <p className="text-slate-400 text-sm">{t("morning.availabilitySubtitle")}</p>
             </div>
             <div className="grid grid-cols-2 gap-4 mt-8">
               <button
@@ -1674,16 +1675,16 @@ function MorningAvailabilityPrompt({
                 className="flex flex-col items-center gap-3 p-6 bg-emerald-900/40 border-2 border-emerald-600/60 rounded-2xl hover:bg-emerald-900/60 hover:border-emerald-500 transition-all active:scale-95"
               >
                 <span className="text-4xl">✅</span>
-                <span className="text-emerald-300 font-bold text-lg">Yes</span>
-                <span className="text-emerald-500 text-xs text-center">I'm available</span>
+                <span className="text-emerald-300 font-bold text-lg">{t("morning.yes")}</span>
+                <span className="text-emerald-500 text-xs text-center">{t("morning.iAmAvailable")}</span>
               </button>
               <button
                 onClick={() => handleAvailabilityChoice(false)}
                 className="flex flex-col items-center gap-3 p-6 bg-slate-800 border-2 border-slate-600 rounded-2xl hover:bg-slate-700 hover:border-slate-500 transition-all active:scale-95"
               >
                 <span className="text-4xl">❌</span>
-                <span className="text-slate-300 font-bold text-lg">No</span>
-                <span className="text-slate-500 text-xs text-center">Not available</span>
+                <span className="text-slate-300 font-bold text-lg">{t("morning.no")}</span>
+                <span className="text-slate-500 text-xs text-center">{t("morning.notAvailable")}</span>
               </button>
             </div>
           </div>
@@ -1694,8 +1695,8 @@ function MorningAvailabilityPrompt({
           <div className="space-y-6">
             <div className="text-center space-y-1">
               <div className="text-4xl mb-3">📋</div>
-              <h3 className="text-white text-xl font-bold">How many jobs can you do?</h3>
-              <p className="text-slate-400 text-sm">This helps us plan tomorrow's schedule.</p>
+              <h3 className="text-white text-xl font-bold">{t("morning.howManyDo")}</h3>
+              <p className="text-slate-400 text-sm">{t("morning.howManyDoSubtitle")}</p>
             </div>
             <div className="grid grid-cols-4 gap-3">
               {[1, 2, 3, 4].map(n => (
@@ -1730,9 +1731,9 @@ function MorningAvailabilityPrompt({
                 disabled={submitCheckin.isPending || maxJobs === null}
               >
                 {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                Submit Availability
+                {t("morning.submitAvailability")}
               </Button>
-              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">← Back</button>
+              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">{t("morning.back")}</button>
             </div>
           </div>
         )}
@@ -1762,9 +1763,9 @@ function MorningAvailabilityPrompt({
                 disabled={submitCheckin.isPending}
               >
                 {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Submit
+                {t("morning.submit")}
               </Button>
-              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">← Back</button>
+              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">{t("morning.back")}</button>
             </div>
           </div>
         )}
@@ -1773,8 +1774,8 @@ function MorningAvailabilityPrompt({
         {step === "confirmed" && (
           <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
             <div className="text-6xl">🎉</div>
-            <h3 className="text-white text-2xl font-bold">You're all set!</h3>
-            <p className="text-slate-400 text-base">Your availability has been recorded.<br />Go have a great day!</p>
+            <h3 className="text-white text-2xl font-bold">{t("morning.allSet")}</h3>
+            <p className="text-slate-400 text-base">{t("morning.recorded")}<br />{t("morning.greatDay")}</p>
           </div>
         )}
       </div>
@@ -1836,8 +1837,8 @@ function CheckinModal({
       {/* Header */}
       <div className="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">End of Day</p>
-          <h2 className="text-white font-semibold text-base leading-tight">Tomorrow's Availability</h2>
+          <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{t("checkin.endOfDay")}</p>
+          <h2 className="text-white font-semibold text-base leading-tight">{t("checkin.tomorrowsAvailability")}</h2>
         </div>
         {step === "confirmed" && (
           <button
@@ -1856,8 +1857,8 @@ function CheckinModal({
           <div className="space-y-6">
             <div className="text-center space-y-2">
               <div className="text-5xl mb-4">🌙</div>
-              <h3 className="text-white text-2xl font-bold">Great work today!</h3>
-              <p className="text-slate-400 text-base">Are you working tomorrow, {tomorrowLabelCheckin}?</p>
+              <h3 className="text-white text-2xl font-bold">{t("checkin.greatWork")}</h3>
+              <p className="text-slate-400 text-base">{t("checkin.question")} {tomorrowLabelCheckin}?</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-8">
@@ -1866,16 +1867,16 @@ function CheckinModal({
                 className="flex flex-col items-center gap-3 p-6 bg-emerald-900/40 border-2 border-emerald-600/60 rounded-2xl hover:bg-emerald-900/60 hover:border-emerald-500 transition-all active:scale-95"
               >
                 <span className="text-4xl">✅</span>
-                <span className="text-emerald-300 font-bold text-lg">Yes</span>
-                <span className="text-emerald-500 text-xs text-center">I'm available tomorrow</span>
+                <span className="text-emerald-300 font-bold text-lg">{t("checkin.yes")}</span>
+                <span className="text-emerald-500 text-xs text-center">{t("checkin.iAmAvailable")}</span>
               </button>
               <button
                 onClick={() => handleAvailabilityChoice(false)}
                 className="flex flex-col items-center gap-3 p-6 bg-slate-800 border-2 border-slate-600 rounded-2xl hover:bg-slate-700 hover:border-slate-500 transition-all active:scale-95"
               >
                 <span className="text-4xl">❌</span>
-                <span className="text-slate-300 font-bold text-lg">No</span>
-                <span className="text-slate-500 text-xs text-center">I'm not available</span>
+                <span className="text-slate-300 font-bold text-lg">{t("checkin.no")}</span>
+                <span className="text-slate-500 text-xs text-center">{t("checkin.notAvailable")}</span>
               </button>
             </div>
           </div>
@@ -1886,8 +1887,8 @@ function CheckinModal({
           <div className="space-y-6">
             <div className="text-center space-y-1">
               <div className="text-4xl mb-3">📋</div>
-              <h3 className="text-white text-xl font-bold">How many jobs can you do?</h3>
-              <p className="text-slate-400 text-sm">This helps us plan tomorrow's schedule.</p>
+              <h3 className="text-white text-xl font-bold">{t("checkin.howManyDo")}</h3>
+              <p className="text-slate-400 text-sm">{t("checkin.howManyDoSubtitle")}</p>
             </div>
 
             <div className="grid grid-cols-4 gap-3">
@@ -1907,11 +1908,11 @@ function CheckinModal({
             </div>
 
             <div className="space-y-2">
-              <label className="text-slate-300 text-sm font-medium block">{t("morning.noteLabel")}</label>
+              <label className="text-slate-300 text-sm font-medium block">{t("checkin.noteLabel")}</label>
               <textarea
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                placeholder={t("morning.notePlaceholder")}
+                placeholder={t("checkin.notePlaceholder")}
                 rows={3}
                 className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-emerald-500"
                 maxLength={500}
@@ -1925,13 +1926,13 @@ function CheckinModal({
                 disabled={submitCheckin.isPending || maxJobs === null}
               >
                 {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                Submit Availability
+                {t("checkin.submitAvailability")}
               </Button>
               <button
                 onClick={() => setStep("availability")}
                 className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
               >
-                ← Back
+                {t("checkin.back")}
               </button>
             </div>
           </div>
@@ -1942,16 +1943,16 @@ function CheckinModal({
           <div className="space-y-6">
             <div className="text-center space-y-1">
               <div className="text-4xl mb-3">📝</div>
-              <h3 className="text-white text-xl font-bold">{t("morning.whyNotTitle")}</h3>
-              <p className="text-slate-400 text-sm">{t("morning.whyNotSubtitle")}</p>
+              <h3 className="text-white text-xl font-bold">{t("checkin.whyNotTitle")}</h3>
+              <p className="text-slate-400 text-sm">{t("checkin.whyNotSubtitle")}</p>
             </div>
 
             <div className="space-y-2">
-              <label className="text-slate-300 text-sm font-medium block">{t("morning.reasonLabel")}</label>
+              <label className="text-slate-300 text-sm font-medium block">{t("checkin.reasonLabel")}</label>
               <textarea
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                placeholder={t("morning.reasonPlaceholder")}
+                placeholder={t("checkin.reasonPlaceholder")}
                 rows={4}
                 className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500"
                 maxLength={500}
@@ -1965,13 +1966,13 @@ function CheckinModal({
                 disabled={submitCheckin.isPending}
               >
                 {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {t("morning.submit")}
+                {t("checkin.submit")}
               </Button>
               <button
                 onClick={() => setStep("availability")}
                 className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
               >
-                {t("morning.back")}
+                {t("checkin.back")}
               </button>
             </div>
           </div>
@@ -1997,14 +1998,14 @@ function CheckinModal({
                   </p>
                   {submittedData.isAvailable && submittedData.maxJobs !== null && (
                     <p className="text-slate-400 text-sm">
-                      Up to {submittedData.maxJobs >= 10 ? "4+" : submittedData.maxJobs} job{submittedData.maxJobs !== 1 ? "s" : ""}
+                      {submittedData.maxJobs !== 1 ? t("morning.maxJobsPlural", { n: submittedData.maxJobs >= 10 ? "4+" : submittedData.maxJobs }) : t("morning.maxJobs", { n: 1 })}
                     </p>
                   )}
                 </div>
               </div>
               {submittedData.note && (
                 <div className="pt-1 border-t border-slate-700">
-                  <p className="text-slate-500 text-xs mb-1">Note</p>
+                  <p className="text-slate-500 text-xs mb-1">{t("checkin.noteLabel")}</p>
                   <p className="text-slate-300 text-sm">{submittedData.note}</p>
                 </div>
               )}
@@ -2014,10 +2015,10 @@ function CheckinModal({
             <div className="bg-amber-950/50 border border-amber-700/40 rounded-2xl p-4">
               <p className="text-amber-300 font-semibold text-sm flex items-center gap-2 mb-1.5">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
-                Important Reminder
+                {t("checkin.importantReminder")}
               </p>
               <p className="text-amber-400/80 text-xs leading-relaxed">
-                If you said you're available but cancel, this will incur a charge equal to the total cost of all of your cancelled appointments.
+                {t("checkin.cancellationWarning")}
               </p>
             </div>
 
@@ -2025,7 +2026,7 @@ function CheckinModal({
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base h-auto"
               onClick={onClose}
             >
-              Done
+              {t("checkin.done")}
             </Button>
           </div>
         )}
