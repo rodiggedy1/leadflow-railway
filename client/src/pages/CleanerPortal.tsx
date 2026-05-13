@@ -2176,16 +2176,15 @@ export default function CleanerPortal() {
   }
 
   const cleaner = meQuery.data;
-  // Sync lang from server profile on first load (server is source of truth for team language)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Sync lang from server profile once on first load (useEffect avoids setState-during-render)
   const serverLang = cleaner?.language as PortalLang | undefined;
-  // Apply server language once on mount (don't override local switch)
-  const [serverLangApplied, setServerLangApplied] = useState(false);
-  if (serverLang && !serverLangApplied) {
-    setLang(serverLang);
-    localStorage.setItem("portal_lang", serverLang);
-    setServerLangApplied(true);
-  }
+  useEffect(() => {
+    if (serverLang) {
+      setLang(serverLang);
+      localStorage.setItem("portal_lang", serverLang);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverLang]);
   const allJobs = (jobsQuery.data ?? []) as Job[];
   // Split: active jobs (show full card) vs removed (show stripped badge card)
   const jobs = allJobs.filter(j => j.bookingStatus !== "rescheduled" && j.bookingStatus !== "cancelled");
