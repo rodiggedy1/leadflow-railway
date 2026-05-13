@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_profiles` DROP COLUMN `language`;

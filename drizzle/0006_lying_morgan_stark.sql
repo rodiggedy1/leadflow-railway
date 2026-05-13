@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_profiles` ADD `language` varchar(5) DEFAULT 'en' NOT NULL;
