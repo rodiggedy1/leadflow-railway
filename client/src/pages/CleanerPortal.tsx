@@ -55,6 +55,7 @@ function formatTime(iso: string | null | undefined): string {
 }
 
 function StarRating({ rating }: { rating: number | null }) {
+  const { t } = useTranslation();
   if (!rating) return <span className="text-muted-foreground text-sm">{t("rating.none")}</span>;
   return (
     <div className="flex items-center gap-0.5">

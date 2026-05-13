@@ -279,8 +279,6 @@ const en = {
     "payRules.dialogTitle": "Payout Rules",
     "payRules.introName": "Here's how your pay works,",
     "payRules.introNoName": "Here's exactly how your pay is calculated — no surprises.",
-    "payRules.tip2Title": "Ask the customer if everything looks good",
-    "payRules.tip2Desc": "A quick check-in before you leave gives the customer a chance to flag anything small — so it doesn't turn into a complaint or reclean.",
     // Language switcher
     "lang.en": "English",
     "lang.es": "Español",
@@ -569,8 +567,6 @@ const es = {
     "payRules.dialogTitle": "Reglas de pago",
     "payRules.introName": "Así funciona tu pago,",
     "payRules.introNoName": "Así es exactamente cómo se calcula tu pago — sin sorpresas.",
-    "payRules.tip2Title": "Pregunta al cliente si todo está bien",
-    "payRules.tip2Desc": "Un chequeo rápido antes de irte le da al cliente la oportunidad de señalar algo pequeño, para que no se convierta en una queja o relimpieza.",
     // Language switcher
     "lang.en": "English",
     "lang.es": "Español",
@@ -859,8 +855,6 @@ const pt = {
     "payRules.dialogTitle": "Regras de pagamento",
     "payRules.introName": "Veja como funciona seu pagamento,",
     "payRules.introNoName": "Veja exatamente como seu pagamento é calculado — sem surpresas.",
-    "payRules.tip2Title": "Pergunte ao cliente se está tudo bem",
-    "payRules.tip2Desc": "Uma verificação rápida antes de sair dá ao cliente a chance de apontar algo pequeno — para que não vire uma reclamação ou relimpeza.",
     // Language switcher
     "lang.en": "English",
     "lang.es": "Español",
