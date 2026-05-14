@@ -86,27 +86,44 @@ declare global {
   }
 }
 
-const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
+// Support both direct Google Maps API key (Railway) and Manus proxy (Manus hosted)
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+const MANUS_API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY;
 const FORGE_BASE_URL =
   import.meta.env.VITE_FRONTEND_FORGE_API_URL ||
   "https://forge.butterfly-effect.dev";
 const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
 
+function getMapsScriptUrl(): string {
+  // If a direct Google Maps API key is set, use it directly
+  if (GOOGLE_MAPS_API_KEY) {
+    return `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
+  }
+  // Otherwise fall back to Manus proxy
+  return `${MAPS_PROXY_URL}/maps/api/js?key=${MANUS_API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
+}
+
+let mapScriptPromise: Promise<void> | null = null;
 function loadMapScript() {
-  return new Promise(resolve => {
+  // Singleton: only load the script once even if called multiple times
+  if (mapScriptPromise) return mapScriptPromise;
+  if (window.google?.maps) {
+    mapScriptPromise = Promise.resolve();
+    return mapScriptPromise;
+  }
+  mapScriptPromise = new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
-    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
+    script.src = getMapsScriptUrl();
     script.async = true;
-    script.crossOrigin = "anonymous";
-    script.onload = () => {
-      resolve(null);
-      script.remove(); // Clean up immediately
-    };
+    script.onload = () => resolve();
     script.onerror = () => {
       console.error("Failed to load Google Maps script");
+      mapScriptPromise = null; // Allow retry on error
+      reject(new Error("Failed to load Google Maps"));
     };
     document.head.appendChild(script);
   });
+  return mapScriptPromise;
 }
 
 interface MapViewProps {

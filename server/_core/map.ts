@@ -19,12 +19,20 @@ type MapsConfig = {
 };
 
 function getMapsConfig(): MapsConfig {
+  // Prefer direct Google Maps API key (Railway deployment)
+  if (ENV.googleMapsApiKey) {
+    return {
+      baseUrl: "https://maps.googleapis.com",
+      apiKey: ENV.googleMapsApiKey,
+    };
+  }
+  // Fall back to Manus proxy (Manus hosted deployment)
   const baseUrl = ENV.forgeApiUrl;
   const apiKey = ENV.forgeApiKey;
 
   if (!baseUrl || !apiKey) {
     throw new Error(
-      "Google Maps proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+      "Google Maps credentials missing: set GOOGLE_MAPS_API_KEY (or BUILT_IN_FORGE_API_URL + BUILT_IN_FORGE_API_KEY for Manus proxy)"
     );
   }
 
@@ -56,10 +64,11 @@ export async function makeRequest<T = unknown>(
   params: Record<string, unknown> = {},
   options: RequestOptions = {}
 ): Promise<T> {
-  const { baseUrl, apiKey } = getMapsConfig();
-
-  // Construct full URL: baseUrl + /v1/maps/proxy + endpoint
-  const url = new URL(`${baseUrl}/v1/maps/proxy${endpoint}`);
+   const { baseUrl, apiKey } = getMapsConfig();
+  // Direct Google Maps uses baseUrl + endpoint; Manus proxy uses baseUrl + /v1/maps/proxy + endpoint
+  const isDirectGoogleMaps = baseUrl === "https://maps.googleapis.com";
+  const urlPath = isDirectGoogleMaps ? `${baseUrl}${endpoint}` : `${baseUrl}/v1/maps/proxy${endpoint}`;
+  const url = new URL(urlPath);
 
   // Add API key as query parameter (standard Google Maps API authentication)
   url.searchParams.append("key", apiKey);
