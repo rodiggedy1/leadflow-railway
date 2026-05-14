@@ -2654,11 +2654,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Poll every 3s; when a new announce_booking message appears that we haven't
   // seen yet, fire glitter + sound on every agent's screen simultaneously.
   const lastSeenCelebrationId = useRef<number | null>(null);
-  // Celebration polling kept at 3s because it drives the glitter animation
-  // and is a lightweight single-row query. SSE also invalidates it via onNewMessage.
+  // Celebration polling: only poll when the panel is visible. SSE also invalidates it via onNewMessage.
+  // 10s interval is sufficient — glitter fires within 10s of a booking announcement.
   const { data: latestCelebration } = trpc.opsChat.getLatestCelebration.useQuery(undefined, {
-    refetchInterval: 3000,
-    refetchIntervalInBackground: true,
+    enabled: isVisible !== false,
+    refetchInterval: isVisible !== false ? 10_000 : false,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
   useEffect(() => {
     if (!latestCelebration) return;

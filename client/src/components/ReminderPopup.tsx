@@ -9,9 +9,13 @@ import { Bell, X, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function ReminderPopup() {
+  const { data: agentMe } = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 2 * 60 * 1000 });
+  const isAuthenticated = !!agentMe;
   const { data, refetch } = trpc.opsChat.getDueReminders.useQuery(undefined, {
-    refetchInterval: 30_000,
-    refetchIntervalInBackground: true,
+    enabled: isAuthenticated,
+    refetchInterval: isAuthenticated ? 30_000 : false,
+    refetchIntervalInBackground: false,
+    retry: false,
   });
 
   const dismissMutation = trpc.opsChat.dismissReminder.useMutation({

@@ -35,7 +35,7 @@ export default function AgentNotificationBell({ followUpCount = 0 }: { followUpC
 
   const { data, refetch } = trpc.agents.getNotifications.useQuery(
     { limit: 30 },
-    { refetchInterval: 30_000, refetchIntervalInBackground: false }
+    { refetchInterval: 30_000, refetchIntervalInBackground: false, retry: false, staleTime: 60_000 }
   );
 
   const notifications = data?.notifications ?? [];

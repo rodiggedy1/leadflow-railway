@@ -10,7 +10,30 @@ import { OpsChatProvider } from "./contexts/OpsChatContext";
 import { getLoginUrl } from "./const";
 import "./index.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Never retry on 429 (rate limit) — retrying makes it worse.
+      // Allow 1 retry on other transient errors.
+      retry: (failureCount, error) => {
+        if (error instanceof TRPCClientError) {
+          if (error.message === "Rate exceeded.") return false;
+          if (error.data?.httpStatus === 429) return false;
+          if (error.data?.httpStatus === 401 || error.data?.httpStatus === 403) return false;
+        }
+        return failureCount < 1;
+      },
+      // 2 minute default stale time — prevents re-fetching on every focus/mount
+      staleTime: 2 * 60 * 1000,
+      // Do not re-fetch on window focus or reconnect by default
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+    mutations: {
+      retry: false,
+    },
+  },
+});
 
 // Expected auth errors that should NOT be logged as errors — they are normal
 // 401 responses from adminAgentProcedure / cleanerProcedure when the user
