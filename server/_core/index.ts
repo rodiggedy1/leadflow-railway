@@ -86,6 +86,25 @@ async function startServer() {
   // Health check for Railway
   app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
+  // TEMPORARY debug endpoint — remove after login is confirmed working
+  app.get("/api/debug-login", async (_req, res) => {
+    try {
+      const { getAgentByEmail } = await import("../db");
+      const agent = await getAgentByEmail("rohangilkes@hey.com");
+      res.json({
+        found: !!agent,
+        isActive: agent?.isActive,
+        isAdmin: agent?.isAdmin,
+        hashPrefix: agent?.passwordHash?.slice(0, 10),
+        emergencyToken: process.env.EMERGENCY_AGENT_LOGIN_TOKEN ? "set" : "missing",
+        emergencyEmail: process.env.EMERGENCY_AGENT_EMAIL ? "set" : "missing",
+        dbUrl: process.env.DATABASE_URL ? "set" : "missing",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Video upload for applicant recordings
   registerVideoUploadRoute(app as any);
   // Interview video chunk upload + finalize
