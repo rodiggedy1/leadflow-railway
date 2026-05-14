@@ -3406,7 +3406,7 @@ function AgentManagement() {
 
 export default function AdminDashboard() {
   // ── Auth state (must come before all other hooks) ────────────────────────────────────
-  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 0 });
+  const meQuery = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 5 * 60 * 1000 });
   const isAdmin = meQuery.data?.isAdmin === true;
   const agentPagePermissions = meQuery.data?.pagePermissions ?? null;
   const authChecked = !meQuery.isLoading;

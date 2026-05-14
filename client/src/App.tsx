@@ -8,7 +8,6 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
 import { trpc } from "./lib/trpc";
-import { useAuth } from "./_core/hooks/useAuth";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -118,11 +117,13 @@ function Router() {
 function GlobalOpsChat() {
   const [location] = useLocation();
   const { state, open, minimize, close } = useOpsChatWindow();
-  const { user } = useAuth();
-
-  // Fetch unread counts for the badge — only when authenticated and OpsChat is not open
-  const { data: agentMe } = trpc.agents.me.useQuery(undefined, { retry: false });
-  const isAuthenticated = Boolean(user) || Boolean(agentMe);
+  // Single session check — agents.me is the canonical auth source for admin/agent routes.
+  // Do NOT call useAuth() here — it fires auth.me simultaneously and doubles the request count on page load.
+  const { data: agentMe } = trpc.agents.me.useQuery(undefined, {
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isAuthenticated = Boolean(agentMe);
 
   const { data: unreadCounts } = trpc.opsChat.getUnreadCounts.useQuery(undefined, {
     enabled: isAuthenticated && state !== "open",
