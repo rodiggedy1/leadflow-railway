@@ -83,8 +83,12 @@ async function startServer() {
   // Raw binary parser for interview video chunks
   app.use("/api/interview/chunk", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "20mb" }));
 
-  // Health check for Railway
-  app.get("/api/health", (_req, res) => res.json({ ok: true }));
+  // Health check for Railway — includes commit SHA for deployment verification
+  app.get("/api/health", (_req, res) => res.json({
+    ok: true,
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.COMMIT_SHA || "unknown",
+    time: new Date().toISOString(),
+  }));
 
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {

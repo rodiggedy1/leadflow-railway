@@ -12,7 +12,7 @@
  * in the textarea update the preview in real-time before saving.
  */
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
@@ -244,6 +244,71 @@ function OpenPhoneSyncCard() {
               <p className="text-xs text-green-600 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" /> All OpenPhone users matched. On-call badges are active.
               </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── App Version Card ─────────────────────────────────────────────────────────
+function AppVersionCard() {
+  const [healthData, setHealthData] = useState<{ commit?: string; time?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/health")
+      .then(r => r.json())
+      .then(d => { setHealthData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const shortCommit = healthData?.commit && healthData.commit !== "unknown"
+    ? healthData.commit.slice(0, 7)
+    : healthData?.commit ?? "unknown";
+
+  const deployedAt = healthData?.time
+    ? new Date(healthData.time).toLocaleString()
+    : null;
+
+  return (
+    <Card className="border border-dashed border-gray-200 bg-gray-50/50">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm font-semibold text-gray-600 flex items-center gap-2">
+          <Zap className="w-4 h-4 text-[#E8735A]" />
+          Deployment Info
+        </CardTitle>
+        <CardDescription className="text-xs text-gray-400">
+          Current Railway deployment details. Use this to verify that the latest code is running.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <Loader2 className="w-3 h-3 animate-spin" /> Checking deployment...
+          </div>
+        ) : (
+          <div className="space-y-1 font-mono text-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 w-20">Commit:</span>
+              <span className="text-gray-700 bg-gray-100 px-2 py-0.5 rounded">{shortCommit}</span>
+              {healthData?.commit && healthData.commit !== "unknown" && (
+                <a
+                  href={`https://github.com/rodiggedy1/leadflow-railway/commit/${healthData.commit}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[#E8735A] hover:underline text-xs"
+                >
+                  view on GitHub
+                </a>
+              )}
+            </div>
+            {deployedAt && (
+              <div className="flex items-center gap-2">
+                <span className="text-gray-400 w-20">Server time:</span>
+                <span className="text-gray-600">{deployedAt}</span>
+              </div>
             )}
           </div>
         )}
@@ -1863,6 +1928,8 @@ export default function SettingsPage() {
                 )}
                 {/* OpenPhone Agent Mapping */}
                 <OpenPhoneSyncCard />
+                {/* App Version / Deployment Info */}
+                <AppVersionCard />
               </div>
             )}
           </>
