@@ -1819,6 +1819,7 @@ export default function AgentDashboard() {
   // Agent session
   const { data: agentMe, isLoading: agentLoading, refetch: refetchMe } = trpc.agents.me.useQuery(undefined, {
     retry: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const logoutMutation = trpc.agents.logout.useMutation({

@@ -21,7 +21,6 @@ import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
 import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -909,12 +908,11 @@ interface OpsChatProps {
 }
 
 export default function OpsChat({ onMinimize, onClose, initialTab: initialTabProp }: OpsChatProps = {}) {
-  // Owner auth (Manus OAuth)
-  const { user, loading: ownerLoading } = useAuth();
-
-  // Agent auth (email + password)
+   // Agent auth (email + password) — single auth source for admin/agent routes.
+  // auth.me (Manus OAuth) is NOT called here to avoid doubling the request count on page load.
   const { data: agentMe, isLoading: agentLoading, refetch: refetchAgentMe } = trpc.agents.me.useQuery(undefined, {
     retry: false,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { minimize: minimizeFromHook, state: opsChatState, initialTab: ctxInitialTab, clearInitialTab, setActiveTab: setCtxActiveTab } = useOpsChatWindow();
@@ -1181,7 +1179,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
    // Load my profile photo on mount (only when authenticated)
   const { data: myProfile } = trpc.opsChat.getMyProfile.useQuery(undefined, {
-    enabled: Boolean(user) || Boolean(agentMe),
+    enabled: Boolean(agentMe),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });
@@ -1194,16 +1192,15 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Resolved caller name — use myProfile.name (from DB) as the authoritative name
   // because messages are stored with the DB name (e.g. "Rohan G"), not the OAuth name (e.g. "Rohan Gilkes").
   // Fall back to agentMe.name, then user.name, then "Office".
-  const callerName = myProfile?.name ?? agentMe?.name ?? user?.name ?? "Office";
+  const callerName = myProfile?.name ?? agentMe?.name ?? "Office";
   // All possible names this user may have — covers the race where myProfile hasn't loaded yet
   // but messages are already rendered (OAuth name vs DB name mismatch).
   const myNames = useMemo(() => {
     const s = new Set<string>();
     if (myProfile?.name) s.add(myProfile.name);
     if (agentMe?.name) s.add(agentMe.name);
-    if (user?.name) s.add(user.name);
     return s;
-  }, [myProfile?.name, agentMe?.name, user?.name]);
+  }, [myProfile?.name, agentMe?.name]);
   // Agent status list — always polled every 60s so data is ready when panel opens
   // Stable DM key: use email from myProfile (owner) or agentMe (agent).
   // agentMe uses publicProcedure so it always resolves even before opsChatProcedure auth.
@@ -1222,7 +1219,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // staleTime is 0 so the data is always considered stale and refetches on schedule.
   const { data: agentStatusData, refetch: refetchAgentStatusData } = trpc.opsChat.getAgentStatusList.useQuery(undefined, {
     refetchInterval: 15_000, // keep at 15s — away status is not SSE-broadcast (ephemeral)
-    enabled: Boolean(user) || Boolean(agentMe),
+    enabled: Boolean(agentMe),
     retry: false,
     staleTime: 0,
   });
@@ -1237,14 +1234,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // is idle (no tRPC calls), lastSeenAt drifts and the dot goes grey.
   const pingPresenceMutation = trpc.opsChat.pingPresence.useMutation();
   useEffect(() => {
-    const isLoggedIn = Boolean(user) || Boolean(agentMe);
+    const isLoggedIn = Boolean(agentMe);
     if (!isLoggedIn) return;
     // Ping immediately on mount, then every 90 seconds
     pingPresenceMutation.mutate();
     const interval = setInterval(() => pingPresenceMutation.mutate(), 90_000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Boolean(user), Boolean(agentMe)]);
+  }, [Boolean(agentMe)]);
 
   // Mutation to persist away status to the DB
   const setAwayStatusMutation = trpc.agents.setAwayStatus.useMutation({
@@ -1256,7 +1253,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   });
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
-    enabled: Boolean(user) || Boolean(agentMe),
+    enabled: Boolean(agentMe),
     staleTime: 0, // always fresh — photos change when agents upload new ones
     refetchInterval: 30_000, // re-fetch every 30s so new photos appear without reload
     retry: false,
@@ -1329,10 +1326,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const { typers: jobTypers, onKeyPress: onJobKeyPress, onBlur: onJobBlur } = useTypingIndicator(jobChannelKey);
 
   // Auth is still loading
-  const authLoading = ownerLoading || agentLoading;
+  const authLoading = agentLoading;
 
   // Neither owner nor agent is logged in
-  const isAuthenticated = Boolean(user) || Boolean(agentMe);
+  const isAuthenticated = Boolean(agentMe);
 
   const scrollTimeline = (dir: "left" | "right") => {
     const el = timelineScrollRef.current;
