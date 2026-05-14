@@ -1192,6 +1192,61 @@ export const cleanerRouter = router({
     return { submitted: rows.length > 0, tomorrowDate: tomorrowStr };
   }),
 
+  /**
+   * cleaner.portalData — single combined query replacing 4 separate queries on portal load.
+   * Returns payRules + activeCustomRules + streakInfo + tomorrowAvailability in one round trip.
+   */
+  portalData: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
+    const [payRules, customRulesRows, streakRows, availabilityRows] = await Promise.all([
+      getPayRules(),
+      db
+        .select()
+        .from(customPayRules)
+        .where(eq(customPayRules.isActive, 1))
+        .orderBy(customPayRules.type, customPayRules.label),
+      db
+        .select()
+        .from(cleanerStreaks)
+        .where(eq(cleanerStreaks.cleanerProfileId, ctx.cleaner.cleanerId))
+        .limit(1),
+      db
+        .select({ id: teamAvailabilityCheckins.id })
+        .from(teamAvailabilityCheckins)
+        .where(
+          and(
+            eq(teamAvailabilityCheckins.cleanerProfileId, ctx.cleaner.cleanerId),
+            eq(teamAvailabilityCheckins.availabilityDate, tomorrowStr),
+          )
+        )
+        .limit(1),
+    ]);
+
+    const streakRow = streakRows[0];
+    return {
+      payRules,
+      activeCustomRules: customRulesRows.map(r => ({
+        id: r.id,
+        label: r.label,
+        type: r.type,
+        amount: r.amount,
+        description: r.description ?? null,
+      })),
+      streakInfo: {
+        currentStreak: streakRow?.currentStreak ?? 0,
+        bestStreak: streakRow?.bestStreak ?? 0,
+      },
+      tomorrowAvailability: { submitted: availabilityRows.length > 0, tomorrowDate: tomorrowStr },
+    };
+  }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

@@ -2050,11 +2050,16 @@ export default function CleanerPortal() {
     retry: false,
   });
 
-  // Check if this cleaner has already submitted tomorrow's availability
-  const availabilityCheckQuery = trpc.cleaner.hasSubmittedTomorrowAvailability.useQuery(
+  // Single combined query: payRules + customRules + streakInfo + tomorrowAvailability
+  // Replaces 4 separate queries to reduce request burst on portal load
+  const portalDataQuery = trpc.cleaner.portalData.useQuery(
     undefined,
-    { enabled: !!meQuery.data }
+    { enabled: !!meQuery.data, staleTime: 5 * 60 * 1000 }
   );
+  const availabilityCheckQuery = {
+    data: portalDataQuery.data?.tomorrowAvailability,
+    isLoading: portalDataQuery.isLoading,
+  };
 
   // Show morning prompt at 7:29 AM ET if availability not yet submitted
   useEffect(() => {
@@ -2077,7 +2082,7 @@ export default function CleanerPortal() {
 
   const jobsQuery = trpc.cleaner.myJobs.useQuery(
     { date },
-    { enabled: !!meQuery.data }
+    { enabled: !!meQuery.data, staleTime: 5 * 60 * 1000 }
   );
 
   // Weekly earnings: Mon–Sun of the current week
@@ -2093,15 +2098,12 @@ export default function CleanerPortal() {
 
   const weekQuery = trpc.cleaner.myJobsRange.useQuery(
     { from: weekStart, to: weekEnd },
-    { enabled: !!meQuery.data }
+    { enabled: !!meQuery.data, staleTime: 5 * 60 * 1000 }
   );
 
-  const payRulesQuery = trpc.cleaner.getPayRules.useQuery();
-  const payRules = payRulesQuery.data;
-  const activeCustomRulesQuery = trpc.cleaner.getActiveCustomRules.useQuery();
-  const activeCustomRules = activeCustomRulesQuery.data ?? [];
-  const streakInfoQuery = trpc.cleaner.getStreakInfo.useQuery(undefined, { enabled: !!meQuery.data });
-  const streakInfo = streakInfoQuery.data;
+  const payRules = portalDataQuery.data?.payRules;
+  const activeCustomRules = portalDataQuery.data?.activeCustomRules ?? [];
+  const streakInfo = portalDataQuery.data?.streakInfo;
 
   const logoutMutation = trpc.cleaner.logout.useMutation({
     onSuccess: () => utils.cleaner.me.invalidate(),
@@ -2516,7 +2518,7 @@ export default function CleanerPortal() {
       cleanerName={meQuery.data?.name ?? ""}
       onSubmitted={() => {
         setShowMorningPrompt(false);
-        availabilityCheckQuery.refetch();
+        portalDataQuery.refetch();
       }}
     />
     </>
