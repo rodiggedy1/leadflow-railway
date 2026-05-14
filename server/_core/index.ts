@@ -83,6 +83,9 @@ async function startServer() {
   // Raw binary parser for interview video chunks
   app.use("/api/interview/chunk", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "20mb" }));
 
+  // Health check for Railway
+  app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
   // Video upload for applicant recordings
   registerVideoUploadRoute(app as any);
   // Interview video chunk upload + finalize
