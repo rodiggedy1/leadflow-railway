@@ -24,6 +24,7 @@ import { serveStatic, setupVite } from "./vite";
 import { registerVideoUploadRoute } from "../videoUpload";
 import { registerInterviewUploadRoutes } from "../interviewUpload";
 import { registerDeepgramStreamRoute } from "../deepgramStream";
+import { registerAgentLoginRoute } from "../agentLoginRoute";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -111,6 +112,8 @@ async function startServer() {
   registerThumbTackBridgeRoute(app);
   // Call Command Center: auto-raise no-checkin issues (Heartbeat cron)
   registerCallCenterCronRoute(app);
+  // Plain REST login — bypasses /api/trpc to avoid platform rate limit on that path
+  registerAgentLoginRoute(app as any);
   // tRPC API
   app.use(
     "/api/trpc",

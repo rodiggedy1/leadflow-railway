@@ -194,14 +194,32 @@ function StageBadge({ stage }: { stage: string }) {
 function AgentLoginForm({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
-  const loginMutation = trpc.agents.login.useMutation({
-    onSuccess: (data) => {
-      toast.success(`Welcome back, ${data.agent.name}!`);
-      onSuccess();
+  const [isPending, setIsPending] = useState(false);
+  const loginMutation = {
+    isPending,
+    mutate: async ({ email: e, password: p }: { email: string; password: string }) => {
+      setIsPending(true);
+      try {
+        const res = await fetch("/api/agents/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email: e, password: p }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          toast.error(data.error || "Login failed");
+          return;
+        }
+        toast.success(`Welcome back, ${data.agent.name}!`);
+        onSuccess();
+      } catch {
+        toast.error("Login failed. Please try again.");
+      } finally {
+        setIsPending(false);
+      }
     },
-    onError: (err) => toast.error(err.message || "Login failed"),
-  });
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#FFF8F5" }}>

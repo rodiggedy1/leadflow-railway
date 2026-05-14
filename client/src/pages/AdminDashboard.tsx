@@ -417,17 +417,36 @@ function AdminLoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const utils = trpc.useUtils();
-  const loginMutation = trpc.agents.login.useMutation({
-    onSuccess: (data) => {
-      if (!data.agent.isAdmin) {
-        toast.error("This is the admin panel. Go to /agent for the agent workspace.", { duration: 6000 });
-        return;
+  const [isPending, setIsPending] = useState(false);
+  const loginMutation = {
+    isPending,
+    mutate: async ({ email: e, password: p }: { email: string; password: string }) => {
+      setIsPending(true);
+      try {
+        const res = await fetch("/api/agents/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email: e, password: p }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          toast.error(data.error || "Login failed");
+          return;
+        }
+        if (!data.agent.isAdmin) {
+          toast.error("This is the admin panel. Go to /agent for the agent workspace.", { duration: 6000 });
+          return;
+        }
+        toast.success(`Welcome back, ${data.agent.name}!`);
+        utils.agents.me.invalidate().then(() => onSuccess());
+      } catch {
+        toast.error("Login failed. Please try again.");
+      } finally {
+        setIsPending(false);
       }
-      toast.success(`Welcome back, ${data.agent.name}!`);
-      utils.agents.me.invalidate().then(() => onSuccess());
     },
-    onError: (err) => toast.error(err.message || "Login failed"),
-  });
+  };
   return (
     <div className="hj-theme min-h-screen flex items-center justify-center">
       <div className="hj-card p-8 max-w-sm w-full mx-4">
