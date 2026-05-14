@@ -7,13 +7,13 @@
  *     onJobUpdate:  () => refetchJobs(),
  *     onLeadUpdate: () => refetchCommandData(),
  *     onReactionUpdate: () => refetchReactions(),
- *   });
+ *   }, { enabled: isAuthenticated });
  *
  * The hook:
- *   - Opens an EventSource to /api/ops-stream on mount
+ *   - Only opens the EventSource when `enabled` is true (default: true)
  *   - Calls the appropriate callback when an ops_update event arrives
- *   - Automatically reconnects with exponential back-off (max 30s) on disconnect
- *   - Closes the connection on unmount
+ *   - Automatically reconnects with exponential back-off (max 60s) on disconnect
+ *   - Closes the connection on unmount or when enabled becomes false
  *   - Falls back gracefully if EventSource is not supported
  */
 
@@ -38,11 +38,17 @@ export type OpsStreamCallbacks = {
 const MIN_RETRY_MS = 5_000;
 const MAX_RETRY_MS = 60_000;
 
-export function useOpsStream(callbacks: OpsStreamCallbacks) {
+export function useOpsStream(
+  callbacks: OpsStreamCallbacks,
+  options?: { enabled?: boolean }
+) {
   const cbRef = useRef(callbacks);
   cbRef.current = callbacks; // always up-to-date without re-running the effect
 
+  const enabled = options?.enabled ?? true;
+
   useEffect(() => {
+    if (!enabled) return; // do not connect until authenticated
     if (typeof EventSource === "undefined") return; // SSR / old browser guard
 
     let es: EventSource | null = null;
@@ -124,5 +130,5 @@ export function useOpsStream(callbacks: OpsStreamCallbacks) {
       if (retryTimer) clearTimeout(retryTimer);
       es?.close();
     };
-  }, []); // mount/unmount only — callbacks are read via ref
+  }, [enabled]); // re-run when enabled flips true after login
 }

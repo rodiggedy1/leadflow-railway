@@ -3539,7 +3539,7 @@ export default function AdminDashboard() {
     onPhoneUpdate: (leadName, newPhone) => {
       toast.success(`Updated ${leadName}'s phone to ${newPhone}`, { duration: 8000 });
     },
-  });
+  }, { enabled: hasSession });
 
   // Call recording indicators — lightweight map of sessionId → { hasRecording, hasTranscript, callScore }
   const { data: recordingMap = {} } = trpc.leads.getSessionsWithRecordings.useQuery(undefined, {

@@ -1869,9 +1869,8 @@ export default function AgentDashboard() {
     onPhoneUpdate: (leadName, newPhone) => {
       toast.success(`Updated ${leadName}'s phone to ${newPhone}`, { duration: 8000 });
     },
-  });
-
-  // ── Follow-up reminder toasts ───────────────────────────────────────────────────────────────────────────
+  }, { enabled: !!agentMe });
+  // ── Follow-up reminder toastss ───────────────────────────────────────────────────────────────────────────
   const { data: todayFollowUps, refetch: refetchFollowUps } = useTodayFollowUps(!!agentMe);
   // When a toast card is clicked, we need to open the LeadCard's drawer.
   // We do this by scrolling to the card and programmatically triggering a click.

@@ -1412,11 +1412,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       // reactions are fetched via mutation; trigger refetch via the callback
       refetchReactions();
     },
-    onAgentStatus: () => {
+     onAgentStatus: () => {
       utils.opsChat.getAgentStatusList.invalidate();
     },
-  });
-
+  }, { enabled: isAuthenticated });
   // markRead mutation — called when opening a channel or job thread
   const markRead = trpc.opsChat.markRead.useMutation({
     onSuccess: () => refetchUnread(),
