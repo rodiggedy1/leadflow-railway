@@ -7,7 +7,6 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
-import { trpc } from "./lib/trpc";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -117,22 +116,13 @@ function Router() {
 function GlobalOpsChat() {
   const [location] = useLocation();
   const { state, open, minimize, close } = useOpsChatWindow();
-  // Single session check — agents.me is the canonical auth source for admin/agent routes.
-  // Do NOT call useAuth() here — it fires auth.me simultaneously and doubles the request count on page load.
-  const { data: agentMe } = trpc.agents.me.useQuery(undefined, {
-    retry: false,
-    staleTime: 5 * 60 * 1000,
-  });
-  const isAuthenticated = Boolean(agentMe);
-
-  const { data: unreadCounts } = trpc.opsChat.getUnreadCounts.useQuery(undefined, {
-    enabled: isAuthenticated && state !== "open",
-    refetchInterval: 30_000,
-  });
-
-  const totalUnread = unreadCounts
-    ? (unreadCounts.urgent + unreadCounts.dispatch + unreadCounts.general + unreadCounts.cleaners)
-    : 0;
+  // NOTE: Do NOT call agents.me here.
+  // AdminDashboard/AgentDashboard are lazy-loaded, so they mount in a later render tick.
+  // Calling agents.me here fires a duplicate request that bypasses tRPC batch deduplication,
+  // consuming the rate limit before the login mutation can fire.
+  // The bubble shows unconditionally on eligible routes — OpsChat's AgentLoginGate handles auth.
+  // The unread badge is populated by OpsChat itself once it has a session.
+  const totalUnread = 0;
 
   // OpsChat is only relevant on admin / agent / call-assist routes.
   // IMPORTANT: Once OpsChat has been mounted, we must NEVER unmount it while
