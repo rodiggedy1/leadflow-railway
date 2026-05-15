@@ -550,6 +550,211 @@ const TIME_PRESETS = [
   { label: "12:00 PM", value: "12:00" },
 ];
 
+
+// ─── TeamHeaderRow ───────────────────────────────────────────────────────────
+// Clean team header: name + status badges always visible.
+// All controls (rating, limits, power, lock, config) live in a popup.
+function TeamHeaderRow({
+  team, isUnavailable, isTeamLocked, teamConflictCount, teamCheckin,
+  driveLabel, recalculating, date,
+  onMarkUnavailable, onMarkAvailable, onLockTeam, onUnlockTeam, onSaveLimits,
+}: {
+  team: { id: number; name: string; color?: string | null; avgRating?: number | null; ratingCount?: number;
+    minJobs?: number | null; maxJobs?: number | null; earliestStartTime?: string | null };
+  isUnavailable: boolean;
+  isTeamLocked: boolean;
+  teamConflictCount: number;
+  teamCheckin: { isAvailable: boolean; maxJobs?: number | null; note?: string | null } | null;
+  driveLabel: string | null;
+  recalculating: boolean;
+  date: string;
+  onMarkUnavailable: () => void;
+  onMarkAvailable: () => void;
+  onLockTeam: () => void;
+  onUnlockTeam: () => void;
+  onSaveLimits: (minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void;
+}) {
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const popRef = React.useRef<HTMLDivElement>(null);
+  const [open, setOpen] = React.useState(false);
+  const [popStyle, setPopStyle] = React.useState<React.CSSProperties>({});
+
+  const openPopup = () => {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const w = 260;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow >= 320 ? rect.bottom + 4 : rect.top - 320 - 4;
+    let left = rect.right - w;
+    if (left < 8) left = 8;
+    setPopStyle({ position: 'fixed', top, left, width: w, zIndex: 9999 });
+    setOpen(true);
+  };
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (btnRef.current?.contains(e.target as Node)) return;
+      if (popRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const fmtTime = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+  };
+
+  const hasLimits = team.minJobs != null || team.maxJobs != null || team.earliestStartTime != null;
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2.5 border-b ${isUnavailable ? 'bg-red-50 border-red-100' : 'border-gray-50'}`}>
+      {/* Color dot */}
+      <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? '#ef4444' : (team.color ?? '#6366f1') }} />
+
+      {/* Name — clickable to open popup */}
+      <button
+        ref={btnRef}
+        onClick={openPopup}
+        className={`font-semibold text-sm truncate max-w-[120px] text-left hover:underline ${
+          isUnavailable ? 'text-red-500 line-through' : 'text-gray-900'
+        }`}
+        title="Click for team controls"
+      >
+        {team.name}
+      </button>
+
+      {/* Always-visible status badges */}
+      {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded shrink-0">OFF</span>}
+      {teamCheckin && (
+        <span
+          title={teamCheckin.isAvailable
+            ? `✅ Confirmed — up to ${teamCheckin.maxJobs != null && teamCheckin.maxJobs >= 10 ? '4+' : teamCheckin.maxJobs ?? '?'} jobs${teamCheckin.note ? ` · ${teamCheckin.note}` : ''}`
+            : `❌ Not available${teamCheckin.note ? ` · ${teamCheckin.note}` : ''}`
+          }
+          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border shrink-0 ${
+            teamCheckin.isAvailable ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'
+          }`}
+        >
+          {teamCheckin.isAvailable ? '✅' : '❌'}
+          {teamCheckin.isAvailable && teamCheckin.maxJobs != null && (
+            <span className="ml-0.5">{teamCheckin.maxJobs >= 10 ? '4+' : teamCheckin.maxJobs}j</span>
+          )}
+        </span>
+      )}
+      {teamConflictCount > 0 && (
+        <span title={`${teamConflictCount} conflict${teamConflictCount > 1 ? 's' : ''}`}
+          className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0">
+          ⚠ {teamConflictCount}
+        </span>
+      )}
+      {recalculating && (
+        <Loader2 className="w-3 h-3 animate-spin text-blue-400 shrink-0" />
+      )}
+
+      {/* Drive label + indicator dots pushed to right */}
+      <div className="ml-auto flex items-center gap-1.5 shrink-0">
+        {driveLabel && <span className="text-[11px] font-medium text-orange-400">{driveLabel}</span>}
+        {/* Subtle indicator dots for active states */}
+        {isTeamLocked && <span className="w-2 h-2 rounded-full bg-amber-400" title="Team locked" />}
+        {hasLimits && <span className="w-2 h-2 rounded-full bg-indigo-400" title="Has job limits" />}
+        {/* Chevron to open popup */}
+        <button ref={btnRef} onClick={openPopup}
+          className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+          title="Team controls"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* Popup */}
+      {open && createPortal(
+        <div ref={popRef} style={popStyle}
+          className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 space-y-3"
+        >
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{team.name}</p>
+
+          {/* Rating */}
+          {team.avgRating != null && (
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-gray-500 w-20 shrink-0">Rating</span>
+              <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                ⭐ {team.avgRating.toFixed(1)}
+              </span>
+              <span className="text-[10px] text-gray-400">{team.ratingCount} job{team.ratingCount === 1 ? '' : 's'}</span>
+            </div>
+          )}
+
+          {/* Job limits */}
+          {hasLimits && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-gray-500 w-20 shrink-0">Limits</span>
+              {team.minJobs != null && (
+                <span title={`Min ${team.minJobs} jobs`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
+                  <ArrowDown className="w-2.5 h-2.5" />{team.minJobs}
+                </span>
+              )}
+              {team.maxJobs != null && (
+                <span title={`Max ${team.maxJobs} jobs`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
+                  <ArrowUp className="w-2.5 h-2.5" />{team.maxJobs}
+                </span>
+              )}
+              {team.earliestStartTime != null && (
+                <span title={`Start after ${fmtTime(team.earliestStartTime)}`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
+                  <Timer className="w-2.5 h-2.5" />{fmtTime(team.earliestStartTime)}
+                </span>
+              )}
+            </div>
+          )}
+
+          <div className="border-t border-gray-100 pt-3 space-y-2">
+            {/* Mark available / unavailable */}
+            <button
+              onClick={() => { isUnavailable ? onMarkAvailable() : onMarkUnavailable(); setOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isUnavailable
+                  ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'bg-red-50 text-red-600 hover:bg-red-100'
+              }`}
+            >
+              <Power className="w-4 h-4" />
+              {isUnavailable ? 'Mark available' : 'Mark unavailable today'}
+            </button>
+
+            {/* Lock / Unlock */}
+            <button
+              onClick={() => { isTeamLocked ? onUnlockTeam() : onLockTeam(); setOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                isTeamLocked
+                  ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {isTeamLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
+              {isTeamLocked ? 'Unlock team' : 'Lock team'}
+            </button>
+
+            {/* Edit limits */}
+            <div onClick={() => setOpen(false)}>
+              <TeamDayConfigButton
+                teamId={team.id}
+                date={date}
+                config={{ minJobs: team.minJobs ?? null, maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
+                onSave={onSaveLimits}
+                onCopyToTomorrow={undefined}
+              />
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+
 function TeamDayConfigButton({
   teamId, date, config, onSave, onCopyToTomorrow,
 }: {
@@ -1611,124 +1816,24 @@ export default function SchedulingTab() {
               const teamCheckin = checkins.find(c => (c.cleanerName ?? '').toLowerCase() === team.name.toLowerCase());
               return (
                 <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${isUnavailable ? "opacity-50 border-red-200" : "border-gray-100"}`}>
-                  {/* Team header */}
-                  <div className={`flex items-center gap-2.5 px-3 py-2.5 border-b ${isUnavailable ? "bg-red-50 border-red-100" : "border-gray-50"}`}>
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: isUnavailable ? "#ef4444" : (team.color ?? "#6366f1") }} />
-                    <span className={`font-semibold text-sm ${isUnavailable ? "text-red-500 line-through" : "text-gray-900"}`}>{team.name}</span>
-                    {isUnavailable && <span className="text-[10px] font-medium text-red-400 bg-red-100 px-1.5 py-0.5 rounded">OFF</span>}
-                    {teamCheckin && (
-                      <span
-                        title={teamCheckin.isAvailable
-                          ? `✅ Confirmed — up to ${teamCheckin.maxJobs != null && teamCheckin.maxJobs >= 10 ? '4+' : teamCheckin.maxJobs ?? '?'} jobs${teamCheckin.note ? ` · ${teamCheckin.note}` : ''}`
-                          : `❌ Not available${teamCheckin.note ? ` · ${teamCheckin.note}` : ''}`
-                        }
-                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
-                          teamCheckin.isAvailable
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-red-50 text-red-600 border-red-200'
-                        }`}
-                      >
-                        {teamCheckin.isAvailable ? '✅' : '❌'}
-                        {teamCheckin.isAvailable && teamCheckin.maxJobs != null && (
-                          <span className="ml-0.5">{teamCheckin.maxJobs >= 10 ? '4+' : teamCheckin.maxJobs}j</span>
-                        )}
-                      </span>
-                    )}
-                    {teamConflictCount > 0 && (
-                      <span
-                        title={`${teamConflictCount} job${teamConflictCount > 1 ? 's have' : ' has'} a time conflict — ask clients to adjust`}
-                        className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded"
-                      >
-                        ⚠ {teamConflictCount} conflict{teamConflictCount > 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {team.avgRating != null && (
-                      <span
-                        title={`Avg rating: ${team.avgRating.toFixed(2)} ⭐ from ${team.ratingCount} job${team.ratingCount === 1 ? '' : 's'}`}
-                        className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded"
-                      >
-                        ⭐ {team.avgRating.toFixed(1)}
-                      </span>
-                    )}
-                    {recalculatingTeams.has(team.id) && (
-                      <span className="flex items-center gap-1 text-[10px] font-medium text-blue-500">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        recalculating…
-                      </span>
-                    )}
-                    {/* Inline limit badges */}
-                    {(() => {
-                      const cfg = team;
-                      if (cfg.minJobs == null && cfg.maxJobs == null && cfg.earliestStartTime == null) return null;
-                      const fmtTime = (hhmm: string) => {
-                        const [h, m] = hhmm.split(":").map(Number);
-                        return `${h % 12 || 12}:${String(m).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"}`;
-                      };
-                      return (
-                        <div className="flex items-center gap-1">
-                          {cfg.minJobs != null && (
-                             <span title={`Min ${cfg.minJobs} jobs`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded">
-                               <ArrowDown className="w-2.5 h-2.5" />{cfg.minJobs}
-                             </span>
-                           )}
-                           {cfg.maxJobs != null && (
-                             <span title={`Max ${cfg.maxJobs} jobs`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded">
-                               <ArrowUp className="w-2.5 h-2.5" />{cfg.maxJobs}
-                             </span>
-                           )}
-                           {cfg.earliestStartTime != null && (
-                             <span title={`Start after ${fmtTime(cfg.earliestStartTime)}`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
-                               <Timer className="w-2.5 h-2.5" />{fmtTime(cfg.earliestStartTime)}
-                             </span>
-                           )}
-                        </div>
-                      );
-                    })()}
-                    <div className="ml-auto flex items-center gap-1.5">
-                      {driveLabel && (
-                        <span className="text-[11px] font-medium text-orange-400">{driveLabel}</span>
-                      )}
-                      {/* Set OFF / Available — icon button */}
-                      <button
-                        title={isUnavailable ? "Mark available" : "Mark unavailable for this day"}
-                        onClick={() => isUnavailable
-                          ? setAvailable.mutate({ teamId: team.id, date })
-                          : setUnavailable.mutate({ teamId: team.id, date })
-                        }
-                        className={`w-7 h-7 flex items-center justify-center rounded-full border transition-colors ${
-                          isUnavailable
-                            ? "bg-red-100 text-red-500 border-red-200 hover:bg-red-200"
-                            : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-orange-50 hover:text-orange-500 hover:border-orange-200"
-                        }`}
-                      >
-                        {isUnavailable ? <Power className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
-                      </button>
-                      {/* Lock / Unlock — icon button */}
-                      <button
-                        title={isTeamLocked ? "Unlock team — optimizer can reassign" : "Lock team — optimizer won't change assignments"}
-                        onClick={() => isTeamLocked
-                          ? unlockTeam.mutate({ teamId: team.id, date })
-                          : lockTeam.mutate({ teamId: team.id, date })
-                        }
-                        className={`w-7 h-7 flex items-center justify-center rounded-full border transition-colors ${
-                          isTeamLocked
-                            ? "bg-amber-100 text-amber-600 border-amber-300 hover:bg-amber-200"
-                            : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200"
-                        }`}
-                      >
-                        {isTeamLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                      </button>
-                      <TeamDayConfigButton
-                        teamId={team.id}
-                        date={date}
-                        config={{ minJobs: team.minJobs ?? null, maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
-                        onSave={(minJobs, maxJobs, earliestStartTime) =>
-                          setTeamLimits.mutate({ teamId: team.id, minJobs, maxJobs, earliestStartTime })
-                        }
-                        onCopyToTomorrow={undefined}
-                      />
-                    </div>
-                  </div>
+                  {/* Team header — clean row with popup for details/controls */}
+                  <TeamHeaderRow
+                    team={team}
+                    isUnavailable={isUnavailable}
+                    isTeamLocked={isTeamLocked}
+                    teamConflictCount={teamConflictCount}
+                    teamCheckin={teamCheckin ?? null}
+                    driveLabel={driveLabel}
+                    recalculating={recalculatingTeams.has(team.id)}
+                    date={date}
+                    onMarkUnavailable={() => setUnavailable.mutate({ teamId: team.id, date })}
+                    onMarkAvailable={() => setAvailable.mutate({ teamId: team.id, date })}
+                    onLockTeam={() => lockTeam.mutate({ teamId: team.id, date })}
+                    onUnlockTeam={() => unlockTeam.mutate({ teamId: team.id, date })}
+                    onSaveLimits={(minJobs, maxJobs, earliestStartTime) =>
+                      setTeamLimits.mutate({ teamId: team.id, minJobs, maxJobs, earliestStartTime })
+                    }
+                  />
                   {/* Jobs */}
                   <div className="p-2 space-y-1.5">
                     {teamJobs.length === 0 ? (
