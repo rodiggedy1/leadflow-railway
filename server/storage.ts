@@ -71,9 +71,10 @@ export async function storagePut(
     ContentType: contentType,
   }));
 
-  // R2 public URL — bucket must have public access enabled, or use presigned URL
-  const endpoint = (process.env.R2_ENDPOINT ?? "").replace(/\/+$/, "");
-  const url = `${endpoint}/${bucket}/${key}`;
+  // Use R2_PUBLIC_URL (public dev URL or custom domain) for the returned URL.
+  // Falls back to the S3 API endpoint if not set (files won't be publicly accessible).
+  const publicBase = (process.env.R2_PUBLIC_URL ?? process.env.R2_ENDPOINT ?? "").replace(/\/+$/, "");
+  const url = `${publicBase}/${key}`;
 
   return { key, url };
 }
