@@ -2254,6 +2254,8 @@ export const schedulingTeams = mysqlTable("scheduling_teams", {
   maxJobs: int("maxJobs"),
   /** Earliest start time HH:MM — optimizer skips jobs before this time (null = no restriction) */
   earliestStartTime: varchar("earliestStartTime", { length: 5 }),
+  /** Short display tag shown in the scheduling header (e.g. "VIP", "Flex", "AM") */
+  tag: varchar("tag", { length: 20 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

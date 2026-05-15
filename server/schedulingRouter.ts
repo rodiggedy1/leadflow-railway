@@ -642,6 +642,19 @@ export const schedulingRouter = router({
         .where(eq(schedulingTeams.id, input.teamId));
       return { ok: true };
     }),
+  setTeamTag: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      tag: z.string().max(20).nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.update(schedulingTeams)
+        .set({ tag: input.tag })
+        .where(eq(schedulingTeams.id, input.teamId));
+      return { ok: true };
+    }),
   deleteTeam: agentProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

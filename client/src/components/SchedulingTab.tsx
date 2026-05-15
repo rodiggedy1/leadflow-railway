@@ -557,10 +557,10 @@ const TIME_PRESETS = [
 function TeamHeaderRow({
   team, isUnavailable, isTeamLocked, teamConflictCount, teamCheckin,
   driveLabel, recalculating, date,
-  onMarkUnavailable, onMarkAvailable, onLockTeam, onUnlockTeam, onSaveLimits,
+  onMarkUnavailable, onMarkAvailable, onLockTeam, onUnlockTeam, onSaveLimits, onSaveTag,
 }: {
   team: { id: number; name: string; color?: string | null; avgRating?: number | null; ratingCount?: number;
-    minJobs?: number | null; maxJobs?: number | null; earliestStartTime?: string | null };
+    minJobs?: number | null; maxJobs?: number | null; earliestStartTime?: string | null; tag?: string | null };
   isUnavailable: boolean;
   isTeamLocked: boolean;
   teamConflictCount: number;
@@ -573,6 +573,7 @@ function TeamHeaderRow({
   onLockTeam: () => void;
   onUnlockTeam: () => void;
   onSaveLimits: (minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void;
+  onSaveTag: (tag: string | null) => void;
 }) {
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const popRef = React.useRef<HTMLDivElement>(null);
@@ -580,6 +581,9 @@ function TeamHeaderRow({
   const [popStyle, setPopStyle] = React.useState<React.CSSProperties>({});
   // Track whether the nested config popover is open so we don't close the outer popup
   const configOpenRef = React.useRef(false);
+  // Tag editing state
+  const [tagInput, setTagInput] = React.useState(team.tag ?? '');
+  React.useEffect(() => { setTagInput(team.tag ?? ''); }, [team.tag]);
 
   const openPopup = () => {
     if (!btnRef.current) return;
@@ -600,7 +604,7 @@ function TeamHeaderRow({
       if (configOpenRef.current) return;
       if (btnRef.current?.contains(e.target as Node)) return;
       if (popRef.current?.contains(e.target as Node)) return;
-      setOpenWithCallback(false);
+      setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -658,12 +662,26 @@ function TeamHeaderRow({
         <Loader2 className="w-3 h-3 animate-spin text-blue-400 shrink-0" />
       )}
 
+      {/* Tag pill — shown when set */}
+      {team.tag && (
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-violet-50 text-violet-700 border-violet-200 shrink-0">{team.tag}</span>
+      )}
+
       {/* Drive label + indicator dots pushed to right */}
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         {driveLabel && <span className="text-[11px] font-medium text-orange-400">{driveLabel}</span>}
         {/* Subtle indicator dots for active states */}
         {isTeamLocked && <span className="w-2 h-2 rounded-full bg-amber-400" title="Team locked" />}
-        {hasLimits && <span className="w-2 h-2 rounded-full bg-indigo-400" title="Has job limits" />}
+        {hasLimits && (
+          <span
+            className="w-2 h-2 rounded-full bg-indigo-400 cursor-default"
+            title={[
+              team.minJobs != null ? `Min ${team.minJobs} jobs` : null,
+              team.maxJobs != null ? `Max ${team.maxJobs} jobs` : null,
+              team.earliestStartTime != null ? `Start after ${fmtTime(team.earliestStartTime)}` : null,
+            ].filter(Boolean).join(' · ')}
+          />
+        )}
         {/* Chevron to open popup */}
         <button ref={btnRef} onClick={openPopup}
           className="w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
@@ -679,6 +697,34 @@ function TeamHeaderRow({
           className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 space-y-3"
         >
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{team.name}</p>
+
+          {/* Tag input */}
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-gray-500 w-20 shrink-0">Tag</span>
+            <input
+              type="text"
+              maxLength={20}
+              placeholder="e.g. VIP, AM, Flex"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const val = tagInput.trim() || null;
+                  onSaveTag(val);
+                  e.currentTarget.blur();
+                }
+                if (e.key === 'Escape') {
+                  setTagInput(team.tag ?? '');
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={() => {
+                const val = tagInput.trim() || null;
+                if (val !== (team.tag ?? null)) onSaveTag(val);
+              }}
+              className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-violet-400 bg-white"
+            />
+          </div>
 
           {/* Rating */}
           {team.avgRating != null && (
@@ -746,8 +792,8 @@ function TeamHeaderRow({
               date={date}
               config={{ minJobs: team.minJobs ?? null, maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
               onSave={(minJobs, maxJobs, earliestStartTime) => {
+                // Save limits but keep the outer popup open so user can see updated values
                 onSaveLimits(minJobs, maxJobs, earliestStartTime);
-                setOpenWithCallback(false);
               }}
               onCopyToTomorrow={undefined}
               onOpenChange={(isOpen) => { configOpenRef.current = isOpen; }}
@@ -1317,6 +1363,11 @@ export default function SchedulingTab() {
     },
     onError: (e) => toast.error(e.message),
   });
+  // Per-team tag — short label shown in header (e.g. "VIP", "AM")
+  const setTeamTag = trpc.scheduling.setTeamTag.useMutation({
+    onSuccess: () => utils.scheduling.getSchedule.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
 
   const jobs: Job[] = (data?.jobs ?? []) as Job[];
   const teams: Team[] = (data?.teams ?? []) as Team[];
@@ -1847,6 +1898,7 @@ export default function SchedulingTab() {
                     onSaveLimits={(minJobs, maxJobs, earliestStartTime) =>
                       setTeamLimits.mutate({ teamId: team.id, minJobs, maxJobs, earliestStartTime })
                     }
+                    onSaveTag={(tag) => setTeamTag.mutate({ teamId: team.id, tag })}
                   />
                   {/* Jobs */}
                   <div className="p-2 space-y-1.5">
