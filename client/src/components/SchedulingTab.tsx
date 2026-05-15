@@ -578,6 +578,8 @@ function TeamHeaderRow({
   const popRef = React.useRef<HTMLDivElement>(null);
   const [open, setOpen] = React.useState(false);
   const [popStyle, setPopStyle] = React.useState<React.CSSProperties>({});
+  // Track whether the nested config popover is open so we don't close the outer popup
+  const configOpenRef = React.useRef(false);
 
   const openPopup = () => {
     if (!btnRef.current) return;
@@ -594,9 +596,11 @@ function TeamHeaderRow({
   React.useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
+      // Don't close if the config sub-popover is open
+      if (configOpenRef.current) return;
       if (btnRef.current?.contains(e.target as Node)) return;
       if (popRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
+      setOpenWithCallback(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -736,16 +740,18 @@ function TeamHeaderRow({
               {isTeamLocked ? 'Unlock team' : 'Lock team'}
             </button>
 
-            {/* Edit limits */}
-            <div onClick={() => setOpen(false)}>
-              <TeamDayConfigButton
-                teamId={team.id}
-                date={date}
-                config={{ minJobs: team.minJobs ?? null, maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
-                onSave={onSaveLimits}
-                onCopyToTomorrow={undefined}
-              />
-            </div>
+            {/* Edit limits — no wrapper onClick; config popover manages its own open state */}
+            <TeamDayConfigButton
+              teamId={team.id}
+              date={date}
+              config={{ minJobs: team.minJobs ?? null, maxJobs: team.maxJobs ?? null, earliestStartTime: team.earliestStartTime ?? null }}
+              onSave={(minJobs, maxJobs, earliestStartTime) => {
+                onSaveLimits(minJobs, maxJobs, earliestStartTime);
+                setOpenWithCallback(false);
+              }}
+              onCopyToTomorrow={undefined}
+              onOpenChange={(isOpen) => { configOpenRef.current = isOpen; }}
+            />
           </div>
         </div>,
         document.body
@@ -756,15 +762,23 @@ function TeamHeaderRow({
 
 
 function TeamDayConfigButton({
-  teamId, date, config, onSave, onCopyToTomorrow,
+  teamId, date, config, onSave, onCopyToTomorrow, onOpenChange,
 }: {
   teamId: number;
   date: string;
   config: { minJobs: number | null; maxJobs: number | null; earliestStartTime: string | null } | null;
   onSave: (minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void;
   onCopyToTomorrow?: ((minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void) | undefined;
+  onOpenChange?: (isOpen: boolean) => void;
 }) {
   const [open, setOpen] = React.useState(false);
+  const setOpenWithCallback = React.useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    setOpen(prev => {
+      const next = typeof v === 'function' ? v(prev) : v;
+      onOpenChange?.(next);
+      return next;
+    });
+  }, [onOpenChange]);
   const [minJobs, setMinJobs] = React.useState<string>(config?.minJobs != null ? String(config.minJobs) : "");
   const [maxJobs, setMaxJobs] = React.useState<string>(config?.maxJobs != null ? String(config.maxJobs) : "");
   const [startTime, setStartTime] = React.useState<string>(config?.earliestStartTime ?? "");
@@ -788,7 +802,7 @@ function TeamDayConfigButton({
       isNaN(mj as number) ? null : mj,
       st,
     );
-    setOpen(false);
+    setOpenWithCallback(false);
   }
 
   function handleClear() {
@@ -796,7 +810,7 @@ function TeamDayConfigButton({
     setMinJobs("");
     setMaxJobs("");
     setStartTime("");
-    setOpen(false);
+    setOpenWithCallback(false);
   }
 
   function handleCopyToTomorrow() {
@@ -845,7 +859,7 @@ function TeamDayConfigButton({
     function handleClick(e: MouseEvent) {
       if (btnRef.current && btnRef.current.contains(e.target as Node)) return;
       if (popoverRef.current && popoverRef.current.contains(e.target as Node)) return;
-      setOpen(false);
+      setOpenWithCallback(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -856,7 +870,7 @@ function TeamDayConfigButton({
       <button
         ref={btnRef}
         title="Set daily limits for this team"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpenWithCallback(v => !v)}
         className={`w-7 h-7 flex items-center justify-center rounded-full border transition-colors ${
           hasConfig
             ? "bg-blue-100 text-blue-600 border-blue-300 hover:bg-blue-200"
@@ -869,7 +883,7 @@ function TeamDayConfigButton({
         <div ref={popoverRef} style={popoverStyle} className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64 space-y-3">
           <div className="flex items-center justify-between mb-1">
             <span className="text-xs font-semibold text-gray-700">Team Limits</span>
-            <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
+            <button onClick={() => setOpenWithCallback(false)} className="text-gray-400 hover:text-gray-600 text-sm leading-none">✕</button>
           </div>
 
           {/* Job count row */}
