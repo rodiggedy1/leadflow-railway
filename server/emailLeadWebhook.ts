@@ -1419,6 +1419,9 @@ export function registerEmailLeadWebhookRoute(app: Express): void {
     const zapierSecret = ENV.zapierWebhookSecret;
     const providedSecret = req.headers["x-zapier-secret"] as string | undefined;
 
+    // DEBUG: log header names and secret lengths to diagnose auth failures
+    console.log(`[EmailLead] Auth debug — configuredLen=${zapierSecret.length}, providedLen=${providedSecret?.length ?? 'MISSING'}, headers=${JSON.stringify(Object.keys(req.headers))}`);
+
     if (!verifyZapierSecret(providedSecret, zapierSecret)) {
       console.warn("[EmailLead] Rejected: invalid or missing X-Zapier-Secret header");
       res.status(401).json({ error: "Unauthorized" });
