@@ -351,10 +351,53 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   const [nextJobEtaTarget, setNextJobEtaTarget] = useState<{ id: number; customerName: string | null } | null>(null);
   // Custom exact-time ETA input ("HH:MM" in 24h format from <input type="time">)
   const [customEtaTime, setCustomEtaTime] = useState<string>("");
-  // Returns "HH:MM" for 1 hour from now in device local time
+  // Returns "HH:MM" for 1 hour from now, expressed in America/New_York time.
+  // Using device-local time here caused the default to be wrong on devices set to EST instead of EDT.
   function defaultEtaTime(): string {
     const d = new Date(Date.now() + 60 * 60 * 1000);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(d);
+    const hh = parts.find(p => p.type === "hour")?.value ?? "00";
+    const mm = parts.find(p => p.type === "minute")?.value ?? "00";
+    return `${hh === "24" ? "00" : hh}:${mm}`;
+  }
+
+  /**
+   * Convert an HH:MM string (from <input type="time">) to a UTC epoch ms value,
+   * treating the time as America/New_York — not the device's local timezone.
+   *
+   * Root cause of the 1-hour bug (2026-05-16):
+   *   GoGreen's phone was set to EST (UTC-5) instead of EDT (UTC-4).
+   *   new Date(today, hh, mm) on that device produced a timestamp 1 hour ahead
+   *   of what the label said, so the SMS showed 2:00 PM while the portal showed 1:00 PM.
+   */
+  function etaHHMMtoTimestamp(hhMm: string): number {
+    const [hh, mm] = hhMm.split(":").map(Number);
+    // Get today's date in ET so we use the right calendar day even near midnight.
+    const etDateParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(new Date());
+    const year  = Number(etDateParts.find(p => p.type === "year")?.value);
+    const month = Number(etDateParts.find(p => p.type === "month")?.value);
+    const day   = Number(etDateParts.find(p => p.type === "day")?.value);
+    // Determine the live ET UTC-offset (handles EST/EDT automatically).
+    const tzName = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York", timeZoneName: "shortOffset",
+    }).formatToParts(new Date()).find(p => p.type === "timeZoneName")?.value ?? "GMT-4";
+    const offsetMatch = tzName.match(/GMT([+-])(\d+)(?::(\d+))?/);
+    const sign        = offsetMatch?.[1] === "+" ? 1 : -1;
+    const offsetHours = sign * Number(offsetMatch?.[2] ?? 4);
+    const offsetMins  = sign * Number(offsetMatch?.[3] ?? 0);
+    // Build an ISO string with the explicit ET offset so Date.parse anchors correctly.
+    const pad2 = (n: number) => String(Math.abs(n)).padStart(2, "0");
+    const offsetStr = `${offsetHours >= 0 ? "+" : "-"}${pad2(offsetHours)}:${pad2(offsetMins)}`;
+    const iso = `${year}-${pad2(month)}-${pad2(day)}T${pad2(hh)}:${pad2(mm)}:00${offsetStr}`;
+    return new Date(iso).getTime();
   }
   const ETA_OPTIONS = [
     { label: "30 min",      value: "30 minutes" },
@@ -1258,35 +1301,26 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                 <button
                   disabled={(() => {
                     if (!customEtaTime || statusMutation.isPending) return true;
-                    // Disable if the chosen time is in the past or within 1 minute of now
-                    const [hh, mm] = customEtaTime.split(":").map(Number);
-                    const now = new Date();
-                    const chosen = new Date(
-                      now.getFullYear(), now.getMonth(), now.getDate(),
-                      hh, mm, 0, 0
-                    );
-                    return chosen.getTime() <= Date.now() + 60_000;
+                    // Interpret the time as ET (not device-local) to match the server and SMS.
+                    return etaHHMMtoTimestamp(customEtaTime) <= Date.now() + 60_000;
                   })()}
                   onClick={() => {
                     if (!etaModalFor || !customEtaTime) return;
-                    // Build the ETA date using the device's local time (which is what the cleaner sees)
-                    const [hh, mm] = customEtaTime.split(":").map(Number);
-                    const now = new Date();
-                    const etaDate = new Date(
-                      now.getFullYear(), now.getMonth(), now.getDate(),
-                      hh, mm, 0, 0
-                    );
-                    // Safety check — should never happen because button is disabled for past times,
-                    // but guard anyway
-                    if (etaDate.getTime() <= Date.now() + 60_000) return;
-                    // Format label in the device's local timezone (same timezone the cleaner is in)
-                    const label = `at ${etaDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`;
+                    // Anchor the timestamp to America/New_York so it matches the SMS regardless
+                    // of what timezone the cleaner's device is set to (bug fix: 2026-05-16).
+                    const etaMs = etaHHMMtoTimestamp(customEtaTime);
+                    if (etaMs <= Date.now() + 60_000) return;
+                    // Format the label in ET too — keeps portal display and SMS in sync.
+                    const label = `at ${new Date(etaMs).toLocaleTimeString("en-US", {
+                      hour: "numeric", minute: "2-digit", hour12: true,
+                      timeZone: "America/New_York",
+                    })}`;
                     const targetId = nextJobEtaTarget?.id ?? job.id;
                     statusMutation.mutate({
                       cleanerJobId: targetId,
                       status: etaModalFor,
                       etaLabel: label,
-                      etaTimestampOverride: etaDate.getTime(),
+                      etaTimestampOverride: etaMs,
                     });
                     setShowEtaModal(false);
                     setEtaModalFor(null);
