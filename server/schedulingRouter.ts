@@ -873,8 +873,17 @@ export const schedulingRouter = router({
         enrichedByTeam.get(tid)!.push(ej);
       }
       for (const [tid, teamEnriched] of Array.from(enrichedByTeam.entries())) {
-        // Sort by routeOrder to find the actual first job
-        teamEnriched.sort((a, b) => (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0));
+        // Sort by routeOrder first (saved assignments), then by serviceDateTime as tiebreaker.
+        // This must match the UI sort order so homeDriveTimeSecs is attributed to the
+        // correct first job. Without the serviceDateTime tiebreaker, DB insertion order
+        // was used, causing a consecutive drive time to be shown as "from home".
+        teamEnriched.sort((a, b) => {
+          const routeOrderDiff = (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0);
+          if (routeOrderDiff !== 0) return routeOrderDiff;
+          const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
+          const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
+          return ta - tb;
+        });
         const firstJob = teamEnriched[0];
         if (firstJob) {
           const secs = estimatedDriveMap.get(firstJob.id);
