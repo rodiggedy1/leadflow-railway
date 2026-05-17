@@ -172,7 +172,7 @@ async function startServer() {
         const cookieOpts = getSessionCookieOptions(req);
         res.cookie(AGENT_COOKIE_NAME, token, { ...cookieOpts, maxAge: ONE_YEAR_MS });
         console.log(`[Preview] Auto-login as ${agent.email} (id=${agent.id})`);
-        return res.redirect("/");
+        return res.redirect("/admin/leads");
       } catch (err) {
         console.error("[Preview] Auto-login error:", err);
         return res.status(500).send("Preview login error");
