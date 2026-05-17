@@ -2256,6 +2256,8 @@ export const schedulingTeams = mysqlTable("scheduling_teams", {
   earliestStartTime: varchar("earliestStartTime", { length: 5 }),
   /** Short display tag shown in the scheduling header (e.g. "VIP", "Flex", "AM") */
   tag: varchar("tag", { length: 20 }),
+  /** Comma-separated DC/MD/VA region tags for first-job preference (e.g. "DC,MD") */
+  regionTags: varchar("regionTags", { length: 50 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
