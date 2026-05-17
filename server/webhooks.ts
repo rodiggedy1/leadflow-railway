@@ -2713,7 +2713,7 @@ async function handleCallAnswered(event: any): Promise<void> {
         console.log(`[CallStatus] Updated lastCalledAt for session ${matchedSession.id} (lead: ${callerLabel}, agent: ${callingAgentName})`);
         // Broadcast so Lead Ops refreshes the card immediately
         const { broadcastOpsUpdate } = await import("./sseBroadcast");
-        broadcastOpsUpdate("lead_activity");
+        broadcastOpsUpdate("lead_update");
       }
     } catch (e) {
       console.error("[CallStatus] Failed to update lastCalledAt on conversationSession:", e);
