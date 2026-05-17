@@ -27,6 +27,9 @@ import { registerInterviewUploadRoutes } from "../interviewUpload";
 import { registerDeepgramStreamRoute } from "../deepgramStream";
 import { registerAgentLoginRoute } from "../agentLoginRoute";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
+import { signAgentSession } from "./agentAuth";
+import { getSessionCookieOptions } from "./cookies";
+import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -142,6 +145,23 @@ async function startServer() {
   registerCallCenterCronRoute(app);
   // Plain REST login — bypasses /api/trpc to avoid platform rate limit on that path
   registerAgentLoginRoute(app as any);
+
+  // Preview auto-login: when PREVIEW_MODE=true, visiting /api/preview-login sets
+  // an admin agent session cookie automatically so the UI is accessible without credentials.
+  if (ENV.isPreviewMode) {
+    app.get("/api/preview-login", async (req, res) => {
+      const token = await signAgentSession({
+        agentId: 0,
+        agentName: "Preview Admin",
+        agentEmail: "preview@maidinblack.com",
+        isAdmin: true,
+      });
+      const cookieOpts = getSessionCookieOptions(req);
+      res.cookie(AGENT_COOKIE_NAME, token, { ...cookieOpts, maxAge: ONE_YEAR_MS });
+      res.redirect("/");
+    });
+    console.log("[Preview] Auto-login endpoint registered: GET /api/preview-login");
+  }
   // TEMPORARY emergency magic-link login — remove after Manus support fixes 429
   registerEmergencyAgentLoginRoute(app as any);
   // tRPC API
