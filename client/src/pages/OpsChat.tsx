@@ -14,6 +14,7 @@ import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
+import LeadOps from "@/components/LeadOps";
 import CsInbox, { type InboxFilter } from "@/components/CsInbox";
 import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
@@ -68,6 +69,7 @@ import {
   BellOff,
   Briefcase,
   Headphones,
+  Zap,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -922,7 +924,7 @@ function CmdMentionBadge({ callerName, hidden, channelMsgs, myNames }: {
 interface OpsChatProps {
   onMinimize?: () => void;
   onClose?: () => void;
-  initialTab?: "today" | "channels" | "cs";
+  initialTab?: "today" | "channels" | "cs" | "leadops";
 }
 
 export default function OpsChat({ onMinimize, onClose, initialTab: initialTabProp }: OpsChatProps = {}) {
@@ -941,7 +943,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [csFilter, setCsFilter] = useState<InboxFilter>("All");
-  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs">(
+  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
   const [activeChannel, setActiveChannel] = useState<string>("command");
@@ -970,8 +972,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
-  const handleSetActiveTab = (tab: "today" | "channels" | "cs") => {
-    if (tab === "cs") {
+  const handleSetActiveTab = (tab: "today" | "channels" | "cs" | "leadops") => {
+    if (tab === "leadops") {
+      setActiveTab("leadops");
+      setSidebarCollapsed(true);
+    } else if (tab === "cs") {
       setActiveTab("cs");
       setSidebarCollapsed(true);
     } else if (tab === "channels" && activeTab === "today") {
@@ -2187,7 +2192,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             {([
               { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
               { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
-              { id: "cs"       as const, label: "CS",   icon: <Headphones    className="w-3.5 h-3.5" /> },
+              { id: "cs"       as const, label: "CS",      icon: <Headphones className="w-3.5 h-3.5" /> },
+              { id: "leadops"  as const, label: "Lead Ops", icon: <Zap        className="w-3.5 h-3.5" /> },
             ]).map((tab) => (
               <button
                 key={tab.id}
@@ -2930,6 +2936,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {activeTab === "cs" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <CsInbox onSwitchTab={handleSetActiveTab} activeFilter={csFilter} setActiveFilter={setCsFilter} />
+          </div>
+        )}
+
+        {/* VIEW: Lead Ops */}
+        {activeTab === "leadops" && (
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <LeadOps />
           </div>
         )}
       </div>

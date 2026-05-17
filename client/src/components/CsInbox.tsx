@@ -200,7 +200,7 @@ function jobStatusStyle(s: JobStatus): string {
 
 export type InboxFilter = "All" | "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type CsInboxProps = {
-  onSwitchTab?: (tab: "today" | "channels" | "cs") => void;
+  onSwitchTab?: (tab: "today" | "channels" | "cs" | "leadops") => void;
   activeFilter?: InboxFilter;
   setActiveFilter?: (f: InboxFilter) => void;
 };
