@@ -4587,6 +4587,101 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         };
       });
     }),
+
+    /**
+     * leads.getNextBestAction — AI-powered contextual coaching for the active lead.
+     * Returns a headline, body copy, suggested reply text, and a recommended action
+     * (call | text | quote | follow_up) based on the lead's conversation history,
+     * status, source, and service details.
+     */
+    getNextBestAction: agentProcedure
+      .input(z.object({ sessionId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const [session] = await db
+          .select({
+            id: conversationSessions.id,
+            leadName: conversationSessions.leadName,
+            leadSource: conversationSessions.leadSource,
+            stage: conversationSessions.stage,
+            serviceType: conversationSessions.serviceType,
+            bedrooms: conversationSessions.bedrooms,
+            bathrooms: conversationSessions.bathrooms,
+            quotedPrice: conversationSessions.quotedPrice,
+            isBooked: conversationSessions.isBooked,
+            messageHistory: conversationSessions.messageHistory,
+            lastCalledAt: conversationSessions.lastCalledAt,
+            followUpAt: conversationSessions.followUpAt,
+          })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!session) return null;
+
+        // Parse message history — keep last 12 messages for context
+        type MsgEntry = { role: string; content: string; ts?: number };
+        let history: MsgEntry[] = [];
+        try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+        const recentMsgs = history
+          .filter((m: MsgEntry) => m.role !== "system")
+          .slice(-12)
+          .map((m: MsgEntry) => `${m.role === "user" ? "Customer" : "Agent"}: ${m.content}`)
+          .join("\n");
+
+        const hasReplied = history.some((m: MsgEntry) => m.role === "user");
+        const msgCount = history.filter((m: MsgEntry) => m.role !== "system").length;
+        const isFollowUpDue = session.followUpAt && new Date(session.followUpAt).getTime() < Date.now();
+
+        const systemPrompt = `You are an elite home-services sales coach for Maids in Black, a residential cleaning company.
+Your job is to advise agents on the single best action to take RIGHT NOW to convert a lead into a booking.
+Always respond with valid JSON only — no markdown, no explanation outside the JSON.`;
+
+        const userPrompt = `Lead context:
+- Name: ${session.leadName ?? "Unknown"}
+- Source: ${session.leadSource ?? "unknown"}
+- Service: ${session.serviceType ?? "cleaning"}
+- Property: ${session.bedrooms ?? "?"} bed / ${session.bathrooms ?? "?"} bath
+- Quoted price: ${session.quotedPrice ? `$${session.quotedPrice}` : "not quoted yet"}
+- Stage: ${session.stage ?? "NEW"}
+- Already replied: ${hasReplied ? "yes" : "no"}
+- Total messages exchanged: ${msgCount}
+- Follow-up overdue: ${isFollowUpDue ? "yes" : "no"}
+- Last called: ${session.lastCalledAt ? new Date(session.lastCalledAt).toLocaleString() : "never"}
+
+Recent conversation (newest last):
+${recentMsgs || "(no messages yet)"}
+
+Return JSON with exactly these fields:
+{
+  "headline": "<short imperative headline, max 8 words>",
+  "body": "<1-2 sentence coaching tip, max 30 words>",
+  "suggestedReply": "<ready-to-send SMS text the agent can use, or empty string if calling is better>",
+  "action": "call" | "text" | "quote" | "follow_up"
+}`;
+
+        const llmResult = await invokeLLM({
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          response_format: { type: "json_object" },
+        });
+
+        const raw = llmResult?.choices?.[0]?.message?.content;
+        const rawStr = typeof raw === "string" ? raw : "{}";
+        try {
+          const parsed = JSON.parse(rawStr) as {
+            headline: string;
+            body: string;
+            suggestedReply: string;
+            action: "call" | "text" | "quote" | "follow_up";
+          };
+          return parsed;
+        } catch {
+          return null;
+        }
+      }),
   }),
   /**
    * agents — agent auth + lead action procedures..
