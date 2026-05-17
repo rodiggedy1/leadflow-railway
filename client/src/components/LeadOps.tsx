@@ -367,6 +367,23 @@ export default function LeadOps() {
     refetchInterval: 30_000,
   });
 
+  // Layer 2: real conversation thread for the active lead
+  const { data: activeSession, isLoading: isLoadingConvo } = trpc.leads.getById.useQuery(
+    { id: activeLead?.id ?? 0 },
+    { enabled: !!activeLead, refetchInterval: 15_000 }
+  );
+
+  // Parse messageHistory into typed messages
+  type ConvoMsg = { role: string; content: string; ts?: number };
+  const convoMessages = React.useMemo<ConvoMsg[]>(() => {
+    if (!activeSession?.messageHistory) return [];
+    try {
+      return JSON.parse(activeSession.messageHistory) as ConvoMsg[];
+    } catch {
+      return [];
+    }
+  }, [activeSession?.messageHistory]);
+
   // Set first lead as active once data loads
   React.useEffect(() => {
     if (leads.length > 0 && !activeLead) {
@@ -744,17 +761,58 @@ export default function LeadOps() {
                         </div>
                       </div>
 
-                      <div className="space-y-4 p-4">
-                        <div className="max-w-[75%] rounded-3xl bg-slate-100 p-4">
-                          <div className="mb-1 text-xs font-bold text-slate-400">{activeLead.source} request</div>
-                          <p className="text-sm leading-6">
-                            {activeLead.service} • {activeLead.bedrooms} bed / {activeLead.bathrooms} bath
-                          </p>
-                        </div>
-                        <div className="ml-auto max-w-[78%] rounded-3xl bg-slate-950 p-4 text-white">
-                          <div className="mb-1 text-xs font-bold text-white/50">AI draft</div>
-                          <p className="text-sm leading-6">{composer}</p>
-                        </div>
+                      {/* Message thread */}
+                      <div className="max-h-[420px] overflow-y-auto space-y-3 p-4" id="lead-convo-scroll">
+                        {isLoadingConvo ? (
+                          <div className="flex justify-center py-6">
+                            <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+                          </div>
+                        ) : convoMessages.length === 0 ? (
+                          <div className="rounded-3xl bg-slate-50 p-4">
+                            <div className="mb-1 text-xs font-bold text-slate-400">{activeLead.source} request</div>
+                            <p className="text-sm leading-6 text-slate-600">
+                              {activeLead.service} • {activeLead.bedrooms} bed / {activeLead.bathrooms} bath
+                            </p>
+                            <p className="mt-2 text-xs text-slate-400">No messages yet — send the first text below.</p>
+                          </div>
+                        ) : (
+                          convoMessages.map((msg, i) => {
+                            const isUser = msg.role === "user";
+                            const isSystem = msg.role === "system";
+                            if (isSystem) return null;
+                            const timeLabel = msg.ts
+                              ? new Date(msg.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                              : null;
+                            return (
+                              <div
+                                key={i}
+                                className={cn(
+                                  "max-w-[82%]",
+                                  isUser ? "mr-auto" : "ml-auto"
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "rounded-3xl p-4 text-sm leading-6",
+                                    isUser
+                                      ? "rounded-tl-md bg-slate-100 text-slate-800"
+                                      : "rounded-tr-md bg-slate-950 text-white"
+                                  )}
+                                >
+                                  {msg.content}
+                                </div>
+                                {timeLabel && (
+                                  <div className={cn(
+                                    "mt-1 text-[10px] text-slate-400",
+                                    isUser ? "text-left" : "text-right"
+                                  )}>
+                                    {isUser ? activeLead.name.split(" ")[0] : "Agent"} · {timeLabel}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
 
                       <div className="border-t border-slate-200 p-4">
