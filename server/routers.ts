@@ -839,6 +839,14 @@ export const appRouter = router({
           // Always sync isBooked flag when stage is set to BOOKED
           stageUpdates.isBooked = 1;
           stageUpdates.bookedAt = new Date();
+          // Credit the assigned agent — fetch assignedAgentId from the session
+          const [existing] = await db
+            .select({ assignedAgentId: conversationSessions.assignedAgentId, bookedByAgentId: conversationSessions.bookedByAgentId })
+            .from(conversationSessions)
+            .where(eq(conversationSessions.id, input.sessionId));
+          if (existing && !existing.bookedByAgentId) {
+            stageUpdates.bookedByAgentId = existing.assignedAgentId ?? null;
+          }
         } else {
           // Moving away from BOOKED — clear the flag
           stageUpdates.isBooked = 0;
