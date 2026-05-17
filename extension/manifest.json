@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "LeadFlow × Thumbtack",
+  "version": "1.1.0",
+  "description": "Auto-generate Madison's first message for accepted Thumbtack leads and update LeadFlow.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "cookies",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.thumbtack.com/*",
+    "https://quote.maidinblack.com/*",
+    "https://leadflowqf-caerhauj.manus.space/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.thumbtack.com/pro-leads",
+        "https://www.thumbtack.com/pro-leads/*",
+        "https://www.thumbtack.com/messages",
+        "https://www.thumbtack.com/messages/*",
+        "https://www.thumbtack.com/pro-inbox/messages",
+        "https://www.thumbtack.com/pro-inbox/messages/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

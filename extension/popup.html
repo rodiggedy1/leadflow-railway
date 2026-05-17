@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeadFlow × Thumbtack</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #f0f0f0;
+      width: 380px;
+      min-height: 200px;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #222;
+    }
+    .header-logo {
+      width: 28px;
+      height: 28px;
+      background: linear-gradient(135deg, #e07b54, #c45e3a);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+    .header-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f0f0f0;
+    }
+    .header-sub {
+      font-size: 11px;
+      color: #666;
+      margin-top: 1px;
+    }
+    .settings-btn {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: #555;
+      cursor: pointer;
+      font-size: 16px;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .settings-btn:hover { color: #aaa; background: #1a1a1a; }
+
+    /* SETTINGS PANEL */
+    #settings-panel {
+      display: none;
+      padding: 14px 16px;
+      border-bottom: 1px solid #222;
+    }
+    #settings-panel.visible { display: block; }
+    .settings-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .settings-input {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #f0f0f0;
+      font-size: 12px;
+      padding: 8px 10px;
+      outline: none;
+      margin-bottom: 10px;
+    }
+    .settings-input:focus { border-color: #e07b54; }
+    .settings-save {
+      background: #e07b54;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .settings-save:hover { background: #c45e3a; }
+
+    /* MAIN CONTENT */
+    #main-panel { padding: 14px 16px; }
+
+    .status-idle {
+      text-align: center;
+      padding: 24px 0 20px;
+      color: #555;
+      font-size: 13px;
+    }
+    .status-idle .icon { font-size: 28px; margin-bottom: 8px; }
+
+    /* LEAD CARD */
+    #lead-card { display: none; }
+    #lead-card.visible { display: block; }
+
+    .lead-info {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .lead-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f0f0f0;
+      margin-bottom: 2px;
+    }
+    .lead-meta {
+      font-size: 11px;
+      color: #777;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .lead-meta span { display: flex; align-items: center; gap: 3px; }
+
+    .msg-label {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .regenerate-btn {
+      background: none;
+      border: none;
+      color: #e07b54;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .regenerate-btn:hover { color: #c45e3a; }
+    .regenerate-btn:disabled { color: #555; cursor: not-allowed; }
+
+    #message-box {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      color: #f0f0f0;
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 10px 12px;
+      outline: none;
+      resize: vertical;
+      min-height: 120px;
+      font-family: inherit;
+      margin-bottom: 12px;
+    }
+    #message-box:focus { border-color: #e07b54; }
+
+    .loading-msg {
+      text-align: center;
+      padding: 20px 0;
+      color: #888;
+      font-size: 12px;
+    }
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #333;
+      border-top-color: #e07b54;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      flex: 1;
+      padding: 9px 0;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #e07b54; color: white; }
+    .btn-primary:hover:not(:disabled) { background: #c45e3a; }
+    .btn-secondary { background: #1e1e1e; color: #aaa; border: 1px solid #333; }
+    .btn-secondary:hover:not(:disabled) { background: #2a2a2a; color: #f0f0f0; }
+
+    .toast {
+      margin-top: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      display: none;
+    }
+    .toast.success { background: #1a2e1a; color: #4caf50; border: 1px solid #2d4a2d; display: block; }
+    .toast.error { background: #2e1a1a; color: #f44336; border: 1px solid #4a2d2d; display: block; }
+
+    /* MANUAL INPUT fallback */
+    #manual-panel { display: none; }
+    #manual-panel.visible { display: block; }
+    .manual-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .manual-grid .full { grid-column: 1 / -1; }
+    .field-label {
+      font-size: 10px;
+      color: #666;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .field-input {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 5px;
+      color: #f0f0f0;
+      font-size: 12px;
+      padding: 6px 8px;
+      outline: none;
+    }
+    .field-input:focus { border-color: #e07b54; }
+    .field-select {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 5px;
+      color: #f0f0f0;
+      font-size: 12px;
+      padding: 6px 8px;
+      outline: none;
+      cursor: pointer;
+    }
+    .generate-manual-btn {
+      width: 100%;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      color: #e07b54;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px;
+      cursor: pointer;
+      margin-bottom: 12px;
+    }
+    .generate-manual-btn:hover { background: #333; }
+    .manual-toggle {
+      font-size: 11px;
+      color: #555;
+      cursor: pointer;
+      text-align: center;
+      margin-top: 8px;
+      padding: 4px;
+    }
+    .manual-toggle:hover { color: #888; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-logo">M</div>
+    <div>
+      <div class="header-title">LeadFlow × Thumbtack</div>
+      <div class="header-sub">Madison's First Message</div>
+    </div>
+    <button class="settings-btn" id="settings-toggle" title="Settings">⚙</button>
+    <button class="settings-btn" id="logs-toggle" title="View Logs" style="margin-left:4px">📋</button>
+  </div>
+
+  <!-- Settings Panel -->
+  <div id="settings-panel">
+    <div class="settings-label">LeadFlow URL</div>
+    <input class="settings-input" id="setting-url" type="url" placeholder="https://quote.maidinblack.com" />
+    <button class="settings-save" id="settings-save-btn">Save</button>
+  </div>
+
+  <div id="main-panel">
+    <!-- Idle state -->
+    <div id="idle-state" class="status-idle">
+      <div class="icon">📋</div>
+      Open a Thumbtack lead to get started
+      <div class="manual-toggle" id="manual-toggle-btn">or enter lead info manually ↓</div>
+    </div>
+
+    <!-- Manual input panel -->
+    <div id="manual-panel">
+      <div class="manual-grid">
+        <div>
+          <div class="field-label">First Name</div>
+          <input class="field-input" id="m-first" placeholder="Sarah" />
+        </div>
+        <div>
+          <div class="field-label">Last Name</div>
+          <input class="field-input" id="m-last" placeholder="Johnson" />
+        </div>
+        <div>
+          <div class="field-label">Phone</div>
+          <input class="field-input" id="m-phone" placeholder="+12025551234" />
+        </div>
+        <div>
+          <div class="field-label">Service</div>
+          <select class="field-select" id="m-service">
+            <option value="Standard Cleaning">Standard Cleaning</option>
+            <option value="Deep Cleaning">Deep Cleaning</option>
+            <option value="Move-In/Move-Out">Move-In/Move-Out</option>
+            <option value="Post Construction">Post Construction</option>
+          </select>
+        </div>
+        <div>
+          <div class="field-label">Bedrooms</div>
+          <select class="field-select" id="m-beds">
+            <option value="Studio">Studio</option>
+            <option value="1 Bedroom">1 Bedroom</option>
+            <option value="2 Bedrooms" selected>2 Bedrooms</option>
+            <option value="3 Bedrooms">3 Bedrooms</option>
+            <option value="4 Bedrooms">4 Bedrooms</option>
+            <option value="5 Bedrooms">5 Bedrooms</option>
+          </select>
+        </div>
+        <div>
+          <div class="field-label">Bathrooms</div>
+          <select class="field-select" id="m-baths">
+            <option value="1 Bathroom">1 Bathroom</option>
+            <option value="1.5 Bathrooms">1.5 Bathrooms</option>
+            <option value="2 Bathrooms" selected>2 Bathrooms</option>
+            <option value="2.5 Bathrooms">2.5 Bathrooms</option>
+            <option value="3 Bathrooms">3 Bathrooms</option>
+            <option value="4 Bathrooms">4 Bathrooms</option>
+          </select>
+        </div>
+        <div class="full">
+          <div class="field-label">Notes / Additional Info</div>
+          <input class="field-input" id="m-notes" placeholder="e.g. has pets, 2nd floor apartment" />
+        </div>
+      </div>
+      <button class="generate-manual-btn" id="generate-manual-btn">✨ Generate Message</button>
+    </div>
+
+    <!-- Lead detected card -->
+    <div id="lead-card">
+      <div class="lead-info" id="lead-info-block">
+        <div class="lead-name" id="lead-name-display">—</div>
+        <div class="lead-meta" id="lead-meta-display"></div>
+      </div>
+
+      <div id="loading-state" class="loading-msg" style="display:none">
+        <span class="spinner"></span> Generating message…
+      </div>
+
+      <div id="message-area" style="display:none">
+        <div class="msg-label">
+          Madison's Message
+          <button class="regenerate-btn" id="regenerate-btn">↻ Regenerate</button>
+        </div>
+        <textarea id="message-box" rows="6"></textarea>
+        <div class="actions">
+          <button class="btn btn-secondary" id="dismiss-btn">Dismiss</button>
+          <button class="btn btn-primary" id="send-btn">Send via SMS + Thumbtack</button>
+        </div>
+        <div id="toast" class="toast"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="logs-panel" style="display:none;padding:8px;background:#111;border-top:1px solid #333;max-height:200px;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <span style="color:#aaa;font-size:11px;font-weight:600;">Background Logs</span>
+      <button id="logs-clear-btn" style="font-size:10px;background:#333;color:#aaa;border:none;padding:2px 6px;border-radius:3px;cursor:pointer;">Clear</button>
+    </div>
+    <pre id="logs-content" style="font-size:10px;color:#ccc;margin:0;white-space:pre-wrap;word-break:break-all;"></pre>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
