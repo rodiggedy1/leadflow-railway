@@ -86,7 +86,17 @@ function formatLastTouch(lead: RealLead): string {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function StatusPill({ status }: { status: RealLead["status"] }) {
+function StatusPill({
+  status,
+  claimedAt,
+  onClaim,
+  isClaiming,
+}: {
+  status: RealLead["status"];
+  claimedAt?: number | null;
+  onClaim?: (e: React.MouseEvent) => void;
+  isClaiming?: boolean;
+}) {
   const styles: Record<RealLead["status"], string> = {
     unclaimed:      "bg-rose-50 text-rose-700 border-rose-200",
     awaiting_reply: "bg-amber-50 text-amber-700 border-amber-200",
@@ -94,6 +104,31 @@ function StatusPill({ status }: { status: RealLead["status"] }) {
     follow_up:      "bg-slate-50 text-slate-700 border-slate-200",
     booked:         "bg-emerald-50 text-emerald-700 border-emerald-200",
   };
+
+  // Claimed pill — show agent name + time
+  if (status !== "unclaimed" && claimedAt) {
+    const mins = Math.floor((Date.now() - claimedAt) / 60_000);
+    const label = mins < 1 ? "Claimed just now" : `Claimed ${mins}m ago`;
+    return (
+      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+        {label}
+      </span>
+    );
+  }
+
+  // Clickable "Needs claim" pill
+  if (status === "unclaimed" && onClaim) {
+    return (
+      <button
+        onClick={onClaim}
+        disabled={isClaiming}
+        className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100 active:scale-95 transition disabled:opacity-50"
+      >
+        {isClaiming ? "Claiming…" : "Needs claim"}
+      </button>
+    );
+  }
+
   const labels: Record<RealLead["status"], string> = {
     unclaimed:      "Needs claim",
     awaiting_reply: "Reply due",
@@ -112,10 +147,16 @@ function LeadCard({
   lead,
   active,
   onClick,
+  onClaim,
+  claimedAt,
+  isClaiming,
 }: {
   lead: RealLead;
   active: boolean;
   onClick: (l: RealLead) => void;
+  onClaim?: (e: React.MouseEvent) => void;
+  claimedAt?: number | null;
+  isClaiming?: boolean;
 }) {
   const isCritical = lead.status === "unclaimed" && lead.ageMs < 120_000;
   return (
@@ -140,7 +181,7 @@ function LeadCard({
           </div>
           <p className="mt-1 text-sm font-medium text-slate-500">{lead.service}</p>
         </div>
-        <StatusPill status={lead.status} />
+        <StatusPill status={lead.status} onClaim={onClaim} claimedAt={claimedAt} isClaiming={isClaiming} />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
@@ -355,6 +396,8 @@ export default function LeadOps() {
   const [composer, setComposer] = useState("");
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  // Track when each lead was claimed (client-side, keyed by sessionId)
+  const [claimedAtMap, setClaimedAtMap] = useState<Record<number, number>>({});
 
   const utils = trpc.useUtils();
 
@@ -427,8 +470,10 @@ export default function LeadOps() {
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const claimMutation = trpc.agents.claimLead.useMutation({
-    onSuccess: () => {
-      toast.success("Lead claimed");
+    onSuccess: (_data, variables) => {
+      toast.success("Lead claimed ✓");
+      // Record claim time so the pill shows "Claimed Xm ago"
+      setClaimedAtMap((prev) => ({ ...prev, [variables.sessionId]: Date.now() }));
       refreshLeads();
     },
     onError: (e) => toast.error(e.message),
@@ -471,6 +516,14 @@ export default function LeadOps() {
   const handleClaim = () => {
     if (!activeLead) return;
     claimMutation.mutate({ sessionId: activeLead.id });
+  };
+
+  const handleClaimFromCard = (lead: RealLead) => (e: React.MouseEvent) => {
+    e.stopPropagation(); // don't also select the card
+    claimMutation.mutate({ sessionId: lead.id });
+    // Also select the lead so the detail panel opens
+    setActiveLead(lead);
+    setComposer(buildDraft(lead));
   };
 
   const handleSend = () => {
@@ -609,6 +662,9 @@ export default function LeadOps() {
                 lead={lead}
                 active={activeLead?.id === lead.id}
                 onClick={handleSelectLead}
+                onClaim={lead.status === "unclaimed" ? handleClaimFromCard(lead) : undefined}
+                claimedAt={claimedAtMap[lead.id] ?? null}
+                isClaiming={claimMutation.isPending && claimMutation.variables?.sessionId === lead.id}
               />
             ))}
           </div>
