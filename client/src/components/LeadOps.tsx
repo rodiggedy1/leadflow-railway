@@ -504,8 +504,10 @@ export default function LeadOps() {
     onSuccess: () => {
       toast.success("Lead marked as booked 🎉");
       refreshLeads();
-      // Also refresh Live Team panel so bookedToday count updates
+      // Refresh Live Team panel so bookedToday count updates
       utils.leads.getTeamActivity.invalidate();
+      // Refresh CommandChat today's bookings number
+      utils.leads.stats.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });
