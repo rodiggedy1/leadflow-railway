@@ -4605,6 +4605,9 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             extras: conversationSessions.extras,
             reactivationLastPrice: conversationSessions.reactivationLastPrice,
             reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+            leadName: conversationSessions.leadName,
+            bookedByAgentName: conversationSessions.bookedByAgentName,
+            assignedAgentName: conversationSessions.assignedAgentName,
           })
           .from(conversationSessions)
           .where(
@@ -4614,10 +4617,17 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           ),
       ]);
       const rangeLeads = claimedLeads; // alias for claimed count logic below
+      // Build the full bookedList for the total bar dropdown (matches CommandChat leads.stats format)
+      const teamBookedList = bookedLeads.map(r => ({
+        leadName: r.leadName ?? 'Unknown',
+        bookedByAgentName: r.bookedByAgentName ?? r.assignedAgentName ?? null,
+        amount: calcBookedRevenue(r),
+        bookedAt: r.bookedAt ? new Date(r.bookedAt).getTime() : null,
+      })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
 
       type AgentRow = typeof allAgents[number];
       type LeadRow = typeof rangeLeads[number];
-      return allAgents.map((agent: AgentRow) => {
+      const agentStats = allAgents.map((agent: AgentRow) => {
         const onlineCutoff = now - 5 * 60 * 1000; // 5 min
         const isOnline = agent.lastSeenAt
           ? new Date(agent.lastSeenAt).getTime() > onlineCutoff
@@ -4678,6 +4688,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           bookedToday: agentBookedLeads.length,
         };
       });
+      return { agents: agentStats, teamBookedList };
     }),
 
     /**

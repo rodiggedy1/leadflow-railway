@@ -35,6 +35,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { toast } from "sonner";
 
@@ -419,9 +424,11 @@ export default function LeadOps() {
   });
 
   // Layer 4: real Live Team data
-  const { data: teamActivity = [] } = trpc.leads.getTeamActivity.useQuery({ range: teamRange }, {
+  const { data: teamActivityData } = trpc.leads.getTeamActivity.useQuery({ range: teamRange }, {
     refetchInterval: 30_000,
   });
+  const teamActivity = teamActivityData?.agents ?? [];
+  const teamBookedList = teamActivityData?.teamBookedList ?? [];
 
   // Layer 2: real conversation thread for the active lead
   const { data: activeSession, isLoading: isLoadingConvo } = trpc.leads.getById.useQuery(
@@ -1236,23 +1243,52 @@ export default function LeadOps() {
                     </div>
                   </div>
 
-                  {/* Total bar — matches CommandChat today dropdown */}
-                  {teamActivity.length > 0 && (() => {
+                  {/* Total bar with dropdown — matches CommandChat booking widget */}
+                  {(() => {
                     const totalBooked = teamActivity.reduce((s, a) => s + (a.bookedCount ?? 0), 0);
                     const totalRevenue = teamActivity.reduce((s, a) => s + (a.bookedRevenue ?? 0), 0);
+                    const rangeLabel = teamRange === 'today' ? 'Today' : teamRange === 'week' ? 'This Week' : teamRange === 'month' ? 'This Month' : 'All Time';
                     return (
-                      <div className="mb-4 rounded-2xl bg-slate-950 px-4 py-3 text-white flex items-center justify-between">
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                            {teamRange === 'today' ? 'Today' : teamRange === 'week' ? 'This Week' : teamRange === 'month' ? 'This Month' : 'All Time'}
+                      <Tooltip delayDuration={100}>
+                        <TooltipTrigger asChild>
+                          <div className="mb-4 rounded-2xl bg-slate-950 px-4 py-3 text-white flex items-center justify-between cursor-pointer hover:bg-slate-900 transition-colors">
+                            <div>
+                              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{rangeLabel}</div>
+                              <div className="text-lg font-black">{totalBooked} booked</div>
+                            </div>
+                            <div className="text-right flex items-center gap-2">
+                              <div>
+                                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Revenue</div>
+                                <div className="text-lg font-black text-emerald-400">${totalRevenue.toLocaleString()}</div>
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-slate-400" />
+                            </div>
                           </div>
-                          <div className="text-lg font-black">{totalBooked} booked</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Revenue</div>
-                          <div className="text-lg font-black text-emerald-400">${totalRevenue.toLocaleString()}</div>
-                        </div>
-                      </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[230px] max-w-[290px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
+                          <div className="px-3 py-2.5 border-b border-white/10">
+                            <p className="text-[12px] font-semibold text-white">${totalRevenue.toLocaleString()} booked {rangeLabel.toLowerCase()}</p>
+                            <p className="text-[10px] text-white/50">{totalBooked} booking{totalBooked !== 1 ? 's' : ''}</p>
+                          </div>
+                          {teamBookedList.length > 0 ? (
+                            <div className="divide-y divide-white/[0.06] max-h-64 overflow-y-auto">
+                              {teamBookedList.map((b, i) => (
+                                <div key={i} className="px-3 py-2 flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-medium text-white truncate">{b.leadName}</p>
+                                    {b.bookedByAgentName && (
+                                      <p className="text-[10px] text-white/40 truncate">by {b.bookedByAgentName}</p>
+                                    )}
+                                  </div>
+                                  <span className="text-[11px] font-semibold text-emerald-400 shrink-0">${b.amount.toLocaleString()}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="px-3 py-2.5 text-[11px] text-white/40">No bookings yet</p>
+                          )}
+                        </TooltipContent>
+                      </Tooltip>
                     );
                   })()}
 
