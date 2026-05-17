@@ -384,13 +384,25 @@ export default function LeadOps() {
     }
   }, [activeSession?.messageHistory]);
 
-  // Set first lead as active once data loads
+  // Set first lead as active once data loads; also sync activeLead from server
+  // after mutations (book, close, claim) so status/filterTag stay current.
   React.useEffect(() => {
-    if (leads.length > 0 && !activeLead) {
+    if (leads.length === 0) return;
+    if (!activeLead) {
       setActiveLead(leads[0]);
       setComposer(buildDraft(leads[0]));
+    } else {
+      // Sync the active lead's fields from the freshly-fetched list
+      const updated = leads.find((l) => l.id === activeLead.id);
+      if (updated && (
+        updated.status !== activeLead.status ||
+        updated.filterTag !== activeLead.filterTag ||
+        updated.assignedAgentId !== activeLead.assignedAgentId
+      )) {
+        setActiveLead(updated);
+      }
     }
-  }, [leads, activeLead]);
+  }, [leads]); // intentionally omit activeLead to avoid loop
 
   // Auto-scroll conversation to bottom when messages update
   React.useEffect(() => {
