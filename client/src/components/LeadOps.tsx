@@ -18,7 +18,7 @@ import {
   AlertTriangle,
   Flame,
   Users,
-  MoreHorizontal,
+  UserPlus,
   ShieldCheck,
   Target,
   Timer,
@@ -406,6 +406,8 @@ export default function LeadOps() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   // Track when each lead was claimed (client-side, keyed by sessionId)
   const [claimedAtMap, setClaimedAtMap] = useState<Record<number, number>>({});
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [addLeadForm, setAddLeadForm] = useState({ name: "", phone: "", email: "", serviceType: "Standard Cleaning", source: "phone" as "yelp"|"google"|"thumbtack"|"bark"|"phone"|"other", notes: "", amount: "" });
 
   const utils = trpc.useUtils();
 
@@ -528,7 +530,33 @@ export default function LeadOps() {
     onError: (e) => toast.error(e.message),
   });
 
+  const createManualMutation = trpc.leads.createManual.useMutation({
+    onSuccess: (result) => {
+      toast.success("Lead added and claimed!");
+      setShowAddLeadModal(false);
+      setAddLeadForm({ name: "", phone: "", email: "", serviceType: "Standard Cleaning", source: "phone", notes: "", amount: "" });
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
   // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const handleAddLead = () => {
+    if (!addLeadForm.name.trim() || !addLeadForm.phone.trim()) {
+      toast.error("Name and phone are required");
+      return;
+    }
+    createManualMutation.mutate({
+      name: addLeadForm.name.trim(),
+      phone: addLeadForm.phone.trim(),
+      email: addLeadForm.email.trim() || undefined,
+      serviceType: addLeadForm.serviceType || "Standard Cleaning",
+      source: addLeadForm.source,
+      notes: addLeadForm.notes.trim() || undefined,
+      amount: addLeadForm.amount ? parseInt(addLeadForm.amount, 10) : undefined,
+    });
+  };
 
   const handleClaim = () => {
     if (!activeLead) return;
@@ -608,6 +636,118 @@ export default function LeadOps() {
           onClose={() => setShowAssignModal(false)}
           onSuccess={refreshLeads}
         />
+      )}
+
+      {/* ── Add Lead Modal ──────────────────────────────────────────────── */}
+      {showAddLeadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-black">Add Lead Manually</h2>
+              <button onClick={() => setShowAddLeadModal(false)} className="rounded-full p-1.5 hover:bg-slate-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">Name *</label>
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="Jane Smith"
+                    value={addLeadForm.name}
+                    onChange={e => setAddLeadForm(f => ({ ...f, name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">Phone *</label>
+                  <input
+                    className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                    placeholder="+1 555 000 0000"
+                    value={addLeadForm.phone}
+                    onChange={e => setAddLeadForm(f => ({ ...f, phone: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-500">Email</label>
+                <input
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  placeholder="jane@example.com"
+                  value={addLeadForm.email}
+                  onChange={e => setAddLeadForm(f => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">Service</label>
+                  <select
+                    className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400 bg-white"
+                    value={addLeadForm.serviceType}
+                    onChange={e => setAddLeadForm(f => ({ ...f, serviceType: e.target.value }))}
+                  >
+                    <option>Standard Cleaning</option>
+                    <option>Deep Cleaning</option>
+                    <option>Move In/Out Cleaning</option>
+                    <option>Post Construction</option>
+                    <option>Recurring Cleaning</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold text-slate-500">Source</label>
+                  <select
+                    className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400 bg-white"
+                    value={addLeadForm.source}
+                    onChange={e => setAddLeadForm(f => ({ ...f, source: e.target.value as any }))}
+                  >
+                    <option value="phone">Phone</option>
+                    <option value="yelp">Yelp</option>
+                    <option value="google">Google</option>
+                    <option value="thumbtack">Thumbtack</option>
+                    <option value="bark">Bark</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-500">Estimated Value ($)</label>
+                <input
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400"
+                  placeholder="289"
+                  type="number"
+                  value={addLeadForm.amount}
+                  onChange={e => setAddLeadForm(f => ({ ...f, amount: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold text-slate-500">Notes</label>
+                <textarea
+                  className="w-full rounded-2xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-slate-400 resize-none"
+                  placeholder="Any context about this lead..."
+                  rows={2}
+                  value={addLeadForm.notes}
+                  onChange={e => setAddLeadForm(f => ({ ...f, notes: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowAddLeadModal(false)}
+                className="flex-1 rounded-2xl border border-slate-200 py-2.5 text-sm font-bold hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddLead}
+                disabled={createManualMutation.isPending}
+                className="flex-1 rounded-2xl bg-slate-950 py-2.5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {createManualMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                Add & Claim Lead
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950">
@@ -731,8 +871,11 @@ export default function LeadOps() {
                   >
                     <MessageSquare className="h-4 w-4" /> Text
                   </button>
-                  <button className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm hover:bg-slate-50">
-                    <MoreHorizontal className="h-5 w-5" />
+                  <button
+                    onClick={() => setShowAddLeadModal(true)}
+                    className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50"
+                  >
+                    <UserPlus className="h-4 w-4" /> Add Lead
                   </button>
                 </div>
               </header>
