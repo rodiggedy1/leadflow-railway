@@ -688,6 +688,20 @@ export const schedulingRouter = router({
       }
     }),
 
+  setTeamTag: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      tag: z.string().max(20).nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.update(schedulingTeams)
+        .set({ tag: input.tag } as any)
+        .where(eq(schedulingTeams.id, input.teamId));
+      return { ok: true };
+    }),
+
   setTeamRegionTags: agentProcedure
     .input(z.object({
       teamId: z.number(),
