@@ -4576,6 +4576,9 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           avgResponseLabel = mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
         }
 
+        const conversionRate = agentLeads.length > 0
+          ? Math.round((bookedLeads.length / agentLeads.length) * 100)
+          : null;
         return {
           id: agent.id,
           name: agent.name,
@@ -4585,6 +4588,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           claimedToday: agentLeads.length,
           bookedToday: bookedLeads.length,
           avgResponseLabel,
+          conversionRate,
         };
       });
     }),

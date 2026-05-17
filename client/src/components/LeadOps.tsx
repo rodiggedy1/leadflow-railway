@@ -1088,7 +1088,7 @@ export default function LeadOps() {
                                 <p className={cn("truncate text-xs font-semibold", stateColor)}>{member.state}</p>
                               </div>
                             </div>
-                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                            <div className="mt-3 grid grid-cols-4 gap-1.5 text-xs">
                               <div className="rounded-2xl bg-white p-2.5">
                                 <div className="font-black">{member.claimedToday}</div>
                                 <div className="text-slate-400">claimed</div>
@@ -1096,6 +1096,19 @@ export default function LeadOps() {
                               <div className="rounded-2xl bg-white p-2.5">
                                 <div className="font-black">{member.bookedToday}</div>
                                 <div className="text-slate-400">booked</div>
+                              </div>
+                              <div className="rounded-2xl bg-white p-2.5">
+                                <div className={cn(
+                                  "font-black",
+                                  member.conversionRate !== null && member.conversionRate >= 50
+                                    ? "text-emerald-600"
+                                    : member.conversionRate !== null && member.conversionRate >= 25
+                                    ? "text-amber-600"
+                                    : "text-slate-900"
+                                )}>
+                                  {member.conversionRate !== null ? `${member.conversionRate}%` : "—"}
+                                </div>
+                                <div className="text-slate-400">conv.</div>
                               </div>
                               <div className="rounded-2xl bg-white p-2.5">
                                 <div className="font-black">{member.avgResponseLabel}</div>
