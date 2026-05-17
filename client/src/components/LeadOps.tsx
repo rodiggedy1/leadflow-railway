@@ -429,20 +429,25 @@ export default function LeadOps() {
 
   // Set first lead as active once data loads; also sync activeLead from server
   // after mutations (book, close, claim) so status/filterTag stay current.
+  // NOTE: leads is the FULL unfiltered list — always search it regardless of filterTab.
   React.useEffect(() => {
     if (leads.length === 0) return;
     if (!activeLead) {
       setActiveLead(leads[0]);
       setComposer(buildDraft(leads[0]));
     } else {
-      // Sync the active lead's fields from the freshly-fetched list
+      // Sync the active lead's fields from the freshly-fetched full list
       const updated = leads.find((l) => l.id === activeLead.id);
-      if (updated && (
-        updated.status !== activeLead.status ||
-        updated.filterTag !== activeLead.filterTag ||
-        updated.assignedAgentId !== activeLead.assignedAgentId
-      )) {
-        setActiveLead(updated);
+      if (updated) {
+        // Always overwrite — any field may have changed (status, filterTag, assignedAgentId, etc.)
+        if (
+          updated.status !== activeLead.status ||
+          updated.filterTag !== activeLead.filterTag ||
+          updated.assignedAgentId !== activeLead.assignedAgentId ||
+          updated.assignedAgentName !== activeLead.assignedAgentName
+        ) {
+          setActiveLead(updated);
+        }
       }
     }
   }, [leads]); // intentionally omit activeLead to avoid loop
@@ -499,6 +504,8 @@ export default function LeadOps() {
     onSuccess: () => {
       toast.success("Lead marked as booked 🎉");
       refreshLeads();
+      // Also refresh Live Team panel so bookedToday count updates
+      utils.leads.getTeamActivity.invalidate();
     },
     onError: (e) => toast.error(e.message),
   });

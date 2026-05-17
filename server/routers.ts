@@ -927,6 +927,7 @@ export const appRouter = router({
         if (input.stage === "BOOKED") {
           stageUpdates.isBooked = 1;
           stageUpdates.bookedAt = new Date();
+          stageUpdates.bookedByAgentId = ctx.agent.agentId;
         } else {
           stageUpdates.isBooked = 0;
         }
