@@ -392,6 +392,12 @@ export default function LeadOps() {
     }
   }, [leads, activeLead]);
 
+  // Auto-scroll conversation to bottom when messages update
+  React.useEffect(() => {
+    const el = document.getElementById("lead-convo-scroll");
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [convoMessages.length]);
+
   function buildDraft(lead: RealLead): string {
     return `Hi ${lead.name.split(" ")[0]}, this is Madison from Maids in Black 👋 I just saw your ${lead.source} request and would love to help with ${lead.service}. What day works best for you?`;
   }
@@ -411,9 +417,17 @@ export default function LeadOps() {
   });
 
   const sendMutation = trpc.leads.sendMessage.useMutation({
-    onSuccess: () => {
-      toast.success("Message sent");
+    onSuccess: (_data, variables) => {
+      toast.success("Message sent ✓");
+      setComposer("");
+      // Refresh the conversation thread immediately
+      utils.leads.getById.invalidate({ id: variables.sessionId });
       refreshLeads();
+      // Scroll conversation to bottom
+      setTimeout(() => {
+        const el = document.getElementById("lead-convo-scroll");
+        if (el) el.scrollTop = el.scrollHeight;
+      }, 200);
     },
     onError: (e) => toast.error(e.message),
   });
