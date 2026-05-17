@@ -4490,6 +4490,103 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         };
       });
     }),
+
+    /**
+     * leads.getTeamActivity — returns per-agent stats for the Live Team panel.
+     * For each active agent: online status, away status, leads claimed today,
+     * leads booked today, avg response time, and current state label.
+     */
+    getTeamActivity: agentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const now = Date.now();
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      // All active agents
+      const allAgents = await db
+        .select({
+          id: agents.id,
+          name: agents.name,
+          lastSeenAt: agents.lastSeenAt,
+          awayStatus: agents.awayStatus,
+          onCallSince: agents.onCallSince,
+          profilePhotoUrl: agents.profilePhotoUrl,
+        })
+        .from(agents)
+        .where(eq(agents.isActive, 1));
+
+      // Today's leads: claimed and booked per agent
+      const todayLeads = await db
+        .select({
+          assignedAgentId: conversationSessions.assignedAgentId,
+          bookedByAgentId: conversationSessions.bookedByAgentId,
+          isBooked: conversationSessions.isBooked,
+          createdAt: conversationSessions.createdAt,
+          bookedAt: conversationSessions.bookedAt,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            gte(conversationSessions.createdAt, todayStart),
+            isNotNull(conversationSessions.assignedAgentId),
+          )
+        );
+
+      type AgentRow = typeof allAgents[number];
+      type LeadRow = typeof todayLeads[number];
+      return allAgents.map((agent: AgentRow) => {
+        const onlineCutoff = now - 5 * 60 * 1000; // 5 min
+        const isOnline = agent.lastSeenAt
+          ? new Date(agent.lastSeenAt).getTime() > onlineCutoff
+          : false;
+
+        // State label
+        let state = 'Offline';
+        if (agent.onCallSince) {
+          state = 'On call';
+        } else if (agent.awayStatus) {
+          const awayLabels: Record<string, string> = {
+            away_sec: 'Away', lunch: 'Lunch', back15: 'Back in 15', eod: 'EOD',
+          };
+          state = awayLabels[agent.awayStatus] ?? 'Away';
+        } else if (isOnline) {
+          state = 'Available';
+        }
+
+        const agentLeads = todayLeads.filter((l: LeadRow) => l.assignedAgentId === agent.id);
+        const bookedLeads = todayLeads.filter((l: LeadRow) => l.bookedByAgentId === agent.id && l.isBooked);
+
+        // Avg response time: mean of (bookedAt - createdAt) for booked leads
+        const responseTimes = bookedLeads
+          .filter((l: LeadRow) => l.bookedAt && l.createdAt)
+          .map((l: LeadRow) => new Date(l.bookedAt!).getTime() - new Date(l.createdAt).getTime())
+          .filter((t: number) => t > 0 && t < 24 * 60 * 60 * 1000);
+
+        let avgResponseMs: number | null = null;
+        if (responseTimes.length > 0) {
+          avgResponseMs = Math.round(responseTimes.reduce((a: number, b: number) => a + b, 0) / responseTimes.length);
+        }
+
+        // Format avg response as human-readable
+        let avgResponseLabel = '—';
+        if (avgResponseMs !== null) {
+          const mins = Math.round(avgResponseMs / 60000);
+          avgResponseLabel = mins < 60 ? `${mins}m` : `${Math.round(mins / 60)}h`;
+        }
+
+        return {
+          id: agent.id,
+          name: agent.name,
+          profilePhotoUrl: agent.profilePhotoUrl ?? null,
+          isOnline,
+          state,
+          claimedToday: agentLeads.length,
+          bookedToday: bookedLeads.length,
+          avgResponseLabel,
+        };
+      });
+    }),
   }),
   /**
    * agents — agent auth + lead action procedures..

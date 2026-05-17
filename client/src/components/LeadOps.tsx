@@ -362,6 +362,11 @@ export default function LeadOps() {
     refetchInterval: 30_000,
   });
 
+  // Layer 4: real Live Team data
+  const { data: teamActivity = [] } = trpc.leads.getTeamActivity.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+
   // Set first lead as active once data loads
   React.useEffect(() => {
     if (leads.length > 0 && !activeLead) {
@@ -840,50 +845,76 @@ export default function LeadOps() {
                   </div>
                 </section>
 
-                {/* Right panel: Live Team (Layer 4 — still mocked) */}
+                {/* Right panel: Live Team (Layer 4 — real data) */}
                 <aside className="overflow-y-auto border-l border-slate-200 bg-white p-4">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Sales Floor</p>
                       <h3 className="mt-0.5 text-xl font-black">Live Team</h3>
                     </div>
-                    <button className="rounded-2xl bg-slate-950 p-2.5 text-white">
-                      <Plus className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-slate-400">
+                        {teamActivity.filter((a) => a.isOnline).length} online
+                      </span>
+                    </div>
                   </div>
 
                   <div className="mb-5 space-y-3">
-                    {[
-                      { name: "Madison",  initials: "M", state: "On lead queue", avg: "—", booked: "—", color: "bg-violet-100 text-violet-700" },
-                      { name: "Rizalina", initials: "R", state: "On lead queue", avg: "—", booked: "—", color: "bg-orange-100 text-orange-700" },
-                      { name: "Carlos",   initials: "C", state: "On lead queue", avg: "—", booked: "—", color: "bg-blue-100 text-blue-700" },
-                      { name: "Ashley",   initials: "A", state: "On lead queue", avg: "—", booked: "—", color: "bg-emerald-100 text-emerald-700" },
-                    ].map((member) => (
-                      <div key={member.name} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex items-center gap-3">
-                          <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl font-black text-sm", member.color)}>
-                            {member.initials}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <h4 className="font-black text-sm">{member.name}</h4>
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    {teamActivity.length === 0 ? (
+                      <p className="text-xs text-slate-400 py-4 text-center">No active agents</p>
+                    ) : (
+                      teamActivity.map((member) => {
+                        const initials = member.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+                        const stateColor =
+                          member.state === "On call" ? "text-violet-600" :
+                          member.state === "Available" ? "text-emerald-600" :
+                          member.state === "Offline" ? "text-slate-400" :
+                          "text-amber-600";
+                        const dotColor =
+                          member.state === "On call" ? "bg-violet-500" :
+                          member.state === "Available" ? "bg-emerald-500" :
+                          member.state === "Offline" ? "bg-slate-300" :
+                          "bg-amber-400";
+                        return (
+                          <div key={member.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="flex items-center gap-3">
+                              {member.profilePhotoUrl ? (
+                                <img
+                                  src={member.profilePhotoUrl}
+                                  alt={member.name}
+                                  className="h-10 w-10 rounded-2xl object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-200 font-black text-sm text-slate-600">
+                                  {initials}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <h4 className="font-black text-sm truncate">{member.name}</h4>
+                                  <span className={cn("h-2.5 w-2.5 rounded-full shrink-0", dotColor)} />
+                                </div>
+                                <p className={cn("truncate text-xs font-semibold", stateColor)}>{member.state}</p>
+                              </div>
                             </div>
-                            <p className="truncate text-xs text-slate-500">{member.state}</p>
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                              <div className="rounded-2xl bg-white p-2.5">
+                                <div className="font-black">{member.claimedToday}</div>
+                                <div className="text-slate-400">claimed</div>
+                              </div>
+                              <div className="rounded-2xl bg-white p-2.5">
+                                <div className="font-black">{member.bookedToday}</div>
+                                <div className="text-slate-400">booked</div>
+                              </div>
+                              <div className="rounded-2xl bg-white p-2.5">
+                                <div className="font-black">{member.avgResponseLabel}</div>
+                                <div className="text-slate-400">avg resp</div>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded-2xl bg-white p-2.5">
-                            <div className="font-black">{member.avg}</div>
-                            <div className="text-slate-400">response</div>
-                          </div>
-                          <div className="rounded-2xl bg-white p-2.5">
-                            <div className="font-black">{member.booked}</div>
-                            <div className="text-slate-400">booked</div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                        );
+                      })
+                    )}
                   </div>
 
                   <div className="rounded-[28px] bg-slate-950 p-4 text-white shadow-2xl">
@@ -911,8 +942,24 @@ export default function LeadOps() {
                   </div>
 
                   <div className="mt-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-                    <h3 className="mb-3 font-black">Recent Wins</h3>
-                    <p className="text-xs text-slate-400">Coming in Layer 4 — real agent activity feed.</p>
+                    <h3 className="mb-3 font-black">Today's Bookers</h3>
+                    {teamActivity.filter((a) => a.bookedToday > 0).length === 0 ? (
+                      <p className="text-xs text-slate-400">No bookings yet today</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {teamActivity
+                          .filter((a) => a.bookedToday > 0)
+                          .sort((a, b) => b.bookedToday - a.bookedToday)
+                          .map((a) => (
+                            <div key={a.id} className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-700">{a.name}</span>
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-black text-emerald-700">
+                                {a.bookedToday} booked
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
                 </aside>
               </div>
