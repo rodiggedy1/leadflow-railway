@@ -13,7 +13,7 @@ import { z } from "zod";
 import { router, agentProcedure, opsChatProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { callTemplates, callLog, jobIssues, cleanerJobs, cleanerProfiles, scheduleAssignments, schedulingTeams } from "../drizzle/schema";
+import { callTemplates, callLog, jobIssues, cleanerJobs, cleanerProfiles, scheduleAssignments, schedulingTeams, fieldMgmtCalls } from "../drizzle/schema";
 import { eq, and, desc, isNull } from "drizzle-orm";
 import { ENV } from "./_core/env";
 
@@ -399,6 +399,31 @@ export const callsRouter = router({
         .update(callLog)
         .set({ status: "fired", vapiCallId: vapiCallId ?? undefined })
         .where(eq(callLog.id, callLogId));
+
+      // ── Guard: insert fieldMgmtCalls row so vapiService skips post-call SMS ──────
+      // vapiService.processEndOfCallReport checks fieldMgmtCalls for the vapiCallId
+      // to determine if this is an internal outbound call. Without this row, it
+      // treats the call as an inbound customer call and sends a "Hi There, thank you
+      // for reaching out" SMS to the cleaner/client being called.
+      if (vapiCallId) {
+        try {
+          await db.insert(fieldMgmtCalls).values({
+            cleanerJobId: input.cleanerJobId,
+            step: "call_command_center",
+            vapiCallId,
+            calledPhone: normalizedPhone,
+            outcome: "no_answer", // updated by end-of-call webhook
+            durationSeconds: 0,
+            transcript: null,
+            summary: null,
+            endedReason: null,
+            recordingUrl: null,
+          });
+          console.log(`[CallCenter] fieldMgmtCalls guard row inserted for vapiCallId=${vapiCallId}`);
+        } catch (fmErr) {
+          console.error("[CallCenter] Failed to insert fieldMgmtCalls guard row:", fmErr);
+        }
+      }
 
       return { callLogId, vapiCallId };
     }),

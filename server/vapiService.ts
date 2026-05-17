@@ -1210,7 +1210,20 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
       console.log(`[Vapi] Skipping post-call SMS for ${normalizedPhone} — caller has opted out.`);
     }
   }
-  if (normalizedPhone && callSummaryForSms && !leadCreated && !callerOptedOut) {
+  // Guard: never send post-call customer SMS to internal/outbound numbers.
+  // OUTBOUND_ALERT_PHONES covers the CS office line and Vapi's own outbound number.
+  // fieldMgmtCalls covers escalation calls, callsRouter (CallCommandCenter) calls, etc.
+  const isInternalPhone = normalizedPhone ? OUTBOUND_ALERT_PHONES.has(normalizedPhone) : false;
+  const isFieldMgmtCall = vapiCallId
+    ? (await db.select({ id: fieldMgmtCalls.id }).from(fieldMgmtCalls).where(eq(fieldMgmtCalls.vapiCallId, vapiCallId)).limit(1)).length > 0
+    : false;
+  if (isInternalPhone) {
+    console.log(`[Vapi] Skipping post-call SMS — internal/outbound number ${normalizedPhone}`);
+  }
+  if (isFieldMgmtCall) {
+    console.log(`[Vapi] Skipping post-call SMS — fieldMgmt/CallCenter call vapiCallId=${vapiCallId}`);
+  }
+  if (normalizedPhone && callSummaryForSms && !leadCreated && !callerOptedOut && !isInternalPhone && !isFieldMgmtCall) {
     const callerName = structuredData?.callerName ?? "there";
     const firstName = callerName.split(" ")[0];
     const price = structuredData?.quotedPrice;
