@@ -4351,6 +4351,145 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
 
       return { items, overallSeverity };
     }),
+
+    /**
+     * leads.listForLeadOps — returns a ranked list of active inbound leads
+     * (thumbtack, bark, yelp, form, widget) for the Lead Ops Revenue Radar view.
+     * Excludes CS-inbound, review, reactivation, campaign, and already-lost/cold leads.
+     * Returns only the fields the UI needs — no full messageHistory blob.
+     */
+    listForLeadOps: agentProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const rows = await db
+        .select({
+          id:                conversationSessions.id,
+          leadName:          conversationSessions.leadName,
+          leadPhone:         conversationSessions.leadPhone,
+          leadSource:        conversationSessions.leadSource,
+          stage:             conversationSessions.stage,
+          serviceType:       conversationSessions.serviceType,
+          bedrooms:          conversationSessions.bedrooms,
+          bathrooms:         conversationSessions.bathrooms,
+          quotedPrice:       conversationSessions.quotedPrice,
+          bookedAmount:      conversationSessions.bookedAmount,
+          isBooked:          conversationSessions.isBooked,
+          assignedAgentId:   conversationSessions.assignedAgentId,
+          assignedAgentName: conversationSessions.assignedAgentName,
+          lastCalledAt:      conversationSessions.lastCalledAt,
+          lastAiMessageAt:   conversationSessions.lastAiMessageAt,
+          createdAt:         conversationSessions.createdAt,
+          updatedAt:         conversationSessions.updatedAt,
+          aiMode:            conversationSessions.aiMode,
+          messageHistory:    conversationSessions.messageHistory,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            // Only inbound lead sources (not CS, not review, not campaign)
+            sql`(
+              ${conversationSessions.leadSource} IS NULL OR
+              ${conversationSessions.leadSource} IN ('thumbtack','thumbtack-sms','bark','yelp','form','widget','voice')
+            )`,
+            // Exclude terminal stages
+            sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
+            // Only last 7 days to keep the list focused
+            sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
+          )
+        )
+        .orderBy(desc(conversationSessions.createdAt))
+        .limit(200);
+
+      const now = Date.now();
+
+      return rows.map(r => {
+        // Derive last outbound / inbound timestamps from messageHistory
+        let lastOutboundAt: number | null = null;
+        let lastInboundAt: number | null = null;
+        try {
+          const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
+          for (let i = history.length - 1; i >= 0; i--) {
+            const m = history[i];
+            if (!lastOutboundAt && m.role === 'assistant' && m.ts) lastOutboundAt = m.ts;
+            if (!lastInboundAt && m.role === 'user' && m.ts) lastInboundAt = m.ts;
+            if (lastOutboundAt && lastInboundAt) break;
+          }
+        } catch { /* ignore */ }
+
+        // Normalize source label
+        const sourceRaw = r.leadSource === 'thumbtack-sms' ? 'thumbtack' : (r.leadSource ?? 'form');
+        const sourceLabel: Record<string, string> = {
+          thumbtack: 'Thumbtack', bark: 'Bark', yelp: 'Yelp',
+          form: 'Website', widget: 'Widget', voice: 'Phone',
+        };
+
+        // Derive status bucket
+        const stage = r.stage ?? 'QUOTE_SENT';
+        let status: 'unclaimed' | 'awaiting_reply' | 'replied' | 'follow_up' | 'booked';
+        if (r.isBooked) {
+          status = 'booked';
+        } else if (!r.assignedAgentId) {
+          status = 'unclaimed';
+        } else if (stage === 'FOLLOW_UP_SCHEDULED') {
+          status = 'follow_up';
+        } else if (lastInboundAt && (!lastOutboundAt || lastInboundAt > lastOutboundAt)) {
+          status = 'replied';
+        } else {
+          status = 'awaiting_reply';
+        }
+
+        // Derive filter tab
+        const filterTag: 'Hot' | 'Follow-up' | 'Booked' =
+          r.isBooked ? 'Booked' :
+          stage === 'FOLLOW_UP_SCHEDULED' ? 'Follow-up' :
+          'Hot';
+
+        // Estimated value from bookedAmount, quotedPrice, or bedrooms heuristic
+        let estimatedValue = 0;
+        if (r.bookedAmount) {
+          estimatedValue = r.bookedAmount;
+        } else if (r.quotedPrice) {
+          const parsed = parseFloat(r.quotedPrice.replace(/[^0-9.]/g, ''));
+          if (!isNaN(parsed)) estimatedValue = Math.round(parsed);
+        } else {
+          const beds = parseInt(r.bedrooms ?? '2', 10) || 2;
+          estimatedValue = Math.round(80 + beds * 30);
+        }
+
+        // Confidence score: heuristic based on reply activity + source
+        let confidence = 60;
+        if (lastInboundAt) confidence += 20;
+        if (sourceRaw === 'thumbtack' || sourceRaw === 'bark') confidence += 10;
+        if (r.assignedAgentId) confidence += 5;
+        confidence = Math.min(confidence, 99);
+
+        const ageMs = now - new Date(r.createdAt).getTime();
+
+        return {
+          id:                r.id,
+          name:              r.leadName ?? 'Unknown',
+          phone:             r.leadPhone,
+          source:            sourceLabel[sourceRaw] ?? 'Website',
+          sourceRaw,
+          service:           r.serviceType ?? 'House Cleaning',
+          bedrooms:          r.bedrooms ?? '?',
+          bathrooms:         r.bathrooms ?? '?',
+          stage,
+          status,
+          filterTag,
+          estimatedValue,
+          confidence,
+          ageMs,
+          assignedAgentId:   r.assignedAgentId ?? null,
+          assignedAgentName: r.assignedAgentName ?? null,
+          lastOutboundAt,
+          lastInboundAt,
+          createdAt:         r.createdAt,
+          aiMode:            r.aiMode,
+        };
+      });
+    }),
   }),
   /**
    * agents — agent auth + lead action procedures..
