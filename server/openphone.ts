@@ -32,6 +32,12 @@ export interface SendSmsResult {
 
 /**
  * Sends an SMS via the OpenPhone API from the configured sender number.
+ *
+ * ⚠️  NEVER add an isPreviewMode / PREVIEW_MODE guard here.
+ * Preview isolation is handled entirely by the Railway environment variable
+ * PREVIEW_MODE=true on the preview deployment — NOT by suppressing sendSms in code.
+ * Adding a code-level guard here silently breaks ALL production SMS with no error log.
+ * The preview branch shares this file with main; any guard added here ships to production.
  */
 export async function sendSms({ to, content, mediaUrl, fromNumberId: fromNumberIdOverride }: SendSmsParams): Promise<SendSmsResult> {
   const apiKey = ENV.openPhoneApiKey;

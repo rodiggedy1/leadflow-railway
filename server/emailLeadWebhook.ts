@@ -618,6 +618,39 @@ export async function handleYelpInquiryEmail(
   const dateDisplay = parsed.requestedDate ?? "Not specified";
   const zipDisplay = parsed.zipCode ?? "Not specified";
 
+  // Create a placeholder session FIRST so we can include sessionId in the card metadata.
+  // Use a synthetic phone key since Yelp does not provide a phone number.
+  const placeholderPhone = `yelp-${Date.now()}`;
+  let yelpSessionId: number | null = null;
+  try {
+    await db.insert(conversationSessions).values({
+      leadPhone: placeholderPhone,
+      leadName: displayName,
+      stage: "QUOTE_SENT" as any,
+      serviceType: parsed.serviceType ?? null,
+      bedrooms: bedroomsDisplay !== "Unknown" ? bedroomsDisplay : null,
+      bathrooms: bathroomsDisplay !== "Unknown" ? bathroomsDisplay : null,
+      leadSource: "yelp",
+      aiMode: 0, // no AI — no phone to SMS
+      barkQA: `Requested date: ${dateDisplay}\nZip: ${zipDisplay}`,
+    } as any);
+    // Look up the session we just created to get its ID
+    const [yelpSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, placeholderPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    yelpSessionId = yelpSession?.id ?? null;
+    console.log(`[YelpLead] Created placeholder session id=${yelpSessionId} phone=${placeholderPhone}`);
+  } catch (err) {
+    console.error("[YelpLead] Failed to create placeholder session:", err);
+    notifyOwner({
+      title: "⚠️ Yelp Lead Lost — Session Creation Failed",
+      content: `Lead: ${displayName}\nError: ${err instanceof Error ? err.message : String(err)}\n\nThis lead appeared in Command Chat but was NOT saved to the Leads list.`,
+    }).catch(() => {});
+  }
+
   // Build Command Chat card body
   const leadBody = [
     `📍 **Yelp Inquiry** · ${displayName}`,
@@ -635,6 +668,7 @@ export async function handleYelpInquiryEmail(
     requestedDate: parsed.requestedDate,
     zipCode: parsed.zipCode,
     utmSource: "yelp",
+    sessionId: yelpSessionId,
     arrivedAt: Date.now(),
   });
 
@@ -649,7 +683,7 @@ export async function handleYelpInquiryEmail(
       quickAction: "new_lead",
       metadata,
     });
-    console.log(`[YelpLead] Posted Yelp lead card to Command Chat`);
+    console.log(`[YelpLead] Posted Yelp lead card to Command Chat (sessionId=${yelpSessionId})`);
   } catch (err) {
     console.error("[YelpLead] Failed to post lead card:", err);
   }
@@ -680,30 +714,6 @@ export async function handleYelpInquiryEmail(
     body: `${parsed.serviceType} · ${bedroomsDisplay} / ${bathroomsDisplay} · ${dateDisplay}`,
     meta: { leadName: displayName, serviceType: parsed.serviceType, source: "yelp" },
   }).catch(() => {});
-
-  // Create a placeholder session so the lead appears in the Leads list.
-  // Use a synthetic phone key since Yelp does not provide a phone number.
-  const placeholderPhone = `yelp-${Date.now()}`;
-  try {
-    await db.insert(conversationSessions).values({
-      leadPhone: placeholderPhone,
-      leadName: displayName,
-      stage: "QUOTE_SENT" as any,
-      serviceType: parsed.serviceType ?? null,
-      bedrooms: bedroomsDisplay !== "Unknown" ? bedroomsDisplay : null,
-      bathrooms: bathroomsDisplay !== "Unknown" ? bathroomsDisplay : null,
-      leadSource: "yelp",
-      aiMode: 0, // no AI — no phone to SMS
-      barkQA: `Requested date: ${dateDisplay}\nZip: ${zipDisplay}`,
-    } as any);
-    console.log(`[YelpLead] Created placeholder session with phone=${placeholderPhone}`);
-  } catch (err) {
-    console.error("[YelpLead] Failed to create placeholder session:", err);
-    notifyOwner({
-      title: "⚠️ Yelp Lead Lost — Session Creation Failed",
-      content: `Lead: ${displayName}\nError: ${err instanceof Error ? err.message : String(err)}\n\nThis lead appeared in Command Chat but was NOT saved to the Leads list.`,
-    }).catch(() => {});
-  }
 }
 
 // ── Thumbtack Lead Parser ────────────────────────────────────────────────────
@@ -954,6 +964,7 @@ export async function handleThumbtackEmail(
   // Always create a session so the lead appears on the Leads page.
   // Use a placeholder phone key when no phone is available (same pattern as Yelp).
   const sessionPhone = normalizedPhone ?? `thumbtack-${Date.now()}`;
+  let thumbtackSessionId: number | null = null;
   try {
     await db.insert(conversationSessions).values({
       leadPhone: sessionPhone,
@@ -969,7 +980,15 @@ export async function handleThumbtackEmail(
       aiMode: normalizedPhone ? undefined : 0,
       barkQA,
     } as any);
-    console.log(`[Thumbtack] Session created — phone=${sessionPhone}`);
+    // Look up the session we just created to get its ID
+    const [thumbtackSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.leadPhone, sessionPhone))
+      .orderBy(desc(conversationSessions.id))
+      .limit(1);
+    thumbtackSessionId = thumbtackSession?.id ?? null;
+    console.log(`[Thumbtack] Session created id=${thumbtackSessionId} phone=${sessionPhone}`);
   } catch (dbErr) {
     console.error("[Thumbtack] Failed to create session:", dbErr);
     notifyOwner({
@@ -995,6 +1014,7 @@ export async function handleThumbtackEmail(
     location: parsed.location,
     requestedDates: parsed.requestedDates,
     utmSource: "thumbtack",
+    sessionId: thumbtackSessionId,
     arrivedAt: Date.now(),
   });
 

@@ -546,6 +546,7 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Pre-job reminder sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+      if (result.messageId) await updateStepMessageId(job.id, "pre_job_reminder", result.messageId);
       // Client pre-job SMS is handled by runClientPreJobNotifications() — its own
       // dedicated cron pass with independent timing. No chain call here.
     } else {
@@ -761,6 +762,7 @@ export async function sendArrivedCheckin(cleanerJobId: number): Promise<void> {
 
   if (result.success) {
     console.log(`[FieldMgmt] Arrived check-in sent to ${job.cleanerName} (${profile.phone}) for job ${cleanerJobId}`);
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "arrived_checkin", result.messageId);
   } else {
     await updateStepOutcome(cleanerJobId, "arrived_checkin", false, result.error);
     console.error(`[FieldMgmt] Arrived check-in FAILED for job ${cleanerJobId}:`, result.error);
@@ -929,6 +931,7 @@ export async function runMidJobNudges(): Promise<{ checked: number; sent: number
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Mid-job nudge sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+      if (result.messageId) await updateStepMessageId(job.id, "mid_job_nudge", result.messageId);
     } else {
       errors++;
       await updateStepOutcome(job.id, "mid_job_nudge", false, result.error);
@@ -994,6 +997,7 @@ export async function sendCompletionFlow(cleanerJobId: number): Promise<void> {
 
   if (result.success) {
     console.log(`[FieldMgmt] Completion flow sent to ${job.cleanerName} (${profile.phone}) for job ${cleanerJobId}`);
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "completion_flow", result.messageId);
   } else {
     await updateStepOutcome(cleanerJobId, "completion_flow", false, result.error);
     console.error(`[FieldMgmt] Completion flow FAILED for job ${cleanerJobId}:`, result.error);
@@ -1077,6 +1081,7 @@ export async function runExceptionHandling(): Promise<{ checked: number; sent: n
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Exception SMS sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+      if (result.messageId) await updateStepMessageId(job.id, "exception_sms", result.messageId);
     } else {
       errors++;
       await updateStepOutcome(job.id, "exception_sms", false, result.error);
@@ -1171,6 +1176,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] No-show alert sent to CS team for job ${job.id} (${job.cleanerName})`);
+      if (result.messageId) await updateStepMessageId(job.id, "noshow_alert", result.messageId);
       // Post alert card to CommandChat escalations section
       try {
         await db.insert(opsChatMessages).values({
@@ -1448,6 +1454,7 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
     if (result.success) {
       sent++;
       console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${job.id}`);
+      if (result.messageId) await updateStepMessageId(job.id, "client_pre_job", result.messageId);
     } else {
       errors++;
       await updateStepOutcome(job.id, "client_pre_job", false, result.error);
@@ -1965,6 +1972,7 @@ async function sendCleanerPreJobSmsForJob(cleanerJobId: number): Promise<void> {
 
   if (result.success) {
     console.log(`[FieldMgmt] Assignment SMS sent to ${job.cleanerName} (${profile.phone}) for job ${job.id}`);
+    if (result.messageId) await updateStepMessageId(job.id, "assignment_sms", result.messageId);
   } else {
     await updateStepOutcome(job.id, "assignment_sms", false, result.error);
     console.error(`[FieldMgmt] Assignment SMS FAILED for job ${job.id}:`, result.error);
