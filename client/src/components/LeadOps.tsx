@@ -1,18 +1,17 @@
 /**
  * LeadOps — Revenue Radar
- * Lead Ops subpage inside OpsChat. Wired to real data via leads.listForLeadOps.
+ * Lead Ops subpage inside OpsChat.
+ * Layer 1: Real lead list from leads.listForLeadOps
+ * Layer 3: Claim, Send, Book, Close, Follow-up, Assign mutations wired
  */
-import React, { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useMemo, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
   Bell,
   Phone,
   MessageSquare,
-  Clock,
-  DollarSign,
   Send,
-  MapPin,
   Sparkles,
   Radio,
   CheckCircle2,
@@ -23,15 +22,19 @@ import {
   ShieldCheck,
   Target,
   Timer,
-  Star,
   ArrowUpRight,
   Bot,
   ClipboardList,
   Plus,
   Loader2,
+  X,
+  CalendarClock,
+  UserCheck,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -55,7 +58,7 @@ type RealLead = {
   lastOutboundAt: number | null;
   lastInboundAt: number | null;
   createdAt: Date | string;
-  aiMode: string | null;
+  aiMode: number | string | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -84,18 +87,18 @@ function formatLastTouch(lead: RealLead): string {
 
 function StatusPill({ status }: { status: RealLead["status"] }) {
   const styles: Record<RealLead["status"], string> = {
-    unclaimed:     "bg-rose-50 text-rose-700 border-rose-200",
-    awaiting_reply:"bg-amber-50 text-amber-700 border-amber-200",
-    replied:       "bg-blue-50 text-blue-700 border-blue-200",
-    follow_up:     "bg-slate-50 text-slate-700 border-slate-200",
-    booked:        "bg-emerald-50 text-emerald-700 border-emerald-200",
+    unclaimed:      "bg-rose-50 text-rose-700 border-rose-200",
+    awaiting_reply: "bg-amber-50 text-amber-700 border-amber-200",
+    replied:        "bg-blue-50 text-blue-700 border-blue-200",
+    follow_up:      "bg-slate-50 text-slate-700 border-slate-200",
+    booked:         "bg-emerald-50 text-emerald-700 border-emerald-200",
   };
   const labels: Record<RealLead["status"], string> = {
-    unclaimed:     "Needs claim",
-    awaiting_reply:"Reply due",
-    replied:       "New reply",
-    follow_up:     "Follow-up",
-    booked:        "Booked",
+    unclaimed:      "Needs claim",
+    awaiting_reply: "Reply due",
+    replied:        "New reply",
+    follow_up:      "Follow-up",
+    booked:         "Booked",
   };
   return (
     <span className={cn("rounded-full border px-2.5 py-1 text-xs font-bold", styles[status])}>
@@ -104,7 +107,15 @@ function StatusPill({ status }: { status: RealLead["status"] }) {
   );
 }
 
-function LeadCard({ lead, active, onClick }: { lead: RealLead; active: boolean; onClick: (l: RealLead) => void }) {
+function LeadCard({
+  lead,
+  active,
+  onClick,
+}: {
+  lead: RealLead;
+  active: boolean;
+  onClick: (l: RealLead) => void;
+}) {
   const isCritical = lead.status === "unclaimed" && lead.ageMs < 120_000;
   return (
     <motion.button
@@ -157,16 +168,179 @@ function LeadCard({ lead, active, onClick }: { lead: RealLead; active: boolean; 
   );
 }
 
-function MetricCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; label: string; value: string; sub: string }) {
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  sub: string;
+}) {
   return (
     <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between">
-        <div className="rounded-2xl bg-slate-100 p-2"><Icon className="h-5 w-5 text-slate-700" /></div>
+        <div className="rounded-2xl bg-slate-100 p-2">
+          <Icon className="h-5 w-5 text-slate-700" />
+        </div>
         <ArrowUpRight className="h-4 w-4 text-slate-400" />
       </div>
       <div className="mt-4 text-3xl font-black tracking-tight text-slate-950">{value}</div>
       <div className="mt-1 text-sm font-semibold text-slate-500">{label}</div>
       <div className="mt-2 text-xs text-slate-400">{sub}</div>
+    </div>
+  );
+}
+
+// ── Follow-up modal ───────────────────────────────────────────────────────────
+
+function FollowUpModal({
+  sessionId,
+  onClose,
+  onSuccess,
+}: {
+  sessionId: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [date, setDate] = useState("");
+  const [message, setMessage] = useState(
+    "Hi, just circling back on this. We have some availability and would love to get you scheduled!"
+  );
+  const setFollowUp = trpc.leads.adminSetFollowUp.useMutation({
+    onSuccess: () => {
+      toast.success("Follow-up scheduled");
+      onSuccess();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-[28px] bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-black">Schedule Follow-up</h3>
+          <button onClick={onClose} className="rounded-xl p-1.5 hover:bg-slate-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-500">Follow-up Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold text-slate-500">Message</label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="h-24 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm outline-none focus:border-slate-400"
+            />
+          </div>
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-2xl border border-slate-200 py-2.5 text-sm font-bold hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={!date || setFollowUp.isPending}
+            onClick={() =>
+              setFollowUp.mutate({ sessionId, followUpDate: date, followUpMessage: message })
+            }
+            className="flex-1 rounded-2xl bg-slate-950 py-2.5 text-sm font-black text-white disabled:opacity-50"
+          >
+            {setFollowUp.isPending ? (
+              <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+            ) : (
+              "Schedule"
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Assign modal ──────────────────────────────────────────────────────────────
+
+function AssignModal({
+  sessionId,
+  onClose,
+  onSuccess,
+}: {
+  sessionId: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { data: agentList = [] } = trpc.agents.list.useQuery();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const assignAgent = trpc.leads.adminAssignAgent.useMutation({
+    onSuccess: () => {
+      toast.success("Lead assigned");
+      onSuccess();
+      onClose();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const activeAgents = agentList.filter((a) => a.isActive);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-sm rounded-[28px] bg-white p-6 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-black">Assign Lead</h3>
+          <button onClick={onClose} className="rounded-xl p-1.5 hover:bg-slate-100">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {activeAgents.map((agent) => (
+            <button
+              key={agent.id}
+              onClick={() => setSelectedId(agent.id)}
+              className={cn(
+                "w-full rounded-2xl border px-4 py-3 text-left text-sm font-bold transition",
+                selectedId === agent.id
+                  ? "border-slate-900 bg-slate-950 text-white"
+                  : "border-slate-200 hover:bg-slate-50"
+              )}
+            >
+              {agent.name}
+            </button>
+          ))}
+        </div>
+        <div className="mt-5 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-2xl border border-slate-200 py-2.5 text-sm font-bold hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={selectedId === null || assignAgent.isPending}
+            onClick={() => assignAgent.mutate({ sessionId, agentId: selectedId })}
+            className="flex-1 rounded-2xl bg-slate-950 py-2.5 text-sm font-black text-white disabled:opacity-50"
+          >
+            {assignAgent.isPending ? (
+              <Loader2 className="mx-auto h-4 w-4 animate-spin" />
+            ) : (
+              "Assign"
+            )}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -178,410 +352,563 @@ export default function LeadOps() {
   const [filterTab, setFilterTab] = useState<"Hot" | "Follow-up" | "Booked">("Hot");
   const [search, setSearch] = useState("");
   const [composer, setComposer] = useState("");
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
+
+  const utils = trpc.useUtils();
 
   const { data: leads = [], isLoading, error } = trpc.leads.listForLeadOps.useQuery(undefined, {
-    refetchInterval: 30_000, // refresh every 30s
+    refetchInterval: 30_000,
   });
 
   // Set first lead as active once data loads
   React.useEffect(() => {
     if (leads.length > 0 && !activeLead) {
       setActiveLead(leads[0]);
-      setComposer(
-        `Hi ${leads[0].name.split(" ")[0]}, this is Madison from Maids in Black 👋 I just saw your ${leads[0].source} request and would love to help with ${leads[0].service}. What day works best for you?`
-      );
+      setComposer(buildDraft(leads[0]));
     }
   }, [leads, activeLead]);
 
+  function buildDraft(lead: RealLead): string {
+    return `Hi ${lead.name.split(" ")[0]}, this is Madison from Maids in Black 👋 I just saw your ${lead.source} request and would love to help with ${lead.service}. What day works best for you?`;
+  }
+
+  const refreshLeads = useCallback(() => {
+    utils.leads.listForLeadOps.invalidate();
+  }, [utils]);
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
+
+  const claimMutation = trpc.agents.claimLead.useMutation({
+    onSuccess: () => {
+      toast.success("Lead claimed");
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const sendMutation = trpc.leads.sendMessage.useMutation({
+    onSuccess: () => {
+      toast.success("Message sent");
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const bookMutation = trpc.leads.agentUpdateStage.useMutation({
+    onSuccess: () => {
+      toast.success("Lead marked as booked 🎉");
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const closeMutation = trpc.leads.agentUpdateStage.useMutation({
+    onSuccess: () => {
+      toast.success("Lead closed");
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const handleClaim = () => {
+    if (!activeLead) return;
+    claimMutation.mutate({ sessionId: activeLead.id });
+  };
+
+  const handleSend = () => {
+    if (!activeLead || !composer.trim()) return;
+    sendMutation.mutate({ sessionId: activeLead.id, message: composer.trim() });
+  };
+
+  const handleBook = () => {
+    if (!activeLead) return;
+    bookMutation.mutate({ sessionId: activeLead.id, stage: "BOOKED" });
+  };
+
+  const handleClose = () => {
+    if (!activeLead) return;
+    closeMutation.mutate({ sessionId: activeLead.id, stage: "LOST" });
+  };
+
+  const handleSelectLead = (lead: RealLead) => {
+    setActiveLead(lead);
+    setComposer(buildDraft(lead));
+  };
+
+  // ── Derived data ───────────────────────────────────────────────────────────
+
   const filtered = useMemo(() => {
-    let list = leads.filter(l => l.filterTag === filterTab);
+    let list = leads.filter((l) => l.filterTag === filterTab);
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(l =>
-        l.name.toLowerCase().includes(q) ||
-        l.phone.includes(q) ||
-        l.service.toLowerCase().includes(q) ||
-        l.source.toLowerCase().includes(q)
+      list = list.filter(
+        (l) =>
+          l.name.toLowerCase().includes(q) ||
+          l.phone.includes(q) ||
+          l.service.toLowerCase().includes(q) ||
+          l.source.toLowerCase().includes(q)
       );
     }
     return list;
   }, [leads, filterTab, search]);
 
-  // Metrics derived from real data
-  const unclaimedCount = leads.filter(l => l.status === "unclaimed").length;
-  const bookedCount    = leads.filter(l => l.status === "booked").length;
-  const bookedRevenue  = leads.filter(l => l.status === "booked").reduce((s, l) => s + l.estimatedValue, 0);
-  const closeRate      = leads.length > 0
-    ? Math.round((bookedCount / leads.length) * 100)
-    : 0;
+  const unclaimedCount = leads.filter((l) => l.status === "unclaimed").length;
+  const bookedCount    = leads.filter((l) => l.status === "booked").length;
+  const bookedRevenue  = leads.filter((l) => l.status === "booked").reduce((s, l) => s + l.estimatedValue, 0);
+  const closeRate      = leads.length > 0 ? Math.round((bookedCount / leads.length) * 100) : 0;
 
-  const handleSelectLead = (lead: RealLead) => {
-    setActiveLead(lead);
-    setComposer(
-      `Hi ${lead.name.split(" ")[0]}, this is Madison from Maids in Black 👋 I just saw your ${lead.source} request and would love to help with ${lead.service}. What day works best for you?`
-    );
-  };
+  const isSending  = sendMutation.isPending;
+  const isClaiming = claimMutation.isPending;
+  const isBooking  = bookMutation.isPending;
+  const isClosing  = closeMutation.isPending;
+  const anyPending = isSending || isClaiming || isBooking || isClosing;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950">
-      {/* ── Left panel: lead list ─────────────────────────────────────────── */}
-      <aside className="w-[340px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4">
-        {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Lead Ops</p>
-            <h1 className="mt-0.5 text-2xl font-black tracking-tight">Revenue Radar</h1>
-          </div>
-          <button className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm hover:bg-slate-50">
-            <Bell className="h-4 w-4" />
-          </button>
-        </div>
+    <>
+      {showFollowUpModal && activeLead && (
+        <FollowUpModal
+          sessionId={activeLead.id}
+          onClose={() => setShowFollowUpModal(false)}
+          onSuccess={refreshLeads}
+        />
+      )}
+      {showAssignModal && activeLead && (
+        <AssignModal
+          sessionId={activeLead.id}
+          onClose={() => setShowAssignModal(false)}
+          onSuccess={refreshLeads}
+        />
+      )}
 
-        {/* Search */}
-        <div className="mb-4 rounded-3xl border border-slate-200 bg-slate-50 p-1.5">
-          <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 shadow-sm">
-            <Search className="h-4 w-4 text-slate-400 shrink-0" />
-            <input
-              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
-              placeholder="Search leads, phones, services"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {/* Metrics */}
-        <div className="mb-4 grid grid-cols-2 gap-2.5">
-          <MetricCard icon={AlertTriangle} label="Unclaimed"    value={String(unclaimedCount)} sub="Last 7 days"              />
-          <MetricCard icon={Timer}         label="Avg Response" value="—"                       sub="Coming soon"              />
-          <MetricCard icon={CheckCircle2}  label="Booked"       value={String(bookedCount)}     sub={`$${bookedRevenue.toLocaleString()} revenue`} />
-          <MetricCard icon={Target}        label="Close Rate"   value={`${closeRate}%`}          sub="Last 7 days"              />
-        </div>
-
-        {/* Filter tabs */}
-        <div className="mb-3 flex rounded-2xl bg-slate-100 p-1">
-          {(["Hot", "Follow-up", "Booked"] as const).map((item) => (
-            <button
-              key={item}
-              onClick={() => setFilterTab(item)}
-              className={cn(
-                "flex-1 rounded-xl px-3 py-2 text-sm font-bold transition",
-                filterTab === item ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
-              )}
-            >
-              {item}
+      <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950">
+        {/* ── Left panel: lead list ─────────────────────────────────────── */}
+        <aside className="w-[340px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">Lead Ops</p>
+              <h1 className="mt-0.5 text-2xl font-black tracking-tight">Revenue Radar</h1>
+            </div>
+            <button className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm hover:bg-slate-50">
+              <Bell className="h-4 w-4" />
             </button>
-          ))}
-        </div>
-
-        {/* Lead cards */}
-        <div className="space-y-3 pb-6">
-          {isLoading && (
-            <div className="flex items-center justify-center py-12 text-slate-400">
-              <Loader2 className="h-6 w-6 animate-spin" />
-            </div>
-          )}
-          {error && (
-            <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">
-              Failed to load leads. Please refresh.
-            </div>
-          )}
-          {!isLoading && !error && filtered.length === 0 && (
-            <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-400">
-              No {filterTab.toLowerCase()} leads in the last 7 days.
-            </div>
-          )}
-          {filtered.map((lead) => (
-            <LeadCard
-              key={lead.id}
-              lead={lead}
-              active={activeLead?.id === lead.id}
-              onClick={handleSelectLead}
-            />
-          ))}
-        </div>
-      </aside>
-
-      {/* ── Center + right: lead detail ──────────────────────────────────── */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {!activeLead ? (
-          <div className="flex flex-1 items-center justify-center text-slate-400">
-            {isLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : "Select a lead to view details"}
           </div>
-        ) : (
-          <>
-            {/* Detail header */}
-            <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-lg font-black text-white">
-                  {activeLead.name.charAt(0)}
-                </div>
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-black tracking-tight">{activeLead.name}</h2>
-                    <StatusPill status={activeLead.status} />
-                  </div>
-                  <p className="mt-0.5 text-sm font-medium text-slate-500">
-                    {activeLead.service} • {activeLead.bedrooms}bd / {activeLead.bathrooms}ba • {activeLead.source}
-                  </p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                {activeLead.status === "unclaimed" && (
-                  <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-right">
-                    <div className="text-[10px] font-black uppercase tracking-wide text-rose-400">Age</div>
-                    <div className="text-lg font-black text-rose-600">{formatAge(activeLead.ageMs)}</div>
-                  </div>
+          <div className="mb-4 rounded-3xl border border-slate-200 bg-slate-50 p-1.5">
+            <div className="flex items-center gap-2 rounded-2xl bg-white px-3 py-2.5 shadow-sm">
+              <Search className="h-4 w-4 text-slate-400 shrink-0" />
+              <input
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                placeholder="Search leads, phones, services"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="mb-4 grid grid-cols-2 gap-2.5">
+            <MetricCard icon={AlertTriangle} label="Unclaimed"    value={String(unclaimedCount)} sub="Last 7 days" />
+            <MetricCard icon={Timer}         label="Avg Response" value="—"                       sub="Coming soon" />
+            <MetricCard icon={CheckCircle2}  label="Booked"       value={String(bookedCount)}     sub={`$${bookedRevenue.toLocaleString()} revenue`} />
+            <MetricCard icon={Target}        label="Close Rate"   value={`${closeRate}%`}          sub="Last 7 days" />
+          </div>
+
+          <div className="mb-3 flex rounded-2xl bg-slate-100 p-1">
+            {(["Hot", "Follow-up", "Booked"] as const).map((item) => (
+              <button
+                key={item}
+                onClick={() => setFilterTab(item)}
+                className={cn(
+                  "flex-1 rounded-xl px-3 py-2 text-sm font-bold transition",
+                  filterTab === item ? "bg-white shadow-sm text-slate-900" : "text-slate-500 hover:text-slate-900"
                 )}
-                <button className="flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 font-black text-white shadow-lg hover:scale-[1.02] text-sm">
-                  <Phone className="h-4 w-4" /> Call
-                </button>
-                <button className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 font-black shadow-sm hover:bg-slate-50 text-sm">
-                  <MessageSquare className="h-4 w-4" /> Text
-                </button>
-                <button className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm hover:bg-slate-50">
-                  <MoreHorizontal className="h-5 w-5" />
-                </button>
-              </div>
-            </header>
+              >
+                {item}
+              </button>
+            ))}
+          </div>
 
-            {/* Detail body */}
-            <div className="grid min-h-0 flex-1 grid-cols-[1fr_340px] overflow-hidden">
-              {/* Center content */}
-              <section className="overflow-y-auto p-5">
-                {/* Stats row */}
-                <div className="mb-5 grid grid-cols-4 gap-3">
-                  {[
-                    ["Lead Source", activeLead.source],
-                    ["Est. Value",  `$${activeLead.estimatedValue}`],
-                    ["Close Fit",   `${activeLead.confidence}%`],
-                    ["Owner",       activeLead.assignedAgentName ?? "None"],
-                  ].map(([k, v]) => (
-                    <div key={k} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                      <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{k}</p>
-                      <p className="mt-2 text-xl font-black">{v}</p>
+          <div className="space-y-3 pb-6">
+            {isLoading && (
+              <div className="flex items-center justify-center py-12 text-slate-400">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            )}
+            {error && (
+              <div className="rounded-2xl bg-rose-50 p-4 text-sm text-rose-700">
+                Failed to load leads. Please refresh.
+              </div>
+            )}
+            {!isLoading && !error && filtered.length === 0 && (
+              <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm text-slate-400">
+                No {filterTab.toLowerCase()} leads in the last 7 days.
+              </div>
+            )}
+            {filtered.map((lead) => (
+              <LeadCard
+                key={lead.id}
+                lead={lead}
+                active={activeLead?.id === lead.id}
+                onClick={handleSelectLead}
+              />
+            ))}
+          </div>
+        </aside>
+
+        {/* ── Center + right: lead detail ───────────────────────────────── */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {!activeLead ? (
+            <div className="flex flex-1 items-center justify-center text-slate-400">
+              {isLoading ? <Loader2 className="h-8 w-8 animate-spin" /> : "Select a lead to view details"}
+            </div>
+          ) : (
+            <>
+              {/* Detail header */}
+              <header className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-lg font-black text-white">
+                    {activeLead.name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-xl font-black tracking-tight">{activeLead.name}</h2>
+                      <StatusPill status={activeLead.status} />
                     </div>
-                  ))}
+                    <p className="mt-0.5 text-sm font-medium text-slate-500">
+                      {activeLead.service} • {activeLead.bedrooms}bd / {activeLead.bathrooms}ba • {activeLead.source}
+                    </p>
+                  </div>
                 </div>
 
-                {/* AI Next Best Action */}
-                <div className="mb-5 rounded-[28px] bg-[#071026] p-5 text-white shadow-2xl">
-                  <div className="mb-4 flex items-start justify-between">
-                    <div>
-                      <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-white/50">
-                        <Sparkles className="h-3.5 w-3.5" /> AI Next Best Action
-                      </div>
-                      <h3 className="text-2xl font-black">
-                        {activeLead.status === "unclaimed"
-                          ? "Claim + text in under 60 seconds"
-                          : activeLead.status === "replied"
-                          ? "Customer replied — respond now"
-                          : activeLead.status === "follow_up"
-                          ? "Follow-up is due"
-                          : "Continue the conversation"}
-                      </h3>
-                      <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
-                        {activeLead.status === "unclaimed"
-                          ? "This lead has no owner yet. Send the first text now, then call if they don't respond within 90 seconds."
-                          : activeLead.status === "replied"
-                          ? "The customer replied. Respond quickly to keep momentum and close the booking."
-                          : "Keep the conversation moving to convert this lead."}
-                      </p>
+                <div className="flex items-center gap-3">
+                  {activeLead.status === "unclaimed" && (
+                    <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-right">
+                      <div className="text-[10px] font-black uppercase tracking-wide text-rose-400">Age</div>
+                      <div className="text-lg font-black text-rose-600">{formatAge(activeLead.ageMs)}</div>
                     </div>
-                    <button className="rounded-2xl bg-white px-4 py-2.5 font-black text-slate-950 hover:scale-[1.02] text-sm shrink-0">
-                      Auto Execute
+                  )}
+                  <button
+                    onClick={() => window.open(`tel:${activeLead.phone}`)}
+                    className="flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 font-black text-white shadow-lg hover:scale-[1.02] text-sm"
+                  >
+                    <Phone className="h-4 w-4" /> Call
+                  </button>
+                  <button
+                    onClick={() => document.getElementById("lead-composer")?.focus()}
+                    className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 font-black shadow-sm hover:bg-slate-50 text-sm"
+                  >
+                    <MessageSquare className="h-4 w-4" /> Text
+                  </button>
+                  <button className="rounded-2xl border border-slate-200 bg-white p-2.5 shadow-sm hover:bg-slate-50">
+                    <MoreHorizontal className="h-5 w-5" />
+                  </button>
+                </div>
+              </header>
+
+              {/* Detail body */}
+              <div className="grid min-h-0 flex-1 grid-cols-[1fr_340px] overflow-hidden">
+                <section className="overflow-y-auto p-5">
+                  {/* Stats row */}
+                  <div className="mb-5 grid grid-cols-4 gap-3">
+                    {[
+                      ["Lead Source", activeLead.source],
+                      ["Est. Value",  `$${activeLead.estimatedValue}`],
+                      ["Close Fit",   `${activeLead.confidence}%`],
+                      ["Owner",       activeLead.assignedAgentName ?? "None"],
+                    ].map(([k, v]) => (
+                      <div key={k} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{k}</p>
+                        <p className="mt-2 text-xl font-black">{v}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* AI Next Best Action */}
+                  <div className="mb-5 rounded-[28px] bg-[#071026] p-5 text-white shadow-2xl">
+                    <div className="mb-4 flex items-start justify-between">
+                      <div>
+                        <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-white/50">
+                          <Sparkles className="h-3.5 w-3.5" /> AI Next Best Action
+                        </div>
+                        <h3 className="text-2xl font-black">
+                          {activeLead.status === "unclaimed"
+                            ? "Claim + text in under 60 seconds"
+                            : activeLead.status === "replied"
+                            ? "Customer replied — respond now"
+                            : activeLead.status === "follow_up"
+                            ? "Follow-up is due"
+                            : "Continue the conversation"}
+                        </h3>
+                        <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
+                          {activeLead.status === "unclaimed"
+                            ? "This lead has no owner yet. Send the first text now, then call if they don't respond within 90 seconds."
+                            : activeLead.status === "replied"
+                            ? "The customer replied. Respond quickly to keep momentum and close the booking."
+                            : "Keep the conversation moving to convert this lead."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-3">
+                      <button
+                        onClick={() => window.open(`tel:${activeLead.phone}`)}
+                        className="rounded-3xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 transition"
+                      >
+                        <Phone className="mb-3 h-5 w-5" />
+                        <div className="font-black text-sm">Call Now</div>
+                        <p className="mt-1 text-xs text-white/60">Best for high-intent leads.</p>
+                      </button>
+                      <button
+                        onClick={() => document.getElementById("lead-composer")?.focus()}
+                        className="rounded-3xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 transition"
+                      >
+                        <Send className="mb-3 h-5 w-5" />
+                        <div className="font-black text-sm">Send AI Text</div>
+                        <p className="mt-1 text-xs text-white/60">Personal first response is ready.</p>
+                      </button>
+                      <button className="rounded-3xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 transition">
+                        <ClipboardList className="mb-3 h-5 w-5" />
+                        <div className="font-black text-sm">Create Quote</div>
+                        <p className="mt-1 text-xs text-white/60">Use property details and source data.</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Conversation + detail cards — stacked */}
+                  <div className="flex flex-col gap-4">
+                    {/* Conversation */}
+                    <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                      <div className="border-b border-slate-200 p-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-black">Lead Conversation</h3>
+                          <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                            <Radio className="h-3 w-3" /> Live
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 p-4">
+                        <div className="max-w-[75%] rounded-3xl bg-slate-100 p-4">
+                          <div className="mb-1 text-xs font-bold text-slate-400">{activeLead.source} request</div>
+                          <p className="text-sm leading-6">
+                            {activeLead.service} • {activeLead.bedrooms} bed / {activeLead.bathrooms} bath
+                          </p>
+                        </div>
+                        <div className="ml-auto max-w-[78%] rounded-3xl bg-slate-950 p-4 text-white">
+                          <div className="mb-1 text-xs font-bold text-white/50">AI draft</div>
+                          <p className="text-sm leading-6">{composer}</p>
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-200 p-4">
+                        <textarea
+                          id="lead-composer"
+                          value={composer}
+                          onChange={(e) => setComposer(e.target.value)}
+                          className="h-24 w-full resize-none rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm outline-none focus:border-slate-400"
+                        />
+                        <div className="mt-3 flex items-center justify-between">
+                          <div className="flex gap-2">
+                            <button className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50">
+                              <Bot className="mr-1.5 inline h-3.5 w-3.5" />Rewrite
+                            </button>
+                            <button className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50">Add urgency</button>
+                            <button className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50">Softer tone</button>
+                          </div>
+                          <button
+                            onClick={handleSend}
+                            disabled={isSending || !composer.trim()}
+                            className="flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 font-black text-white text-sm disabled:opacity-50"
+                          >
+                            {isSending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Send className="h-4 w-4" /> Send
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Detail cards — 3-column row */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                        <h3 className="mb-3 text-base font-black">Lead Details</h3>
+                        {[
+                          ["Phone",      activeLead.phone],
+                          ["Property",   `${activeLead.bedrooms} bed / ${activeLead.bathrooms} bath`],
+                          ["Stage",      activeLead.stage],
+                          ["Last touch", formatLastTouch(activeLead)],
+                        ].map(([k, v]) => (
+                          <div key={k} className="mb-2.5 flex flex-col gap-0.5 text-sm">
+                            <span className="font-bold text-slate-400">{k}</span>
+                            <span className="font-semibold">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                        <div className="mb-2 flex items-center gap-2 text-amber-700">
+                          <AlertTriangle className="h-4 w-4" />
+                          <h3 className="font-black text-sm">Escalation Rule</h3>
+                        </div>
+                        <p className="text-xs leading-5 text-amber-800">
+                          If not claimed in 60 seconds, notify manager and trigger auto-text.
+                        </p>
+                        <button className="mt-3 rounded-2xl bg-amber-600 px-3 py-1.5 text-xs font-black text-white">
+                          Enable auto-response
+                        </button>
+                      </div>
+
+                      <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                        <h3 className="mb-3 text-base font-black">Quick Actions</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Claim */}
+                          <button
+                            onClick={handleClaim}
+                            disabled={isClaiming || activeLead.status === "booked"}
+                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-slate-950 px-3 py-2.5 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40 transition"
+                          >
+                            {isClaiming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                            Claim
+                          </button>
+
+                          {/* Quote — placeholder */}
+                          <button className="rounded-2xl bg-slate-100 px-3 py-2.5 text-xs font-black hover:bg-slate-200 transition">
+                            Quote
+                          </button>
+
+                          {/* Book */}
+                          <button
+                            onClick={handleBook}
+                            disabled={isBooking || activeLead.status === "booked"}
+                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 px-3 py-2.5 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-40 transition"
+                          >
+                            {isBooking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                            Book
+                          </button>
+
+                          {/* Follow-up */}
+                          <button
+                            onClick={() => setShowFollowUpModal(true)}
+                            disabled={anyPending}
+                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3 py-2.5 text-xs font-black hover:bg-slate-200 disabled:opacity-40 transition"
+                          >
+                            <CalendarClock className="h-3.5 w-3.5" />
+                            Follow-up
+                          </button>
+
+                          {/* Assign */}
+                          <button
+                            onClick={() => setShowAssignModal(true)}
+                            disabled={anyPending}
+                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3 py-2.5 text-xs font-black hover:bg-slate-200 disabled:opacity-40 transition"
+                          >
+                            <Users className="h-3.5 w-3.5" />
+                            Assign
+                          </button>
+
+                          {/* Close */}
+                          <button
+                            onClick={handleClose}
+                            disabled={isClosing || activeLead.status === "booked"}
+                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-rose-50 px-3 py-2.5 text-xs font-black text-rose-700 hover:bg-rose-100 disabled:opacity-40 transition"
+                          >
+                            {isClosing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Right panel: Live Team (Layer 4 — still mocked) */}
+                <aside className="overflow-y-auto border-l border-slate-200 bg-white p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Sales Floor</p>
+                      <h3 className="mt-0.5 text-xl font-black">Live Team</h3>
+                    </div>
+                    <button className="rounded-2xl bg-slate-950 p-2.5 text-white">
+                      <Plus className="h-4 w-4" />
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="mb-5 space-y-3">
                     {[
-                      { icon: Phone,        title: "Call Now",       desc: "Best for high-intent leads." },
-                      { icon: Send,         title: "Send AI Text",   desc: "Personal first response is ready." },
-                      { icon: ClipboardList,title: "Create Quote",   desc: "Use property details and source data." },
-                    ].map(({ icon: Icon, title, desc }) => (
-                      <button key={title} className="rounded-3xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 transition">
-                        <Icon className="mb-3 h-5 w-5" />
-                        <div className="font-black text-sm">{title}</div>
-                        <p className="mt-1 text-xs text-white/60">{desc}</p>
-                      </button>
+                      { name: "Madison",  initials: "M", state: "On lead queue", avg: "—", booked: "—", color: "bg-violet-100 text-violet-700" },
+                      { name: "Rizalina", initials: "R", state: "On lead queue", avg: "—", booked: "—", color: "bg-orange-100 text-orange-700" },
+                      { name: "Carlos",   initials: "C", state: "On lead queue", avg: "—", booked: "—", color: "bg-blue-100 text-blue-700" },
+                      { name: "Ashley",   initials: "A", state: "On lead queue", avg: "—", booked: "—", color: "bg-emerald-100 text-emerald-700" },
+                    ].map((member) => (
+                      <div key={member.name} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl font-black text-sm", member.color)}>
+                            {member.initials}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <h4 className="font-black text-sm">{member.name}</h4>
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+                            </div>
+                            <p className="truncate text-xs text-slate-500">{member.state}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-2xl bg-white p-2.5">
+                            <div className="font-black">{member.avg}</div>
+                            <div className="text-slate-400">response</div>
+                          </div>
+                          <div className="rounded-2xl bg-white p-2.5">
+                            <div className="font-black">{member.booked}</div>
+                            <div className="text-slate-400">booked</div>
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
 
-                {/* Conversation + details — stacked vertically */}
-                <div className="flex flex-col gap-4">
-                  {/* Conversation */}
-                  <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
-                    <div className="border-b border-slate-200 p-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-black">Lead Conversation</h3>
-                        <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                          <Radio className="h-3 w-3" /> Live
-                        </div>
-                      </div>
+                  <div className="rounded-[28px] bg-slate-950 p-4 text-white shadow-2xl">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="font-black">Today</h3>
+                      <ShieldCheck className="h-5 w-5 text-emerald-300" />
                     </div>
-
-                    <div className="space-y-4 p-4">
-                      <div className="max-w-[75%] rounded-3xl bg-slate-100 p-4">
-                        <div className="mb-1 text-xs font-bold text-slate-400">{activeLead.source} request</div>
-                        <p className="text-sm leading-6">
-                          {activeLead.service} • {activeLead.bedrooms} bed / {activeLead.bathrooms} bath
-                        </p>
-                      </div>
-                      <div className="ml-auto max-w-[78%] rounded-3xl bg-slate-950 p-4 text-white">
-                        <div className="mb-1 text-xs font-bold text-white/50">AI draft</div>
-                        <p className="text-sm leading-6">{composer}</p>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-200 p-4">
-                      <textarea
-                        value={composer}
-                        onChange={(e) => setComposer(e.target.value)}
-                        className="h-24 w-full resize-none rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm outline-none focus:border-slate-400"
-                      />
-                      <div className="mt-3 flex items-center justify-between">
-                        <div className="flex gap-2">
-                          <button className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50">
-                            <Bot className="mr-1.5 inline h-3.5 w-3.5" />Rewrite
-                          </button>
-                          <button className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50">Add urgency</button>
-                          <button className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold hover:bg-slate-50">Softer tone</button>
-                        </div>
-                        <button className="flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 font-black text-white text-sm">
-                          <Send className="h-4 w-4" /> Send
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Detail cards — 3-column row below conversation */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="mb-3 text-base font-black">Lead Details</h3>
+                    <div className="space-y-3">
                       {[
-                        ["Phone",      activeLead.phone],
-                        ["Property",   `${activeLead.bedrooms} bed / ${activeLead.bathrooms} bath`],
-                        ["Stage",      activeLead.stage],
-                        ["Last touch", formatLastTouch(activeLead)],
-                      ].map(([k, v]) => (
-                        <div key={k} className="mb-2.5 flex flex-col gap-0.5 text-sm">
-                          <span className="font-bold text-slate-400">{k}</span>
-                          <span className="font-semibold">{v}</span>
+                        ["Unclaimed", `${unclaimedCount}`, Math.min(unclaimedCount * 10, 100)],
+                        ["Booked",    `${bookedCount}`,    Math.min(bookedCount * 10, 100)],
+                        ["Close rate",`${closeRate}%`,     closeRate],
+                      ].map(([label, pct, width]) => (
+                        <div key={label as string}>
+                          <div className="mb-1.5 flex justify-between text-xs">
+                            <span>{label}</span>
+                            <span className="font-black">{pct}</span>
+                          </div>
+                          <div className="h-2.5 rounded-full bg-white/10">
+                            <div className="h-2.5 rounded-full bg-white" style={{ width: `${width}%` }} />
+                          </div>
                         </div>
                       ))}
                     </div>
-
-                    <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4 shadow-sm">
-                      <div className="mb-2 flex items-center gap-2 text-amber-700">
-                        <AlertTriangle className="h-4 w-4" />
-                        <h3 className="font-black text-sm">Escalation Rule</h3>
-                      </div>
-                      <p className="text-xs leading-5 text-amber-800">
-                        If not claimed in 60 seconds, notify manager and trigger auto-text.
-                      </p>
-                      <button className="mt-3 rounded-2xl bg-amber-600 px-3 py-1.5 text-xs font-black text-white">
-                        Enable auto-response
-                      </button>
-                    </div>
-
-                    <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-                      <h3 className="mb-3 text-base font-black">Quick Actions</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {["Claim", "Quote", "Book", "Follow-up", "Assign", "Close"].map((action) => (
-                          <button key={action} className="rounded-2xl bg-slate-100 px-3 py-2.5 text-xs font-black hover:bg-slate-200 transition">
-                            {action}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
                   </div>
-                </div>
-              </section>
 
-              {/* Right panel: Live Team */}
-              <aside className="overflow-y-auto border-l border-slate-200 bg-white p-4">
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Sales Floor</p>
-                    <h3 className="mt-0.5 text-xl font-black">Live Team</h3>
+                  <div className="mt-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+                    <h3 className="mb-3 font-black">Recent Wins</h3>
+                    <p className="text-xs text-slate-400">Coming in Layer 4 — real agent activity feed.</p>
                   </div>
-                  <button className="rounded-2xl bg-slate-950 p-2.5 text-white">
-                    <Plus className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Team panel — still mocked; Layer 4 will wire real agent data */}
-                <div className="mb-5 space-y-3">
-                  {[
-                    { name: "Madison",  initials: "M", state: "On lead queue",        avg: "—", booked: "—", color: "bg-violet-100 text-violet-700" },
-                    { name: "Rizalina", initials: "R", state: "On lead queue",         avg: "—", booked: "—", color: "bg-orange-100 text-orange-700" },
-                    { name: "Carlos",   initials: "C", state: "On lead queue",         avg: "—", booked: "—", color: "bg-blue-100 text-blue-700"   },
-                    { name: "Ashley",   initials: "A", state: "On lead queue",         avg: "—", booked: "—", color: "bg-emerald-100 text-emerald-700" },
-                  ].map((member) => (
-                    <div key={member.name} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("flex h-10 w-10 items-center justify-center rounded-2xl font-black text-sm", member.color)}>
-                          {member.initials}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <h4 className="font-black text-sm">{member.name}</h4>
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
-                          </div>
-                          <p className="truncate text-xs text-slate-500">{member.state}</p>
-                        </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-2xl bg-white p-2.5">
-                          <div className="font-black">{member.avg}</div>
-                          <div className="text-slate-400">response</div>
-                        </div>
-                        <div className="rounded-2xl bg-white p-2.5">
-                          <div className="font-black">{member.booked}</div>
-                          <div className="text-slate-400">booked</div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Today's performance */}
-                <div className="rounded-[28px] bg-slate-950 p-4 text-white shadow-2xl">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="font-black">Today</h3>
-                    <ShieldCheck className="h-5 w-5 text-emerald-300" />
-                  </div>
-                  <div className="space-y-3">
-                    {[
-                      ["Unclaimed leads", `${unclaimedCount}`, Math.min(unclaimedCount * 10, 100)],
-                      ["Booked",          `${bookedCount}`,   Math.min(bookedCount * 10, 100)],
-                      ["Close rate",      `${closeRate}%`,    closeRate],
-                    ].map(([label, pct, width]) => (
-                      <div key={label as string}>
-                        <div className="mb-1.5 flex justify-between text-xs">
-                          <span>{label}</span>
-                          <span className="font-black">{pct}</span>
-                        </div>
-                        <div className="h-2.5 rounded-full bg-white/10">
-                          <div className="h-2.5 rounded-full bg-white" style={{ width: `${width}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Recent wins — still mocked */}
-                <div className="mt-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-                  <h3 className="mb-3 font-black">Recent Wins</h3>
-                  <p className="text-xs text-slate-400">Coming in Layer 4 — real agent activity feed.</p>
-                </div>
-              </aside>
-            </div>
-          </>
-        )}
+                </aside>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
