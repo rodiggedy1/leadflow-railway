@@ -4554,30 +4554,66 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .from(agents)
         .where(eq(agents.isActive, 1));
 
+      // Compute ET-aware range start for booked sessions (matches CommandChat leads.stats logic)
+      // buildBookedDateConditions uses estOffsetMs to convert ET midnight → UTC
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD in ET
+      const bookedRangeCondition = (() => {
+        if (range === 'today') return buildBookedDateConditions(todayStr, todayStr);
+        if (range === 'week') {
+          // Monday of current week in ET
+          const now2 = new Date();
+          const etStr = now2.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+          const etDate = new Date(etStr + 'T00:00:00.000Z');
+          const day = etDate.getUTCDay(); // 0=Sun
+          const daysToMon = day === 0 ? 6 : day - 1;
+          etDate.setUTCDate(etDate.getUTCDate() - daysToMon);
+          const monStr = etDate.toISOString().slice(0, 10);
+          return buildBookedDateConditions(monStr, todayStr);
+        }
+        if (range === 'month') {
+          const monthStart = todayStr.slice(0, 8) + '01'; // YYYY-MM-01
+          return buildBookedDateConditions(monthStart, todayStr);
+        }
+        return undefined; // 'all'
+      })();
+
       // Leads in the selected range that are assigned to an agent
-      const rangeLeads = await db
-        .select({
-          assignedAgentId: conversationSessions.assignedAgentId,
-          bookedByAgentId: conversationSessions.bookedByAgentId,
-          isBooked: conversationSessions.isBooked,
-          createdAt: conversationSessions.createdAt,
-          bookedAt: conversationSessions.bookedAt,
-          // Revenue fields — same as calcBookedRevenue inputs
-          bookedAmount: conversationSessions.bookedAmount,
-          quotedPrice: conversationSessions.quotedPrice,
-          extras: conversationSessions.extras,
-          reactivationLastPrice: conversationSessions.reactivationLastPrice,
-          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
-        })
-        .from(conversationSessions)
-        .where(
-          rangeStart
-            ? and(
-                gte(conversationSessions.createdAt, rangeStart),
-                isNotNull(conversationSessions.assignedAgentId),
-              )
-            : isNotNull(conversationSessions.assignedAgentId)
-        );
+      // For claimed count: filter by createdAt (when the lead came in)
+      // For booked count/revenue: filter by bookedAt via bookedRangeCondition
+      const [claimedLeads, bookedLeads] = await Promise.all([
+        db
+          .select({
+            assignedAgentId: conversationSessions.assignedAgentId,
+            createdAt: conversationSessions.createdAt,
+            bookedAt: conversationSessions.bookedAt,
+          })
+          .from(conversationSessions)
+          .where(
+            rangeStart
+              ? and(gte(conversationSessions.createdAt, rangeStart), isNotNull(conversationSessions.assignedAgentId))
+              : isNotNull(conversationSessions.assignedAgentId)
+          ),
+        db
+          .select({
+            assignedAgentId: conversationSessions.assignedAgentId,
+            bookedByAgentId: conversationSessions.bookedByAgentId,
+            isBooked: conversationSessions.isBooked,
+            createdAt: conversationSessions.createdAt,
+            bookedAt: conversationSessions.bookedAt,
+            bookedAmount: conversationSessions.bookedAmount,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+          })
+          .from(conversationSessions)
+          .where(
+            bookedRangeCondition
+              ? and(bookedRangeCondition, eq(conversationSessions.isBooked, 1), isNotNull(conversationSessions.bookedByAgentId))
+              : and(eq(conversationSessions.isBooked, 1), isNotNull(conversationSessions.bookedByAgentId))
+          ),
+      ]);
+      const rangeLeads = claimedLeads; // alias for claimed count logic below
 
       type AgentRow = typeof allAgents[number];
       type LeadRow = typeof rangeLeads[number];
@@ -4601,13 +4637,14 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         }
 
         const agentLeads = rangeLeads.filter((l: LeadRow) => l.assignedAgentId === agent.id);
-        const bookedLeads = rangeLeads.filter((l: LeadRow) => l.bookedByAgentId === agent.id && l.isBooked);
-        const bookedRevenue = bookedLeads.reduce((sum: number, l: LeadRow) => sum + calcBookedRevenue(l), 0);
+        // bookedLeads is pre-filtered by bookedAt range (ET-aware) — matches CommandChat leads.stats
+        const agentBookedLeads = bookedLeads.filter((b) => b.bookedByAgentId === agent.id);
+        const bookedRevenue = agentBookedLeads.reduce((sum: number, l) => sum + calcBookedRevenue(l), 0);
 
         // Avg response time: mean of (bookedAt - createdAt) for booked leads
-        const responseTimes = bookedLeads
-          .filter((l: LeadRow) => l.bookedAt && l.createdAt)
-          .map((l: LeadRow) => new Date(l.bookedAt!).getTime() - new Date(l.createdAt).getTime())
+        const responseTimes = agentBookedLeads
+          .filter((l) => l.bookedAt && l.createdAt)
+          .map((l) => new Date(l.bookedAt!).getTime() - new Date(l.createdAt).getTime())
           .filter((t: number) => t > 0 && t < 24 * 60 * 60 * 1000);
 
         let avgResponseMs: number | null = null;
@@ -4623,7 +4660,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         }
 
         const conversionRate = agentLeads.length > 0
-          ? Math.round((bookedLeads.length / agentLeads.length) * 100)
+          ? Math.round((agentBookedLeads.length / agentLeads.length) * 100)
           : null;
         return {
           id: agent.id,
@@ -4632,13 +4669,13 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           isOnline,
           state,
           claimedCount: agentLeads.length,
-          bookedCount: bookedLeads.length,
+          bookedCount: agentBookedLeads.length,
           bookedRevenue,
           avgResponseLabel,
           conversionRate,
           // keep legacy aliases so existing callers don't break
           claimedToday: agentLeads.length,
-          bookedToday: bookedLeads.length,
+          bookedToday: agentBookedLeads.length,
         };
       });
     }),

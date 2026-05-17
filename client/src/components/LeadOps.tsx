@@ -1236,6 +1236,26 @@ export default function LeadOps() {
                     </div>
                   </div>
 
+                  {/* Total bar — matches CommandChat today dropdown */}
+                  {teamActivity.length > 0 && (() => {
+                    const totalBooked = teamActivity.reduce((s, a) => s + (a.bookedCount ?? 0), 0);
+                    const totalRevenue = teamActivity.reduce((s, a) => s + (a.bookedRevenue ?? 0), 0);
+                    return (
+                      <div className="mb-4 rounded-2xl bg-slate-950 px-4 py-3 text-white flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            {teamRange === 'today' ? 'Today' : teamRange === 'week' ? 'This Week' : teamRange === 'month' ? 'This Month' : 'All Time'}
+                          </div>
+                          <div className="text-lg font-black">{totalBooked} booked</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Revenue</div>
+                          <div className="text-lg font-black text-emerald-400">${totalRevenue.toLocaleString()}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="mb-5 space-y-3">
                     {teamActivity.length === 0 ? (
                       <p className="text-xs text-slate-400 py-4 text-center">No active agents</p>
