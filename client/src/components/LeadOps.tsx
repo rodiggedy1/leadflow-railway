@@ -612,19 +612,81 @@ export default function LeadOps() {
               {/* Detail body */}
               <div className="grid min-h-0 flex-1 grid-cols-[1fr_340px] overflow-hidden">
                 <section className="overflow-y-auto p-5">
-                  {/* Stats row */}
-                  <div className="mb-5 grid grid-cols-4 gap-3">
-                    {[
-                      ["Lead Source", activeLead.source],
-                      ["Est. Value",  `$${activeLead.estimatedValue}`],
-                      ["Close Fit",   `${activeLead.confidence}%`],
-                      ["Owner",       activeLead.assignedAgentName ?? "None"],
-                    ].map(([k, v]) => (
-                      <div key={k} className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">{k}</p>
-                        <p className="mt-2 text-xl font-black">{v}</p>
+                  {/* Action cards row — stat + action combined */}
+                  <div className="mb-5 grid grid-cols-6 gap-2.5">
+                    {/* Lead Source */}
+                    <div className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Lead Source</p>
+                        <p className="mt-1.5 text-base font-black leading-tight">{activeLead.source}</p>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Est. Value */}
+                    <div className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Est. Value</p>
+                        <p className="mt-1.5 text-base font-black leading-tight">${activeLead.estimatedValue}</p>
+                      </div>
+                    </div>
+
+                    {/* Close Fit */}
+                    <div className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3">
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Close Fit</p>
+                        <p className="mt-1.5 text-base font-black leading-tight">{activeLead.confidence}%</p>
+                      </div>
+                    </div>
+
+                    {/* Owner → Claim */}
+                    <button
+                      onClick={handleClaim}
+                      disabled={isClaiming || activeLead.status === "booked"}
+                      className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3 text-left hover:border-slate-400 hover:shadow-md transition group disabled:opacity-40"
+                    >
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Owner</p>
+                        <p className="mt-1.5 text-base font-black leading-tight truncate">{activeLead.assignedAgentName ?? "None"}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 rounded-xl bg-slate-950 px-2.5 py-1.5 text-white text-[10px] font-black w-fit group-hover:bg-slate-800 transition">
+                        {isClaiming ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserCheck className="h-3 w-3" />}
+                        Claim
+                      </div>
+                    </button>
+
+                    {/* Book */}
+                    <button
+                      onClick={handleBook}
+                      disabled={isBooking || activeLead.status === "booked"}
+                      className="rounded-3xl border border-emerald-200 bg-emerald-50 p-3.5 shadow-sm flex flex-col justify-between gap-3 text-left hover:border-emerald-400 hover:shadow-md transition group disabled:opacity-40"
+                    >
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-500">Status</p>
+                        <p className="mt-1.5 text-base font-black leading-tight text-emerald-900">
+                          {activeLead.status === "booked" ? "Booked ✓" : "Not booked"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 py-1.5 text-white text-[10px] font-black w-fit group-hover:bg-emerald-700 transition">
+                        {isBooking ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                        Book
+                      </div>
+                    </button>
+
+                    {/* Follow-up */}
+                    <button
+                      onClick={() => setShowFollowUpModal(true)}
+                      disabled={anyPending}
+                      className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3 text-left hover:border-slate-400 hover:shadow-md transition group disabled:opacity-40"
+                    >
+                      <div>
+                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Follow-up</p>
+                        <p className="mt-1.5 text-base font-black leading-tight">Schedule</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 py-1.5 text-slate-700 text-[10px] font-black w-fit group-hover:bg-slate-200 transition">
+                        <CalendarClock className="h-3 w-3" />
+                        Set date
+                      </div>
+                    </button>
                   </div>
 
                   {/* AI Next Best Action */}
@@ -736,8 +798,9 @@ export default function LeadOps() {
                       </div>
                     </div>
 
-                    {/* Detail cards — 3-column row */}
-                    <div className="grid grid-cols-3 gap-3">
+
+                    {/* Lead details + escalation row */}
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                         <h3 className="mb-3 text-base font-black">Lead Details</h3>
                         {[
@@ -753,58 +816,22 @@ export default function LeadOps() {
                         ))}
                       </div>
 
-                      <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4 shadow-sm">
-                        <div className="mb-2 flex items-center gap-2 text-amber-700">
-                          <AlertTriangle className="h-4 w-4" />
-                          <h3 className="font-black text-sm">Escalation Rule</h3>
+                      <div className="flex flex-col gap-3">
+                        <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                          <div className="mb-2 flex items-center gap-2 text-amber-700">
+                            <AlertTriangle className="h-4 w-4" />
+                            <h3 className="font-black text-sm">Escalation Rule</h3>
+                          </div>
+                          <p className="text-xs leading-5 text-amber-800">
+                            If not claimed in 60 seconds, notify manager and trigger auto-text.
+                          </p>
+                          <button className="mt-3 rounded-2xl bg-amber-600 px-3 py-1.5 text-xs font-black text-white">
+                            Enable auto-response
+                          </button>
                         </div>
-                        <p className="text-xs leading-5 text-amber-800">
-                          If not claimed in 60 seconds, notify manager and trigger auto-text.
-                        </p>
-                        <button className="mt-3 rounded-2xl bg-amber-600 px-3 py-1.5 text-xs font-black text-white">
-                          Enable auto-response
-                        </button>
-                      </div>
 
-                      <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-                        <h3 className="mb-3 text-base font-black">Quick Actions</h3>
+                        {/* Assign + Close row */}
                         <div className="grid grid-cols-2 gap-2">
-                          {/* Claim */}
-                          <button
-                            onClick={handleClaim}
-                            disabled={isClaiming || activeLead.status === "booked"}
-                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-slate-950 px-3 py-2.5 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40 transition"
-                          >
-                            {isClaiming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
-                            Claim
-                          </button>
-
-                          {/* Quote — placeholder */}
-                          <button className="rounded-2xl bg-slate-100 px-3 py-2.5 text-xs font-black hover:bg-slate-200 transition">
-                            Quote
-                          </button>
-
-                          {/* Book */}
-                          <button
-                            onClick={handleBook}
-                            disabled={isBooking || activeLead.status === "booked"}
-                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-emerald-600 px-3 py-2.5 text-xs font-black text-white hover:bg-emerald-700 disabled:opacity-40 transition"
-                          >
-                            {isBooking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                            Book
-                          </button>
-
-                          {/* Follow-up */}
-                          <button
-                            onClick={() => setShowFollowUpModal(true)}
-                            disabled={anyPending}
-                            className="flex items-center justify-center gap-1.5 rounded-2xl bg-slate-100 px-3 py-2.5 text-xs font-black hover:bg-slate-200 disabled:opacity-40 transition"
-                          >
-                            <CalendarClock className="h-3.5 w-3.5" />
-                            Follow-up
-                          </button>
-
-                          {/* Assign */}
                           <button
                             onClick={() => setShowAssignModal(true)}
                             disabled={anyPending}
@@ -813,8 +840,6 @@ export default function LeadOps() {
                             <Users className="h-3.5 w-3.5" />
                             Assign
                           </button>
-
-                          {/* Close */}
                           <button
                             onClick={handleClose}
                             disabled={isClosing || activeLead.status === "booked"}
