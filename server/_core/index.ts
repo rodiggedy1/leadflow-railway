@@ -30,6 +30,7 @@ import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { getAgentByEmail } from "../db";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -148,17 +149,34 @@ async function startServer() {
 
   // Preview auto-login: when PREVIEW_MODE=true, visiting /api/preview-login sets
   // an admin agent session cookie automatically so the UI is accessible without credentials.
+  // Uses EMERGENCY_AGENT_EMAIL to look up a real agent so agents.me DB lookup succeeds.
   if (ENV.isPreviewMode) {
     app.get("/api/preview-login", async (req, res) => {
-      const token = await signAgentSession({
-        agentId: 0,
-        agentName: "Preview Admin",
-        agentEmail: "preview@maidinblack.com",
-        isAdmin: true,
-      });
-      const cookieOpts = getSessionCookieOptions(req);
-      res.cookie(AGENT_COOKIE_NAME, token, { ...cookieOpts, maxAge: ONE_YEAR_MS });
-      res.redirect("/");
+      const defaultEmail = process.env.EMERGENCY_AGENT_EMAIL;
+      if (!defaultEmail) {
+        console.error("[Preview] EMERGENCY_AGENT_EMAIL not set — cannot auto-login");
+        return res.status(500).send("Preview login unavailable: EMERGENCY_AGENT_EMAIL not configured");
+      }
+      try {
+        const agent = await getAgentByEmail(defaultEmail.toLowerCase().trim());
+        if (!agent || !agent.isActive) {
+          console.error(`[Preview] Agent not found or inactive: ${defaultEmail}`);
+          return res.status(500).send("Preview login unavailable: agent not found");
+        }
+        const token = await signAgentSession({
+          agentId: agent.id,
+          agentName: agent.name,
+          agentEmail: agent.email,
+          isAdmin: agent.isAdmin === 1,
+        });
+        const cookieOpts = getSessionCookieOptions(req);
+        res.cookie(AGENT_COOKIE_NAME, token, { ...cookieOpts, maxAge: ONE_YEAR_MS });
+        console.log(`[Preview] Auto-login as ${agent.email} (id=${agent.id})`);
+        return res.redirect("/");
+      } catch (err) {
+        console.error("[Preview] Auto-login error:", err);
+        return res.status(500).send("Preview login error");
+      }
     });
     console.log("[Preview] Auto-login endpoint registered: GET /api/preview-login");
   }
