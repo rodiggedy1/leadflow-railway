@@ -4562,6 +4562,12 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           isBooked: conversationSessions.isBooked,
           createdAt: conversationSessions.createdAt,
           bookedAt: conversationSessions.bookedAt,
+          // Revenue fields — same as calcBookedRevenue inputs
+          bookedAmount: conversationSessions.bookedAmount,
+          quotedPrice: conversationSessions.quotedPrice,
+          extras: conversationSessions.extras,
+          reactivationLastPrice: conversationSessions.reactivationLastPrice,
+          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
         })
         .from(conversationSessions)
         .where(
@@ -4596,6 +4602,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
 
         const agentLeads = rangeLeads.filter((l: LeadRow) => l.assignedAgentId === agent.id);
         const bookedLeads = rangeLeads.filter((l: LeadRow) => l.bookedByAgentId === agent.id && l.isBooked);
+        const bookedRevenue = bookedLeads.reduce((sum: number, l: LeadRow) => sum + calcBookedRevenue(l), 0);
 
         // Avg response time: mean of (bookedAt - createdAt) for booked leads
         const responseTimes = bookedLeads
@@ -4626,6 +4633,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           state,
           claimedCount: agentLeads.length,
           bookedCount: bookedLeads.length,
+          bookedRevenue,
           avgResponseLabel,
           conversionRate,
           // keep legacy aliases so existing callers don't break

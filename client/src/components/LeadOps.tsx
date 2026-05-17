@@ -1282,6 +1282,11 @@ export default function LeadOps() {
                               <div className="rounded-2xl bg-white p-2.5">
                                 <div className="font-black">{member.bookedCount ?? member.bookedToday}</div>
                                 <div className="text-slate-400">booked</div>
+                                {(member.bookedRevenue ?? 0) > 0 && (
+                                  <div className="text-[10px] font-bold text-emerald-600 leading-tight mt-0.5">
+                                    ${(member.bookedRevenue ?? 0).toLocaleString()}
+                                  </div>
+                                )}
                               </div>
                               <div className="rounded-2xl bg-white p-2.5">
                                 <div className={cn(
