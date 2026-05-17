@@ -31,6 +31,7 @@ import {
   CalendarClock,
   UserCheck,
   ChevronDown,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
@@ -612,80 +613,65 @@ export default function LeadOps() {
               {/* Detail body */}
               <div className="grid min-h-0 flex-1 grid-cols-[1fr_340px] overflow-hidden">
                 <section className="overflow-y-auto p-5">
-                  {/* Action cards row — stat + action combined */}
-                  <div className="mb-5 grid grid-cols-6 gap-2.5">
-                    {/* Lead Source */}
-                    <div className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3">
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Lead Source</p>
-                        <p className="mt-1.5 text-base font-black leading-tight">{activeLead.source}</p>
-                      </div>
-                    </div>
-
-                    {/* Est. Value */}
-                    <div className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3">
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Est. Value</p>
-                        <p className="mt-1.5 text-base font-black leading-tight">${activeLead.estimatedValue}</p>
-                      </div>
-                    </div>
-
-                    {/* Close Fit */}
-                    <div className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3">
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Close Fit</p>
-                        <p className="mt-1.5 text-base font-black leading-tight">{activeLead.confidence}%</p>
-                      </div>
-                    </div>
-
-                    {/* Owner → Claim */}
+                  {/* Quick Actions — top row, always visible */}
+                  <div className="mb-5 grid grid-cols-6 gap-2">
+                    {/* Claim */}
                     <button
                       onClick={handleClaim}
                       disabled={isClaiming || activeLead.status === "booked"}
-                      className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3 text-left hover:border-slate-400 hover:shadow-md transition group disabled:opacity-40"
+                      className="flex items-center justify-center gap-2 rounded-3xl bg-slate-950 px-4 py-3.5 text-sm font-black text-white hover:bg-slate-800 disabled:opacity-40 transition shadow-sm"
                     >
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Owner</p>
-                        <p className="mt-1.5 text-base font-black leading-tight truncate">{activeLead.assignedAgentName ?? "None"}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 rounded-xl bg-slate-950 px-2.5 py-1.5 text-white text-[10px] font-black w-fit group-hover:bg-slate-800 transition">
-                        {isClaiming ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserCheck className="h-3 w-3" />}
-                        Claim
-                      </div>
+                      {isClaiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+                      Claim
+                    </button>
+
+                    {/* Quote — placeholder */}
+                    <button
+                      onClick={() => {}}
+                      className="flex items-center justify-center gap-2 rounded-3xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-black hover:bg-slate-50 transition shadow-sm"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Quote
                     </button>
 
                     {/* Book */}
                     <button
                       onClick={handleBook}
                       disabled={isBooking || activeLead.status === "booked"}
-                      className="rounded-3xl border border-emerald-200 bg-emerald-50 p-3.5 shadow-sm flex flex-col justify-between gap-3 text-left hover:border-emerald-400 hover:shadow-md transition group disabled:opacity-40"
+                      className="flex items-center justify-center gap-2 rounded-3xl bg-emerald-600 px-4 py-3.5 text-sm font-black text-white hover:bg-emerald-700 disabled:opacity-40 transition shadow-sm"
                     >
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-500">Status</p>
-                        <p className="mt-1.5 text-base font-black leading-tight text-emerald-900">
-                          {activeLead.status === "booked" ? "Booked ✓" : "Not booked"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-2.5 py-1.5 text-white text-[10px] font-black w-fit group-hover:bg-emerald-700 transition">
-                        {isBooking ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                        Book
-                      </div>
+                      {isBooking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      Book
                     </button>
 
                     {/* Follow-up */}
                     <button
                       onClick={() => setShowFollowUpModal(true)}
                       disabled={anyPending}
-                      className="rounded-3xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between gap-3 text-left hover:border-slate-400 hover:shadow-md transition group disabled:opacity-40"
+                      className="flex items-center justify-center gap-2 rounded-3xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-black hover:bg-slate-50 disabled:opacity-40 transition shadow-sm"
                     >
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.22em] text-slate-400">Follow-up</p>
-                        <p className="mt-1.5 text-base font-black leading-tight">Schedule</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 rounded-xl bg-slate-100 px-2.5 py-1.5 text-slate-700 text-[10px] font-black w-fit group-hover:bg-slate-200 transition">
-                        <CalendarClock className="h-3 w-3" />
-                        Set date
-                      </div>
+                      <CalendarClock className="h-4 w-4" />
+                      Follow-up
+                    </button>
+
+                    {/* Assign */}
+                    <button
+                      onClick={() => setShowAssignModal(true)}
+                      disabled={anyPending}
+                      className="flex items-center justify-center gap-2 rounded-3xl border border-slate-200 bg-white px-4 py-3.5 text-sm font-black hover:bg-slate-50 disabled:opacity-40 transition shadow-sm"
+                    >
+                      <Users className="h-4 w-4" />
+                      Assign
+                    </button>
+
+                    {/* Close */}
+                    <button
+                      onClick={handleClose}
+                      disabled={isClosing || activeLead.status === "booked"}
+                      className="flex items-center justify-center gap-2 rounded-3xl border border-rose-200 bg-rose-50 px-4 py-3.5 text-sm font-black text-rose-700 hover:bg-rose-100 disabled:opacity-40 transition shadow-sm"
+                    >
+                      {isClosing ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
+                      Close
                     </button>
                   </div>
 
