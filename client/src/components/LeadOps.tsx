@@ -407,6 +407,8 @@ export default function LeadOps() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   // Track when each lead was claimed (client-side, keyed by sessionId)
   const [claimedAtMap, setClaimedAtMap] = useState<Record<number, number>>({});
+  // Time range for Live Team stats
+  const [teamRange, setTeamRange] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [addLeadForm, setAddLeadForm] = useState({ name: "", phone: "", email: "", serviceType: "Standard Cleaning", source: "phone" as "yelp"|"google"|"thumbtack"|"bark"|"phone"|"other", notes: "", amount: "" });
 
@@ -417,7 +419,7 @@ export default function LeadOps() {
   });
 
   // Layer 4: real Live Team data
-  const { data: teamActivity = [] } = trpc.leads.getTeamActivity.useQuery(undefined, {
+  const { data: teamActivity = [] } = trpc.leads.getTeamActivity.useQuery({ range: teamRange }, {
     refetchInterval: 30_000,
   });
 
@@ -1205,15 +1207,32 @@ export default function LeadOps() {
 
                 {/* Right panel: Live Team (Layer 4 — real data) */}
                 <aside className="overflow-y-auto border-l border-slate-200 bg-white p-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Sales Floor</p>
-                      <h3 className="mt-0.5 text-xl font-black">Live Team</h3>
-                    </div>
-                    <div className="flex items-center gap-1.5">
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-400">Sales Floor</p>
+                        <h3 className="mt-0.5 text-xl font-black">Live Team</h3>
+                      </div>
                       <span className="text-[10px] font-bold text-slate-400">
                         {teamActivity.filter((a) => a.isOnline).length} online
                       </span>
+                    </div>
+                    {/* Compact time-range switcher */}
+                    <div className="flex gap-1">
+                      {(['today', 'week', 'month', 'all'] as const).map((r) => (
+                        <button
+                          key={r}
+                          onClick={() => setTeamRange(r)}
+                          className={cn(
+                            "flex-1 rounded-xl py-1 text-[10px] font-black uppercase tracking-wide transition-colors",
+                            teamRange === r
+                              ? "bg-slate-950 text-white"
+                              : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+                          )}
+                        >
+                          {r === 'today' ? 'Today' : r === 'week' ? 'Wk' : r === 'month' ? 'Mo' : 'All'}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -1257,11 +1276,11 @@ export default function LeadOps() {
                             </div>
                             <div className="mt-3 grid grid-cols-4 gap-1.5 text-xs">
                               <div className="rounded-2xl bg-white p-2.5">
-                                <div className="font-black">{member.claimedToday}</div>
+                                <div className="font-black">{member.claimedCount ?? member.claimedToday}</div>
                                 <div className="text-slate-400">claimed</div>
                               </div>
                               <div className="rounded-2xl bg-white p-2.5">
-                                <div className="font-black">{member.bookedToday}</div>
+                                <div className="font-black">{member.bookedCount ?? member.bookedToday}</div>
                                 <div className="text-slate-400">booked</div>
                               </div>
                               <div className="rounded-2xl bg-white p-2.5">

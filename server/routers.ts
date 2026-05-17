@@ -4497,15 +4497,41 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
 
     /**
      * leads.getTeamActivity — returns per-agent stats for the Live Team panel.
-     * For each active agent: online status, away status, leads claimed today,
-     * leads booked today, avg response time, and current state label.
+     * For each active agent: online status, away status, leads claimed/booked for the
+     * requested time range (today | week | month | all), conv%, and avg response time.
      */
-    getTeamActivity: agentProcedure.query(async () => {
+    getTeamActivity: agentProcedure
+      .input(z.object({
+        range: z.enum(['today', 'week', 'month', 'all']).optional().default('today'),
+      }).optional())
+      .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return [];
       const now = Date.now();
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
+      const range = input?.range ?? 'today';
+
+      // Compute the start boundary for the selected range
+      const rangeStart = (() => {
+        const d = new Date();
+        if (range === 'today') {
+          d.setHours(0, 0, 0, 0);
+          return d;
+        }
+        if (range === 'week') {
+          // Monday 00:00:00 local
+          const day = d.getDay(); // 0=Sun
+          const daysToMon = day === 0 ? 6 : day - 1;
+          d.setDate(d.getDate() - daysToMon);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        }
+        if (range === 'month') {
+          d.setDate(1);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        }
+        return null; // 'all' — no lower bound
+      })();
 
       // All active agents
       const allAgents = await db
@@ -4520,8 +4546,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .from(agents)
         .where(eq(agents.isActive, 1));
 
-      // Today's leads: claimed and booked per agent
-      const todayLeads = await db
+      // Leads in the selected range that are assigned to an agent
+      const rangeLeads = await db
         .select({
           assignedAgentId: conversationSessions.assignedAgentId,
           bookedByAgentId: conversationSessions.bookedByAgentId,
@@ -4531,14 +4557,16 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         })
         .from(conversationSessions)
         .where(
-          and(
-            gte(conversationSessions.createdAt, todayStart),
-            isNotNull(conversationSessions.assignedAgentId),
-          )
+          rangeStart
+            ? and(
+                gte(conversationSessions.createdAt, rangeStart),
+                isNotNull(conversationSessions.assignedAgentId),
+              )
+            : isNotNull(conversationSessions.assignedAgentId)
         );
 
       type AgentRow = typeof allAgents[number];
-      type LeadRow = typeof todayLeads[number];
+      type LeadRow = typeof rangeLeads[number];
       return allAgents.map((agent: AgentRow) => {
         const onlineCutoff = now - 5 * 60 * 1000; // 5 min
         const isOnline = agent.lastSeenAt
@@ -4558,8 +4586,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           state = 'Available';
         }
 
-        const agentLeads = todayLeads.filter((l: LeadRow) => l.assignedAgentId === agent.id);
-        const bookedLeads = todayLeads.filter((l: LeadRow) => l.bookedByAgentId === agent.id && l.isBooked);
+        const agentLeads = rangeLeads.filter((l: LeadRow) => l.assignedAgentId === agent.id);
+        const bookedLeads = rangeLeads.filter((l: LeadRow) => l.bookedByAgentId === agent.id && l.isBooked);
 
         // Avg response time: mean of (bookedAt - createdAt) for booked leads
         const responseTimes = bookedLeads
@@ -4588,10 +4616,13 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           profilePhotoUrl: agent.profilePhotoUrl ?? null,
           isOnline,
           state,
-          claimedToday: agentLeads.length,
-          bookedToday: bookedLeads.length,
+          claimedCount: agentLeads.length,
+          bookedCount: bookedLeads.length,
           avgResponseLabel,
           conversionRate,
+          // keep legacy aliases so existing callers don't break
+          claimedToday: agentLeads.length,
+          bookedToday: bookedLeads.length,
         };
       });
     }),
