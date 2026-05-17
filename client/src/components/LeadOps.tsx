@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { toast } from "sonner";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -481,6 +482,15 @@ export default function LeadOps() {
   const refreshLeads = useCallback(() => {
     utils.leads.listForLeadOps.invalidate();
   }, [utils]);
+
+  // Subscribe to SSE so claims/updates made in CommandChat (or by another agent)
+  // reflect instantly in Lead Ops without waiting for the 30s poll cycle.
+  useOpsStream({
+    onLeadUpdate: () => {
+      utils.leads.listForLeadOps.invalidate();
+      utils.leads.getTeamActivity.invalidate();
+    },
+  });
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
