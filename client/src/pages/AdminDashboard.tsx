@@ -3552,10 +3552,98 @@ export default function AdminDashboard() {
     enabled: hasSession,
   });
 
-  const { data: attentionData, isLoading: attentionLoading } = trpc.leads.attentionItems.useQuery(undefined, {
-    refetchInterval: 60_000,
-    enabled: hasSession,
-  });
+  // Executive summary counts — computed from the same sessions array used by the leads table.
+  // This guarantees the count and the filtered list are always identical.
+  const attentionLoading = sessionsLoading;
+  const attentionData = useMemo(() => {
+    if (!sessions.length) return null;
+    const now = Date.now();
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    const FOUR_HOURS_MS = 4 * ONE_HOUR_MS;
+    const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
+    const closedStages = ["BOOKED", "COMPLETED", "CLOSED", "LOST", "COLD"];
+    let unrespondedUrgent = 0;
+    let unrespondedWarning = 0;
+    let unhandledCount = 0;
+    let hotLeadsCount = 0;
+    let unreadCount2 = 0;
+    for (const s of sessions) {
+      const hist: Array<{ role: string; ts?: number }> = (() => {
+        try { return JSON.parse((s as any).messageHistory ?? "[]"); } catch { return []; }
+      })();
+      const respondedAt = (s as any).respondedAt as number | null | undefined;
+      // AWAITING_REPLY (unresponded) — same logic as the stageFilter === "AWAITING_REPLY" branch
+      if (!closedStages.includes(s.stage ?? "")) {
+        const lastMsg = hist.length > 0 ? hist[hist.length - 1] : null;
+        if (lastMsg && (lastMsg.role === "user" || lastMsg.role === "customer")) {
+          const isHandled = respondedAt && lastMsg.ts && lastMsg.ts <= respondedAt;
+          if (!isHandled) {
+            const age = lastMsg.ts ? now - lastMsg.ts : 0;
+            if (age > FOUR_HOURS_MS) unrespondedUrgent++;
+            else if (age > ONE_HOUR_MS) unrespondedWarning++;
+          }
+        }
+      }
+      // UNHANDLED — same logic as stageFilter === "UNHANDLED" branch
+      if (s.stage === "UNHANDLED") {
+        const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
+        const isHandled = respondedAt && (!lastCustomer?.ts || lastCustomer.ts <= respondedAt);
+        if (!isHandled) unhandledCount++;
+      }
+      // HOT_LEADS — same logic as stageFilter === "HOT_LEADS" branch
+      if (!closedStages.includes(s.stage ?? "")) {
+        const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
+        if (lastCustomer?.ts && (now - lastCustomer.ts) <= SEVENTY_TWO_HOURS_MS) hotLeadsCount++;
+      }
+      // UNREAD — same flag computed by leads.list server-side
+      if (!!(s as any).hasUnread) unreadCount2++;
+    }
+    type Severity = "urgent" | "warning" | "ok";
+    const items: Array<{ key: string; label: string; count: number; detail: string; severity: Severity }> = [
+      {
+        key: "unresponded",
+        label: "Unresponded leads",
+        count: unrespondedUrgent + unrespondedWarning,
+        detail: unrespondedUrgent > 0
+          ? `${unrespondedUrgent} lead${unrespondedUrgent !== 1 ? "s" : ""} waiting 4+ hours for a reply`
+          : unrespondedWarning > 0
+          ? `${unrespondedWarning} lead${unrespondedWarning !== 1 ? "s" : ""} waiting 1–4 hours for a reply`
+          : "All leads have been responded to",
+        severity: unrespondedUrgent > 0 ? "urgent" : unrespondedWarning > 0 ? "warning" : "ok",
+      },
+      {
+        key: "unhandled",
+        label: "Unhandled leads",
+        count: unhandledCount,
+        detail: unhandledCount > 0
+          ? `${unhandledCount} lead${unhandledCount !== 1 ? "s" : ""} need immediate attention`
+          : "No unhandled leads — great work!",
+        severity: unhandledCount > 0 ? "urgent" : "ok",
+      },
+      {
+        key: "hot_leads",
+        label: "Hot leads",
+        count: hotLeadsCount,
+        detail: hotLeadsCount > 0
+          ? `${hotLeadsCount} lead${hotLeadsCount !== 1 ? "s" : ""} active in the last 72 hours`
+          : "No hot leads right now",
+        severity: hotLeadsCount > 0 ? "warning" : "ok",
+      },
+      {
+        key: "unread",
+        label: "Unread messages",
+        count: unreadCount2,
+        detail: unreadCount2 > 0
+          ? `${unreadCount2} lead${unreadCount2 !== 1 ? "s" : ""} with new messages you haven't seen`
+          : "All messages have been read",
+        severity: unreadCount2 > 0 ? "warning" : "ok",
+      },
+    ];
+    const overallSeverity: Severity =
+      items.some(i => i.severity === "urgent") ? "urgent" :
+      items.some(i => i.severity === "warning") ? "warning" : "ok";
+    return { items, overallSeverity };
+  }, [sessions]);
   const { data: visitorStats } = trpc.leads.visitorStats.useQuery(dateRange, {
     refetchInterval: 60000,
     enabled: hasSession,
