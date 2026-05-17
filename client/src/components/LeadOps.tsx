@@ -391,8 +391,8 @@ export default function LeadOps() {
               </div>
             </div>
 
-            {/* Conversation + details */}
-            <div className="grid grid-cols-[1fr_280px] gap-4">
+            {/* Conversation + details — stacked vertically */}
+            <div className="flex flex-col gap-4">
               {/* Conversation */}
               <div className="rounded-[28px] border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 p-4">
@@ -436,8 +436,8 @@ export default function LeadOps() {
                 </div>
               </div>
 
-              {/* Right detail cards */}
-              <div className="space-y-3">
+              {/* Detail cards — 3-column row below conversation */}
+              <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
                   <h3 className="mb-3 text-base font-black">Lead Details</h3>
                   {[
@@ -446,9 +446,9 @@ export default function LeadOps() {
                     ["Property",   activeLead.details],
                     ["Last touch", activeLead.lastTouch],
                   ].map(([k, v]) => (
-                    <div key={k} className="mb-2.5 flex justify-between gap-4 text-sm">
+                    <div key={k} className="mb-2.5 flex flex-col gap-0.5 text-sm">
                       <span className="font-bold text-slate-400">{k}</span>
-                      <span className="text-right font-semibold">{v}</span>
+                      <span className="font-semibold">{v}</span>
                     </div>
                   ))}
                 </div>
