@@ -59,6 +59,36 @@ interface TeamConfig {
   earliestStartTime?: string | null; // "HH:MM" earliest first job start
   lockedJobCount?: number;          // jobs already locked to this team (excluded from VRP pool)
   avgRating?: number | null;        // all-time average customer rating (1-5)
+  regionTags?: string[] | null;     // DC/MD/VA region tags for first-job preference
+}
+
+// ── Region helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Infer DC/MD/VA region tags from an address string.
+ * Looks for state abbreviations or city names in the address.
+ * Returns an array of matching region codes (e.g. ["DC", "MD"]).
+ */
+function inferRegionFromAddress(address: string | null | undefined): string[] {
+  if (!address) return [];
+  const a = address.toUpperCase();
+  const tags: string[] = [];
+  // DC: ", DC" or "WASHINGTON DC" or "WASHINGTON, DC"
+  if (/,\s*DC\b/.test(a) || /WASHINGTON[,\s]+DC/.test(a) || /\bDC\b/.test(a)) tags.push("DC");
+  // MD: ", MD" or state name Maryland
+  if (/,\s*MD\b/.test(a) || /\bMARYLAND\b/.test(a)) tags.push("MD");
+  // VA: ", VA" or state name Virginia (but not West Virginia)
+  if (/,\s*VA\b/.test(a) || (/\bVIRGINIA\b/.test(a) && !/WEST\s+VIRGINIA/.test(a))) tags.push("VA");
+  return tags;
+}
+
+/**
+ * Infer DC/MD/VA region from a job address string.
+ * Returns the single best-match region code or null.
+ */
+function inferJobRegion(address: string | null | undefined): string | null {
+  const tags = inferRegionFromAddress(address);
+  return tags[0] ?? null;
 }
 
 interface Assignment {
@@ -424,7 +454,21 @@ function solveVRP(
         ? route.filter(rji => jobs[rji].serviceDateTime?.slice(11, 13) === jobHour).length
         : 0;
       const sameSlotPenalty = sameSlotCount * SAME_SLOT_PENALTY;
-      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB + sameSlotPenalty - floorBonus - ratingBonus - homeReturnBonus;
+      // Region match bonus (first job only): if this is the team's first job AND the team has
+      // region tags AND the job's address matches one of those tags, apply a strong bonus.
+      // Weight: 1200s (20 min equivalent) — strong preference but a 20+ min drive advantage
+      // for a mismatched team still wins. Only applied to the first job (empty route).
+      // For jobs 2+, region is irrelevant — distance chaining dominates.
+      const REGION_MATCH_BONUS = 1_200; // seconds — strong but overridable by distance
+      let regionBonus = 0;
+      if (seq.length === 1 && t.regionTags && t.regionTags.length > 0) {
+        // First job for this team — check if job region matches team tags
+        const jobRegion = inferJobRegion(jobs[ji].address);
+        if (jobRegion && t.regionTags.includes(jobRegion)) {
+          regionBonus = REGION_MATCH_BONUS;
+        }
+      }
+      const totalCost = minInsertCost + overload * LOAD_PENALTY_PER_JOB + sameSlotPenalty - floorBonus - ratingBonus - homeReturnBonus - regionBonus;
       if (totalCost < bestCost) {
         bestCost = totalCost;
         bestTeam = t;
@@ -438,6 +482,7 @@ function solveVRP(
         if (overloadSecs > 0) summary += `, load-balanced`;
         if (sameSlotPenalty > 0) summary += `, spread across time slots`;
         if (homeReturnBonus > 0) summary += `, on the way home`;
+        if (regionBonus > 0) summary += `, region match (${inferJobRegion(jobs[ji].address)})`;
         jobRationale.set(ji, {
           driveCostSecs: minInsertCost,
           ratingBonus: Math.round(ratingBonus),
@@ -594,6 +639,8 @@ export const schedulingRouter = router({
       skills: z.string().optional(),
       color: z.string().optional(),
       isActive: z.number().optional(),
+      /** Comma-separated region tags, e.g. "DC,MD". Pass null to clear. Omit to auto-infer from homeAddress. */
+      regionTags: z.string().nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const db = await getDb();
@@ -607,19 +654,53 @@ export const schedulingRouter = router({
         if (geo) { homeLat = geo.lat; homeLng = geo.lng; }
       }
 
+      // Determine regionTags:
+      // - If explicitly provided (including empty string), use that value
+      // - If omitted and homeAddress is provided, auto-infer from the address
+      // - Otherwise leave unchanged (update) or null (insert)
+      let regionTagsValue: string | null | undefined = undefined;
+      if (input.regionTags !== undefined) {
+        // Explicit override — normalize to null if empty
+        regionTagsValue = input.regionTags?.trim() || null;
+      } else if (input.homeAddress) {
+        // Auto-infer from address
+        const inferred = inferRegionFromAddress(input.homeAddress);
+        regionTagsValue = inferred.length > 0 ? inferred.join(",") : null;
+      }
+
       if (input.id) {
-        await db.update(schedulingTeams)
-          .set({ name: input.name, homeAddress: input.homeAddress, homeLat, homeLng, maxHoursPerDay: input.maxHoursPerDay, skills: input.skills, color: input.color, isActive: input.isActive ?? 1 })
-          .where(eq(schedulingTeams.id, input.id));
+        const updatePayload: Record<string, unknown> = {
+          name: input.name, homeAddress: input.homeAddress, homeLat, homeLng,
+          maxHoursPerDay: input.maxHoursPerDay, skills: input.skills,
+          color: input.color, isActive: input.isActive ?? 1,
+        };
+        if (regionTagsValue !== undefined) updatePayload.regionTags = regionTagsValue;
+        await db.update(schedulingTeams).set(updatePayload as any).where(eq(schedulingTeams.id, input.id));
         return { id: input.id };
       } else {
         const [result] = await db.insert(schedulingTeams).values({
           name: input.name, homeAddress: input.homeAddress, homeLat, homeLng,
           maxHoursPerDay: input.maxHoursPerDay, skills: input.skills,
           color: input.color ?? "#6366f1", isActive: 1,
+          regionTags: regionTagsValue ?? null,
         });
         return { id: (result as any).insertId };
       }
+    }),
+
+  setTeamRegionTags: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      /** Comma-separated region tags, e.g. "DC,MD". Pass null to clear. */
+      regionTags: z.string().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.update(schedulingTeams)
+        .set({ regionTags: input.regionTags?.trim() || null })
+        .where(eq(schedulingTeams.id, input.teamId));
+      return { ok: true };
     }),
 
   setTeamLimits: agentProcedure
@@ -639,19 +720,6 @@ export const schedulingRouter = router({
           maxJobs: input.maxJobs,
           earliestStartTime: input.earliestStartTime,
         })
-        .where(eq(schedulingTeams.id, input.teamId));
-      return { ok: true };
-    }),
-  setTeamTag: agentProcedure
-    .input(z.object({
-      teamId: z.number(),
-      tag: z.string().max(20).nullable(),
-    }))
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-      await db.update(schedulingTeams)
-        .set({ tag: input.tag })
         .where(eq(schedulingTeams.id, input.teamId));
       return { ok: true };
     }),
@@ -873,17 +941,8 @@ export const schedulingRouter = router({
         enrichedByTeam.get(tid)!.push(ej);
       }
       for (const [tid, teamEnriched] of Array.from(enrichedByTeam.entries())) {
-        // Sort by routeOrder first (saved assignments), then by serviceDateTime as tiebreaker.
-        // This must match the UI sort order so homeDriveTimeSecs is attributed to the
-        // correct first job. Without the serviceDateTime tiebreaker, DB insertion order
-        // was used, causing a consecutive drive time to be shown as "from home".
-        teamEnriched.sort((a, b) => {
-          const routeOrderDiff = (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0);
-          if (routeOrderDiff !== 0) return routeOrderDiff;
-          const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
-          const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
-          return ta - tb;
-        });
+        // Sort by routeOrder to find the actual first job
+        teamEnriched.sort((a, b) => (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0));
         const firstJob = teamEnriched[0];
         if (firstJob) {
           const secs = estimatedDriveMap.get(firstJob.id);
@@ -1052,6 +1111,10 @@ export const schedulingRouter = router({
           maxJobs: t.maxJobs ?? null,
           earliestStartTime: t.earliestStartTime ?? null,
           avgRating: _ratingByTeamName.get(t.name) ?? null,
+          // Parse stored regionTags (comma-separated) or auto-infer from homeAddress
+          regionTags: t.regionTags
+            ? t.regionTags.split(",").map(s => s.trim()).filter(Boolean)
+            : inferRegionFromAddress(t.homeAddress),
         }));
 
       if (teamConfigs.length === 0) {
