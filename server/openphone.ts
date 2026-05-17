@@ -34,6 +34,11 @@ export interface SendSmsResult {
  * Sends an SMS via the OpenPhone API from the configured sender number.
  */
 export async function sendSms({ to, content, mediaUrl, fromNumberId: fromNumberIdOverride }: SendSmsParams): Promise<SendSmsResult> {
+  // Block all outbound SMS in preview mode — prevents real messages to real clients
+  if (ENV.isPreviewMode) {
+    console.log(`[OpenPhone] PREVIEW MODE — SMS suppressed to ${to}: ${content?.slice(0, 80)}`);
+    return { success: true };
+  }
   const apiKey = ENV.openPhoneApiKey;
   const fromNumberId = fromNumberIdOverride || ENV.openPhoneNumberId;
 

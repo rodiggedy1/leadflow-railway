@@ -22,6 +22,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { registerVideoUploadRoute } from "../videoUpload";
+import { ENV } from "./env";
 import { registerInterviewUploadRoutes } from "../interviewUpload";
 import { registerDeepgramStreamRoute } from "../deepgramStream";
 import { registerAgentLoginRoute } from "../agentLoginRoute";
@@ -169,16 +170,20 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
     // Start internal cron scheduler immediately (nightly sync, follow-ups, always-on).
     // The AI warmup cron has its own 60s startup delay built in.
-    startInternalCron();
-    // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
-    // Always use the production domain so Vapi tool calls reach the live server.
-    // VAPI_WEBHOOK_URL env var sets the webhook destination; defaults to production domain.
-    const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
-    const VAPI_STARTUP_DELAY_MS = 30_000;
-    console.log(`[Vapi] Bootstrap scheduled in ${VAPI_STARTUP_DELAY_MS / 1000}s...`);
-    setTimeout(() => {
-      bootstrapVapiAssistant(webhookUrl).catch(console.error);
-    }, VAPI_STARTUP_DELAY_MS);
+    if (ENV.isPreviewMode) {
+      console.log("[Preview] PREVIEW_MODE=true — all cron jobs and Vapi bootstrap disabled");
+    } else {
+      startInternalCron();
+      // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
+      // Always use the production domain so Vapi tool calls reach the live server.
+      // VAPI_WEBHOOK_URL env var sets the webhook destination; defaults to production domain.
+      const webhookUrl = process.env.VAPI_WEBHOOK_URL ?? "https://quote.maidinblack.com/api/webhooks/vapi";
+      const VAPI_STARTUP_DELAY_MS = 30_000;
+      console.log(`[Vapi] Bootstrap scheduled in ${VAPI_STARTUP_DELAY_MS / 1000}s...`);
+      setTimeout(() => {
+        bootstrapVapiAssistant(webhookUrl).catch(console.error);
+      }, VAPI_STARTUP_DELAY_MS);
+    }
   });
 }
 

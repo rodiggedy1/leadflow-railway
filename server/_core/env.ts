@@ -23,4 +23,5 @@ export const ENV = {
   quoteAppSecret: process.env.QUOTE_APP_SECRET ?? "",
   quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://maidsquotes-b55s3sg4.manus.space",
   businessTimezone: process.env.BUSINESS_TIMEZONE ?? "America/Los_Angeles",
+  isPreviewMode: process.env.PREVIEW_MODE === "true",
 };
