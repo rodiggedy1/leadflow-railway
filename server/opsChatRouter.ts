@@ -1372,6 +1372,14 @@ export const opsChatRouter = router({
           // opsCaller.id is String(agent.agentId) for agent sessions
           const parsed = parseInt(ctx.opsCaller.id, 10);
           if (!isNaN(parsed)) agentIntId = parsed;
+        } else {
+          // Owner claim: resolve agentId by matching name in the agents table
+          const [ownerAgent] = await db
+            .select({ id: agents.id })
+            .from(agents)
+            .where(eq(agents.name, claimedBy))
+            .limit(1);
+          if (ownerAgent) agentIntId = ownerAgent.id;
         }
         await db
           .update(conversationSessions)
