@@ -2682,6 +2682,44 @@ async function handleCallAnswered(event: any): Promise<void> {
       callerLabel = callerPhone;
     }
   }
+  // ── Cross-reference: update lastCalledAt on the matching conversationSession ──
+  // Strategy: match session by leadPhone, then use assignedAgentId (the claiming agent)
+  // rather than trying to resolve the OpenPhone userId (unreliable on shared numbers).
+  if (callerPhone) {
+    try {
+      const normalizedCaller = normalizePhone(callerPhone);
+      const [matchedSession] = await db
+        .select({
+          id: conversationSessions.id,
+          assignedAgentId: conversationSessions.assignedAgentId,
+          assignedAgentName: conversationSessions.assignedAgentName,
+        })
+        .from(conversationSessions)
+        .where(eq(conversationSessions.leadPhone, normalizedCaller))
+        .orderBy(desc(conversationSessions.createdAt))
+        .limit(1);
+      if (matchedSession) {
+        // Prefer the claiming agent; fall back to the call's resolved agent
+        const callingAgentId = matchedSession.assignedAgentId ?? agent.id;
+        const callingAgentName = matchedSession.assignedAgentName ?? agent.name;
+        await db
+          .update(conversationSessions)
+          .set({
+            lastCalledAt: new Date(callStartedAt),
+            lastCalledByAgentId: callingAgentId,
+            lastCalledByAgentName: callingAgentName,
+          } as any)
+          .where(eq(conversationSessions.id, matchedSession.id));
+        console.log(`[CallStatus] Updated lastCalledAt for session ${matchedSession.id} (lead: ${callerLabel}, agent: ${callingAgentName})`);
+        // Broadcast so Lead Ops refreshes the card immediately
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("lead_activity");
+      }
+    } catch (e) {
+      console.error("[CallStatus] Failed to update lastCalledAt on conversationSession:", e);
+    }
+  }
+
   const agentLabel = isSharedCsNumber ? "An agent" : agent.name;
   const cardBody = callerLabel
     ? `${agentLabel} ${isOutbound ? "called" : "received a call from"} ${callerLabel}`

@@ -4486,6 +4486,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           assignedAgentName: r.assignedAgentName ?? null,
           lastOutboundAt,
           lastInboundAt,
+          lastCalledAt:          r.lastCalledAt ? r.lastCalledAt.getTime() : null,
+          lastCalledByAgentName: r.lastCalledByAgentName ?? null,
           createdAt:         r.createdAt,
           aiMode:            r.aiMode,
         };

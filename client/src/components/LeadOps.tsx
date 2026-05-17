@@ -58,6 +58,8 @@ type RealLead = {
   assignedAgentName: string | null;
   lastOutboundAt: number | null;
   lastInboundAt: number | null;
+  lastCalledAt: number | null;
+  lastCalledByAgentName: string | null;
   createdAt: Date | string;
   aiMode: number | string | null;
 };
@@ -206,6 +208,12 @@ function LeadCard({
         <Users className="h-4 w-4 shrink-0" />
         <span className="truncate">{lead.assignedAgentName ?? "Unassigned"}</span>
       </div>
+      {lead.lastCalledAt && (
+        <div className="mt-2 flex items-center gap-1.5 text-xs text-violet-600 font-semibold">
+          <Phone className="h-3 w-3" />
+          <span>Called {formatAge(Date.now() - lead.lastCalledAt)} ago{lead.lastCalledByAgentName ? ` · ${lead.lastCalledByAgentName}` : ""}</span>
+        </div>
+      )}
     </motion.button>
   );
 }
@@ -854,8 +862,12 @@ export default function LeadOps() {
                         )}
                       >
                         <Phone className="mb-3 h-5 w-5" />
-                        <div className="font-black text-sm">Call Now</div>
-                        <p className="mt-1 text-xs text-white/60">Best for high-intent leads.</p>
+                        <div className="font-black text-sm">Calling Now</div>
+                        <p className="mt-1 text-xs text-white/60">
+                          {activeLead.lastCalledAt
+                            ? `Last called ${formatAge(Date.now() - activeLead.lastCalledAt)} ago`
+                            : "Best for high-intent leads."}
+                        </p>
                       </button>
                       <button
                         onClick={() => { document.getElementById("lead-composer")?.focus(); if (nba?.suggestedReply) setComposer(nba.suggestedReply); }}
