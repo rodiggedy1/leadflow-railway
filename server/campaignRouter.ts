@@ -635,9 +635,18 @@ export const campaignRouter = router({
         throw new Error("No eligible contacts found in Completed Jobs. Sync more data or adjust filters.");
       }
 
+      // Deduplicate by phone — keep only the most recent job per phone number
+      const seenPhones = new Set<string>();
+      const dedupedEligible = eligible.filter((job) => {
+        const phone = job.phone?.trim();
+        if (!phone || seenPhones.has(phone)) return false;
+        seenPhones.add(phone);
+        return true;
+      });
+
       // Compute daysSince for each contact
       const now = new Date();
-      const withDays = eligible.map((job) => {
+      const withDays = dedupedEligible.map((job) => {
         const jobDate = job.jobDate ? new Date(job.jobDate) : null;
         const daysSince = jobDate ? Math.floor((now.getTime() - jobDate.getTime()) / (1000 * 60 * 60 * 24)) : null;
         const segment: "6-12mo" | "1-2yr" | "all" =
@@ -654,7 +663,7 @@ export const campaignRouter = router({
         sourceType: "completed_jobs",
         status: "DRAFT",
         batchSize: input.batchSize,
-        totalContacts: eligible.length,
+        totalContacts: dedupedEligible.length,
         sentCount: 0,
         repliedCount: 0,
         bookedCount: 0,
@@ -685,7 +694,7 @@ export const campaignRouter = router({
         );
       }
 
-      return { campaignId, contactCount: eligible.length };
+      return { campaignId, contactCount: dedupedEligible.length };
     }),
 
   /** Get contacts for a campaign with optional status filter */
@@ -729,23 +738,23 @@ export const campaignRouter = router({
 // ─── Throttled send engine ────────────────────────────────────────────────────
 
 /**
- * Sends the next batch of pending contacts for a campaign.
- * Respects the campaign's batchSize (per-hour throttle).
- * Called when a campaign is activated or when a batch completes.
+ * Sends ONE pending contact for a campaign, then schedules itself again in 12 seconds.
+ * Rate: 5 messages/minute.
+ * Called when a campaign is activated or after each send tick.
  */
 export async function sendNextBatch(campaignId: number): Promise<void> {
   const db = await getDb();
-    if (!db) return;
+  if (!db) return;
 
-    const [campaign] = await db
-      .select()
-      .from(reactivationCampaigns)
-      .where(eq(reactivationCampaigns.id, campaignId));
+  const [campaign] = await db
+    .select()
+    .from(reactivationCampaigns)
+    .where(eq(reactivationCampaigns.id, campaignId));
 
-    if (!campaign || campaign.status !== "ACTIVE") return;
+  if (!campaign || campaign.status !== "ACTIVE") return;
 
-  // Get next batch of PENDING contacts
-  const pending = await db
+  // ── Get next single PENDING contact ───────────────────────────────────────
+  const [contact] = await db
     .select()
     .from(reactivationContacts)
     .where(
@@ -754,95 +763,69 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
         eq(reactivationContacts.status, "PENDING")
       )
     )
-    .limit(campaign.batchSize);
+    .limit(1);
 
-  if (pending.length === 0) {
+  if (!contact) {
     // All contacts sent — mark campaign complete
     await db
       .update(reactivationCampaigns)
       .set({ status: "COMPLETED" })
       .where(eq(reactivationCampaigns.id, campaignId));
-
     await notifyOwner({
       title: `Campaign "${campaign.name}" completed`,
       content: `All ${campaign.totalContacts} contacts have been messaged. Sent: ${campaign.sentCount}, Replied: ${campaign.repliedCount}, Booked: ${campaign.bookedCount}`,
     }).catch(() => {});
-    // notifyOwner signature: ({ title, content })
     return;
   }
 
-  let sentThisBatch = 0;
+  // ── Send one message ───────────────────────────────────────────────────────
+  try {
+    const firstName = contact.firstName ?? "";
+    const name = contact.name ?? "";
+    const discountPct = contact.discountPct ?? 10;
+    const message = await getTemplate("reactivation_initial", {
+      "[Name]": firstName || name,
+      "[FirstName]": firstName || name,
+      "[FullName]": name,
+      "[Discount]": String(discountPct),
+    });
 
-  for (const contact of pending) {
-    try {
-      // Fetch the live template from DB (falls back to default if not yet seeded)
-      const firstName = contact.firstName ?? "";
-      const name = contact.name ?? "";
-      const discountPct = contact.discountPct ?? 10;
-      const message = await getTemplate("reactivation_initial", {
-        "[Name]": firstName || name,
-        "[FirstName]": firstName || name,
-        "[FullName]": name,
-        "[Discount]": String(discountPct),
-      });
+    await sendSms({ to: contact.phone, content: message });
 
-      await sendSms({ to: contact.phone, content: message });
+    // Create a conversation session so inbound replies are routed correctly
+    const [sessionResult] = await db.insert(conversationSessions).values({
+      leadPhone: contact.phone,
+      leadName: contact.name ?? "",
+      stage: "REACTIVATION",
+      leadSource: "reactivation",
+      reactivationLastPrice: contact.lastPrice ?? null,
+      reactivationDiscountPct: contact.discountPct ?? 10,
+      messageHistory: "[]",
+      aiMode: 1,
+      isBooked: 0,
+    });
+    const sessionId = (sessionResult as any).insertId as number;
 
-      // Create a conversation session for this contact so inbound replies are routed correctly
-      const [sessionResult] = await db.insert(conversationSessions).values({
-        leadPhone: contact.phone,
-        leadName: contact.name ?? "",
-        stage: "REACTIVATION",
-        leadSource: "reactivation",
-        reactivationLastPrice: contact.lastPrice ?? null,
-        reactivationDiscountPct: contact.discountPct ?? 10,
-        messageHistory: "[]",
-        aiMode: 1,
-        isBooked: 0,
-      });
-      const sessionId = (sessionResult as any).insertId as number;
+    await db
+      .update(reactivationContacts)
+      .set({ status: "SENT", sentAt: new Date(), sessionId })
+      .where(eq(reactivationContacts.id, contact.id));
 
-      // Mark as SENT and link session
-      await db
-        .update(reactivationContacts)
-        .set({ status: "SENT", sentAt: new Date(), sessionId })
-        .where(eq(reactivationContacts.id, contact.id));
+    await db
+      .update(reactivationCampaigns)
+      .set({
+        sentCount: sql`${reactivationCampaigns.sentCount} + 1`,
+        lastSentAt: new Date(),
+      })
+      .where(eq(reactivationCampaigns.id, campaignId));
 
-      sentThisBatch++;
-    } catch (err) {
-      console.error(`[Campaign] Failed to send to ${contact.phone}:`, err);
-    }
-
-    // Small delay between sends to avoid rate limits (100ms)
-    await new Promise((r) => setTimeout(r, 100));
+    console.log(`[Campaign ${campaignId}] Sent to ${contact.phone} (${contact.name}). Next in 12s.`);
+  } catch (err) {
+    console.error(`[Campaign ${campaignId}] Failed to send to ${contact.phone}:`, err);
   }
 
-  // Update campaign sent count and lastSentAt
-  await db
-    .update(reactivationCampaigns)
-    .set({
-      sentCount: sql`${reactivationCampaigns.sentCount} + ${sentThisBatch}`,
-      lastSentAt: new Date(),
-    })
-    .where(eq(reactivationCampaigns.id, campaignId));
-
-  // Schedule next batch in 1 hour if there are more pending
-  const [remaining] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(reactivationContacts)
-    .where(
-      and(
-        eq(reactivationContacts.campaignId, campaignId),
-        eq(reactivationContacts.status, "PENDING")
-      )
-    );
-
-  if (Number(remaining?.count ?? 0) > 0) {
-    console.log(
-      `[Campaign ${campaignId}] Sent ${sentThisBatch} messages. Next batch in 1 hour.`
-    );
-    setTimeout(() => sendNextBatch(campaignId).catch(console.error), 60 * 60 * 1000);
-  }
+  // ── Schedule next send in 12 seconds (5/min) ──────────────────────────────
+  setTimeout(() => sendNextBatch(campaignId).catch(console.error), 12 * 1000);
 }
 
 /**
