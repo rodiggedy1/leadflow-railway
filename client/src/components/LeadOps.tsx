@@ -66,6 +66,8 @@ type RealLead = {
   lastInboundAt: number | null;
   lastCalledAt: number | null;
   lastCalledByAgentName: string | null;
+  callCount: number;
+  lastCallAt: number | null;
   createdAt: Date | string;
   aiMode: number | string | null;
   notes: string | null;
@@ -319,10 +321,17 @@ function LeadCard({
         <Users className="h-4 w-4 shrink-0" />
         <span className="truncate">{lead.assignedAgentName ?? "Unassigned"}</span>
       </div>
-      {lead.lastCalledAt && (
+      {(lead.callCount > 0 || lead.lastCalledAt) && (
         <div className="mt-2 flex items-center gap-1.5 text-xs text-violet-600 font-semibold">
           <Phone className="h-3 w-3" />
-          <span>Called {formatAge(Date.now() - lead.lastCalledAt)} ago{lead.lastCalledByAgentName ? ` · ${lead.lastCalledByAgentName}` : ""}</span>
+          {lead.callCount > 0 ? (
+            <span>
+              {lead.callCount} call{lead.callCount > 1 ? "s" : ""}
+              {lead.lastCallAt ? ` · ${formatAge(Date.now() - lead.lastCallAt)} ago` : ""}
+            </span>
+          ) : (
+            <span>Called {formatAge(Date.now() - lead.lastCalledAt!)} ago{lead.lastCalledByAgentName ? ` · ${lead.lastCalledByAgentName}` : ""}</span>
+          )}
         </div>
       )}
     </motion.button>

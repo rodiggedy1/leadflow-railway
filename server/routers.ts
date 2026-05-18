@@ -4409,6 +4409,31 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .orderBy(desc(conversationSessions.createdAt))
         .limit(200);
 
+      // Fetch call recording summary per session (from openphone_call_recordings)
+      // so the UI can show a "called" indicator without a per-lead query.
+      const sessionIds = rows.map(r => r.id);
+      let callMap: Record<number, { callCount: number; lastCallAt: Date | null }> = {};
+      if (sessionIds.length > 0) {
+        const callRows = await db
+          .select({
+            sessionId: openphoneCallRecordings.sessionId,
+            callStartedAt: openphoneCallRecordings.callStartedAt,
+          })
+          .from(openphoneCallRecordings)
+          .where(inArray(openphoneCallRecordings.sessionId, sessionIds));
+        for (const c of callRows) {
+          const entry = callMap[c.sessionId];
+          if (!entry) {
+            callMap[c.sessionId] = { callCount: 1, lastCallAt: c.callStartedAt };
+          } else {
+            entry.callCount++;
+            if (c.callStartedAt > (entry.lastCallAt ?? new Date(0))) {
+              entry.lastCallAt = c.callStartedAt;
+            }
+          }
+        }
+      }
+
       const now = Date.now();
 
       return rows.map(r => {
@@ -4495,6 +4520,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           lastInboundAt,
           lastCalledAt:          r.lastCalledAt ? r.lastCalledAt.getTime() : null,
           lastCalledByAgentName: r.lastCalledByAgentName ?? null,
+          callCount:             callMap[r.id]?.callCount ?? 0,
+          lastCallAt:            callMap[r.id]?.lastCallAt ? callMap[r.id]!.lastCallAt!.getTime() : null,
           createdAt:         r.createdAt,
           aiMode:            r.aiMode,
           notes:             r.internalNotes ?? null,
