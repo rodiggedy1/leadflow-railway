@@ -151,6 +151,62 @@ function StatusPill({
   );
 }
 
+function ValueCell({ leadId, value }: { leadId: number; value: number }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const utils = trpc.useUtils();
+  const updateAmount = trpc.leads.updateBookedAmount.useMutation({
+    onSuccess: () => {
+      utils.leads.listForLeadOps.invalidate();
+      setEditing(false);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  function commit() {
+    const num = parseInt(draft.replace(/[^0-9]/g, ""), 10);
+    if (!isNaN(num) && num >= 0) {
+      updateAmount.mutate({ sessionId: leadId, bookedAmount: num });
+    } else {
+      setEditing(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-2xl bg-white/80 p-3 border border-slate-100 cursor-pointer"
+      onClick={(e) => {
+        e.stopPropagation();
+        setDraft(String(value));
+        setEditing(true);
+      }}
+    >
+      <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Value</div>
+      {editing ? (
+        <div className="mt-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <span className="font-black text-slate-900">$</span>
+          <input
+            autoFocus
+            type="text"
+            inputMode="numeric"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className="w-full min-w-0 bg-transparent font-black text-slate-900 outline-none border-b border-slate-400"
+          />
+          {updateAmount.isPending && <Loader2 className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
+        </div>
+      ) : (
+        <div className="mt-1 font-black text-slate-900">${value}</div>
+      )}
+    </div>
+  );
+}
+
 function LeadCard({
   lead,
   active,
@@ -199,10 +255,7 @@ function LeadCard({
             {formatAge(lead.ageMs)}
           </div>
         </div>
-        <div className="rounded-2xl bg-white/80 p-3 border border-slate-100">
-          <div className="text-xs font-bold uppercase tracking-wide text-slate-400">Value</div>
-          <div className="mt-1 font-black text-slate-900">${lead.estimatedValue}</div>
-        </div>
+        <ValueCell leadId={lead.id} value={lead.estimatedValue} />
       </div>
 
       <div className="mt-3 flex items-center justify-between rounded-2xl bg-slate-950 px-3 py-2 text-white">
