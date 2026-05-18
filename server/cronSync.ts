@@ -260,12 +260,13 @@ export async function runNightlySync(targetDate?: string): Promise<{
       continue;
     }
 
-    // Reactivation eligibility only applies to valid-phone jobs (can't SMS invalid phones)
+    // Reactivation eligibility: one-time customers ONLY (recurring customers are NEVER eligible),
+    // and only after 30 days since job date (they need time to rebook on their own first).
     const isOneTime = !b.frequency || /one.?time|once/i.test(b.frequency);
     const jobDateObj = new Date(jobDate);
     const reactivationDate = new Date(jobDateObj);
     reactivationDate.setDate(reactivationDate.getDate() + 30);
-    const isAlreadyEligible = isPhoneValid && (isOneTime || reactivationDate <= new Date());
+    const isAlreadyEligible = isPhoneValid && isOneTime && reactivationDate <= new Date();
 
     await db.insert(completedJobs).values({
       batchId,

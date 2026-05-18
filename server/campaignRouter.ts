@@ -552,36 +552,30 @@ export const campaignRouter = router({
         .map((r) => r.completedJobId)
         .filter((id): id is number => id != null && id > 0);
 
-      // Build frequency filter
+         // Reactivation is ONE-TIME customers only, 30+ days since job date.
       const RECURRING_FREQS = ["Bi-weekly (15%OFF)", "Monthly (10%OFF)", "Weekly (20%OFF)", "Tri-weekly (10%OFF)", "Bi-monthly"];
-      const freqCondition =
-        input.frequency === "one-time"
-          ? or(
-              isNull(completedJobs.frequency),
-              ...RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f))
-            )
-          : input.frequency === "recurring"
-          ? or(...RECURRING_FREQS.map((f) => eq(completedJobs.frequency, f)))
-          : undefined;
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().slice(0, 10);
 
       const baseConditions = [
         eq(completedJobs.reactivationEligible, 1),
+        // One-time only: exclude all known recurring frequencies
+        ...RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f)),
+        // 30+ days since job date
+        sql`${completedJobs.jobDate} <= ${thirtyDaysAgoStr}`,
         ...(enrolledIds.length > 0 ? [notInArray(completedJobs.id, enrolledIds)] : []),
-        ...(freqCondition ? [freqCondition] : []),
       ];
-
       const eligible = await db
         .select()
         .from(completedJobs)
         .where(and(...baseConditions))
         .orderBy(desc(completedJobs.jobDate))
         .limit(500);
-
       const [countRow] = await db
         .select({ count: sql<number>`count(*)` })
         .from(completedJobs)
         .where(and(...baseConditions));
-
       return {
         contacts: eligible.slice(0, 200), // preview cap
         total: Number(countRow?.count ?? 0),
@@ -616,21 +610,19 @@ export const campaignRouter = router({
         .map((r) => r.completedJobId)
         .filter((id): id is number => id != null && id > 0);
 
+      // Reactivation is ONE-TIME customers only, 30+ days since job date.
       const RECURRING_FREQS = ["Bi-weekly (15%OFF)", "Monthly (10%OFF)", "Weekly (20%OFF)", "Tri-weekly (10%OFF)", "Bi-monthly"];
-      const freqCondition =
-        input.frequency === "one-time"
-          ? or(
-              isNull(completedJobs.frequency),
-              ...RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f))
-            )
-          : input.frequency === "recurring"
-          ? or(...RECURRING_FREQS.map((f) => eq(completedJobs.frequency, f)))
-          : undefined;
+      const thirtyDaysAgo2 = new Date();
+      thirtyDaysAgo2.setDate(thirtyDaysAgo2.getDate() - 30);
+      const thirtyDaysAgoStr2 = thirtyDaysAgo2.toISOString().slice(0, 10);
 
       const baseConditions = [
         eq(completedJobs.reactivationEligible, 1),
+        // One-time only: exclude all known recurring frequencies
+        ...RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f)),
+        // 30+ days since job date
+        sql`${completedJobs.jobDate} <= ${thirtyDaysAgoStr2}`,
         ...(enrolledIds.length > 0 ? [notInArray(completedJobs.id, enrolledIds)] : []),
-        ...(freqCondition ? [freqCondition] : []),
       ];
 
       const eligible = await db

@@ -119,14 +119,13 @@ export const launch27Router = router({
           continue;
         }
 
-        // Determine reactivation eligibility:
-        // One-time bookings are eligible immediately (no recurring schedule).
-        // Recurring bookings become eligible 30 days after the job date.
+        // Reactivation eligibility: one-time customers ONLY (recurring = never eligible),
+        // and only after 30 days since job date.
         const isOneTime = !b.frequency || /one.?time|once/i.test(b.frequency);
         const jobDateObj = new Date(jobDate);
         const reactivationDate = new Date(jobDateObj);
         reactivationDate.setDate(reactivationDate.getDate() + 30);
-        const isAlreadyEligible = isOneTime || reactivationDate <= new Date();
+        const isAlreadyEligible = isOneTime && reactivationDate <= new Date();
 
         await db.insert(completedJobs).values({
           batchId,

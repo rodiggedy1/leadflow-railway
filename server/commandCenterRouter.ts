@@ -1501,6 +1501,8 @@ Respond in JSON with this exact schema:
 
       // Get one row per phone: the customer's most recent job date, name, and frequency.
       // Fetch up to 3500 so we can count the full pool, then cap the default send at 50.
+      // Reactivation targets: one-time customers ONLY (recurring = never eligible).
+      const REACTIVATION_RECURRING_FREQS = ["Bi-weekly (15%OFF)", "Monthly (10%OFF)", "Weekly (20%OFF)", "Tri-weekly (10%OFF)", "Bi-monthly"];
       const lapsedCustomers = await db
         .select({
           phone: completedJobs.phone,
@@ -1514,7 +1516,9 @@ Respond in JSON with this exact schema:
         .where(
           and(
             isNotNull(completedJobs.phone),
-            isNotNull(completedJobs.jobDate)
+            isNotNull(completedJobs.jobDate),
+            // One-time customers only — exclude all recurring frequencies
+            ...REACTIVATION_RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f))
           )
         )
         .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.name, completedJobs.serviceType, completedJobs.frequency)
