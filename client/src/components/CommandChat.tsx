@@ -869,8 +869,8 @@ type MessageListProps = {
   setResolveIssueNoteText: (v: string) => void;
   setResolveIssueOpen: (v: boolean) => void;
   dismissSystemCard: (messageId: number) => void;
+  onScrollToBottom: () => void;
 };
-
 const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
@@ -901,10 +901,11 @@ const MessageList = memo(function MessageList({
   setResolveIssueNoteText,
   setResolveIssueOpen,
   dismissSystemCard,
+  onScrollToBottom,
 }: MessageListProps) {
   return (
     <>
-        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200">
+        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
             <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
@@ -2974,9 +2975,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     if (!container || !msgsDiv) return;
     // Initial scroll to bottom
     container.scrollTop = container.scrollHeight;
-    // Observe child additions (new messages)
+    // Observe child additions (new messages).
+    // Only auto-scroll if the user is already near the bottom (scroll-lock pattern).
     const mo = new MutationObserver(() => {
-      container.scrollTop = container.scrollHeight;
+      const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 250;
+      if (nearBottom) {
+        container.scrollTop = container.scrollHeight;
+      } else {
+        setNewMsgCount(n => n + 1);
+      }
     });
     mo.observe(msgsDiv, { childList: true, subtree: true });
     return () => mo.disconnect();
@@ -3146,6 +3153,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
   const [plusOpen, setPlusOpen] = useState(false);
+  const [newMsgCount, setNewMsgCount] = useState(0);
   // Right column is always visible — never collapsed
   const rightCollapsed = false;
 
@@ -4312,7 +4320,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setResolveIssueNoteText={setResolveIssueNoteText}
           setResolveIssueOpen={setResolveIssueOpen}
           dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
+          onScrollToBottom={() => setNewMsgCount(0)}
         />
+        {/* New-message badge — shown when user is scrolled up */}
+        {newMsgCount > 0 && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20">
+            <button
+              onClick={() => {
+                const container = threadScrollRef.current;
+                if (container) container.scrollTop = container.scrollHeight;
+                setNewMsgCount(0);
+              }}
+              className="flex items-center gap-1.5 bg-slate-900 text-white text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg hover:bg-slate-700 transition"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+              {newMsgCount} new {newMsgCount === 1 ? 'message' : 'messages'}
+            </button>
+          </div>
+        )}
         </div>{/* end relative wrapper */}
         {chatConvertModal && (
           <ConvertToIssueModal
