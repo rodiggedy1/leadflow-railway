@@ -853,11 +853,10 @@ export const schedulingRouter = router({
             pairs.push({ fromId: -(team.id), toId: firstJob.id, from: { lat: team.homeLat, lng: team.homeLng }, to: { lat: firstGeo.lat, lng: firstGeo.lng } });
           }
         }
-        // Consecutive job pairs (only for jobs without saved assignments)
+        // Consecutive job pairs — always include ALL pairs so drive times are always live
         for (let i = 1; i < teamJobs.length; i++) {
           const prev = teamJobs[i - 1];
           const curr = teamJobs[i];
-          if (assignmentMap.has(curr.id)) continue; // already has real assignment
           const prevGeo = geoByAddress.get(prev.jobAddress?.trim().toLowerCase() ?? "");
           const currGeo = geoByAddress.get(curr.jobAddress?.trim().toLowerCase() ?? "");
           if (prevGeo && currGeo) {
@@ -920,7 +919,13 @@ export const schedulingRouter = router({
               rationale: null as AssignmentRationale | null,
             }
           : null;
-        const baseAssignment = isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment);
+        // Always use the freshly-computed drive time from the live N×N matrix,
+        // overriding whatever stale value was stored in schedule_assignments.
+        const freshDriveSecs = estimatedDriveMap.get(j.id) ?? null;
+        const savedWithFreshDrive = savedAssignment && freshDriveSecs != null
+          ? { ...savedAssignment, driveTimeSecs: freshDriveSecs }
+          : savedAssignment;
+        const baseAssignment = isExplicitlyUnassigned ? null : (savedWithFreshDrive ?? syntheticAssignment);
         // Compute badge flags
         const isNewClient = j.bookingStatus === "new";
         const isMoveInOut = /move.?in|move.?out/i.test(j.serviceType ?? "");
