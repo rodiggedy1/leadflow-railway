@@ -4431,77 +4431,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               ))}
             </div>
           )}
+          {/* WhatsApp single-row composer: [+] [textarea] [emoji] */}
           <div
             className={cn(
-              "rounded-2xl border p-4 transition",
+              "rounded-2xl border px-3 py-2 transition flex items-center gap-2",
               isDragging ? "border-slate-300 bg-slate-200 ring-2 ring-slate-900/10" : "border-slate-200 bg-slate-50"
             )}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
           >
-            <Textarea
-              ref={composerRef}
-              value={composer}
-              onChange={(e) => {
-                const val = e.target.value;
-                setComposer(val);
-                // Clear quality warning when user edits
-                // @mention detection: find '@' before cursor
-                const pos = e.target.selectionStart ?? val.length;
-                const before = val.slice(0, pos);
-                const atMatch = before.match(/@(\w*)$/);
-                if (atMatch) {
-                  setMentionQuery(atMatch[1]);
-                  setMentionStart(pos - atMatch[0].length);
-                  setMentionIndex(0);
-                } else {
-                  setMentionQuery(null);
-                }
-              }}
-              placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team… (Enter to send, Shift+Enter for new line)"}
-              rows={1}
-              className="resize-none border-0 bg-transparent p-0 text-base text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
-              onKeyDown={(e) => {
-                // @mention autocomplete navigation
-                if (mentionQuery !== null && mentionSuggestions.length > 0) {
-                  if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
-                  if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
-                  if (e.key === "Enter" || e.key === "Tab") {
-                    e.preventDefault();
-                    const chosen = mentionSuggestions[mentionIndex];
-                    if (chosen) {
-                      const before = composer.slice(0, mentionStart);
-                      const after = composer.slice((composerRef.current?.selectionStart ?? composer.length));
-                      const next = before + "@" + chosen + " " + after;
-                      setComposer(next);
-                      setMentionQuery(null);
-                      // Restore cursor after inserted name
-                      requestAnimationFrame(() => {
-                        const pos = (before + "@" + chosen + " ").length;
-                        composerRef.current?.setSelectionRange(pos, pos);
-                      });
-                    }
-                    return;
-                  }
-                  if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
-                }
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
-                // Auto-return: first keystroke while away clears status and posts "I'm Back"
-                if (awayStatus && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                  if (!imBackFiredRef.current) {
-                    imBackFiredRef.current = true;
-                    onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
-                    onSetAwayStatus?.(null);
-                  }
-                }
-                onCmdKeyPress();
-              }}
-              onBlur={onCmdBlur}
-            />
-
-            {/* WhatsApp-style bottom bar: + menu | emoji */}
-            <div className="flex items-center gap-2 mt-1">
               {/* + button opens action menu */}
               <Popover open={plusOpen} onOpenChange={setPlusOpen}>
                 <PopoverTrigger asChild>
@@ -4604,6 +4543,62 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </PopoverContent>
               </Popover>
+            {/* Textarea grows to fill space */}
+            <Textarea
+              ref={composerRef}
+              value={composer}
+              onChange={(e) => {
+                const val = e.target.value;
+                setComposer(val);
+                const pos = e.target.selectionStart ?? val.length;
+                const before = val.slice(0, pos);
+                const atMatch = before.match(/@(\w*)$/);
+                if (atMatch) {
+                  setMentionQuery(atMatch[1]);
+                  setMentionStart(pos - atMatch[0].length);
+                  setMentionIndex(0);
+                } else {
+                  setMentionQuery(null);
+                }
+              }}
+              placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team…"}
+              rows={1}
+              className="flex-1 resize-none border-0 bg-transparent p-0 text-sm text-slate-700 focus-visible:ring-0 placeholder:text-slate-400 self-center"
+              onKeyDown={(e) => {
+                if (mentionQuery !== null && mentionSuggestions.length > 0) {
+                  if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
+                  if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    const chosen = mentionSuggestions[mentionIndex];
+                    if (chosen) {
+                      const before = composer.slice(0, mentionStart);
+                      const after = composer.slice((composerRef.current?.selectionStart ?? composer.length));
+                      const next = before + "@" + chosen + " " + after;
+                      setComposer(next);
+                      setMentionQuery(null);
+                      requestAnimationFrame(() => {
+                        const pos = (before + "@" + chosen + " ").length;
+                        composerRef.current?.setSelectionRange(pos, pos);
+                      });
+                    }
+                    return;
+                  }
+                  if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
+                }
+                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); return; }
+                if (awayStatus && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                  if (!imBackFiredRef.current) {
+                    imBackFiredRef.current = true;
+                    onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
+                    onSetAwayStatus?.(null);
+                  }
+                }
+                onCmdKeyPress();
+              }}
+              onBlur={onCmdBlur}
+            />
+            {/* WhatsApp-style bottom bar: + menu | emoji */}
               {/* Emoji picker */}
               <div ref={emojiRef} className="relative shrink-0">
                 <button
@@ -4626,7 +4621,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </div>
                 )}
               </div>
-            </div>
           </div>
           </div>{/* end relative wrapper for @mention dropdown */}
         </div>
