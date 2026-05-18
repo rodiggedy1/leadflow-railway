@@ -24,7 +24,7 @@ import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
-  ExternalLink, ChevronDown,
+  ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
   ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming } from "lucide-react";
@@ -3145,6 +3145,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
+  const [plusOpen, setPlusOpen] = useState(false);
   // Right column is always visible — never collapsed
   const rightCollapsed = false;
 
@@ -4326,94 +4327,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
         <div className="px-5 py-4 bg-white">
-          {/* Quick-action chips */}
-          <div className="flex gap-1.5 mb-3 items-center flex-nowrap overflow-x-auto">
-            <button
-              onClick={() => setBroadcastOpen(true)}
-              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
-            >
-              <Radio className="h-3 w-3" /> Broadcast
-            </button>
-
-            <button
-              onClick={() => setReminderOpen(true)}
-              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
-            >
-              <Bell className="h-3 w-3" /> Reminder
-            </button>
-            <button
-              onClick={() => setPinOpen(true)}
-              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
-            >
-              <Pin className="h-3 w-3" /> Pin
-            </button>
-            <button
-              onClick={() => setFollowUpsOpen(true)}
-              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
-            >
-              <ClipboardList className="h-3 w-3" /> Follow-ups
-            </button>
-            <button
-              onClick={() => setFaqOpen(true)}
-              className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0"
-            >
-              <BookOpen className="h-3 w-3" /> FAQ
-            </button>
-{/* Away / I'm Back toggle */}
-            {awayStatus ? (
-              // Currently away — show "I'm Back" button to clear status
-              <button
-                className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-emerald-600 border border-emerald-600 text-white hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm shrink-0"
-                onClick={() => {
-                  if (imBackFiredRef.current) return;
-                  imBackFiredRef.current = true;
-                  onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
-                  onSetAwayStatus?.(null);
-                }}
-              >
-                <span className="inline-block w-2 h-2 rounded-full bg-white" />
-                I'm Back
-              </button>
-            ) : (
-              // Not away — show Away picker
-              <Popover open={awayOpen} onOpenChange={setAwayOpen}>
-                <PopoverTrigger asChild>
-                  <button className="text-xs font-medium rounded-full px-3 py-1.5 transition bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1.5 shadow-sm shrink-0">
-                    <span className="inline-block w-2 h-2 rounded-full bg-amber-400" />
-                    Away
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-52 p-1.5" align="end">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Set status</p>
-                  {([
-                    { key: "away_sec", label: "Away for a sec",  sub: "Quick break",         emoji: "☕",  accent: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
-                    { key: "lunch",    label: "Lunch break",     sub: "Quick munch",         emoji: "🍔",  accent: "#10b981", bg: "#ecfdf5", border: "#a7f3d0" },
-                    { key: "back15",   label: "Back in 15",      sub: "Short defined break", emoji: "⏰",  accent: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
-                    { key: "eod",      label: "Signing off",     sub: "End of day",          emoji: "🌙",  accent: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd" },
-                  ] as const).map(({ key, label, sub, emoji, accent, bg, border }) => (
-                    <button
-                      key={key}
-                      className="w-full text-left px-3 py-2.5 rounded-lg hover:opacity-90 transition flex items-center gap-3 mb-1"
-                      style={{ background: bg, border: `1px solid ${border}` }}
-                      onClick={() => {
-                        // Reset guard so the next "I'm Back" can fire
-                        imBackFiredRef.current = false;
-                        onSendMessage(`${emoji} ${callerName} — ${label}`, undefined, undefined, `away_status:${key}`);
-                        onSetAwayStatus?.(key);
-                        setAwayOpen(false);
-                      }}
-                    >
-                      <span className="text-xl leading-none">{emoji}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold leading-tight" style={{ color: accent }}>{label}</p>
-                        <p className="text-[11px] text-slate-400 leading-tight">{sub}</p>
-                      </div>
-                    </button>
-                  ))}
-                </PopoverContent>
-              </Popover>
-            )}
-          </div>
 
           {/* Staged photo preview strip */}
           {stagedPhotos.length > 0 && (
@@ -4587,74 +4500,132 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onBlur={onCmdBlur}
             />
 
-            <div className="flex items-center justify-between mt-2">
-              <div className="flex items-center gap-1 relative">
-                {/* Photo */}
-                <button
-                  className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition text-sm font-medium flex items-center gap-1.5 shadow-sm"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  📷 Photo
-                </button>
-                {/* Voice */}
-                {isRecording ? (
+            {/* WhatsApp-style bottom bar: + menu | emoji */}
+            <div className="flex items-center gap-2 mt-1">
+              {/* + button opens action menu */}
+              <Popover open={plusOpen} onOpenChange={setPlusOpen}>
+                <PopoverTrigger asChild>
                   <button
-                    className="rounded-full px-4 py-2 bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition text-sm flex items-center gap-1.5 font-medium shadow-sm"
-                    onClick={stopRecording}
+                    className={cn(
+                      "shrink-0 h-9 w-9 rounded-full border-2 flex items-center justify-center transition-all",
+                      plusOpen ? "border-slate-900 bg-slate-900 text-white rotate-45" : "border-slate-300 bg-white text-slate-600 hover:border-slate-500"
+                    )}
                   >
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                    {recordingSeconds}s — Stop
+                    <Plus className="h-4 w-4" />
                   </button>
-                ) : isTranscribing ? (
-                  <button disabled className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-400 transition text-sm flex items-center gap-1.5 shadow-sm">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Transcribing…
+                </PopoverTrigger>
+                <PopoverContent className="w-52 p-1.5" align="start" side="top">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Actions</p>
+                  <button onClick={() => { setBroadcastOpen(true); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <Radio className="h-4 w-4 text-slate-500" /> Broadcast
                   </button>
-                ) : (
-                  <button
-                    className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition text-sm font-medium flex items-center gap-1.5 shadow-sm"
-                    onClick={startRecording}
-                  >
-                    🎤 Voice
+                  <button onClick={() => { setReminderOpen(true); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <Bell className="h-4 w-4 text-slate-500" /> Reminder
                   </button>
-                )}
-                {/* Objections */}
-                <button
-                  className="rounded-full px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 transition text-sm font-medium flex items-center gap-1.5 shadow-sm"
-                  onClick={() => setObjectionOpen(true)}
-                >
-                  🛡️ Objections
-                </button>
-                {/* Emoji */}
-                <div ref={emojiRef} className="relative">
-                  <button
-                    className={cn("rounded-full px-4 py-2 bg-white border transition text-sm font-medium shadow-sm", showEmoji ? "border-slate-400 text-slate-800" : "border-slate-200 text-slate-700 hover:bg-slate-50")}
-                    onClick={() => setShowEmoji(v => !v)}
-                  >
-                    😊
+                  <button onClick={() => { setPinOpen(true); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <Pin className="h-4 w-4 text-slate-500" /> Pin
                   </button>
-                  {showEmoji && (
-                    <div className="absolute bottom-10 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">
-                      <EmojiPicker
-                        theme={Theme.LIGHT}
-                        onEmojiClick={(data) => { insertEmoji(data); setShowEmoji(false); }}
-                        height={350}
-                        width={300}
-                        searchDisabled={false}
-                        skinTonesDisabled
-                        previewConfig={{ showPreview: false }}
-                      />
-                    </div>
+                  <button onClick={() => { setFollowUpsOpen(true); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <ClipboardList className="h-4 w-4 text-slate-500" /> Follow-ups
+                  </button>
+                  <button onClick={() => { setFaqOpen(true); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <BookOpen className="h-4 w-4 text-slate-500" /> FAQ
+                  </button>
+                  <button onClick={() => { fileInputRef.current?.click(); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <span className="text-base leading-none">📷</span> Photo
+                  </button>
+                  {isRecording ? (
+                    <button onClick={() => { stopRecording(); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-50 transition flex items-center gap-2.5 text-sm text-red-600">
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                      {recordingSeconds}s — Stop
+                    </button>
+                  ) : isTranscribing ? (
+                    <button disabled className="w-full text-left px-3 py-2 rounded-lg flex items-center gap-2.5 text-sm text-slate-400">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Transcribing…
+                    </button>
+                  ) : (
+                    <button onClick={() => { startRecording(); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                      <span className="text-base leading-none">🎤</span> Voice
+                    </button>
                   )}
-                </div>
+                  <button onClick={() => { setObjectionOpen(true); setPlusOpen(false); }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                    <span className="text-base leading-none">🛡️</span> Objections
+                  </button>
+                  <div className="my-1 border-t border-slate-100" />
+                  {awayStatus ? (
+                    <button
+                      onClick={() => {
+                        if (imBackFiredRef.current) return;
+                        imBackFiredRef.current = true;
+                        onSendMessage(`✅ ${callerName} — I'm Back`, undefined, undefined, "away_status:back");
+                        onSetAwayStatus?.(null);
+                        setPlusOpen(false);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-emerald-50 transition flex items-center gap-2.5 text-sm text-emerald-700 font-semibold"
+                    >
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" /> I'm Back
+                    </button>
+                  ) : (
+                    <Popover open={awayOpen} onOpenChange={setAwayOpen}>
+                      <PopoverTrigger asChild>
+                        <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 transition flex items-center gap-2.5 text-sm text-slate-700">
+                          <span className="inline-block w-2 h-2 rounded-full bg-amber-400" /> Away
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-52 p-1.5" align="start" side="right">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide px-2 py-1">Set status</p>
+                        {([
+                          { key: "away_sec", label: "Away for a sec",  sub: "Quick break",         emoji: "☕",  accent: "#f59e0b", bg: "#fffbeb", border: "#fde68a" },
+                          { key: "lunch",    label: "Lunch break",     sub: "Quick munch",         emoji: "🍔",  accent: "#10b981", bg: "#ecfdf5", border: "#a7f3d0" },
+                          { key: "back15",   label: "Back in 15",      sub: "Short defined break", emoji: "⏰",  accent: "#6366f1", bg: "#eef2ff", border: "#c7d2fe" },
+                          { key: "eod",      label: "Signing off",     sub: "End of day",          emoji: "🌙",  accent: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd" },
+                        ] as const).map(({ key, label, sub, emoji, accent, bg, border }) => (
+                          <button
+                            key={key}
+                            className="w-full text-left px-3 py-2.5 rounded-lg hover:opacity-90 transition flex items-center gap-3 mb-1"
+                            style={{ background: bg, border: `1px solid ${border}` }}
+                            onClick={() => {
+                              imBackFiredRef.current = false;
+                              onSendMessage(`${emoji} ${callerName} — ${label}`, undefined, undefined, `away_status:${key}`);
+                              onSetAwayStatus?.(key);
+                              setAwayOpen(false);
+                              setPlusOpen(false);
+                            }}
+                          >
+                            <span className="text-xl leading-none">{emoji}</span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold leading-tight" style={{ color: accent }}>{label}</p>
+                              <p className="text-[11px] text-slate-400 leading-tight">{sub}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </PopoverContent>
+              </Popover>
+              {/* Emoji picker */}
+              <div ref={emojiRef} className="relative shrink-0">
+                <button
+                  className={cn("h-9 w-9 rounded-full border-2 flex items-center justify-center transition text-base", showEmoji ? "border-slate-400 bg-slate-100" : "border-slate-200 bg-white hover:border-slate-400")}
+                  onClick={() => setShowEmoji(v => !v)}
+                >
+                  😊
+                </button>
+                {showEmoji && (
+                  <div className="absolute bottom-11 left-0 z-50 shadow-2xl rounded-2xl overflow-hidden">
+                    <EmojiPicker
+                      theme={Theme.LIGHT}
+                      onEmojiClick={(data) => { insertEmoji(data); setShowEmoji(false); }}
+                      height={350}
+                      width={300}
+                      searchDisabled={false}
+                      skinTonesDisabled
+                      previewConfig={{ showPreview: false }}
+                    />
+                  </div>
+                )}
               </div>
-              <Button
-                size="default"
-                onClick={handleSend}
-                disabled={(!composer.trim() && stagedPhotos.filter(p => p.status === "done").length === 0)}
-                className="rounded-2xl px-6 py-3 font-semibold shadow-md bg-slate-900 hover:bg-slate-800 text-white text-sm h-auto"
-              >
-                <Send className="h-4 w-4 mr-2" /> Send to chat
-              </Button>
             </div>
           </div>
           </div>{/* end relative wrapper for @mention dropdown */}
