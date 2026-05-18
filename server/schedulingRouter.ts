@@ -26,7 +26,7 @@ import {
   teamDayLock,
   teamDayConfig,
 } from "../drizzle/schema";
-import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
+import { makeRequest, GeocodingResult, DistanceMatrixResult, DirectionsResult } from "./_core/map";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -887,14 +887,67 @@ export const schedulingRouter = router({
           }
         }
         const matrix = await buildTravelMatrix(uniquePoints);
+
+        // Cross-check suspicious pairs using the Directions API as an independent source.
+        // A pair is suspicious when the matrix value is >3x the straight-line haversine estimate
+        // (real driving is rarely more than 2x straight-line; 3x signals a likely indexing error).
+        // Only suspicious pairs fire a Directions call to keep latency low on normal days.
+        const suspiciousPairs = pairs.filter((pair) => {
+          const fromIdx = pointIndex.get(coordKey(pair.from))!;
+          const toIdx = pointIndex.get(coordKey(pair.to))!;
+          const matrixSecs = matrix[fromIdx]?.[toIdx];
+          if (matrixSecs == null || matrixSecs <= 0) return false;
+          const haversineSecs = Math.round(haversineMeters(pair.from, pair.to) / 10);
+          return matrixSecs > haversineSecs * 3;
+        });
+
+        const directionsOverrides = new Map<number, number>();
+        if (suspiciousPairs.length > 0) {
+          const checks = await Promise.allSettled(
+            suspiciousPairs.map(async (pair) => {
+              const origin = `${pair.from.lat},${pair.from.lng}`;
+              const destination = `${pair.to.lat},${pair.to.lng}`;
+              const res = await makeRequest<DirectionsResult>("/maps/api/directions/json", {
+                origin,
+                destination,
+                mode: "driving",
+              });
+              const dirSecs = res.status === "OK" && res.routes?.[0]?.legs?.[0]?.duration?.value
+                ? res.routes[0].legs[0].duration.value
+                : null;
+              return { toId: pair.toId, dirSecs };
+            })
+          );
+          for (const result of checks) {
+            if (result.status === "fulfilled" && result.value.dirSecs != null) {
+              directionsOverrides.set(result.value.toId, result.value.dirSecs);
+            }
+          }
+        }
+
         for (const pair of pairs) {
           const fromIdx = pointIndex.get(coordKey(pair.from))!;
           const toIdx = pointIndex.get(coordKey(pair.to))!;
-          const secs = matrix[fromIdx]?.[toIdx];
-          estimatedDriveMap.set(
-            pair.toId,
-            secs != null && secs > 0 ? secs : Math.round(haversineMeters(pair.from, pair.to) / 10),
-          );
+          const matrixSecs = matrix[fromIdx]?.[toIdx];
+          const fallback = Math.round(haversineMeters(pair.from, pair.to) / 10);
+          const dirSecs = directionsOverrides.get(pair.toId);
+
+          let finalSecs: number;
+          if (dirSecs != null && dirSecs > 0) {
+            // Suspicious pair — Directions API is authoritative
+            const matrixForLog = matrixSecs ?? 0;
+            const ratio = Math.abs(matrixForLog - dirSecs) / dirSecs;
+            console.warn(
+              `[DriveCheck] toId=${pair.toId} matrix=${matrixForLog}s dirs=${dirSecs}s ratio=${(ratio * 100).toFixed(0)}% — using Directions value`
+            );
+            finalSecs = dirSecs;
+          } else if (matrixSecs != null && matrixSecs > 0) {
+            finalSecs = matrixSecs;
+          } else {
+            finalSecs = fallback;
+          }
+
+          estimatedDriveMap.set(pair.toId, finalSecs);
         }
       }
 
