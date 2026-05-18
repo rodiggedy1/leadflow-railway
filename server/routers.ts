@@ -4397,11 +4397,6 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .from(conversationSessions)
         .where(
           and(
-            // Only inbound lead sources (not CS, not review, not campaign)
-            sql`(
-              ${conversationSessions.leadSource} IS NULL OR
-              ${conversationSessions.leadSource} IN ('thumbtack','thumbtack-sms','bark','yelp','form','widget','voice')
-            )`,
             // Exclude terminal stages
             sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
             // Only last 7 days to keep the list focused
