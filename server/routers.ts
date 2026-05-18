@@ -4409,22 +4409,24 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .orderBy(desc(conversationSessions.createdAt))
         .limit(200);
 
-      // Fetch call recording summary per session (from openphone_call_recordings)
-      // so the UI can show a "called" indicator without a per-lead query.
-      const sessionIds = rows.map(r => r.id);
-      let callMap: Record<number, { callCount: number; lastCallAt: Date | null }> = {};
-      if (sessionIds.length > 0) {
+      // Fetch call recording summary matched by phone number (from openphone_call_recordings).
+      // We match by callerPhone rather than sessionId because the webhook may attach the
+      // recording to an older duplicate session for the same lead phone number.
+      const leadPhones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))];
+      // phoneCallMap: phone → { callCount, lastCallAt }
+      let phoneCallMap: Record<string, { callCount: number; lastCallAt: Date | null }> = {};
+      if (leadPhones.length > 0) {
         const callRows = await db
           .select({
-            sessionId: openphoneCallRecordings.sessionId,
+            callerPhone: openphoneCallRecordings.callerPhone,
             callStartedAt: openphoneCallRecordings.callStartedAt,
           })
           .from(openphoneCallRecordings)
-          .where(inArray(openphoneCallRecordings.sessionId, sessionIds));
+          .where(inArray(openphoneCallRecordings.callerPhone, leadPhones));
         for (const c of callRows) {
-          const entry = callMap[c.sessionId];
+          const entry = phoneCallMap[c.callerPhone];
           if (!entry) {
-            callMap[c.sessionId] = { callCount: 1, lastCallAt: c.callStartedAt };
+            phoneCallMap[c.callerPhone] = { callCount: 1, lastCallAt: c.callStartedAt };
           } else {
             entry.callCount++;
             if (c.callStartedAt > (entry.lastCallAt ?? new Date(0))) {
@@ -4520,8 +4522,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           lastInboundAt,
           lastCalledAt:          r.lastCalledAt ? r.lastCalledAt.getTime() : null,
           lastCalledByAgentName: r.lastCalledByAgentName ?? null,
-          callCount:             callMap[r.id]?.callCount ?? 0,
-          lastCallAt:            callMap[r.id]?.lastCallAt ? callMap[r.id]!.lastCallAt!.getTime() : null,
+          callCount:             phoneCallMap[r.leadPhone]?.callCount ?? 0,
+          lastCallAt:            phoneCallMap[r.leadPhone]?.lastCallAt ? phoneCallMap[r.leadPhone]!.lastCallAt!.getTime() : null,
           createdAt:         r.createdAt,
           aiMode:            r.aiMode,
           notes:             r.internalNotes ?? null,
