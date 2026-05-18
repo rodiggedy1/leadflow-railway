@@ -866,41 +866,32 @@ export const schedulingRouter = router({
         }
       }
 
-      // Fetch real drive times from Google Maps (batch as origin|origin... → dest|dest...)
+      // Fetch real drive times using a true N×N Distance Matrix.
+      // Deduplicate all unique coordinates into one array, build the full matrix once
+      // via buildTravelMatrix(), then look up each pair by index — no diagonal trick.
       const estimatedDriveMap = new Map<number, number>();
       if (pairs.length > 0) {
-        try {
-          const CHUNK = 10;
-          for (let i = 0; i < pairs.length; i += CHUNK) {
-            const chunk = pairs.slice(i, i + CHUNK);
-            const origins = chunk.map(p => `${p.from.lat},${p.from.lng}`).join("|");
-            const destinations = chunk.map(p => `${p.to.lat},${p.to.lng}`).join("|");
-            const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
-              origins,
-              destinations,
-              mode: "driving",
-              units: "metric",
-            });
-            if (result.status === "OK") {
-              // Each origin maps to its own destination (diagonal of the matrix)
-              chunk.forEach((pair, idx) => {
-                const el = result.rows[idx]?.elements[idx];
-                if (el?.status === "OK") {
-                  estimatedDriveMap.set(pair.toId, el.duration.value);
-                } else {
-                  // Fallback to haversine
-                  const distM = haversineMeters(pair.from, pair.to);
-                  estimatedDriveMap.set(pair.toId, Math.round(distM / 10));
-                }
-              });
+        const coordKey = (p: LatLng) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+        const uniquePoints: LatLng[] = [];
+        const pointIndex = new Map<string, number>();
+        for (const pair of pairs) {
+          for (const pt of [pair.from, pair.to]) {
+            const key = coordKey(pt);
+            if (!pointIndex.has(key)) {
+              pointIndex.set(key, uniquePoints.length);
+              uniquePoints.push(pt);
             }
           }
-        } catch {
-          // Fallback: use haversine for all pairs
-          for (const pair of pairs) {
-            const distM = haversineMeters(pair.from, pair.to);
-            estimatedDriveMap.set(pair.toId, Math.round(distM / 10));
-          }
+        }
+        const matrix = await buildTravelMatrix(uniquePoints);
+        for (const pair of pairs) {
+          const fromIdx = pointIndex.get(coordKey(pair.from))!;
+          const toIdx = pointIndex.get(coordKey(pair.to))!;
+          const secs = matrix[fromIdx]?.[toIdx];
+          estimatedDriveMap.set(
+            pair.toId,
+            secs != null && secs > 0 ? secs : Math.round(haversineMeters(pair.from, pair.to) / 10),
+          );
         }
       }
 
