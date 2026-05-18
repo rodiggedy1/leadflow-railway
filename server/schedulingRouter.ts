@@ -802,9 +802,13 @@ export const schedulingRouter = router({
       }
 
       // Group jobs by team, sort by serviceDateTime
+      // Skip jobs that are explicitly unassigned (isManual=2) — they are hidden from the UI
+      // and must not participate in the consecutive drive time chain.
       const jobsByTeam = new Map<string, typeof jobs>();
       for (const j of jobs) {
         if (!j.teamName) continue;
+        const asgn = assignmentMap.get(j.id);
+        if (asgn?.isManual === 2) continue; // explicitly unassigned — skip
         if (!jobsByTeam.has(j.teamName)) jobsByTeam.set(j.teamName, []);
         jobsByTeam.get(j.teamName)!.push(j);
       }
@@ -882,6 +886,8 @@ export const schedulingRouter = router({
             }
           }
         }
+        uniquePoints.forEach((pt, i) => console.log(`[PT] idx=${i} lat=${pt.lat.toFixed(6)} lng=${pt.lng.toFixed(6)}`));
+        pairs.forEach(p => console.log(`[PAIR] fromId=${p.fromId} toId=${p.toId} from=${p.from.lat.toFixed(6)},${p.from.lng.toFixed(6)} to=${p.to.lat.toFixed(6)},${p.to.lng.toFixed(6)}`));
         const matrix = await buildTravelMatrix(uniquePoints);
         for (const pair of pairs) {
           const fromIdx = pointIndex.get(coordKey(pair.from))!;
