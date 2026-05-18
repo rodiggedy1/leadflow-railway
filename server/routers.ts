@@ -4415,6 +4415,16 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       const leadPhones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))];
       // phoneCallMap: phone → { callCount, firstCallAt, lastCallAt }
       let phoneCallMap: Record<string, { callCount: number; firstCallAt: Date | null; lastCallAt: Date | null }> = {};
+      // Build a per-lead phone → session createdAt map so we only count calls AFTER the lead came in
+      const phoneCreatedAtMap: Record<string, Date> = {};
+      for (const r of rows) {
+        if (r.leadPhone) {
+          const existing = phoneCreatedAtMap[r.leadPhone];
+          const created = new Date(r.createdAt);
+          if (!existing || created < existing) phoneCreatedAtMap[r.leadPhone] = created;
+        }
+      }
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       if (leadPhones.length > 0) {
         const callRows = await db
           .select({
@@ -4422,8 +4432,14 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             callStartedAt: openphoneCallRecordings.callStartedAt,
           })
           .from(openphoneCallRecordings)
-          .where(inArray(openphoneCallRecordings.callerPhone, leadPhones));
+          .where(and(
+            inArray(openphoneCallRecordings.callerPhone, leadPhones),
+            gte(openphoneCallRecordings.callStartedAt, sevenDaysAgo),
+          ));
         for (const c of callRows) {
+          // Only count calls that happened AFTER the lead was created
+          const leadCreatedAt = phoneCreatedAtMap[c.callerPhone];
+          if (leadCreatedAt && c.callStartedAt < leadCreatedAt) continue;
           const entry = phoneCallMap[c.callerPhone];
           if (!entry) {
             phoneCallMap[c.callerPhone] = { callCount: 1, firstCallAt: c.callStartedAt, lastCallAt: c.callStartedAt };
