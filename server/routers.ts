@@ -2847,6 +2847,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           bookedAmount:       input.amount ?? null,
           isBooked:           isBookedFlag,
           bookedAt:           isBookedFlag ? new Date() : null,
+          bookedByAgentId:    isBookedFlag ? agentId : null,
+          bookedByAgentName:  isBookedFlag ? agentName : null,
           assignedAgentId:    agentId,
           assignedAgentName:  agentName,
           quoteLeadId:        leadId,
@@ -4609,8 +4611,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           .from(conversationSessions)
           .where(
             bookedRangeCondition
-              ? and(bookedRangeCondition, eq(conversationSessions.isBooked, 1), isNotNull(conversationSessions.bookedByAgentId))
-              : and(eq(conversationSessions.isBooked, 1), isNotNull(conversationSessions.bookedByAgentId))
+              ? and(bookedRangeCondition, eq(conversationSessions.isBooked, 1), isNotNull(conversationSessions.assignedAgentId))
+              : and(eq(conversationSessions.isBooked, 1), isNotNull(conversationSessions.assignedAgentId))
           ),
       ]);
       const rangeLeads = claimedLeads; // alias for claimed count logic below
@@ -4645,7 +4647,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
 
         const agentLeads = rangeLeads.filter((l: LeadRow) => l.assignedAgentId === agent.id);
         // bookedLeads is pre-filtered by bookedAt range (ET-aware) — matches CommandChat leads.stats
-        const agentBookedLeads = bookedLeads.filter((b) => b.bookedByAgentId === agent.id);
+        const agentBookedLeads = bookedLeads.filter((b) => (b.bookedByAgentId ?? b.assignedAgentId) === agent.id);
         const bookedRevenue = agentBookedLeads.reduce((sum: number, l) => sum + calcBookedRevenue(l), 0);
 
         // Avg response time: mean of (bookedAt - createdAt) for booked leads
