@@ -331,22 +331,26 @@ function LeadCard({
         <Users className="h-4 w-4 shrink-0" />
         <span className="truncate">{lead.assignedAgentName ?? "Unassigned"}</span>
       </div>
-      {(lead.callCount > 0 || lead.lastCalledAt) && (
-        <div className="mt-2 flex items-center gap-1.5 text-xs text-violet-600 font-semibold">
-          <Phone className="h-3 w-3" />
-          {lead.callCount > 0 ? (
-            <span>
-              {lead.callCount} call{lead.callCount > 1 ? "s" : ""}
-              {lead.lastCallAt ? ` · ${formatAge(Date.now() - lead.lastCallAt)} ago` : ""}
-              {lead.responseTimeMs != null && lead.responseTimeMs > 0 && (
-                <span className="ml-1 text-slate-400 font-normal">· {formatResponseTime(lead.responseTimeMs)} response</span>
-              )}
-            </span>
-          ) : (
-            <span>Called {formatAge(Date.now() - lead.lastCalledAt!)} ago{lead.lastCalledByAgentName ? ` · ${lead.lastCalledByAgentName}` : ""}</span>
-          )}
+      <div className="mt-2 space-y-0.5">
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
+          Lead created {formatAge(lead.ageMs)} ago
         </div>
-      )}
+        {(lead.callCount > 0 || lead.lastCalledAt) && (
+          <div className="flex items-center gap-1.5 text-xs text-violet-600 font-semibold">
+            <Phone className="h-3 w-3 shrink-0" />
+            {lead.callCount > 0
+              ? `${lead.callCount} call${lead.callCount > 1 ? "s" : ""}${lead.lastCallAt ? ` · ${formatAge(Date.now() - lead.lastCallAt)} ago` : ""}`
+              : `Called ${formatAge(Date.now() - lead.lastCalledAt!)} ago`}
+          </div>
+        )}
+        {lead.responseTimeMs != null && lead.responseTimeMs > 0 && (
+          <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+            {formatResponseTime(lead.responseTimeMs)} response time
+          </div>
+        )}
+      </div>
     </motion.button>
   );
 }
