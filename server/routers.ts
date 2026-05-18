@@ -4393,6 +4393,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           updatedAt:         conversationSessions.updatedAt,
           aiMode:            conversationSessions.aiMode,
           messageHistory:    conversationSessions.messageHistory,
+          internalNotes:     conversationSessions.internalNotes,
         })
         .from(conversationSessions)
         .where(
@@ -4494,6 +4495,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           lastCalledByAgentName: r.lastCalledByAgentName ?? null,
           createdAt:         r.createdAt,
           aiMode:            r.aiMode,
+          notes:             r.internalNotes ?? null,
         };
       });
     }),

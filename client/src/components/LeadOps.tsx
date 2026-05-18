@@ -68,6 +68,7 @@ type RealLead = {
   lastCalledByAgentName: string | null;
   createdAt: Date | string;
   aiMode: number | string | null;
+  notes: string | null;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -202,6 +203,57 @@ function ValueCell({ leadId, value }: { leadId: number; value: number }) {
         </div>
       ) : (
         <div className="mt-1 font-black text-slate-900">${value}</div>
+      )}
+    </div>
+  );
+}
+
+function NotesCard({ lead }: { lead: RealLead }) {
+  const [draft, setDraft] = React.useState<string>(lead.notes ?? "");
+  const [saving, setSaving] = React.useState(false);
+  const utils = trpc.useUtils();
+
+  // Sync draft when lead changes
+  React.useEffect(() => {
+    setDraft(lead.notes ?? "");
+  }, [lead.id, lead.notes]);
+
+  const updateNotes = trpc.agents.updateNotes.useMutation({
+    onMutate: () => setSaving(true),
+    onSettled: () => setSaving(false),
+    onSuccess: () => utils.leads.listForLeadOps.invalidate(),
+    onError: (e) => toast.error(e.message),
+  });
+
+  function save() {
+    if (draft === (lead.notes ?? "")) return;
+    updateNotes.mutate({ sessionId: lead.id, notes: draft });
+  }
+
+  return (
+    <div className="mb-5 rounded-[28px] bg-[#071026] p-5 text-white shadow-2xl">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-white/50">
+          <FileText className="h-3.5 w-3.5" /> Notes
+        </div>
+        {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-white/30" />}
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        placeholder="Add internal notes about this lead…"
+        rows={4}
+        className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/20 focus:bg-white/10 transition"
+      />
+      {draft !== (lead.notes ?? "") && (
+        <button
+          onClick={save}
+          disabled={saving}
+          className="mt-2 rounded-2xl bg-white/10 px-4 py-1.5 text-xs font-bold text-white/80 hover:bg-white/20 transition disabled:opacity-40"
+        >
+          Save
+        </button>
       )}
     </div>
   );
@@ -921,6 +973,9 @@ export default function LeadOps() {
                     <p className="mt-0.5 text-sm font-medium text-slate-500">
                       {activeLead.service} • {activeLead.bedrooms}bd / {activeLead.bathrooms}ba • {activeLead.source}
                     </p>
+                    {activeLead.phone && (
+                      <p className="mt-0.5 text-sm font-mono text-slate-400">{activeLead.phone}</p>
+                    )}
                   </div>
                 </div>
 
@@ -1017,98 +1072,8 @@ export default function LeadOps() {
                     </button>
                   </div>
 
-                  {/* AI Next Best Action */}
-                  <div className="mb-5 rounded-[28px] bg-[#071026] p-5 text-white shadow-2xl">
-                    <div className="mb-4 flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.28em] text-white/50">
-                          <Sparkles className="h-3.5 w-3.5" /> AI Next Best Action
-                        </div>
-                        {isLoadingNba ? (
-                          <div className="flex items-center gap-2 py-1">
-                            <Loader2 className="h-4 w-4 animate-spin text-white/40" />
-                            <span className="text-sm text-white/40">Analyzing conversation…</span>
-                          </div>
-                        ) : (
-                          <>
-                            <h3 className="text-2xl font-black">
-                              {nba?.headline ??
-                                (activeLead.status === "unclaimed"
-                                  ? "Claim + text in under 60 seconds"
-                                  : activeLead.status === "replied"
-                                  ? "Customer replied — respond now"
-                                  : "Continue the conversation")}
-                            </h3>
-                            <p className="mt-2 max-w-xl text-sm leading-6 text-white/70">
-                              {nba?.body ??
-                                (activeLead.status === "unclaimed"
-                                  ? "This lead has no owner yet. Send the first text now."
-                                  : "Keep the conversation moving to convert this lead.")}
-                            </p>
-                            {nba?.suggestedReply && (
-                              <button
-                                onClick={() => setComposer(nba.suggestedReply)}
-                                className="mt-3 flex items-center gap-1.5 rounded-2xl border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold text-white/80 hover:bg-white/20 transition"
-                              >
-                                <Send className="h-3 w-3" /> Use suggested reply
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => refetchNba()}
-                        disabled={isLoadingNba}
-                        className="ml-3 mt-1 rounded-2xl border border-white/10 bg-white/5 p-2 hover:bg-white/10 transition disabled:opacity-40"
-                        title="Refresh AI suggestion"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-3">
-                      <button
-                        onClick={() => window.open(`tel:${activeLead.phone}`)}
-                        className={cn(
-                          "rounded-3xl border p-4 text-left transition",
-                          nba?.action === "call"
-                            ? "border-violet-400/40 bg-violet-500/20 ring-1 ring-violet-400/30"
-                            : "border-white/10 bg-white/5 hover:bg-white/10"
-                        )}
-                      >
-                        <Phone className="mb-3 h-5 w-5" />
-                        <div className="font-black text-sm">Calling Now</div>
-                        <p className="mt-1 text-xs text-white/60">
-                          {activeLead.lastCalledAt
-                            ? `Last called ${formatAge(Date.now() - activeLead.lastCalledAt)} ago`
-                            : "Best for high-intent leads."}
-                        </p>
-                      </button>
-                      <button
-                        onClick={() => { document.getElementById("lead-composer")?.focus(); if (nba?.suggestedReply) setComposer(nba.suggestedReply); }}
-                        className={cn(
-                          "rounded-3xl border p-4 text-left transition",
-                          nba?.action === "text"
-                            ? "border-emerald-400/40 bg-emerald-500/20 ring-1 ring-emerald-400/30"
-                            : "border-white/10 bg-white/5 hover:bg-white/10"
-                        )}
-                      >
-                        <Send className="mb-3 h-5 w-5" />
-                        <div className="font-black text-sm">Send AI Text</div>
-                        <p className="mt-1 text-xs text-white/60">AI reply loaded in composer.</p>
-                      </button>
-                      <button className={cn(
-                        "rounded-3xl border p-4 text-left transition",
-                        nba?.action === "quote"
-                          ? "border-amber-400/40 bg-amber-500/20 ring-1 ring-amber-400/30"
-                          : "border-white/10 bg-white/5 hover:bg-white/10"
-                      )}>
-                        <ClipboardList className="mb-3 h-5 w-5" />
-                        <div className="font-black text-sm">Create Quote</div>
-                        <p className="mt-1 text-xs text-white/60">Use property details and source data.</p>
-                      </button>
-                    </div>
-                  </div>
+                  {/* Notes */}
+                  <NotesCard lead={activeLead} />
 
                   {/* Conversation + detail cards — stacked */}
                   <div className="flex flex-col gap-4">
