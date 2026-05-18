@@ -244,7 +244,7 @@ function NotesCard({ lead }: { lead: RealLead }) {
         onBlur={save}
         placeholder="Add internal notes about this lead…"
         rows={4}
-        className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/20 focus:bg-white/10 transition"
+        className="w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white placeholder-white/30 outline-none focus:border-white/20 focus:bg-white/10 transition [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       />
       {draft !== (lead.notes ?? "") && (
         <button
