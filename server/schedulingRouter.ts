@@ -184,6 +184,7 @@ async function buildTravelMatrix(points: LatLng[]): Promise<number[][]> {
           mode: "driving",
           units: "metric",
         });
+        console.log(`[MATRIX] chunk oi=${oi} di=${di} status=${result.status} rows=${result.rows?.length ?? 0}`);
         if (result.status === "OK") {
           result.rows.forEach((row, ri) => {
             row.elements.forEach((el, ci) => {
@@ -199,7 +200,8 @@ async function buildTravelMatrix(points: LatLng[]): Promise<number[][]> {
             });
           });
         }
-      } catch {
+      } catch (err) {
+        console.log(`[MATRIX] EXCEPTION chunk oi=${oi} di=${di}: ${String(err)}`);
         // Fallback to haversine for this chunk
         for (let ri = 0; ri < CHUNK && oi + ri < n; ri++) {
           for (let ci = 0; ci < CHUNK && di + ci < n; ci++) {
@@ -882,15 +884,16 @@ export const schedulingRouter = router({
             }
           }
         }
+        console.log(`[GETDAY] uniquePoints=${uniquePoints.length} pairs=${pairs.length}`);
         const matrix = await buildTravelMatrix(uniquePoints);
         for (const pair of pairs) {
           const fromIdx = pointIndex.get(coordKey(pair.from))!;
           const toIdx = pointIndex.get(coordKey(pair.to))!;
           const secs = matrix[fromIdx]?.[toIdx];
-          estimatedDriveMap.set(
-            pair.toId,
-            secs != null && secs > 0 ? secs : Math.round(haversineMeters(pair.from, pair.to) / 10),
-          );
+          const fallback = Math.round(haversineMeters(pair.from, pair.to) / 10);
+          const used = secs != null && secs > 0 ? secs : fallback;
+          console.log(`[GETDAY] pair toId=${pair.toId} fromIdx=${fromIdx} toIdx=${toIdx} matrixVal=${secs} fallback=${fallback} used=${used}`);
+          estimatedDriveMap.set(pair.toId, used);
         }
       }
 
