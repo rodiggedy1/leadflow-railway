@@ -334,14 +334,14 @@ function LeadCard({
       <div className="mt-2 space-y-0.5">
         <div className="flex items-center gap-1.5 text-xs text-slate-400">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
-          Lead created {formatAge(lead.ageMs)} ago
+          Lead in {new Date(Date.now() - lead.ageMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
         </div>
-        {(lead.callCount > 0 || lead.lastCalledAt) && (
+        {(lead.callCount > 0 || lead.lastCalledAt || lead.firstCallAt) && (
           <div className="flex items-center gap-1.5 text-xs text-violet-600 font-semibold">
             <Phone className="h-3 w-3 shrink-0" />
             {lead.callCount > 0
-              ? `${lead.callCount} call${lead.callCount > 1 ? "s" : ""}${lead.lastCallAt ? ` · ${formatAge(Date.now() - lead.lastCallAt)} ago` : ""}`
-              : `Called ${formatAge(Date.now() - lead.lastCalledAt!)} ago`}
+              ? `${lead.callCount} call${lead.callCount > 1 ? "s" : ""}${lead.firstCallAt ? ` · first at ${new Date(lead.firstCallAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ""}`
+              : lead.lastCalledAt ? `Called at ${new Date(Date.now() - lead.lastCalledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ""}
           </div>
         )}
         {lead.responseTimeMs != null && lead.responseTimeMs > 0 && (
