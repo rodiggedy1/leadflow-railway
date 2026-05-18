@@ -189,6 +189,7 @@ async function buildTravelMatrix(points: LatLng[]): Promise<number[][]> {
             row.elements.forEach((el, ci) => {
               if (el.status === "OK") {
                 matrix[oi + ri][di + ci] = el.duration.value; // seconds
+                console.log(`[EL] [${oi+ri}][${di+ci}] = ${el.duration.value}s (${points[oi+ri].lat.toFixed(4)},${points[oi+ri].lng.toFixed(4)}) -> (${points[di+ci].lat.toFixed(4)},${points[di+ci].lng.toFixed(4)})`);
               } else {
                 // Fallback: straight-line distance × 1.4 speed factor
                 const p1 = points[oi + ri];
