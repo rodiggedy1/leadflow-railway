@@ -1665,7 +1665,7 @@ Respond in JSON with this exact schema:
         return new Date(b.lastJobDate).getTime() - new Date(a.lastJobDate).getTime();
       });
 
-      const tomorrowTargets = recencySorted; // all eligible contacts
+      const tomorrowTargets = recencySorted.slice(0, 50); // cap at 50 per batch
       const coldOnly: typeof recencySorted = []; // all go to tomorrow_slots card
 
       // Human-readable batch label for UI (e.g. "#81–180 of 3,491")
