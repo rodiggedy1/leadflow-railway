@@ -1996,6 +1996,7 @@ Respond in JSON with this exact schema:
             await db.insert(reactivationContacts).values({
               campaignId: CC_CAMPAIGN_ID,
               phone,
+              bookingCount: 0,
               status: "SENT" as const,
               sentAt: new Date(),
             });
