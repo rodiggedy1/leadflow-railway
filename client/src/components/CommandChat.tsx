@@ -4460,7 +4460,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 }
               }}
               placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team… (Enter to send, Shift+Enter for new line)"}
-              rows={3}
+              rows={1}
               className="resize-none border-0 bg-transparent p-0 text-base text-slate-700 focus-visible:ring-0 placeholder:text-slate-400"
               onKeyDown={(e) => {
                 // @mention autocomplete navigation
