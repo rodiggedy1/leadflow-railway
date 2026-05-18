@@ -67,7 +67,9 @@ type RealLead = {
   lastCalledAt: number | null;
   lastCalledByAgentName: string | null;
   callCount: number;
+  firstCallAt: number | null;
   lastCallAt: number | null;
+  responseTimeMs: number | null;
   createdAt: Date | string;
   aiMode: number | string | null;
   notes: string | null;
@@ -76,6 +78,14 @@ type RealLead = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatAge(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function formatResponseTime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const mins = Math.floor(seconds / 60);
@@ -328,6 +338,9 @@ function LeadCard({
             <span>
               {lead.callCount} call{lead.callCount > 1 ? "s" : ""}
               {lead.lastCallAt ? ` · ${formatAge(Date.now() - lead.lastCallAt)} ago` : ""}
+              {lead.responseTimeMs != null && lead.responseTimeMs > 0 && (
+                <span className="ml-1 text-slate-400 font-normal">· {formatResponseTime(lead.responseTimeMs)} response</span>
+              )}
             </span>
           ) : (
             <span>Called {formatAge(Date.now() - lead.lastCalledAt!)} ago{lead.lastCalledByAgentName ? ` · ${lead.lastCalledByAgentName}` : ""}</span>

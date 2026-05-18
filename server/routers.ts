@@ -4413,8 +4413,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       // We match by callerPhone rather than sessionId because the webhook may attach the
       // recording to an older duplicate session for the same lead phone number.
       const leadPhones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))];
-      // phoneCallMap: phone → { callCount, lastCallAt }
-      let phoneCallMap: Record<string, { callCount: number; lastCallAt: Date | null }> = {};
+      // phoneCallMap: phone → { callCount, firstCallAt, lastCallAt }
+      let phoneCallMap: Record<string, { callCount: number; firstCallAt: Date | null; lastCallAt: Date | null }> = {};
       if (leadPhones.length > 0) {
         const callRows = await db
           .select({
@@ -4426,9 +4426,12 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         for (const c of callRows) {
           const entry = phoneCallMap[c.callerPhone];
           if (!entry) {
-            phoneCallMap[c.callerPhone] = { callCount: 1, lastCallAt: c.callStartedAt };
+            phoneCallMap[c.callerPhone] = { callCount: 1, firstCallAt: c.callStartedAt, lastCallAt: c.callStartedAt };
           } else {
             entry.callCount++;
+            if (c.callStartedAt < (entry.firstCallAt ?? new Date())) {
+              entry.firstCallAt = c.callStartedAt;
+            }
             if (c.callStartedAt > (entry.lastCallAt ?? new Date(0))) {
               entry.lastCallAt = c.callStartedAt;
             }
@@ -4523,7 +4526,12 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           lastCalledAt:          r.lastCalledAt ? r.lastCalledAt.getTime() : null,
           lastCalledByAgentName: r.lastCalledByAgentName ?? null,
           callCount:             phoneCallMap[r.leadPhone]?.callCount ?? 0,
+          firstCallAt:           phoneCallMap[r.leadPhone]?.firstCallAt ? phoneCallMap[r.leadPhone]!.firstCallAt!.getTime() : null,
           lastCallAt:            phoneCallMap[r.leadPhone]?.lastCallAt ? phoneCallMap[r.leadPhone]!.lastCallAt!.getTime() : null,
+          // responseTimeMs: ms from lead creation to first outbound call (null if never called)
+          responseTimeMs:        phoneCallMap[r.leadPhone]?.firstCallAt
+            ? phoneCallMap[r.leadPhone]!.firstCallAt!.getTime() - new Date(r.createdAt).getTime()
+            : null,
           createdAt:         r.createdAt,
           aiMode:            r.aiMode,
           notes:             r.internalNotes ?? null,
@@ -4612,6 +4620,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         db
           .select({
             assignedAgentId: conversationSessions.assignedAgentId,
+            leadPhone: conversationSessions.leadPhone,
             createdAt: conversationSessions.createdAt,
             bookedAt: conversationSessions.bookedAt,
           })
@@ -4626,6 +4635,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             assignedAgentId: conversationSessions.assignedAgentId,
             bookedByAgentId: conversationSessions.bookedByAgentId,
             isBooked: conversationSessions.isBooked,
+            leadPhone: conversationSessions.leadPhone,
             createdAt: conversationSessions.createdAt,
             bookedAt: conversationSessions.bookedAt,
             bookedAmount: conversationSessions.bookedAmount,
@@ -4645,6 +4655,26 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           ),
       ]);
       const rangeLeads = claimedLeads; // alias for claimed count logic below
+
+      // Fetch first call time per phone from openphone_call_recordings
+      // Used to compute true call response time (lead created → first call).
+      const allPhones = [...new Set([...claimedLeads, ...bookedLeads].map(l => l.leadPhone).filter(Boolean))];
+      const firstCallByPhone: Record<string, Date> = {};
+      if (allPhones.length > 0) {
+        const firstCallRows = await db
+          .select({
+            callerPhone: openphoneCallRecordings.callerPhone,
+            callStartedAt: openphoneCallRecordings.callStartedAt,
+          })
+          .from(openphoneCallRecordings)
+          .where(inArray(openphoneCallRecordings.callerPhone, allPhones));
+        for (const c of firstCallRows) {
+          const existing = firstCallByPhone[c.callerPhone];
+          if (!existing || c.callStartedAt < existing) {
+            firstCallByPhone[c.callerPhone] = c.callStartedAt;
+          }
+        }
+      }
       // Build the full bookedList for the total bar dropdown (matches CommandChat leads.stats format)
       const teamBookedList = bookedLeads.map(r => ({
         leadName: r.leadName ?? 'Unknown',
@@ -4679,10 +4709,11 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         const agentBookedLeads = bookedLeads.filter((b) => (b.bookedByAgentId ?? b.assignedAgentId) === agent.id);
         const bookedRevenue = agentBookedLeads.reduce((sum: number, l) => sum + calcBookedRevenue(l), 0);
 
-        // Avg response time: mean of (bookedAt - createdAt) for booked leads
-        const responseTimes = agentBookedLeads
-          .filter((l) => l.bookedAt && l.createdAt)
-          .map((l) => new Date(l.bookedAt!).getTime() - new Date(l.createdAt).getTime())
+        // Avg response time: mean of (firstCallAt - createdAt) for leads this agent claimed.
+        // Uses openphone_call_recordings matched by phone — true call response time.
+        const responseTimes = agentLeads
+          .filter((l) => l.leadPhone && firstCallByPhone[l.leadPhone] && l.createdAt)
+          .map((l) => firstCallByPhone[l.leadPhone!].getTime() - new Date(l.createdAt).getTime())
           .filter((t: number) => t > 0 && t < 24 * 60 * 60 * 1000);
 
         let avgResponseMs: number | null = null;
