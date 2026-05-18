@@ -1486,23 +1486,8 @@ Respond in JSON with this exact schema:
         )
         .limit(100);
 
-      // Lapsed past customers — people who had a completed job but haven't booked
-      // in 60+ days. We find the most recent jobDate per phone number in completedJobs
-      // and target those where it's been at least 60 days.
-      const sixtyDaysAgoStr = (() => {
-        const d = new Date();
-        d.setDate(d.getDate() - 60);
-        return [
-          d.getFullYear(),
-          String(d.getMonth() + 1).padStart(2, "0"),
-          String(d.getDate()).padStart(2, "0"),
-        ].join("-");
-      })();
-
-      // Get one row per phone: the customer's most recent job date, name, and frequency.
-      // Fetch up to 3500 so we can count the full pool, then cap the default send at 50.
-      // Reactivation targets: one-time customers ONLY (recurring = never eligible).
-      const REACTIVATION_RECURRING_FREQS = ["Bi-weekly (15%OFF)", "Monthly (10%OFF)", "Weekly (20%OFF)", "Tri-weekly (10%OFF)", "Bi-monthly"];
+      // Pull from the curated reactivationEligible list — one-time customers only,
+      // 30+ days since last job, manually reviewed and cleaned.
       const lapsedCustomers = await db
         .select({
           phone: completedJobs.phone,
@@ -1517,12 +1502,10 @@ Respond in JSON with this exact schema:
           and(
             isNotNull(completedJobs.phone),
             isNotNull(completedJobs.jobDate),
-            // One-time customers only — exclude all recurring frequencies
-            ...REACTIVATION_RECURRING_FREQS.map((f) => ne(completedJobs.frequency, f))
+            eq(completedJobs.reactivationEligible, 1)
           )
         )
         .groupBy(completedJobs.phone, completedJobs.firstName, completedJobs.name, completedJobs.serviceType, completedJobs.frequency)
-        .having(sql`MAX(${completedJobs.jobDate}) <= ${sixtyDaysAgoStr}`)
         .orderBy(sql`MAX(${completedJobs.jobDate}) DESC`)
         .limit(3500);
 
