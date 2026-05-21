@@ -2329,7 +2329,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet
   const { data: superAlertMsgIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery(
     { channel: "command" },
-    { staleTime: 30_000, refetchInterval: 60_000 }
+    { staleTime: 0, refetchInterval: 60_000 }
   );
   const superAlertMsgSet = useMemo(() => new Set(superAlertMsgIds), [superAlertMsgIds]);
 
