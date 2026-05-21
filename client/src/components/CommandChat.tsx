@@ -4793,11 +4793,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       const after = composer.slice((composerRef.current?.selectionStart ?? composer.length));
                       const next = before + "@" + chosen + " " + after;
                       setMentionQuery(null);
-                      // If this name is already in the composer (double-tag = super-alert),
-                      // send immediately instead of waiting for another Enter press.
-                      const alreadyTagged = composer.toLowerCase().includes("@" + chosen.toLowerCase());
+                      // Double-tag detection: check if @chosen already appears in the text
+                      // BEFORE the current @ position (i.e. user typed the same name twice).
+                      const chosenTag = "@" + chosen.toLowerCase();
+                      const alreadyTagged = before.toLowerCase().includes(chosenTag);
                       if (alreadyTagged) {
-                        // Send with the completed double-tag body
+                        // Send the completed double-tag message immediately
                         onSendMessage(next.trim(), undefined, replyTo ?? undefined);
                         setComposer("");
                         setReplyTo(null);
