@@ -32,6 +32,8 @@ import {
   UserCheck,
   ChevronDown,
   FileText,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
@@ -596,7 +598,9 @@ export default function LeadOps() {
           updated.filterTag !== activeLead.filterTag ||
           updated.assignedAgentId !== activeLead.assignedAgentId ||
           updated.assignedAgentName !== activeLead.assignedAgentName ||
-          updated.notes !== activeLead.notes
+          updated.notes !== activeLead.notes ||
+          updated.name !== activeLead.name ||
+          updated.phone !== activeLead.phone
         ) {
           setActiveLead(updated);
         }
@@ -690,6 +694,43 @@ export default function LeadOps() {
     },
     onError: (e) => toast.error(e.message),
   });
+
+  // ── Contact edit state ─────────────────────────────────────────────────────
+  const [editingContact, setEditingContact] = useState<"name" | "phone" | null>(null);
+  const [contactDraft, setContactDraft] = useState("");
+
+  const updateLeadNameMutation = trpc.leads.updateLeadName.useMutation({
+    onSuccess: () => {
+      setEditingContact(null);
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const updateLeadPhoneMutation = trpc.leads.updateLeadPhone.useMutation({
+    onSuccess: () => {
+      setEditingContact(null);
+      refreshLeads();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  function startEditContact(field: "name" | "phone") {
+    if (!activeLead) return;
+    setContactDraft(field === "name" ? activeLead.name : (activeLead.phone ?? ""));
+    setEditingContact(field);
+  }
+
+  function commitContactEdit() {
+    if (!activeLead || !editingContact) return;
+    const trimmed = contactDraft.trim();
+    if (!trimmed) { setEditingContact(null); return; }
+    if (editingContact === "name") {
+      updateLeadNameMutation.mutate({ sessionId: activeLead.id, leadName: trimmed });
+    } else {
+      updateLeadPhoneMutation.mutate({ sessionId: activeLead.id, leadPhone: trimmed });
+    }
+  }
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
@@ -993,16 +1034,63 @@ export default function LeadOps() {
                     {activeLead.name.charAt(0)}
                   </div>
                   <div>
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-xl font-black tracking-tight">{activeLead.name}</h2>
+                    <div className="flex items-center gap-2">
+                      {editingContact === "name" ? (
+                        <form onSubmit={(e) => { e.preventDefault(); commitContactEdit(); }} className="flex items-center gap-1.5">
+                          <input
+                            autoFocus
+                            value={contactDraft}
+                            onChange={(e) => setContactDraft(e.target.value)}
+                            onKeyDown={(e) => e.key === "Escape" && setEditingContact(null)}
+                            className="rounded-lg border border-slate-300 px-2 py-0.5 text-lg font-black tracking-tight focus:outline-none focus:ring-2 focus:ring-slate-400 w-44"
+                          />
+                          <button type="submit" disabled={updateLeadNameMutation.isPending} className="rounded-lg bg-slate-950 p-1 text-white hover:bg-slate-700 disabled:opacity-40">
+                            {updateLeadNameMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          </button>
+                          <button type="button" onClick={() => setEditingContact(null)} className="rounded-lg border border-slate-200 p-1 hover:bg-slate-100">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <h2 className="text-xl font-black tracking-tight">{activeLead.name}</h2>
+                          <button onClick={() => startEditContact("name")} className="rounded p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100" title="Edit name">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
                       <StatusPill status={activeLead.status} />
                     </div>
                     <p className="mt-0.5 text-sm font-medium text-slate-500">
                       {activeLead.service} • {activeLead.bedrooms}bd / {activeLead.bathrooms}ba • {activeLead.source}
                     </p>
-                    {activeLead.phone && (
-                      <p className="mt-0.5 text-sm font-mono text-slate-400">{activeLead.phone}</p>
-                    )}
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      {editingContact === "phone" ? (
+                        <form onSubmit={(e) => { e.preventDefault(); commitContactEdit(); }} className="flex items-center gap-1.5">
+                          <input
+                            autoFocus
+                            value={contactDraft}
+                            onChange={(e) => setContactDraft(e.target.value)}
+                            onKeyDown={(e) => e.key === "Escape" && setEditingContact(null)}
+                            placeholder="+1 (555) 000-0000"
+                            className="rounded-lg border border-slate-300 px-2 py-0.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-400 w-44"
+                          />
+                          <button type="submit" disabled={updateLeadPhoneMutation.isPending} className="rounded-lg bg-slate-950 p-1 text-white hover:bg-slate-700 disabled:opacity-40">
+                            {updateLeadPhoneMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          </button>
+                          <button type="button" onClick={() => setEditingContact(null)} className="rounded-lg border border-slate-200 p-1 hover:bg-slate-100">
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <span className="text-sm font-mono text-slate-400">{activeLead.phone || <span className="italic text-slate-300">No phone</span>}</span>
+                          <button onClick={() => startEditContact("phone")} className="rounded p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100" title="Edit phone">
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
