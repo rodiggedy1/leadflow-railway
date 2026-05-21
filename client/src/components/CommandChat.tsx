@@ -4792,12 +4792,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       const before = composer.slice(0, mentionStart);
                       const after = composer.slice((composerRef.current?.selectionStart ?? composer.length));
                       const next = before + "@" + chosen + " " + after;
-                      setComposer(next);
                       setMentionQuery(null);
-                      requestAnimationFrame(() => {
-                        const pos = (before + "@" + chosen + " ").length;
-                        composerRef.current?.setSelectionRange(pos, pos);
-                      });
+                      // If this name is already in the composer (double-tag = super-alert),
+                      // send immediately instead of waiting for another Enter press.
+                      const alreadyTagged = composer.toLowerCase().includes("@" + chosen.toLowerCase());
+                      if (alreadyTagged) {
+                        // Send with the completed double-tag body
+                        onSendMessage(next.trim(), undefined, replyTo ?? undefined);
+                        setComposer("");
+                        setReplyTo(null);
+                        setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
+                        requestAnimationFrame(() => threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
+                      } else {
+                        setComposer(next);
+                        requestAnimationFrame(() => {
+                          const pos = (before + "@" + chosen + " ").length;
+                          composerRef.current?.setSelectionRange(pos, pos);
+                        });
+                      }
                     }
                     return;
                   }
