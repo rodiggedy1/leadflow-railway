@@ -553,7 +553,7 @@ export const opsChatRouter = router({
         jobId: input.cleanerJobId,
       });
 
-      return { success: true };
+      return { success: true, messageId: newMessageId };
     }),
 
   /**

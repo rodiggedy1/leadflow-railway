@@ -1542,7 +1542,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Send message mutation ───────────────────────────────────────────────────
   const sendMsg = trpc.opsChat.sendMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       setComposer("");
       setSelectedQuickAction(null);
       // Clear staged photos and revoke object URLs
@@ -1552,6 +1552,26 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       }
       if (activeTab === "channels") {
         utils.opsChat.listChannelMessages.invalidate({ channel: activeChannel });
+      }
+      // If this was a super-tag (double @Name), immediately add the message ID to the
+      // badge cache so the ⚡ SUPER badge appears instantly without waiting for SSE/poll.
+      if (data.messageId && variables.body && (variables.body.match(/@/g)?.length ?? 0) >= 2) {
+        const bodyLower = variables.body.toLowerCase();
+        const agentNames = (agentStatusData?.agents ?? []).map((a: { name: string }) => a.name);
+        const isDoubleSuperTag =
+          (bodyLower.split("@everyone").length - 1) >= 2 ||
+          agentNames.some((name: string) => {
+            const tag = "@" + name.toLowerCase();
+            let count = 0, pos = 0;
+            while ((pos = bodyLower.indexOf(tag, pos)) !== -1) { count++; pos += tag.length; }
+            return count >= 2;
+          });
+        if (isDoubleSuperTag) {
+          utils.opsChat.getSuperAlertMessageIds.setData(
+            { channel: "command" },
+            (prev: number[] | undefined) => [...(prev ?? []), data.messageId!]
+          );
+        }
       }
     },
   });
