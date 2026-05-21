@@ -491,10 +491,9 @@ export const opsChatRouter = router({
       const newMessageId = (insertResult as any).insertId as number;
 
       // ── Super-alert detection (double-tag) ────────────────────────────────────
-      // Count how many times @Name appears for each known agent name.
-      // Using indexOf per-name (not regex) so multi-word names like "John Smith" work correctly.
-      // "@everyone @everyone" triggers a super-alert for all active agents.
-      {
+      // Only runs when the body contains at least two @ symbols — skips the DB
+      // hit entirely for normal messages, keeping send latency identical to before.
+      if ((input.body.match(/@/g)?.length ?? 0) >= 2) {
         const bodyLower = input.body.toLowerCase();
         const countTag = (name: string) => {
           const tag = "@" + name.toLowerCase();
@@ -506,15 +505,11 @@ export const opsChatRouter = router({
         const allAgents = await getAllAgents();
         let targetNames: string[] = [];
 
-        // Check @everyone @everyone first
         if (countTag("everyone") >= 2) {
           targetNames = allAgents.filter(a => a.isActive).map(a => a.name);
         } else {
-          // Check each agent name individually
           for (const agent of allAgents) {
-            if (countTag(agent.name) >= 2) {
-              targetNames.push(agent.name);
-            }
+            if (countTag(agent.name) >= 2) targetNames.push(agent.name);
           }
         }
 
