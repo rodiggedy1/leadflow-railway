@@ -491,35 +491,34 @@ export const opsChatRouter = router({
       const newMessageId = (insertResult as any).insertId as number;
 
       // ── Super-alert detection (double-tag) ────────────────────────────────────
-      // Parse @mentions from the body. If any name appears 2+ times, or
-      // "everyone" appears 2+ times, trigger a super-alert for those targets.
-      const mentionRegex = /@([\w.\- ]+?)(?=\s|@|$)/g;
-      const mentionCounts: Record<string, number> = {};
-      let m: RegExpExecArray | null;
-      while ((m = mentionRegex.exec(input.body)) !== null) {
-        const name = m[1].trim().toLowerCase();
-        if (name) mentionCounts[name] = (mentionCounts[name] ?? 0) + 1;
-      }
-      const doubledNames = Object.entries(mentionCounts)
-        .filter(([, count]) => count >= 2)
-        .map(([name]) => name);
+      // Count how many times @Name appears for each known agent name.
+      // Using indexOf per-name (not regex) so multi-word names like "John Smith" work correctly.
+      // "@everyone @everyone" triggers a super-alert for all active agents.
+      {
+        const bodyLower = input.body.toLowerCase();
+        const countTag = (name: string) => {
+          const tag = "@" + name.toLowerCase();
+          let count = 0, pos = 0;
+          while ((pos = bodyLower.indexOf(tag, pos)) !== -1) { count++; pos += tag.length; }
+          return count;
+        };
 
-      if (doubledNames.length > 0) {
-        // Resolve "everyone" to all active agent names
+        const allAgents = await getAllAgents();
         let targetNames: string[] = [];
-        if (doubledNames.includes("everyone")) {
-          const allAgents = await getAllAgents();
+
+        // Check @everyone @everyone first
+        if (countTag("everyone") >= 2) {
           targetNames = allAgents.filter(a => a.isActive).map(a => a.name);
         } else {
-          // Match doubled names case-insensitively against real agent names
-          const allAgents = await getAllAgents();
-          for (const doubled of doubledNames) {
-            const match = allAgents.find(a => a.name.toLowerCase() === doubled);
-            if (match) targetNames.push(match.name);
+          // Check each agent name individually
+          for (const agent of allAgents) {
+            if (countTag(agent.name) >= 2) {
+              targetNames.push(agent.name);
+            }
           }
         }
+
         if (targetNames.length > 0) {
-          // Insert one super-alert row per target
           await db.insert(chatSuperAlerts).values(
             targetNames.map(name => ({
               messageId: newMessageId,

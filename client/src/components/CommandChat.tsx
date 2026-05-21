@@ -2319,6 +2319,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onSuperAlert: () => {
       // Refresh pending super-alerts so the overlay appears immediately for targeted agents
       utils.opsChat.getPendingSuperAlerts.invalidate();
+      utils.opsChat.getSuperAlertMessageIds.invalidate();
       utils.opsChat.getCommandChatData.invalidate();
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
     },
