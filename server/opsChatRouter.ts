@@ -493,6 +493,7 @@ export const opsChatRouter = router({
       // ── Super-alert detection (double-tag) ────────────────────────────────────
       // Only runs when the body contains at least two @ symbols — skips the DB
       // hit entirely for normal messages, keeping send latency identical to before.
+      let superAlertTargets: string[] = [];
       if ((input.body.match(/@/g)?.length ?? 0) >= 2) {
         const bodyLower = input.body.toLowerCase();
         const countTag = (name: string) => {
@@ -503,19 +504,18 @@ export const opsChatRouter = router({
         };
 
         const allAgents = await getAllAgents();
-        let targetNames: string[] = [];
 
         if (countTag("everyone") >= 2) {
-          targetNames = allAgents.filter(a => a.isActive).map(a => a.name);
+          superAlertTargets = allAgents.filter(a => a.isActive).map(a => a.name);
         } else {
           for (const agent of allAgents) {
-            if (countTag(agent.name) >= 2) targetNames.push(agent.name);
+            if (countTag(agent.name) >= 2) superAlertTargets.push(agent.name);
           }
         }
 
-        if (targetNames.length > 0) {
+        if (superAlertTargets.length > 0) {
           await db.insert(chatSuperAlerts).values(
-            targetNames.map(name => ({
+            superAlertTargets.map(name => ({
               messageId: newMessageId,
               channel: input.channel ?? "command",
               targetAgentName: name,
@@ -524,7 +524,7 @@ export const opsChatRouter = router({
               repliedAt: null,
             }))
           );
-          broadcastOpsUpdate("super_alert", { targetAgentNames: targetNames });
+          broadcastOpsUpdate("super_alert", { targetAgentNames: superAlertTargets });
         }
       }
       // ── End super-alert ───────────────────────────────────────────────────────
@@ -553,7 +553,7 @@ export const opsChatRouter = router({
         jobId: input.cleanerJobId,
       });
 
-      return { success: true, messageId: newMessageId };
+      return { success: true, messageId: newMessageId, superAlertTargets: superAlertTargets ?? [] };
     }),
 
   /**
