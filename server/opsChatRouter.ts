@@ -3527,19 +3527,21 @@ Respond ONLY with valid JSON, no markdown:
 
   /**
    * opsChat.getPendingSuperAlerts — returns unacknowledged super-alerts for the
-   * calling agent (matched by authorName passed from the client).
+   * calling agent. Uses ctx.opsCaller.name from the session cookie — no client-
+   * provided agentName needed, which eliminates name-mismatch bugs.
    */
   getPendingSuperAlerts: opsChatProcedure
-    .input(z.object({ agentName: z.string().min(1).max(255) }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return [];
+      const callerName = ctx.opsCaller.name;
+      if (!callerName) return [];
       const rows = await db
         .select()
         .from(chatSuperAlerts)
         .where(
           and(
-            eq(chatSuperAlerts.targetAgentName, input.agentName),
+            eq(chatSuperAlerts.targetAgentName, callerName),
             isNull(chatSuperAlerts.repliedAt)
           )
         )

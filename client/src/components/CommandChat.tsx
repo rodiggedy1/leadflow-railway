@@ -2469,8 +2469,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // ── Super-alert overlay ──────────────────────────────────────────────────────
   // Poll every 3s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
+  // Server uses session cookie to identify the caller — no agentName input needed.
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
-    { agentName: callerName },
+    undefined,
     { refetchInterval: 3_000, refetchIntervalInBackground: true, retry: 2, staleTime: 0, refetchOnWindowFocus: true }
   );
   const acknowledgeSuperAlertMutation = trpc.opsChat.acknowledgeSuperAlert.useMutation({
