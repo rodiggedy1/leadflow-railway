@@ -872,6 +872,7 @@ type MessageListProps = {
   setResolveIssueOpen: (v: boolean) => void;
   dismissSystemCard: (messageId: number) => void;
   onScrollToBottom: () => void;
+  superAlertMsgSet: Set<number>;
 };
 const MessageList = memo(function MessageList({
   channelMsgs,
@@ -904,6 +905,7 @@ const MessageList = memo(function MessageList({
   setResolveIssueOpen,
   dismissSystemCard,
   onScrollToBottom,
+  superAlertMsgSet,
 }: MessageListProps) {
   return (
     <>
@@ -2322,6 +2324,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
   });
 
+  // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
+  // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet
+  const { data: superAlertMsgIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery(
+    { channel: "command" },
+    { staleTime: 30_000, refetchInterval: 60_000 }
+  );
+  const superAlertMsgSet = useMemo(() => new Set(superAlertMsgIds), [superAlertMsgIds]);
+
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
     staleTime: 2 * 60 * 1000,
@@ -2467,13 +2477,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   // Show the oldest unacknowledged super-alert as the active overlay
   const activeSuperAlert = pendingSuperAlerts[0] ?? null;
-
-  // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
-  const { data: superAlertMsgIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery(
-    { channel: "command" },
-    { staleTime: 30_000, refetchInterval: 60_000 }
-  );
-  const superAlertMsgSet = useMemo(() => new Set(superAlertMsgIds), [superAlertMsgIds]);
 
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -4507,6 +4510,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setResolveIssueOpen={setResolveIssueOpen}
           dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
           onScrollToBottom={() => setNewMsgCount(0)}
+          superAlertMsgSet={superAlertMsgSet}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
