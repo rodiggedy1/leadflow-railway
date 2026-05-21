@@ -1945,6 +1945,35 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Lead Assignment card (amber/orange) ──────────────────────────────
+                if (msg.quickAction === "lead_assignment") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const laLeadName = (meta.leadName as string) ?? "Lead";
+                  const laLeadPhone = (meta.leadPhone as string | null) ?? null;
+                  const laAgentName = (meta.agentName as string) ?? "Agent";
+                  const laAssignedByName = (meta.assignedByName as string) ?? "";
+                  const laNotes = (meta.notes as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-orange-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500">
+                          <Briefcase className="h-3 w-3 text-orange-100" />
+                          <span className="text-[10px] font-semibold text-orange-100 uppercase tracking-widest">Lead Assigned</span>
+                          <span className="ml-auto text-[10px] text-orange-200">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-orange-50">
+                          <p className="text-sm font-semibold text-slate-900">{laLeadName}</p>
+                          {laLeadPhone && <p className="text-xs text-slate-500 mt-0.5">📞 {laLeadPhone}</p>}
+                          <p className="text-xs text-orange-700 mt-0.5">Assigned to <span className="font-semibold">{laAgentName}</span></p>
+                          {laAssignedByName && <p className="text-[10px] text-slate-400 mt-0.5">By {laAssignedByName}</p>}
+                          {laNotes && <p className="text-xs text-slate-500 mt-1 italic border-t border-orange-100 pt-1">{laNotes}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -2271,6 +2300,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Invalidate the specific issue's comment thread so all agents see it instantly
       utils.opsChat.getIssueComments.invalidate({ issueKey });
     },
+    onLeadAssignment: () => {
+      // Refresh the pending assignment query so the overlay appears for the assigned agent
+      utils.leads.getPendingAssignment.invalidate();
+      utils.opsChat.getCommandChatData.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
   });
 
   // Load all agent photo URLs for message bubble avatars
@@ -2388,6 +2423,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const dismissPinMutation = trpc.opsChat.dismissPin.useMutation({
     onSuccess: () => { toast.success("Pin dismissed"); refetchPin(); },
+  });
+
+  // ── Lead Assignment overlay ────────────────────────────────────────────────
+  // Poll every 10s for unacknowledged assignments; also refreshed via SSE onLeadAssignment.
+  const { data: pendingAssignment } = trpc.leads.getPendingAssignment.useQuery(undefined, {
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+    staleTime: 0,
+  });
+  const acknowledgeAssignmentMutation = trpc.leads.acknowledgeAssignment.useMutation({
+    onSuccess: () => {
+      utils.leads.getPendingAssignment.invalidate();
+      onSwitchToLeadOps?.();
+    },
+    onError: (err) => toast.error("Failed to acknowledge assignment", { description: err.message }),
   });
 
   // ── Announce Booking modal state ───────────────────────────────────────────
@@ -3212,6 +3263,49 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   return (
     <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
+
+      {/* ── Lead Assignment Blocking Overlay ──────────────────────────────────────────── */}
+      {pendingAssignment && pendingAssignment.agentName === callerName && (
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
+          {/* Pulsing border ring */}
+          <div
+            className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
+            style={{ animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite", border: "3px solid #f97316" }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-orange-500">
+              <Briefcase className="h-5 w-5 text-white shrink-0" />
+              <span className="text-sm font-bold text-white uppercase tracking-wider">New Lead Assigned to You</span>
+            </div>
+            {/* Body */}
+            <div className="px-5 py-4 bg-amber-50">
+              <div className="space-y-1.5 mb-4">
+                <p className="text-base font-semibold text-slate-800">👤 <span className="text-orange-700">{pendingAssignment.leadName ?? "Lead"}</span></p>
+                {pendingAssignment.leadPhone && (
+                  <p className="text-sm text-slate-600">📞 {pendingAssignment.leadPhone}</p>
+                )}
+                <p className="text-sm text-slate-600">Assigned by <span className="font-semibold">{pendingAssignment.assignedByName}</span></p>
+                {pendingAssignment.notes && (
+                  <p className="text-sm text-slate-500 italic border-t border-orange-200 pt-2 mt-2">"{pendingAssignment.notes}"</p>
+                )}
+              </div>
+              <p className="text-xs text-amber-700 font-medium mb-4">⚡ Head to Lead Ops to follow up immediately.</p>
+              <button
+                disabled={acknowledgeAssignmentMutation.isPending}
+                onClick={() => acknowledgeAssignmentMutation.mutate({ assignmentId: pendingAssignment.id })}
+                className="w-full rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3 text-sm transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {acknowledgeAssignmentMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                Got it — Go to Lead Ops
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Lightbox ── */}
       {lightboxUrl && (

@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -1048,9 +1048,10 @@ export const appRouter = router({
         sessionId: z.number().int().positive(),
         agentId: z.number().int().positive().nullable(),
       }))
-       .mutation(async ({ input }) => {
+       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
+        const assignedByName: string = ctx.agent?.agentName ?? "Admin";
         if (input.agentId === null) {
           await db
             .update(conversationSessions)
@@ -1063,15 +1064,103 @@ export const appRouter = router({
         }
         const agent = await getAgentById(input.agentId);
         if (!agent) throw new Error("Agent not found");
+        // Fetch session info for the card
+        const [session] = await db
+          .select({
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            internalNotes: conversationSessions.internalNotes,
+          })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
         await db
           .update(conversationSessions)
           .set({ assignedAgentId: agent.id, assignedAgentName: agent.name })
           .where(eq(conversationSessions.id, input.sessionId));
         await syncClaimToOpsChatMessage(db, input.sessionId, agent.name, Date.now());
+        // Insert lead_assignments row
+        const [newAssignment] = await db
+          .insert(leadAssignments)
+          .values({
+            sessionId: input.sessionId,
+            agentId: agent.id,
+            agentName: agent.name,
+            assignedByName,
+            leadName: session?.leadName ?? null,
+            leadPhone: session?.leadPhone ?? null,
+            notes: session?.internalNotes ?? null,
+            acknowledgedAt: null,
+          })
+          .$returningId();
+        const assignmentId = newAssignment?.id ?? 0;
+        // Post a system card to Command Chat
+        const cardMetadata = JSON.stringify({
+          assignmentId,
+          sessionId: input.sessionId,
+          agentId: agent.id,
+          agentName: agent.name,
+          assignedByName,
+          leadName: session?.leadName ?? 'Lead',
+          leadPhone: session?.leadPhone ?? null,
+          notes: session?.internalNotes ?? null,
+        });
+        await db.insert(opsChatMessages).values({
+          channel: "command",
+          authorName: "📋 Lead Assignment",
+          authorRole: "office",
+          body: `📋 **${session?.leadName ?? 'Lead'}** assigned to **${agent.name}** by ${assignedByName}`,
+          quickAction: "lead_assignment",
+          metadata: cardMetadata,
+        });
         const { broadcastOpsUpdate: bcast2 } = await import("./sseBroadcast");
         bcast2("lead_update");
+        bcast2("lead_assignment", { assignmentId, targetAgentId: agent.id });
+        return { success: true, assignmentId };
+      }),
+    /**
+     * leads.acknowledgeAssignment — agent acknowledges a lead assignment, dismissing the overlay.
+     */
+    acknowledgeAssignment: agentProcedure
+      .input(z.object({ assignmentId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        await db
+          .update(leadAssignments)
+          .set({ acknowledgedAt: Date.now() })
+          .where(eq(leadAssignments.id, input.assignmentId));
         return { success: true };
       }),
+
+    /**
+     * leads.getPendingAssignment — returns the most recent unacknowledged assignment for the calling agent.
+     */
+    getPendingAssignment: agentProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const agentId = ctx.agent?.agentId;
+      if (!agentId) return null;
+      const [row] = await db
+        .select()
+        .from(leadAssignments)
+        .where(and(eq(leadAssignments.agentId, agentId), isNull(leadAssignments.acknowledgedAt)))
+        .orderBy(desc(leadAssignments.createdAt))
+        .limit(1);
+      if (!row) return null;
+      return {
+        id: row.id,
+        sessionId: row.sessionId,
+        agentId: row.agentId,
+        agentName: row.agentName,
+        assignedByName: row.assignedByName,
+        leadName: row.leadName ?? null,
+        leadPhone: row.leadPhone ?? null,
+        notes: row.notes,
+        createdAt: row.createdAt,
+      };
+    }),
+
     /**
      * leads.updateBookedAmount — admin sets the actual invoiced/booked dollar amount.
      * Pass null to clear the override and revert to quotedPrice + extras.

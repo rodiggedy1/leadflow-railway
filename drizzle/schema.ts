@@ -2617,3 +2617,36 @@ export const teamAvailabilityCheckins = mysqlTable("team_availability_checkins",
 }));
 export type TeamAvailabilityCheckin = typeof teamAvailabilityCheckins.$inferSelect;
 export type InsertTeamAvailabilityCheckin = typeof teamAvailabilityCheckins.$inferInsert;
+
+/**
+ * lead_assignments — one row per lead assignment action.
+ * Created when an admin assigns a lead to an agent from Lead Ops.
+ * Drives the blocking Command Chat overlay for the assigned agent.
+ */
+export const leadAssignments = mysqlTable("lead_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to conversationSessions.id */
+  sessionId: int("sessionId").notNull(),
+  /** Agent ID being assigned */
+  agentId: int("agentId").notNull(),
+  /** Agent display name (denormalized for fast reads) */
+  agentName: varchar("agentName", { length: 128 }).notNull(),
+  /** Name of the admin who made the assignment */
+  assignedByName: varchar("assignedByName", { length: 128 }).notNull(),
+  /** Lead name at time of assignment */
+  leadName: varchar("leadName", { length: 255 }),
+  /** Lead phone at time of assignment */
+  leadPhone: varchar("leadPhone", { length: 30 }),
+  /** Notes captured at time of assignment */
+  notes: text("notes"),
+  /** FK to ops_chat_messages.id — the Command Chat card posted for this assignment */
+  opsChatMessageId: int("opsChatMessageId"),
+  /** Set when the assigned agent clicks "Got it" */
+  acknowledgedAt: bigint("acknowledgedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxSession: index("idx_la_session").on(t.sessionId),
+  idxAgent: index("idx_la_agent").on(t.agentId),
+}));
+export type LeadAssignment = typeof leadAssignments.$inferSelect;
+export type InsertLeadAssignment = typeof leadAssignments.$inferInsert;
