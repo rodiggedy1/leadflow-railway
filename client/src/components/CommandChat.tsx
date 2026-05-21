@@ -2467,10 +2467,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
 
   // ── Super-alert overlay ──────────────────────────────────────────────────────
-  // Poll every 10s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
+  // Poll every 3s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
     { agentName: callerName },
-    { refetchInterval: 10_000, refetchIntervalInBackground: false, retry: false, staleTime: 0 }
+    { refetchInterval: 3_000, refetchIntervalInBackground: true, retry: 2, staleTime: 0, refetchOnWindowFocus: true }
   );
   const acknowledgeSuperAlertMutation = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { utils.opsChat.getPendingSuperAlerts.invalidate(); },
@@ -3304,7 +3304,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── Lead Assignment Blocking Overlay ──────────────────────────────────────────── */}
       {pendingAssignment && pendingAssignment.agentName === callerName && (
-        <div className="absolute inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
           {/* Pulsing border ring */}
           <div
             className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
@@ -3347,7 +3347,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       {/* ── Super-Alert Blocking Overlay ──────────────────────────────────────── */}
       {activeSuperAlert && (
-        <div className="absolute inset-0 z-[9998] flex items-center justify-center" style={{ background: "rgba(30, 10, 60, 0.88)" }}>
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center" style={{ background: "rgba(30, 10, 60, 0.88)" }}>
           <div
             className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
             style={{ animation: "pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite", border: "3px solid #a855f7" }}
