@@ -590,12 +590,13 @@ export default function LeadOps() {
       // Sync the active lead's fields from the freshly-fetched full list
       const updated = leads.find((l) => l.id === activeLead.id);
       if (updated) {
-        // Always overwrite — any field may have changed (status, filterTag, assignedAgentId, etc.)
+        // Always overwrite — any field may have changed (status, filterTag, assignedAgentId, notes, etc.)
         if (
           updated.status !== activeLead.status ||
           updated.filterTag !== activeLead.filterTag ||
           updated.assignedAgentId !== activeLead.assignedAgentId ||
-          updated.assignedAgentName !== activeLead.assignedAgentName
+          updated.assignedAgentName !== activeLead.assignedAgentName ||
+          updated.notes !== activeLead.notes
         ) {
           setActiveLead(updated);
         }
