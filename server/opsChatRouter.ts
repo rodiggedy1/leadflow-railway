@@ -476,7 +476,7 @@ export const opsChatRouter = router({
         }
       }
 
-      const insertResult = await db.insert(opsChatMessages).values({
+      const [insertResult] = await db.insert(opsChatMessages).values({
         cleanerJobId: input.cleanerJobId ?? null,
         channel: input.channel ?? null,
         authorName: input.authorName,
