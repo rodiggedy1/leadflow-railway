@@ -31,6 +31,8 @@ export type OpsStreamCallbacks = {
   onConnected?: () => void;
   /** Called when update-lead-phone successfully links a real phone to a lead */
   onPhoneUpdate?: (leadName: string, newPhone: string) => void;
+  /** Called when a comment is posted on an issue thread in Command Chat */
+  onIssueComment?: (issueKey: string) => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -74,11 +76,15 @@ export function useOpsStream(
             jobId?: number;
             leadName?: string;
             newPhone?: string;
+            issueKey?: string;
           };
 
           switch (event.type) {
             case "new_message":
               cbRef.current.onNewMessage?.(event.channel, event.jobId);
+              break;
+            case "issue_comment":
+              cbRef.current.onIssueComment?.(event.issueKey ?? "");
               break;
             case "job_update":
               cbRef.current.onJobUpdate?.(event.jobId);

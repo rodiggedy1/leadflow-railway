@@ -3373,6 +3373,9 @@ Respond ONLY with valid JSON, no markdown:
         type: input.type,
         createdAt: now,
       });
+      // Broadcast so all connected agents see the comment instantly
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("issue_comment", { issueKey: input.issueKey });
       return { ok: true, createdAt: now };
     }),
 

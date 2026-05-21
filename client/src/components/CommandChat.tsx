@@ -2265,6 +2265,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onReactionUpdate: () => {
       refetchReactions();
     },
+    onIssueComment: (issueKey) => {
+      // Invalidate the specific issue's comment thread so all agents see it instantly
+      utils.opsChat.getIssueComments.invalidate({ issueKey });
+    },
   });
 
   // Load all agent photo URLs for message bubble avatars
