@@ -943,6 +943,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [csFilter, setCsFilter] = useState<InboxFilter>("All");
+  const [focusLeadSessionId, setFocusLeadSessionId] = useState<number | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
@@ -1541,7 +1542,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Send message mutation ───────────────────────────────────────────────────
   const sendMsg = trpc.opsChat.sendMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       setComposer("");
       setSelectedQuickAction(null);
       // Clear staged photos and revoke object URLs
@@ -1551,6 +1552,15 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       }
       if (activeTab === "channels") {
         utils.opsChat.listChannelMessages.invalidate({ channel: activeChannel });
+      }
+      // Super-alert: server tells us exactly who was targeted.
+      // Update badge cache instantly and show a confirmation toast to the sender.
+      if (data.messageId && data.superAlertTargets && data.superAlertTargets.length > 0) {
+        utils.opsChat.getSuperAlertMessageIds.setData(
+          { channel: "command" },
+          (prev: number[] | undefined) => [...(prev ?? []), data.messageId!]
+        );
+        toast.success(`⚡ Super-alert sent to ${data.superAlertTargets.join(", ")}`);
       }
     },
   });
@@ -2721,7 +2731,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
             onSwitchToCS={() => handleSetActiveTab("cs")}
-            onSwitchToLeadOps={() => handleSetActiveTab("leadops")}
+            onSwitchToLeadOps={(sessionId) => { setFocusLeadSessionId(sessionId); handleSetActiveTab("leadops"); }}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2943,7 +2953,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: Lead Ops */}
         {activeTab === "leadops" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <LeadOps />
+            <LeadOps focusSessionId={focusLeadSessionId} />
           </div>
         )}
       </div>

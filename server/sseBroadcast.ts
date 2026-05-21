@@ -16,8 +16,9 @@
  *   "reminder_update" — a reminder was set or fired
  *   "agent_status"    — an agent's on-call status changed (call answered/completed)
  *   "phone_update"    — update-lead-phone successfully linked a real phone to a lead
- *   "issue_comment"   — a comment was posted on an issue thread in Command Chat
- *   "ping"            — keepalive (sent every 25s to prevent proxy timeouts)
+ *   "issue_comment"     — a comment was posted on an issue thread in Command Chat
+ *   "lead_assignment"   — a lead was assigned to an agent from Lead Ops
+ *   "ping"              — keepalive (sent every 25s to prevent proxy timeouts)
  */
 
 import type { Response } from "express";
@@ -31,6 +32,8 @@ export type OpsEventType =
   | "agent_status"
   | "phone_update"
   | "issue_comment"
+  | "lead_assignment"
+  | "super_alert"
   | "ping";
 
 export interface OpsEvent {
@@ -43,6 +46,11 @@ export interface OpsEvent {
   newPhone?: string;
   /** For issue_comment events */
   issueKey?: string;
+  /** For lead_assignment events */
+  assignmentId?: number;
+  targetAgentId?: number;
+  /** For super_alert events — names of targeted agents (or ['everyone']) */
+  targetAgentNames?: string[];
   ts: number;
 }
 

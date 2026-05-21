@@ -33,6 +33,10 @@ export type OpsStreamCallbacks = {
   onPhoneUpdate?: (leadName: string, newPhone: string) => void;
   /** Called when a comment is posted on an issue thread in Command Chat */
   onIssueComment?: (issueKey: string) => void;
+  /** Called when a lead is assigned to an agent from Lead Ops */
+  onLeadAssignment?: (assignmentId: number, targetAgentId: number) => void;
+  /** Called when a super-alert (double-tag) is posted in Command Chat */
+  onSuperAlert?: (targetAgentNames: string[]) => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -77,6 +81,9 @@ export function useOpsStream(
             leadName?: string;
             newPhone?: string;
             issueKey?: string;
+            assignmentId?: number;
+            targetAgentId?: number;
+            targetAgentNames?: string[];
           };
 
           switch (event.type) {
@@ -103,6 +110,12 @@ export function useOpsStream(
               break;
             case "phone_update":
               cbRef.current.onPhoneUpdate?.(event.leadName ?? "", event.newPhone ?? "");
+              break;
+            case "lead_assignment":
+              cbRef.current.onLeadAssignment?.(event.assignmentId ?? 0, event.targetAgentId ?? 0);
+              break;
+            case "super_alert":
+              cbRef.current.onSuperAlert?.((event as { targetAgentNames?: string[] }).targetAgentNames ?? []);
               break;
             case "ping":
               // keepalive — no action needed

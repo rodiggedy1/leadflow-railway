@@ -2617,3 +2617,61 @@ export const teamAvailabilityCheckins = mysqlTable("team_availability_checkins",
 }));
 export type TeamAvailabilityCheckin = typeof teamAvailabilityCheckins.$inferSelect;
 export type InsertTeamAvailabilityCheckin = typeof teamAvailabilityCheckins.$inferInsert;
+
+/**
+ * lead_assignments — one row per lead assignment action.
+ * Created when an admin assigns a lead to an agent from Lead Ops.
+ * Drives the blocking Command Chat overlay for the assigned agent.
+ */
+export const leadAssignments = mysqlTable("lead_assignments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to conversationSessions.id */
+  sessionId: int("sessionId").notNull(),
+  /** Agent ID being assigned */
+  agentId: int("agentId").notNull(),
+  /** Agent display name (denormalized for fast reads) */
+  agentName: varchar("agentName", { length: 128 }).notNull(),
+  /** Name of the admin who made the assignment */
+  assignedByName: varchar("assignedByName", { length: 128 }).notNull(),
+  /** Lead name at time of assignment */
+  leadName: varchar("leadName", { length: 255 }),
+  /** Lead phone at time of assignment */
+  leadPhone: varchar("leadPhone", { length: 30 }),
+  /** Notes captured at time of assignment */
+  notes: text("notes"),
+  /** FK to ops_chat_messages.id — the Command Chat card posted for this assignment */
+  opsChatMessageId: int("opsChatMessageId"),
+  /** Set when the assigned agent clicks "Got it" */
+  acknowledgedAt: bigint("acknowledgedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxSession: index("idx_la_session").on(t.sessionId),
+  idxAgent: index("idx_la_agent").on(t.agentId),
+}));
+export type LeadAssignment = typeof leadAssignments.$inferSelect;
+export type InsertLeadAssignment = typeof leadAssignments.$inferInsert;
+
+// ── chat_super_alerts ─────────────────────────────────────────────────────────
+// One row per (message, target agent) for every super-alert (double-tag).
+// The overlay persists until the agent clicks Reply (sets repliedAt).
+export const chatSuperAlerts = mysqlTable("chat_super_alerts", {
+  id:              int("id").autoincrement().primaryKey(),
+  /** FK to ops_chat_messages.id — the message that triggered the super-alert */
+  messageId:       int("messageId").notNull(),
+  /** Channel the message was posted in (e.g. "command") */
+  channel:         varchar("channel", { length: 64 }).notNull().default("command"),
+  /** The agent name being alerted (matches agents.name; "everyone" for broadcast) */
+  targetAgentName: varchar("targetAgentName", { length: 255 }).notNull(),
+  /** Denormalised sender name for the overlay */
+  senderName:      varchar("senderName", { length: 255 }).notNull(),
+  /** The message body shown in the overlay */
+  messageBody:     text("messageBody").notNull(),
+  /** Set when the agent clicks Reply */
+  repliedAt:       bigint("repliedAt", { mode: "number" }),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxMessage: index("idx_csa_message").on(t.messageId),
+  idxTarget:  index("idx_csa_target").on(t.targetAgentName),
+}));
+export type ChatSuperAlert = typeof chatSuperAlerts.$inferSelect;
+export type InsertChatSuperAlert = typeof chatSuperAlerts.$inferInsert;

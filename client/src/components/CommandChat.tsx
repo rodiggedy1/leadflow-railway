@@ -73,7 +73,7 @@ interface CommandChatProps {
   /** Called when user clicks "CS" in the in-panel tab switcher */
   onSwitchToCS?: () => void;
   /** Called when user clicks the Lead Ops badge in the header */
-  onSwitchToLeadOps?: () => void;
+  onSwitchToLeadOps?: (sessionId?: number) => void;
   /** Current away status of the calling agent (null = available) */
   awayStatus?: string | null;
   /** Called when agent sets or clears away status */
@@ -872,6 +872,7 @@ type MessageListProps = {
   setResolveIssueOpen: (v: boolean) => void;
   dismissSystemCard: (messageId: number) => void;
   onScrollToBottom: () => void;
+  superAlertMsgSet: Set<number>;
 };
 const MessageList = memo(function MessageList({
   channelMsgs,
@@ -904,6 +905,7 @@ const MessageList = memo(function MessageList({
   setResolveIssueOpen,
   dismissSystemCard,
   onScrollToBottom,
+  superAlertMsgSet,
 }: MessageListProps) {
   return (
     <>
@@ -921,6 +923,7 @@ const MessageList = memo(function MessageList({
               channelMsgs.map((msg) => {
                 const isMine = msg.from === callerName;
                 const isAlert = msg.role === "alert" || msg.role === "system";
+                const isSuperAlert = superAlertMsgSet.has(msg.id);
                 const isReview = msg.quickAction === "review_confirmed";
                 const isCallSummary = msg.quickAction === "call_summary";
                 // Parse mediaUrl — may be a JSON array of URLs or a single URL
@@ -1945,6 +1948,35 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Lead Assignment card (amber/orange) ──────────────────────────────
+                if (msg.quickAction === "lead_assignment") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const laLeadName = (meta.leadName as string) ?? "Lead";
+                  const laLeadPhone = (meta.leadPhone as string | null) ?? null;
+                  const laAgentName = (meta.agentName as string) ?? "Agent";
+                  const laAssignedByName = (meta.assignedByName as string) ?? "";
+                  const laNotes = (meta.notes as string | null) ?? null;
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-orange-300 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500">
+                          <Briefcase className="h-3 w-3 text-orange-100" />
+                          <span className="text-[10px] font-semibold text-orange-100 uppercase tracking-widest">Lead Assigned</span>
+                          <span className="ml-auto text-[10px] text-orange-200">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-orange-50">
+                          <p className="text-sm font-semibold text-slate-900">{laLeadName}</p>
+                          {laLeadPhone && <p className="text-xs text-slate-500 mt-0.5">📞 {laLeadPhone}</p>}
+                          <p className="text-xs text-orange-700 mt-0.5">Assigned to <span className="font-semibold">{laAgentName}</span></p>
+                          {laAssignedByName && <p className="text-[10px] text-slate-400 mt-0.5">By {laAssignedByName}</p>}
+                          {laNotes && <p className="text-xs text-slate-500 mt-1 italic border-t border-orange-100 pt-1">{laNotes}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -1996,9 +2028,16 @@ const MessageList = memo(function MessageList({
                                 </span>
                               )}
                             </span>
-                            <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
-                              {fmtMsgTime(msg.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {isSuperAlert && (
+                                <span title="Super-Alert" className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-200">
+                                  <Zap className="h-2.5 w-2.5" /> SUPER
+                                </span>
+                              )}
+                              <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
+                                {fmtMsgTime(msg.createdAt)}
+                              </span>
+                            </div>
                           </div>
                           {/* WhatsApp-style quoted block with vivid sender accent */}
                           {msg.replyToId && msg.replyToBody && (
@@ -2271,7 +2310,28 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Invalidate the specific issue's comment thread so all agents see it instantly
       utils.opsChat.getIssueComments.invalidate({ issueKey });
     },
+    onLeadAssignment: () => {
+      // Refresh the pending assignment query so the overlay appears for the assigned agent
+      utils.leads.getPendingAssignment.invalidate();
+      utils.opsChat.getCommandChatData.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
+    onSuperAlert: () => {
+      // Refresh pending super-alerts so the overlay appears immediately for targeted agents
+      utils.opsChat.getPendingSuperAlerts.invalidate();
+      utils.opsChat.getSuperAlertMessageIds.invalidate();
+      utils.opsChat.getCommandChatData.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
   });
+
+  // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
+  // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet
+  const { data: superAlertMsgIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery(
+    { channel: "command" },
+    { staleTime: 0, refetchInterval: 60_000 }
+  );
+  const superAlertMsgSet = useMemo(() => new Set(superAlertMsgIds), [superAlertMsgIds]);
 
   // Load all agent photo URLs for message bubble avatars
   const { data: agentPhotoData } = trpc.opsChat.getAllAgentPhotoMap.useQuery(undefined, {
@@ -2389,6 +2449,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const dismissPinMutation = trpc.opsChat.dismissPin.useMutation({
     onSuccess: () => { toast.success("Pin dismissed"); refetchPin(); },
   });
+
+  // ── Lead Assignment overlay ────────────────────────────────────────────────
+  // Poll every 10s for unacknowledged assignments; also refreshed via SSE onLeadAssignment.
+  const { data: pendingAssignment } = trpc.leads.getPendingAssignment.useQuery(undefined, {
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+    staleTime: 0,
+  });
+  const acknowledgeAssignmentMutation = trpc.leads.acknowledgeAssignment.useMutation({
+    onSuccess: (_data, variables) => {
+      utils.leads.getPendingAssignment.invalidate();
+      // Pass the sessionId so Lead Ops auto-selects the assigned lead
+      onSwitchToLeadOps?.(pendingAssignment?.sessionId ?? undefined);
+    },
+    onError: (err) => toast.error("Failed to acknowledge assignment", { description: err.message }),
+  });
+
+  // ── Super-alert overlay ──────────────────────────────────────────────────────
+  // Poll every 3s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
+  const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
+    { agentName: callerName },
+    { refetchInterval: 3_000, refetchIntervalInBackground: true, retry: 2, staleTime: 0, refetchOnWindowFocus: true }
+  );
+  const acknowledgeSuperAlertMutation = trpc.opsChat.acknowledgeSuperAlert.useMutation({
+    onSuccess: () => { utils.opsChat.getPendingSuperAlerts.invalidate(); },
+    onError: (err) => toast.error("Failed to dismiss alert", { description: err.message }),
+  });
+  // Show the oldest unacknowledged super-alert as the active overlay
+  const activeSuperAlert = pendingSuperAlerts[0] ?? null;
 
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -3135,7 +3225,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const hasText = composer.trim().length > 0;
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const uploadingPhotos = stagedPhotos.filter(p => p.status === "uploading" || p.status === "pending");
-    if (!hasText && donePhotos.length === 0) return;
+    if (!hasText && donePhotos.length === 0) { return; }
     if (uploadingPhotos.length > 0) {
       toast.error("Please wait for photos to finish uploading");
       return;
@@ -3212,6 +3302,94 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   return (
     <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
+
+      {/* ── Lead Assignment Blocking Overlay ──────────────────────────────────────────── */}
+      {pendingAssignment && pendingAssignment.agentName === callerName && (
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
+          {/* Pulsing border ring */}
+          <div
+            className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
+            style={{ animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite", border: "3px solid #f97316" }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-orange-500">
+              <Briefcase className="h-5 w-5 text-white shrink-0" />
+              <span className="text-sm font-bold text-white uppercase tracking-wider">New Lead Assigned to You</span>
+            </div>
+            {/* Body */}
+            <div className="px-5 py-4 bg-amber-50">
+              <div className="space-y-1.5 mb-4">
+                <p className="text-base font-semibold text-slate-800">👤 <span className="text-orange-700">{pendingAssignment.leadName ?? "Lead"}</span></p>
+                {pendingAssignment.leadPhone && (
+                  <p className="text-sm text-slate-600">📞 {pendingAssignment.leadPhone}</p>
+                )}
+                <p className="text-sm text-slate-600">Assigned by <span className="font-semibold">{pendingAssignment.assignedByName}</span></p>
+                {pendingAssignment.notes && (
+                  <p className="text-sm text-slate-500 italic border-t border-orange-200 pt-2 mt-2">"{pendingAssignment.notes}"</p>
+                )}
+              </div>
+              <p className="text-xs text-amber-700 font-medium mb-4">⚡ Head to Lead Ops to follow up immediately.</p>
+              <button
+                disabled={acknowledgeAssignmentMutation.isPending}
+                onClick={() => acknowledgeAssignmentMutation.mutate({ assignmentId: pendingAssignment.id })}
+                className="w-full rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3 text-sm transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {acknowledgeAssignmentMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                Got it — Go to Lead Ops
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Super-Alert Blocking Overlay ──────────────────────────────────────── */}
+      {activeSuperAlert && (
+        <div className="absolute inset-0 z-[9998] flex items-center justify-center" style={{ background: "rgba(30, 10, 60, 0.88)" }}>
+          <div
+            className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
+            style={{ animation: "pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite", border: "3px solid #a855f7" }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-purple-600">
+              <Zap className="h-5 w-5 text-yellow-300 shrink-0" />
+              <span className="text-sm font-bold text-white uppercase tracking-wider">⚡ Super-Alert from {activeSuperAlert.senderName}</span>
+            </div>
+            {/* Body */}
+            <div className="px-5 py-4 bg-purple-50">
+              <div className="mb-4 rounded-xl bg-white border border-purple-200 px-4 py-3 shadow-sm">
+                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{activeSuperAlert.messageBody}</p>
+              </div>
+              <p className="text-xs text-purple-700 font-medium mb-4">You must reply before you can continue.</p>
+              <button
+                disabled={acknowledgeSuperAlertMutation.isPending}
+                onClick={() => {
+                  acknowledgeSuperAlertMutation.mutate({ alertId: activeSuperAlert.id });
+                  // Pre-fill reply-to so the composer is in reply mode
+                  setReplyTo({
+                    id: activeSuperAlert.messageId,
+                    body: activeSuperAlert.messageBody,
+                    author: activeSuperAlert.senderName,
+                  });
+                  // Focus the composer
+                  setTimeout(() => composerRef.current?.focus(), 100);
+                }}
+                className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-bold py-3 text-sm transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {acknowledgeSuperAlertMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                Reply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Lightbox ── */}
       {lightboxUrl && (
@@ -4334,6 +4512,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setResolveIssueOpen={setResolveIssueOpen}
           dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
           onScrollToBottom={() => setNewMsgCount(0)}
+          superAlertMsgSet={superAlertMsgSet}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
@@ -4606,7 +4785,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 if (mentionQuery !== null && mentionSuggestions.length > 0) {
                   if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
                   if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
-                  if (e.key === "Enter" || e.key === "Tab") {
+                  if (e.key === "Tab") {
+                    // Tab: insert the mention and keep composing
                     e.preventDefault();
                     const chosen = mentionSuggestions[mentionIndex];
                     if (chosen) {
@@ -4620,6 +4800,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         composerRef.current?.setSelectionRange(pos, pos);
                       });
                     }
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    // Enter with dropdown open: close dropdown and send immediately
+                    e.preventDefault();
+                    setMentionQuery(null);
+                    handleSend();
                     return;
                   }
                   if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
