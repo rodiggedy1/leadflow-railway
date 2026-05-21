@@ -3732,6 +3732,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </div>
                     );
                   })()}
+                  <a
+                    href="/admin/lead-ops"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open Lead Ops"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors"
+                  >
+                    🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
+                  </a>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
