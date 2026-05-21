@@ -13,7 +13,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { storagePut } from "./storage";
-import { getDb } from "./db";
+import { getDb, getAllAgents } from "./db";
 import { sendPushToAll } from "./webPush";
 import {
   cleanerJobs,
@@ -35,6 +35,7 @@ import {
   agents,
   users,
   quoteLeads,
+  chatSuperAlerts,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -475,7 +476,7 @@ export const opsChatRouter = router({
         }
       }
 
-      await db.insert(opsChatMessages).values({
+      const insertResult = await db.insert(opsChatMessages).values({
         cleanerJobId: input.cleanerJobId ?? null,
         channel: input.channel ?? null,
         authorName: input.authorName,
@@ -487,6 +488,52 @@ export const opsChatRouter = router({
         replyToBody: input.replyToBody ?? null,
         replyToAuthor: input.replyToAuthor ?? null,
       });
+      const newMessageId = (insertResult as any).insertId as number;
+
+      // ── Super-alert detection (double-tag) ────────────────────────────────────
+      // Parse @mentions from the body. If any name appears 2+ times, or
+      // "everyone" appears 2+ times, trigger a super-alert for those targets.
+      const mentionRegex = /@([\w.\- ]+?)(?=\s|@|$)/g;
+      const mentionCounts: Record<string, number> = {};
+      let m: RegExpExecArray | null;
+      while ((m = mentionRegex.exec(input.body)) !== null) {
+        const name = m[1].trim().toLowerCase();
+        if (name) mentionCounts[name] = (mentionCounts[name] ?? 0) + 1;
+      }
+      const doubledNames = Object.entries(mentionCounts)
+        .filter(([, count]) => count >= 2)
+        .map(([name]) => name);
+
+      if (doubledNames.length > 0) {
+        // Resolve "everyone" to all active agent names
+        let targetNames: string[] = [];
+        if (doubledNames.includes("everyone")) {
+          const allAgents = await getAllAgents();
+          targetNames = allAgents.filter(a => a.isActive).map(a => a.name);
+        } else {
+          // Match doubled names case-insensitively against real agent names
+          const allAgents = await getAllAgents();
+          for (const doubled of doubledNames) {
+            const match = allAgents.find(a => a.name.toLowerCase() === doubled);
+            if (match) targetNames.push(match.name);
+          }
+        }
+        if (targetNames.length > 0) {
+          // Insert one super-alert row per target
+          await db.insert(chatSuperAlerts).values(
+            targetNames.map(name => ({
+              messageId: newMessageId,
+              channel: input.channel ?? "command",
+              targetAgentName: name,
+              senderName: input.authorName,
+              messageBody: input.body,
+              repliedAt: null,
+            }))
+          );
+          broadcastOpsUpdate("super_alert", { targetAgentNames: targetNames });
+        }
+      }
+      // ── End super-alert ───────────────────────────────────────────────────────
 
       // Fire Web Push to all agents for real messages (skip system/away status noise)
       const isSystemNoise = input.quickAction?.startsWith("away_status") || input.authorRole === "system";
@@ -3482,6 +3529,67 @@ Respond ONLY with valid JSON, no markdown:
       if (msg.authorRole !== "system") throw new TRPCError({ code: "FORBIDDEN", message: "Can only dismiss system messages" });
       await db.delete(opsChatMessages).where(eq(opsChatMessages.id, input.messageId));
       return { success: true };
+    }),
+
+  /**
+   * opsChat.getPendingSuperAlerts — returns unacknowledged super-alerts for the
+   * calling agent (matched by authorName passed from the client).
+   */
+  getPendingSuperAlerts: opsChatProcedure
+    .input(z.object({ agentName: z.string().min(1).max(255) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(chatSuperAlerts)
+        .where(
+          and(
+            eq(chatSuperAlerts.targetAgentName, input.agentName),
+            isNull(chatSuperAlerts.repliedAt)
+          )
+        )
+        .orderBy(chatSuperAlerts.createdAt)
+        .limit(20);
+      return rows;
+    }),
+
+  /**
+   * opsChat.acknowledgeSuperAlert — marks a super-alert as replied (dismissed).
+   */
+  acknowledgeSuperAlert: opsChatProcedure
+    .input(z.object({ alertId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db
+        .update(chatSuperAlerts)
+        .set({ repliedAt: Date.now() })
+        .where(eq(chatSuperAlerts.id, input.alertId));
+      return { success: true };
+    }),
+
+  /**
+   * opsChat.getSuperAlertMessageIds — returns the distinct set of message IDs
+   * that triggered super-alerts in the given channel (for badge rendering).
+   * Only returns IDs from the last 7 days to keep the result set small.
+   */
+  getSuperAlertMessageIds: opsChatProcedure
+    .input(z.object({ channel: z.string().min(1).max(64).default("command") }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const rows = await db
+        .selectDistinct({ messageId: chatSuperAlerts.messageId })
+        .from(chatSuperAlerts)
+        .where(
+          and(
+            eq(chatSuperAlerts.channel, input.channel),
+            gte(chatSuperAlerts.createdAt, sevenDaysAgo)
+          )
+        );
+      return rows.map(r => r.messageId);
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

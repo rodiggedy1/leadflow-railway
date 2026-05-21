@@ -921,6 +921,7 @@ const MessageList = memo(function MessageList({
               channelMsgs.map((msg) => {
                 const isMine = msg.from === callerName;
                 const isAlert = msg.role === "alert" || msg.role === "system";
+                const isSuperAlert = superAlertMsgSet.has(msg.id);
                 const isReview = msg.quickAction === "review_confirmed";
                 const isCallSummary = msg.quickAction === "call_summary";
                 // Parse mediaUrl — may be a JSON array of URLs or a single URL
@@ -2025,9 +2026,16 @@ const MessageList = memo(function MessageList({
                                 </span>
                               )}
                             </span>
-                            <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
-                              {fmtMsgTime(msg.createdAt)}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {isSuperAlert && (
+                                <span title="Super-Alert" className="inline-flex items-center gap-0.5 rounded-full bg-purple-100 px-1.5 py-0.5 text-[9px] font-bold text-purple-700 border border-purple-200">
+                                  <Zap className="h-2.5 w-2.5" /> SUPER
+                                </span>
+                              )}
+                              <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
+                                {fmtMsgTime(msg.createdAt)}
+                              </span>
+                            </div>
                           </div>
                           {/* WhatsApp-style quoted block with vivid sender accent */}
                           {msg.replyToId && msg.replyToBody && (
@@ -2306,6 +2314,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.opsChat.getCommandChatData.invalidate();
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
     },
+    onSuperAlert: () => {
+      // Refresh pending super-alerts so the overlay appears immediately for targeted agents
+      utils.opsChat.getPendingSuperAlerts.invalidate();
+      utils.opsChat.getCommandChatData.invalidate();
+      utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
   });
 
   // Load all agent photo URLs for message bubble avatars
@@ -2440,6 +2454,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
     onError: (err) => toast.error("Failed to acknowledge assignment", { description: err.message }),
   });
+
+  // ── Super-alert overlay ──────────────────────────────────────────────────────
+  // Poll every 10s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
+  const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
+    { agentName: callerName },
+    { refetchInterval: 10_000, refetchIntervalInBackground: false, retry: false, staleTime: 0 }
+  );
+  const acknowledgeSuperAlertMutation = trpc.opsChat.acknowledgeSuperAlert.useMutation({
+    onSuccess: () => { utils.opsChat.getPendingSuperAlerts.invalidate(); },
+    onError: (err) => toast.error("Failed to dismiss alert", { description: err.message }),
+  });
+  // Show the oldest unacknowledged super-alert as the active overlay
+  const activeSuperAlert = pendingSuperAlerts[0] ?? null;
+
+  // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
+  const { data: superAlertMsgIds = [] } = trpc.opsChat.getSuperAlertMessageIds.useQuery(
+    { channel: "command" },
+    { staleTime: 30_000, refetchInterval: 60_000 }
+  );
+  const superAlertMsgSet = useMemo(() => new Set(superAlertMsgIds), [superAlertMsgIds]);
 
   // ── Announce Booking modal state ───────────────────────────────────────────
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -3301,6 +3335,51 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   <ArrowRight className="h-4 w-4" />
                 )}
                 Got it — Go to Lead Ops
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Super-Alert Blocking Overlay ──────────────────────────────────────── */}
+      {activeSuperAlert && (
+        <div className="absolute inset-0 z-[9998] flex items-center justify-center" style={{ background: "rgba(30, 10, 60, 0.88)" }}>
+          <div
+            className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
+            style={{ animation: "pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite", border: "3px solid #a855f7" }}
+          >
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-purple-600">
+              <Zap className="h-5 w-5 text-yellow-300 shrink-0" />
+              <span className="text-sm font-bold text-white uppercase tracking-wider">⚡ Super-Alert from {activeSuperAlert.senderName}</span>
+            </div>
+            {/* Body */}
+            <div className="px-5 py-4 bg-purple-50">
+              <div className="mb-4 rounded-xl bg-white border border-purple-200 px-4 py-3 shadow-sm">
+                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{activeSuperAlert.messageBody}</p>
+              </div>
+              <p className="text-xs text-purple-700 font-medium mb-4">You must reply before you can continue.</p>
+              <button
+                disabled={acknowledgeSuperAlertMutation.isPending}
+                onClick={() => {
+                  acknowledgeSuperAlertMutation.mutate({ alertId: activeSuperAlert.id });
+                  // Pre-fill reply-to so the composer is in reply mode
+                  setReplyTo({
+                    id: activeSuperAlert.messageId,
+                    body: activeSuperAlert.messageBody,
+                    author: activeSuperAlert.senderName,
+                  });
+                  // Focus the composer
+                  setTimeout(() => composerRef.current?.focus(), 100);
+                }}
+                className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 active:bg-purple-800 text-white font-bold py-3 text-sm transition flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {acknowledgeSuperAlertMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+                Reply
               </button>
             </div>
           </div>

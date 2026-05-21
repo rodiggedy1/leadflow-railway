@@ -33,6 +33,7 @@ export type OpsEventType =
   | "phone_update"
   | "issue_comment"
   | "lead_assignment"
+  | "super_alert"
   | "ping";
 
 export interface OpsEvent {
@@ -48,6 +49,8 @@ export interface OpsEvent {
   /** For lead_assignment events */
   assignmentId?: number;
   targetAgentId?: number;
+  /** For super_alert events — names of targeted agents (or ['everyone']) */
+  targetAgentNames?: string[];
   ts: number;
 }
 

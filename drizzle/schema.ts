@@ -2650,3 +2650,28 @@ export const leadAssignments = mysqlTable("lead_assignments", {
 }));
 export type LeadAssignment = typeof leadAssignments.$inferSelect;
 export type InsertLeadAssignment = typeof leadAssignments.$inferInsert;
+
+// ── chat_super_alerts ─────────────────────────────────────────────────────────
+// One row per (message, target agent) for every super-alert (double-tag).
+// The overlay persists until the agent clicks Reply (sets repliedAt).
+export const chatSuperAlerts = mysqlTable("chat_super_alerts", {
+  id:              int("id").autoincrement().primaryKey(),
+  /** FK to ops_chat_messages.id — the message that triggered the super-alert */
+  messageId:       int("messageId").notNull(),
+  /** Channel the message was posted in (e.g. "command") */
+  channel:         varchar("channel", { length: 64 }).notNull().default("command"),
+  /** The agent name being alerted (matches agents.name; "everyone" for broadcast) */
+  targetAgentName: varchar("targetAgentName", { length: 255 }).notNull(),
+  /** Denormalised sender name for the overlay */
+  senderName:      varchar("senderName", { length: 255 }).notNull(),
+  /** The message body shown in the overlay */
+  messageBody:     text("messageBody").notNull(),
+  /** Set when the agent clicks Reply */
+  repliedAt:       bigint("repliedAt", { mode: "number" }),
+  createdAt:       timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxMessage: index("idx_csa_message").on(t.messageId),
+  idxTarget:  index("idx_csa_target").on(t.targetAgentName),
+}));
+export type ChatSuperAlert = typeof chatSuperAlerts.$inferSelect;
+export type InsertChatSuperAlert = typeof chatSuperAlerts.$inferInsert;
