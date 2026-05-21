@@ -3222,11 +3222,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   function handleSend() {
-    console.log("[SEND] handleSend called, composer:", JSON.stringify(composer), "hasText:", composer.trim().length > 0, "mentionQuery:", mentionQuery);
     const hasText = composer.trim().length > 0;
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const uploadingPhotos = stagedPhotos.filter(p => p.status === "uploading" || p.status === "pending");
-    if (!hasText && donePhotos.length === 0) { console.log("[SEND] blocked: no text and no photos"); return; }
+    if (!hasText && donePhotos.length === 0) { return; }
     if (uploadingPhotos.length > 0) {
       toast.error("Please wait for photos to finish uploading");
       return;
