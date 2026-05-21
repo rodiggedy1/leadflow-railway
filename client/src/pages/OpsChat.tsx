@@ -2721,6 +2721,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
             onSwitchToCS={() => handleSetActiveTab("cs")}
+            onSwitchToLeadOps={() => handleSetActiveTab("leadops")}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any

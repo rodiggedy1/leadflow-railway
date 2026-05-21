@@ -72,6 +72,8 @@ interface CommandChatProps {
   onSwitchToToday: () => void;
   /** Called when user clicks "CS" in the in-panel tab switcher */
   onSwitchToCS?: () => void;
+  /** Called when user clicks the Lead Ops badge in the header */
+  onSwitchToLeadOps?: () => void;
   /** Current away status of the calling agent (null = available) */
   awayStatus?: string | null;
   /** Called when agent sets or clears away status */
@@ -2176,7 +2178,7 @@ const MessageList = memo(function MessageList({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // Message quality check
 
@@ -3732,15 +3734,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </div>
                     );
                   })()}
-                  <a
-                    href="/admin/lead-ops"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => onSwitchToLeadOps?.()}
                     title="Open Lead Ops"
-                    className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors"
+                    className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors cursor-pointer"
                   >
                     🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
-                  </a>
+                  </button>
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
