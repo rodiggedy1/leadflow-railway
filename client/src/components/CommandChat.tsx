@@ -73,7 +73,7 @@ interface CommandChatProps {
   /** Called when user clicks "CS" in the in-panel tab switcher */
   onSwitchToCS?: () => void;
   /** Called when user clicks the Lead Ops badge in the header */
-  onSwitchToLeadOps?: () => void;
+  onSwitchToLeadOps?: (sessionId?: number) => void;
   /** Current away status of the calling agent (null = available) */
   awayStatus?: string | null;
   /** Called when agent sets or clears away status */
@@ -2458,9 +2458,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     staleTime: 0,
   });
   const acknowledgeAssignmentMutation = trpc.leads.acknowledgeAssignment.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       utils.leads.getPendingAssignment.invalidate();
-      onSwitchToLeadOps?.();
+      // Pass the sessionId so Lead Ops auto-selects the assigned lead
+      onSwitchToLeadOps?.(pendingAssignment?.sessionId ?? undefined);
     },
     onError: (err) => toast.error("Failed to acknowledge assignment", { description: err.message }),
   });

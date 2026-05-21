@@ -943,6 +943,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [csFilter, setCsFilter] = useState<InboxFilter>("All");
+  const [focusLeadSessionId, setFocusLeadSessionId] = useState<number | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
@@ -2721,7 +2722,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
             onSwitchToCS={() => handleSetActiveTab("cs")}
-            onSwitchToLeadOps={() => handleSetActiveTab("leadops")}
+            onSwitchToLeadOps={(sessionId) => { setFocusLeadSessionId(sessionId); handleSetActiveTab("leadops"); }}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2943,7 +2944,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: Lead Ops */}
         {activeTab === "leadops" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <LeadOps />
+            <LeadOps focusSessionId={focusLeadSessionId} />
           </div>
         )}
       </div>

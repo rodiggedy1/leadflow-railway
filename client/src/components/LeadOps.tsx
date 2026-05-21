@@ -536,7 +536,7 @@ function AssignModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function LeadOps() {
+export default function LeadOps({ focusSessionId }: { focusSessionId?: number } = {}) {
   const [activeLead, setActiveLead] = useState<RealLead | null>(null);
   const [filterTab, setFilterTab] = useState<"Hot" | "Follow-up" | "Booked">("Hot");
   const [search, setSearch] = useState("");
@@ -582,12 +582,14 @@ export default function LeadOps() {
 
   // Set first lead as active once data loads; also sync activeLead from server
   // after mutations (book, close, claim) so status/filterTag stay current.
-  // NOTE: leads is the FULL unfiltered list — always search it regardless of filterTab.
   React.useEffect(() => {
     if (leads.length === 0) return;
     if (!activeLead) {
-      setActiveLead(leads[0]);
-      setComposer(buildDraft(leads[0]));
+      // If a specific lead was requested (e.g. from an assignment overlay), select it
+      const target = focusSessionId ? leads.find(l => l.id === focusSessionId) : null;
+      const initial = target ?? leads[0];
+      setActiveLead(initial);
+      setComposer(buildDraft(initial));
     } else {
       // Sync the active lead's fields from the freshly-fetched full list
       const updated = leads.find((l) => l.id === activeLead.id);
