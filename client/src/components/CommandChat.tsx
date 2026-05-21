@@ -3222,10 +3222,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   function handleSend() {
+    console.log("[SEND] handleSend called, composer:", JSON.stringify(composer), "hasText:", composer.trim().length > 0, "mentionQuery:", mentionQuery);
     const hasText = composer.trim().length > 0;
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const uploadingPhotos = stagedPhotos.filter(p => p.status === "uploading" || p.status === "pending");
-    if (!hasText && donePhotos.length === 0) return;
+    if (!hasText && donePhotos.length === 0) { console.log("[SEND] blocked: no text and no photos"); return; }
     if (uploadingPhotos.length > 0) {
       toast.error("Please wait for photos to finish uploading");
       return;
@@ -4785,33 +4786,28 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 if (mentionQuery !== null && mentionSuggestions.length > 0) {
                   if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, mentionSuggestions.length - 1)); return; }
                   if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
-                  if (e.key === "Enter" || e.key === "Tab") {
+                  if (e.key === "Tab") {
+                    // Tab: insert the mention and keep composing
                     e.preventDefault();
                     const chosen = mentionSuggestions[mentionIndex];
                     if (chosen) {
                       const before = composer.slice(0, mentionStart);
                       const after = composer.slice((composerRef.current?.selectionStart ?? composer.length));
                       const next = before + "@" + chosen + " " + after;
+                      setComposer(next);
                       setMentionQuery(null);
-                      // Double-tag detection: check if @chosen already appears in the text
-                      // BEFORE the current @ position (i.e. user typed the same name twice).
-                      const chosenTag = "@" + chosen.toLowerCase();
-                      const alreadyTagged = before.toLowerCase().includes(chosenTag);
-                      if (alreadyTagged) {
-                        // Send the completed double-tag message immediately
-                        onSendMessage(next.trim(), undefined, replyTo ?? undefined);
-                        setComposer("");
-                        setReplyTo(null);
-                        setStagedPhotos(prev => { prev.forEach(p => URL.revokeObjectURL(p.previewUrl)); return []; });
-                        requestAnimationFrame(() => threadBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }));
-                      } else {
-                        setComposer(next);
-                        requestAnimationFrame(() => {
-                          const pos = (before + "@" + chosen + " ").length;
-                          composerRef.current?.setSelectionRange(pos, pos);
-                        });
-                      }
+                      requestAnimationFrame(() => {
+                        const pos = (before + "@" + chosen + " ").length;
+                        composerRef.current?.setSelectionRange(pos, pos);
+                      });
                     }
+                    return;
+                  }
+                  if (e.key === "Enter") {
+                    // Enter with dropdown open: close dropdown and send immediately
+                    e.preventDefault();
+                    setMentionQuery(null);
+                    handleSend();
                     return;
                   }
                   if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
