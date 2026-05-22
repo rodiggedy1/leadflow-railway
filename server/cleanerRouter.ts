@@ -420,6 +420,7 @@ export const cleanerRouter = router({
           bookingStatus: "assigned",
           jobStatus: "in_progress",
           completedAt: null,
+          etaTimestamp: null, // clear stale ETA on revert to in_progress
         })
         .where(eq(cleanerJobs.id, input.cleanerJobId));
       return { success: true };
@@ -492,6 +493,10 @@ export const cleanerRouter = router({
       }
 
       if (effectiveStatus === "issue_at_property") updateData.flagged = 1;
+
+      // Clear stale ETA when job transitions to in_progress — prevents the
+      // client_eta_approaching cron from firing hours later on an old timestamp.
+      if (effectiveStatus === "in_progress") updateData.etaTimestamp = null;
 
       await db
         .update(cleanerJobs)

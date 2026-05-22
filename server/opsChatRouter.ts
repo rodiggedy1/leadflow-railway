@@ -364,11 +364,12 @@ export const opsChatRouter = router({
       }
 
       // Add outbound SMS sent to client from the automation engine (fieldMgmtLog)
-      const CLIENT_FACING_STEPS = new Set(["client_pre_job", "client_on_the_way", "client_running_late"]);
+      const CLIENT_FACING_STEPS = new Set(["client_pre_job", "client_on_the_way", "client_running_late", "client_eta_approaching"]);
       const STEP_LABELS: Record<string, string> = {
         client_pre_job: "Pre-Job Reminder",
         client_on_the_way: "On the Way",
         client_running_late: "Running Late",
+        client_eta_approaching: "ETA Approaching",
       };
       for (const f of fmLog) {
         // Include eta_update_* steps (ETA update SMS sent to client on each ETA change)
