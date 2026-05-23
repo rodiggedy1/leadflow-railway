@@ -4856,6 +4856,145 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
     }),
 
     /**
+     * leads.getAgentLeadsForDay — admin view: returns all leads assigned to a specific agent
+     * for today (ET), enriched with first call time and call notes.
+     * Used by the Lead Ops agent drawer.
+     */
+    getAgentLeadsForDay: agentProcedure
+      .input(z.object({ agentId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const todayEtStart = (() => {
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          return d;
+        })();
+        // Get today's leads assigned to this agent
+        const rows = await db
+          .select({
+            id: conversationSessions.id,
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            leadSource: conversationSessions.leadSource,
+            stage: conversationSessions.stage,
+            isBooked: conversationSessions.isBooked,
+            bookedAmount: conversationSessions.bookedAmount,
+            quotedPrice: conversationSessions.quotedPrice,
+            extras: conversationSessions.extras,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+            internalNotes: conversationSessions.internalNotes,
+            createdAt: conversationSessions.createdAt,
+            bookedAt: conversationSessions.bookedAt,
+            assignedAgentId: conversationSessions.assignedAgentId,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              eq(conversationSessions.assignedAgentId, input.agentId),
+              gte(conversationSessions.createdAt, todayEtStart),
+            )
+          )
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(100);
+
+        // Fetch first call time per phone
+        const phones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))] as string[];
+        const firstCallMap: Record<string, Date> = {};
+        if (phones.length > 0) {
+          const callRows = await db
+            .select({ callerPhone: openphoneCallRecordings.callerPhone, callStartedAt: openphoneCallRecordings.callStartedAt })
+            .from(openphoneCallRecordings)
+            .where(inArray(openphoneCallRecordings.callerPhone, phones));
+          for (const c of callRows) {
+            const existing = firstCallMap[c.callerPhone];
+            if (!existing || c.callStartedAt < existing) firstCallMap[c.callerPhone] = c.callStartedAt;
+          }
+        }
+
+        return rows.map(r => ({
+          id: r.id,
+          leadName: r.leadName ?? 'Unknown',
+          leadSource: r.leadSource ?? null,
+          stage: r.stage ?? null,
+          isBooked: r.isBooked === 1,
+          estimatedValue: calcBookedRevenue(r),
+          internalNotes: r.internalNotes ?? null,
+          createdAt: r.createdAt,
+          bookedAt: r.bookedAt ?? null,
+          firstCallAt: r.leadPhone ? (firstCallMap[r.leadPhone] ?? null) : null,
+        }));
+      }),
+
+    /**
+     * leads.myAssignedLeadsToday — agent view: returns the current agent's assigned leads
+     * for today (ET), enriched with first call time and call notes.
+     * Used by the Command Chat assigned leads panel.
+     */
+    myAssignedLeadsToday: agentProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const todayEtStart = (() => {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d;
+      })();
+      const rows = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+          leadSource: conversationSessions.leadSource,
+          stage: conversationSessions.stage,
+          isBooked: conversationSessions.isBooked,
+          bookedAmount: conversationSessions.bookedAmount,
+          quotedPrice: conversationSessions.quotedPrice,
+          extras: conversationSessions.extras,
+          reactivationLastPrice: conversationSessions.reactivationLastPrice,
+          reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+          internalNotes: conversationSessions.internalNotes,
+          createdAt: conversationSessions.createdAt,
+          bookedAt: conversationSessions.bookedAt,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            eq(conversationSessions.assignedAgentId, ctx.agent.agentId),
+            gte(conversationSessions.createdAt, todayEtStart),
+          )
+        )
+        .orderBy(desc(conversationSessions.createdAt))
+        .limit(100);
+
+      const phones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))] as string[];
+      const firstCallMap: Record<string, Date> = {};
+      if (phones.length > 0) {
+        const callRows = await db
+          .select({ callerPhone: openphoneCallRecordings.callerPhone, callStartedAt: openphoneCallRecordings.callStartedAt })
+          .from(openphoneCallRecordings)
+          .where(inArray(openphoneCallRecordings.callerPhone, phones));
+        for (const c of callRows) {
+          const existing = firstCallMap[c.callerPhone];
+          if (!existing || c.callStartedAt < existing) firstCallMap[c.callerPhone] = c.callStartedAt;
+        }
+      }
+
+      return rows.map(r => ({
+        id: r.id,
+        leadName: r.leadName ?? 'Unknown',
+        leadSource: r.leadSource ?? null,
+        stage: r.stage ?? null,
+        isBooked: r.isBooked === 1,
+        estimatedValue: calcBookedRevenue(r),
+        internalNotes: r.internalNotes ?? null,
+        createdAt: r.createdAt,
+        bookedAt: r.bookedAt ?? null,
+        firstCallAt: r.leadPhone ? (firstCallMap[r.leadPhone] ?? null) : null,
+      }));
+    }),
+
+    /**
      * leads.getNextBestAction — AI-powered contextual coaching for the active lead.
      * Returns a headline, body copy, suggested reply text, and a recommended action
      * (call | text | quote | follow_up) based on the lead's conversation history,

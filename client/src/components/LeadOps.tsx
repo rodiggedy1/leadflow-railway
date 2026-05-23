@@ -549,6 +549,8 @@ export default function LeadOps({ focusSessionId }: { focusSessionId?: number } 
   const [teamRange, setTeamRange] = useState<'today' | 'week' | 'month' | 'all'>('today');
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [addLeadForm, setAddLeadForm] = useState({ name: "", phone: "", email: "", serviceType: "Standard Cleaning", source: "phone" as "yelp"|"google"|"thumbtack"|"bark"|"phone"|"other", notes: "", amount: "" });
+  // Agent leads drawer state
+  const [agentDrawer, setAgentDrawer] = useState<{ id: number; name: string; photoUrl?: string | null } | null>(null);
 
   const utils = trpc.useUtils();
 
@@ -562,6 +564,12 @@ export default function LeadOps({ focusSessionId }: { focusSessionId?: number } 
   });
   const teamActivity = teamActivityData?.agents ?? [];
   const teamBookedList = teamActivityData?.teamBookedList ?? [];
+
+  // Agent leads drawer data
+  const { data: agentDrawerLeads = [], isLoading: isLoadingDrawerLeads } = trpc.leads.getAgentLeadsForDay.useQuery(
+    { agentId: agentDrawer?.id ?? 0 },
+    { enabled: !!agentDrawer, refetchInterval: 30_000 }
+  );
 
   // Layer 2: real conversation thread for the active lead
   const { data: activeSession, isLoading: isLoadingConvo } = trpc.leads.getById.useQuery(
@@ -829,6 +837,16 @@ export default function LeadOps({ focusSessionId }: { focusSessionId?: number } 
           sessionId={activeLead.id}
           onClose={() => setShowAssignModal(false)}
           onSuccess={refreshLeads}
+        />
+      )}
+
+      {/* ── Agent Leads Drawer */}
+      {agentDrawer && (
+        <AgentLeadsDrawer
+          agent={agentDrawer}
+          leads={agentDrawerLeads}
+          isLoading={isLoadingDrawerLeads}
+          onClose={() => setAgentDrawer(null)}
         />
       )}
 
@@ -1444,7 +1462,7 @@ export default function LeadOps({ focusSessionId }: { focusSessionId?: number } 
                           member.state === "Offline" ? "bg-slate-300" :
                           "bg-amber-400";
                         return (
-                          <div key={member.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                          <div key={member.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-4 cursor-pointer hover:border-slate-300 hover:bg-slate-100 transition-colors" onClick={() => setAgentDrawer({ id: member.id, name: member.name, photoUrl: member.profilePhotoUrl })}>
                             <div className="flex items-center gap-3">
                               {member.profilePhotoUrl ? (
                                 <img
@@ -1554,5 +1572,128 @@ export default function LeadOps({ focusSessionId }: { focusSessionId?: number } 
         </div>
       </div>
     </>
+  );
+}
+
+// ── AgentLeadsDrawer ─────────────────────────────────────────────────────────
+
+function AgentLeadsDrawer({
+  agent,
+  leads,
+  isLoading,
+  onClose,
+}: {
+  agent: { id: number; name: string; photoUrl?: string | null };
+  leads: Array<{
+    id: number;
+    leadName: string;
+    leadSource: string | null;
+    stage: string | null;
+    isBooked: boolean;
+    estimatedValue: number;
+    internalNotes: string | null;
+    createdAt: Date;
+    bookedAt: Date | null;
+    firstCallAt: Date | null;
+  }>;
+  isLoading: boolean;
+  onClose: () => void;
+}) {
+  const booked = leads.filter(l => l.isBooked);
+  const notBooked = leads.filter(l => !l.isBooked);
+  const totalValue = booked.reduce((s, l) => s + l.estimatedValue, 0);
+
+  const fmt = (d: Date | null) =>
+    d ? new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+
+  const sourceLabel = (s: string | null) => {
+    if (!s) return '';
+    const m: Record<string, string> = { thumbtack: 'Thumbtack', google: 'Google', yelp: 'Yelp', bark: 'Bark', phone: 'Phone', other: 'Other' };
+    return m[s.toLowerCase()] ?? s;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative z-10 w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            {agent.photoUrl ? (
+              <img src={agent.photoUrl} alt={agent.name} className="w-10 h-10 rounded-full object-cover" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-black text-sm">
+                {agent.name.charAt(0)}
+              </div>
+            )}
+            <div>
+              <div className="font-black text-slate-900 text-base">{agent.name}</div>
+              <div className="text-xs text-slate-400">{leads.length} leads today · ${totalValue.toLocaleString()} booked</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+            <X className="w-4 h-4 text-slate-600" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto flex-1 px-4 py-4 space-y-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+            </div>
+          ) : leads.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 text-sm">No leads assigned today</div>
+          ) : (
+            leads.map(lead => (
+              <div key={lead.id} className={`rounded-2xl border p-4 ${
+                lead.isBooked ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+              }`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-sm truncate">{lead.leadName}</span>
+                      {lead.isBooked && (
+                        <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white">Booked</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
+                      {lead.leadSource && <span>{sourceLabel(lead.leadSource)}</span>}
+                      <span>Arrived {fmt(lead.createdAt)}</span>
+                      {lead.firstCallAt && <span>Called {fmt(lead.firstCallAt)}</span>}
+                      {lead.bookedAt && <span>Booked {fmt(lead.bookedAt)}</span>}
+                    </div>
+                    {lead.internalNotes && (
+                      <div className="mt-2 text-[11px] text-slate-600 bg-white rounded-xl px-3 py-2 border border-slate-200">
+                        {lead.internalNotes}
+                      </div>
+                    )}
+                  </div>
+                  {lead.estimatedValue > 0 && (
+                    <div className="shrink-0 text-right">
+                      <div className="font-black text-slate-900 text-sm">${lead.estimatedValue.toLocaleString()}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer summary */}
+        {leads.length > 0 && (
+          <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+            <div className="flex gap-4 text-xs text-slate-500">
+              <span><span className="font-black text-emerald-600">{booked.length}</span> booked</span>
+              <span><span className="font-black text-slate-700">{notBooked.length}</span> not booked</span>
+            </div>
+            <div className="text-sm font-black text-slate-900">${totalValue.toLocaleString()} total</div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

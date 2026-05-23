@@ -3122,6 +3122,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const todayRevenue = todayStats?.bookedRevenue ?? 0;
   const todayBookingCount = todayStats?.bookedCount ?? 0;
 
+  // My Assigned Leads Today panel
+  const [showMyLeads, setShowMyLeads] = useState(false);
+  const { data: myAssignedLeads = [] } = trpc.leads.myAssignedLeadsToday.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
   // AI Call Command Center — today's call count for badge
   const { data: todayCallLog = [] } = trpc.calls.getCallLog.useQuery(
     { jobDate: todayDateStr, limit: 100 },
@@ -3304,7 +3311,100 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
-      {/* ── Lead Assignment Blocking Overlay ──────────────────────────────────────────── */}
+      {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
+      {showMyLeads && (() => {
+        const myAgent = agentList?.find(a => a.name === callerName);
+        const bookedLeads = myAssignedLeads.filter(l => l.isBooked);
+        const notBookedLeads = myAssignedLeads.filter(l => !l.isBooked);
+        const totalValue = bookedLeads.reduce((s, l) => s + l.estimatedValue, 0);
+        const fmt = (d: Date | null) =>
+          d ? new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+        const srcLabel = (s: string | null) => {
+          if (!s) return '';
+          const m: Record<string, string> = { thumbtack: 'Thumbtack', google: 'Google', yelp: 'Yelp', bark: 'Bark', 'bark-sms': 'Bark', phone: 'Phone', other: 'Other' };
+          return m[s.toLowerCase()] ?? s;
+        };
+        return (
+          <div className="fixed inset-0 z-[500] flex items-end sm:items-center justify-center" onClick={() => setShowMyLeads(false)}>
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+            <div
+              className="relative z-10 w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  {myAgent?.photoUrl ? (
+                    <img src={myAgent.photoUrl} alt={callerName} className="w-10 h-10 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-black text-sm">
+                      {callerName.charAt(0)}
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-black text-slate-900 text-base">{callerName}</div>
+                    <div className="text-xs text-slate-400">{myAssignedLeads.length} leads today · ${totalValue.toLocaleString()} booked</div>
+                  </div>
+                </div>
+                <button onClick={() => setShowMyLeads(false)} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+                  <X className="w-4 h-4 text-slate-600" />
+                </button>
+              </div>
+              {/* Body */}
+              <div className="overflow-y-auto flex-1 px-4 py-4 space-y-2">
+                {myAssignedLeads.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-sm">No leads assigned today</div>
+                ) : (
+                  myAssignedLeads.map(lead => (
+                    <div key={lead.id} className={`rounded-2xl border p-4 ${
+                      lead.isBooked ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'
+                    }`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-slate-900 text-sm truncate">{lead.leadName}</span>
+                            {lead.isBooked && (
+                              <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white">Booked</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
+                            {lead.leadSource && <span>{srcLabel(lead.leadSource)}</span>}
+                            <span>Arrived {fmt(lead.createdAt)}</span>
+                            {lead.firstCallAt && <span>Called {fmt(lead.firstCallAt)}</span>}
+                            {lead.bookedAt && <span>Booked {fmt(lead.bookedAt)}</span>}
+                          </div>
+                          {lead.internalNotes && (
+                            <div className="mt-2 text-[11px] text-slate-600 bg-white rounded-xl px-3 py-2 border border-slate-200">
+                              {lead.internalNotes}
+                            </div>
+                          )}
+                        </div>
+                        {lead.estimatedValue > 0 && (
+                          <div className="shrink-0 text-right">
+                            <div className="font-black text-slate-900 text-sm">${lead.estimatedValue.toLocaleString()}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              {/* Footer */}
+              {myAssignedLeads.length > 0 && (
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                  <div className="flex gap-4 text-xs text-slate-500">
+                    <span><span className="font-black text-emerald-600">{bookedLeads.length}</span> booked</span>
+                    <span><span className="font-black text-slate-700">{notBookedLeads.length}</span> not booked</span>
+                  </div>
+                  <div className="text-sm font-black text-slate-900">${totalValue.toLocaleString()} total</div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Lead Assignment Blocking Overlay ────────────────────────────────────────────────────────────────────────────────── */}
       {pendingAssignment && pendingAssignment.agentName === callerName && (
         <div className="absolute inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
           {/* Pulsing border ring */}
@@ -3920,6 +4020,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   >
                     🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
                   </button>
+                  {myAssignedLeads.length > 0 && (
+                    <button
+                      onClick={() => setShowMyLeads(v => !v)}
+                      title="My assigned leads today"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      📋 {myAssignedLeads.length} my lead{myAssignedLeads.length !== 1 ? 's' : ''}
+                    </button>
+                  )}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
