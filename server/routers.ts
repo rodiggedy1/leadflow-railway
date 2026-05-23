@@ -489,8 +489,8 @@ export const appRouter = router({
 
         // Helper: run booked-revenue query for a given filter
         async function bookedBreakdown(filter: SQL<unknown> | undefined) {
-          const baseWhere = bookedConditions ? and(bookedConditions, filter, eq(conversationSessions.stage, "BOOKED"))
-                                             : and(filter, eq(conversationSessions.stage, "BOOKED"));
+          const baseWhere = bookedConditions ? and(bookedConditions, filter, eq(conversationSessions.isBooked, 1))
+                                             : and(filter, eq(conversationSessions.isBooked, 1));
           const rows = await db!
             .select({
               leadSource: conversationSessions.leadSource,
@@ -524,8 +524,8 @@ export const appRouter = router({
           // legacy combined booked for revenueBySource + per-booking detail list
           (async () => {
             const baseWhere = conditions
-              ? and(conditions, listVisibilityFilter, eq(conversationSessions.stage, "BOOKED"))
-              : and(listVisibilityFilter, eq(conversationSessions.stage, "BOOKED"));
+              ? and(conditions, listVisibilityFilter, eq(conversationSessions.isBooked, 1))
+              : and(listVisibilityFilter, eq(conversationSessions.isBooked, 1));
             return db!.select({
               leadSource: conversationSessions.leadSource,
               quotedPrice: conversationSessions.quotedPrice,
