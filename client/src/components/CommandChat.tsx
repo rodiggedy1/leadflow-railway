@@ -4026,8 +4026,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       title="My assigned leads today"
                       className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
                     >
-                      📋 {myAssignedLeads.length} my lead{myAssignedLeads.length !== 1 ? 's' : ''}
+                      📋 My leads: {myAssignedLeads.length}
                     </button>
+                  )}
+                  {/* Booking count badge */}
+                  {todayBookingCount > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                      ✓ {todayBookingCount} booked
+                    </span>
+                  )}
+                  {/* Conversion rate badge */}
+                  {(todayStats?.total ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                      {Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}% CVR
+                    </span>
                   )}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -4087,13 +4099,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   ? <BellOff className="h-4 w-4 text-slate-400" />
                   : <Bell className="h-4 w-4 text-slate-500" />}
               </button>
-              <button
-                title="Broadcast"
-                onClick={() => setBroadcastOpen(true)}
-                className="h-9 w-9 flex items-center justify-center rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
-              >
-                <Megaphone className="h-4 w-4 text-slate-500" />
-              </button>
+
               {/* AI Call Command Center — Calls log button */}
               <button
                 title="AI Call Log"
@@ -4112,12 +4118,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              <button
-                title="Pin"
-                className="h-9 w-9 flex items-center justify-center rounded-full border-2 border-slate-900 hover:bg-slate-100 transition-colors"
-              >
-                <Pin className="h-4 w-4 text-slate-900" />
-              </button>
+
             </div>
           </div>
         </div>
