@@ -474,12 +474,21 @@ export const appRouter = router({
           or(organicFilter, campaignFilter, reviewRebookingFilter)
         );
 
+        // Only count leads where we actually received a real phone number.
+        // Thumbtack/Bark/form leads without a phone get a placeholder like
+        // "thumbtack-<timestamp>", "no-phone-bark-...", "no-phone-form-...", "no-phone-call-..."
+        // These are not actionable, so exclude them from the total count.
+        const hasPhoneFilter = sql`(
+          ${conversationSessions.leadPhone} NOT LIKE 'thumbtack-%' AND
+          ${conversationSessions.leadPhone} NOT LIKE 'no-phone-%'
+        )`;
+
         // Helper: run stage-count query for a given filter
         async function stageBreakdown(filter: SQL<unknown> | undefined) {
           const rows = await db!
             .select({ stage: conversationSessions.stage, count: sql<number>`count(*)` })
             .from(conversationSessions)
-            .where(conditions ? and(conditions, filter) : filter)
+            .where(conditions ? and(conditions, filter, hasPhoneFilter) : and(filter, hasPhoneFilter))
             .groupBy(conversationSessions.stage);
           const byStage: Record<string,number> = {};
           let total = 0;

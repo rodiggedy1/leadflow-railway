@@ -4026,7 +4026,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       title="My assigned leads today"
                       className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
                     >
-                      📋 {myAssignedLeads.length} my lead{myAssignedLeads.length !== 1 ? 's' : ''}
+                      📋 My leads: {myAssignedLeads.length}
                     </button>
                   )}
                   <Tooltip delayDuration={200}>
