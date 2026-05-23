@@ -3122,6 +3122,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const todayRevenue = todayStats?.bookedRevenue ?? 0;
   const todayBookingCount = todayStats?.bookedCount ?? 0;
 
+  // My Assigned Leads Today panel
+  const [showMyLeads, setShowMyLeads] = useState(false);
+  const { data: myAssignedLeads = [] } = trpc.leads.myAssignedLeadsToday.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
   // AI Call Command Center — today's call count for badge
   const { data: todayCallLog = [] } = trpc.calls.getCallLog.useQuery(
     { jobDate: todayDateStr, limit: 100 },
@@ -3304,7 +3311,55 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
-      {/* ── Lead Assignment Blocking Overlay ──────────────────────────────────────────── */}
+      {/* ── My Assigned Leads Today Panel ────────────────────────────────────────────────────────────────────────────────── */}
+      {showMyLeads && myAssignedLeads.length > 0 && (
+        <div className="absolute top-0 left-0 right-0 z-[200] bg-white border-b border-amber-200 shadow-lg max-h-[60vh] overflow-y-auto">
+          <div className="flex items-center justify-between px-4 py-3 bg-amber-50 border-b border-amber-100">
+            <span className="text-sm font-black text-amber-800">📋 My Leads Today ({myAssignedLeads.length})</span>
+            <button onClick={() => setShowMyLeads(false)} className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center hover:bg-amber-200 transition-colors">
+              <X className="w-3.5 h-3.5 text-amber-700" />
+            </button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {myAssignedLeads.map(lead => {
+              const fmt = (d: Date | null) => d ? new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : '—';
+              const srcLabel: Record<string, string> = { thumbtack: 'Thumbtack', google: 'Google', yelp: 'Yelp', bark: 'Bark', phone: 'Phone', other: 'Other' };
+              return (
+                <div key={lead.id} className={`px-4 py-3 flex items-start justify-between gap-3 ${
+                  lead.isBooked ? 'bg-emerald-50' : 'bg-white'
+                }`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-sm truncate">{lead.leadName}</span>
+                      {lead.isBooked && (
+                        <span className="shrink-0 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white">Booked</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5 text-[11px] text-slate-500">
+                      {lead.leadSource && <span>{srcLabel[lead.leadSource.toLowerCase()] ?? lead.leadSource}</span>}
+                      <span>Arrived {fmt(lead.createdAt)}</span>
+                      {lead.firstCallAt && <span>Called {fmt(lead.firstCallAt)}</span>}
+                      {lead.bookedAt && <span>Booked {fmt(lead.bookedAt)}</span>}
+                    </div>
+                    {lead.internalNotes && (
+                      <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 rounded-lg px-2.5 py-1.5 border border-slate-200">
+                        {lead.internalNotes}
+                      </div>
+                    )}
+                  </div>
+                  {lead.estimatedValue > 0 && (
+                    <div className="shrink-0 text-right">
+                      <div className="font-black text-slate-900 text-sm">${lead.estimatedValue.toLocaleString()}</div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Lead Assignment Blocking Overlay ────────────────────────────────────────────────────────────────────────────────── */}
       {pendingAssignment && pendingAssignment.agentName === callerName && (
         <div className="absolute inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
           {/* Pulsing border ring */}
@@ -3920,6 +3975,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   >
                     🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
                   </button>
+                  {myAssignedLeads.length > 0 && (
+                    <button
+                      onClick={() => setShowMyLeads(v => !v)}
+                      title="My assigned leads today"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      📋 {myAssignedLeads.length} my lead{myAssignedLeads.length !== 1 ? 's' : ''}
+                    </button>
+                  )}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
