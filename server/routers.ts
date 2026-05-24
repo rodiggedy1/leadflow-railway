@@ -6,7 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { messageTemplateRouter } from "./messageTemplateRouter";
 import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
 import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
@@ -4941,7 +4941,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
      * for today (ET), enriched with first call time and call notes.
      * Used by the Command Chat assigned leads panel.
      */
-    myAssignedLeadsToday: agentProcedure.query(async ({ ctx }) => {
+    myAssignedLeadsToday: opsChatProcedure.query(async ({ ctx }) => {
       const db = await getDb();
       if (!db) return [];
       const todayEtStart = (() => {
@@ -4949,6 +4949,21 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         d.setHours(0, 0, 0, 0);
         return d;
       })();
+      // Resolve the agentId for the current caller (agent or owner)
+      let resolvedAgentId: number | null = null;
+      if (!ctx.opsCaller.isOwner) {
+        // Agent: look up by email
+        const agentRows = await db.select({ id: agents.id }).from(agents)
+          .where(eq(agents.email, (ctx.opsCaller as any).email ?? '')).limit(1);
+        resolvedAgentId = agentRows[0]?.id ?? null;
+      } else {
+        // Owner: find their agent row by first-name prefix
+        const firstName = ctx.opsCaller.name.split(/\s+/)[0];
+        const agentRows = await db.select({ id: agents.id }).from(agents)
+          .where(like(agents.name, `${firstName}%`)).limit(1);
+        resolvedAgentId = agentRows[0]?.id ?? null;
+      }
+      if (!resolvedAgentId) return [];
       const rows = await db
         .select({
           id: conversationSessions.id,
@@ -4969,7 +4984,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .from(conversationSessions)
         .where(
           and(
-            eq(conversationSessions.assignedAgentId, ctx.agent.agentId),
+            eq(conversationSessions.assignedAgentId, resolvedAgentId),
             gte(conversationSessions.createdAt, todayEtStart),
           )
         )

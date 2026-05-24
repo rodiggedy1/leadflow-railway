@@ -4048,7 +4048,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold text-slate-900 leading-none">MIB Command Chat</h2>
                   {agentList && agentList.length > 0 && (() => {
-                    const MAX_SHOW = 6;
+                    const MAX_SHOW = 8;
                     const visible = agentList.slice(0, MAX_SHOW);
                     const overflow = agentList.length - MAX_SHOW;
                     return (
