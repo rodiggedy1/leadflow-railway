@@ -4963,6 +4963,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           .where(like(agents.name, `${firstName}%`)).limit(1);
         resolvedAgentId = agentRows[0]?.id ?? null;
       }
+      console.log('[DEBUG myAssignedLeadsToday] isOwner:', ctx.opsCaller.isOwner, 'name:', ctx.opsCaller.name, 'resolvedAgentId:', resolvedAgentId);
       if (!resolvedAgentId) return [];
       const rows = await db
         .select({
@@ -4991,6 +4992,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .orderBy(desc(conversationSessions.createdAt))
         .limit(100);
 
+      console.log("[DEBUG myAssignedLeadsToday] rows returned:", rows.length, "todayEtStart:", todayEtStart);
       const phones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))] as string[];
       const firstCallMap: Record<string, Date> = {};
       if (phones.length > 0) {
