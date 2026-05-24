@@ -4551,7 +4551,11 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             // Exclude terminal stages
             sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
             // Only last 7 days to keep the list focused
-            sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`
+            sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+            // Exclude internal team/cleaner/hiring sessions — only show real customer leads
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner', 'review'))`,
+            // Exclude cs_initiated unless they have a lead-like stage
+            sql`NOT (${conversationSessions.leadSource} = 'cs_initiated' AND ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))`
           )
         )
         .orderBy(desc(conversationSessions.createdAt))
