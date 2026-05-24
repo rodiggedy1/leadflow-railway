@@ -4875,9 +4875,11 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         const db = await getDb();
         if (!db) return [];
         const todayEtStart = (() => {
-          const d = new Date();
-          d.setHours(0, 0, 0, 0);
-          return d;
+          // Compute midnight ET (America/New_York) as a UTC Date
+          const nowEt = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+          nowEt.setHours(0, 0, 0, 0);
+          const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).getTime();
+          return new Date(nowEt.getTime() + offsetMs);
         })();
         // Get today's leads assigned to this agent
         const rows = await db
@@ -4945,9 +4947,11 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       const db = await getDb();
       if (!db) return [];
       const todayEtStart = (() => {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0);
-        return d;
+        // Compute midnight ET (America/New_York) as a UTC Date
+        const nowEt = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        nowEt.setHours(0, 0, 0, 0);
+        const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })).getTime();
+        return new Date(nowEt.getTime() + offsetMs);
       })();
       // Resolve the agentId for the current caller (agent or owner)
       let resolvedAgentId: number | null = null;
@@ -4963,7 +4967,6 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           .where(like(agents.name, `${firstName}%`)).limit(1);
         resolvedAgentId = agentRows[0]?.id ?? null;
       }
-      console.log('[DEBUG myAssignedLeadsToday] isOwner:', ctx.opsCaller.isOwner, 'name:', ctx.opsCaller.name, 'resolvedAgentId:', resolvedAgentId);
       if (!resolvedAgentId) return [];
       const rows = await db
         .select({
@@ -4992,7 +4995,6 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .orderBy(desc(conversationSessions.createdAt))
         .limit(100);
 
-      console.log("[DEBUG myAssignedLeadsToday] rows returned:", rows.length, "todayEtStart:", todayEtStart);
       const phones = [...new Set(rows.map(r => r.leadPhone).filter(Boolean))] as string[];
       const firstCallMap: Record<string, Date> = {};
       if (phones.length > 0) {
