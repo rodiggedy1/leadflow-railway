@@ -589,44 +589,54 @@ export const appRouter = router({
         })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
 
 
-        // Build lead list using the exact same filter as stageBreakdown (organic + campaign + hasPhone)
-        // plus an explicit exclusion of internal team/cleaner sessions that have real phone numbers
-        const teamExclusionFilter = sql`(
-          ${conversationSessions.leadSource} IS NULL OR
-          ${conversationSessions.leadSource} NOT IN (
-            'schedule_confirm', 'hiring_interview', 'hiring', 'cs_initiated',
-            'cs-inbound', 'cs-inbound-cleaner', 'review'
+        // Build lead list using the EXACT same sourceFilter as leads.list (Lead Ops page)
+        // + today date filter + hasPhoneFilter so the list matches only real customer leads
+        const leadListSourceFilter = and(
+          sql`(
+            ${conversationSessions.leadSource} IS NULL OR
+            ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'schedule_confirm') AND
+            NOT (
+              ${conversationSessions.leadSource} = 'cs_initiated' AND
+              ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD')
+            )
+          )`,
+          sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+          or(
+            sql`${conversationSessions.leadSource} IS NULL`,
+            sql`(
+              ${conversationSessions.leadSource} IS NOT NULL AND
+              ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+              ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking')
+            )`,
+            sql`(
+              (
+                ${conversationSessions.leadSource} LIKE 'always-on%' OR
+                ${conversationSessions.leadSource} LIKE 'campaign:%' OR
+                ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
+              ) AND
+              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+            )`,
+            sql`(
+              ${conversationSessions.leadSource} = 'review_rebooking' AND
+              JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+            )`
           )
-        )`;
-        const leadListOrganic = await db!
+        );
+        const leadListRows = await db!
           .select({
             leadName: conversationSessions.leadName,
             leadPhone: conversationSessions.leadPhone,
             isBooked: conversationSessions.isBooked,
-            createdAt: conversationSessions.createdAt,
           })
           .from(conversationSessions)
-          .where(conditions ? and(conditions, organicFilter, hasPhoneFilter, teamExclusionFilter) : and(organicFilter, hasPhoneFilter, teamExclusionFilter));
-        const leadListCampaign = await db!
-          .select({
-            leadName: conversationSessions.leadName,
-            leadPhone: conversationSessions.leadPhone,
-            isBooked: conversationSessions.isBooked,
-            createdAt: conversationSessions.createdAt,
-          })
-          .from(conversationSessions)
-          .where(conditions ? and(conditions, campaignFilter, hasPhoneFilter, teamExclusionFilter) : and(campaignFilter, hasPhoneFilter, teamExclusionFilter));
-        const leadList = [...leadListOrganic, ...leadListCampaign]
-          .sort((a, b) => {
-            const ta = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
-            const tb = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
-            return tb - ta;
-          })
-          .map(r => ({
-            leadName: r.leadName ?? 'Unknown',
-            leadPhone: r.leadPhone ?? '',
-            isBooked: r.isBooked === 1,
-          }));
+          .where(conditions ? and(conditions, leadListSourceFilter, hasPhoneFilter) : and(leadListSourceFilter, hasPhoneFilter))
+          .orderBy(sql`${conversationSessions.createdAt} DESC`);
+        const leadList = leadListRows.map(r => ({
+          leadName: r.leadName ?? 'Unknown',
+          leadPhone: r.leadPhone ?? '',
+          isBooked: r.isBooked === 1,
+        }));
         return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
