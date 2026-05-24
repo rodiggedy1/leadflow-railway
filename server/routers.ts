@@ -589,28 +589,37 @@ export const appRouter = router({
         })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
 
 
-        // Build lead list (only real customer leads with phone numbers — strict exclusion list)
-        const strictLeadFilter = sql`(
-          ${conversationSessions.leadSource} IS NULL OR
-          ${conversationSessions.leadSource} NOT IN (
-            'cs-inbound', 'cs-inbound-cleaner', 'cs_initiated',
-            'hiring_interview', 'hiring', 'schedule_confirm', 'review'
-          )
-        )`;
-        const leadListRows = await db!
+        // Build lead list using the exact same filter as stageBreakdown (organic + campaign + hasPhone)
+        // so the list matches the count shown in the badge
+        const leadListOrganic = await db!
           .select({
             leadName: conversationSessions.leadName,
             leadPhone: conversationSessions.leadPhone,
             isBooked: conversationSessions.isBooked,
+            createdAt: conversationSessions.createdAt,
           })
           .from(conversationSessions)
-          .where(conditions ? and(conditions, strictLeadFilter, hasPhoneFilter) : and(strictLeadFilter, hasPhoneFilter))
-          .orderBy(sql`${conversationSessions.createdAt} DESC`);
-        const leadList = leadListRows.map(r => ({
-          leadName: r.leadName ?? 'Unknown',
-          leadPhone: r.leadPhone ?? '',
-          isBooked: r.isBooked === 1,
-        }));
+          .where(conditions ? and(conditions, organicFilter, hasPhoneFilter) : and(organicFilter, hasPhoneFilter));
+        const leadListCampaign = await db!
+          .select({
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            isBooked: conversationSessions.isBooked,
+            createdAt: conversationSessions.createdAt,
+          })
+          .from(conversationSessions)
+          .where(conditions ? and(conditions, campaignFilter, hasPhoneFilter) : and(campaignFilter, hasPhoneFilter));
+        const leadList = [...leadListOrganic, ...leadListCampaign]
+          .sort((a, b) => {
+            const ta = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
+            const tb = b.createdAt instanceof Date ? b.createdAt.getTime() : Number(b.createdAt);
+            return tb - ta;
+          })
+          .map(r => ({
+            leadName: r.leadName ?? 'Unknown',
+            leadPhone: r.leadPhone ?? '',
+            isBooked: r.isBooked === 1,
+          }));
         return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
