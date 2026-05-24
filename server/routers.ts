@@ -589,7 +589,14 @@ export const appRouter = router({
         })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
 
 
-        // Build lead list (only leads with real phone numbers — same filter as total count)
+        // Build lead list (only real customer leads with phone numbers — strict exclusion list)
+        const strictLeadFilter = sql`(
+          ${conversationSessions.leadSource} IS NULL OR
+          ${conversationSessions.leadSource} NOT IN (
+            'cs-inbound', 'cs-inbound-cleaner', 'cs_initiated',
+            'hiring_interview', 'hiring', 'schedule_confirm', 'review'
+          )
+        )`;
         const leadListRows = await db!
           .select({
             leadName: conversationSessions.leadName,
@@ -597,7 +604,7 @@ export const appRouter = router({
             isBooked: conversationSessions.isBooked,
           })
           .from(conversationSessions)
-          .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter))
+          .where(conditions ? and(conditions, strictLeadFilter, hasPhoneFilter) : and(strictLeadFilter, hasPhoneFilter))
           .orderBy(sql`${conversationSessions.createdAt} DESC`);
         const leadList = leadListRows.map(r => ({
           leadName: r.leadName ?? 'Unknown',
