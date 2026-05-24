@@ -873,6 +873,23 @@ type MessageListProps = {
   dismissSystemCard: (messageId: number) => void;
   onScrollToBottom: () => void;
   superAlertMsgSet: Set<number>;
+  // Conversation row action buttons
+  searchOpen: boolean;
+  openSearch: () => void;
+  closeSearch: () => void;
+  searchQuery: string;
+  setSearchQuery: (v: string) => void;
+  searchResultIdx: number;
+  setSearchResultIdx: (v: number) => void;
+  searchMatchList: Array<{ id: number; body: string }>;
+  navigateSearchResult: (dir: 1 | -1) => void;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
+  notifMuted: boolean;
+  toggleMute: () => void;
+  pendingReminderCount: number;
+  centerView: "chat" | "issues" | "calls";
+  setCenterView: (v: "chat" | "issues" | "calls") => void;
+  todayCallCount: number;
 };
 const MessageList = memo(function MessageList({
   channelMsgs,
@@ -906,13 +923,96 @@ const MessageList = memo(function MessageList({
   dismissSystemCard,
   onScrollToBottom,
   superAlertMsgSet,
+  searchOpen,
+  openSearch,
+  closeSearch,
+  searchQuery,
+  setSearchQuery,
+  searchResultIdx,
+  setSearchResultIdx,
+  searchMatchList,
+  navigateSearchResult,
+  searchInputRef,
+  notifMuted,
+  toggleMute,
+  pendingReminderCount,
+  centerView,
+  setCenterView,
+  todayCallCount,
 }: MessageListProps) {
   return (
     <>
         <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
-            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded-full px-2.5 py-0.5">Alerts + regular team chat</span>
+            {searchOpen ? (
+              <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
+                <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  value={searchQuery}
+                  onChange={e => { setSearchQuery(e.target.value); setSearchResultIdx(0); }}
+                  onKeyDown={e => {
+                    if (e.key === "Escape") closeSearch();
+                    if (e.key === "Enter") navigateSearchResult(e.shiftKey ? -1 : 1);
+                  }}
+                  placeholder="Search messages…"
+                  className="flex-1 min-w-0 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
+                />
+                {searchQuery && searchMatchList.length > 0 && (
+                  <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
+                    {searchResultIdx + 1}/{searchMatchList.length}
+                  </span>
+                )}
+                {searchQuery && searchMatchList.length === 0 && (
+                  <span className="text-[10px] text-slate-400 shrink-0">No results</span>
+                )}
+                {searchQuery && searchMatchList.length > 0 && (
+                  <>
+                    <button onClick={() => navigateSearchResult(-1)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500" title="Previous (Shift+Enter)">
+                      <ChevronLeft className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => navigateSearchResult(1)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500" title="Next (Enter)">
+                      <ChevronRight className="h-3 w-3" />
+                    </button>
+                  </>
+                )}
+                <button onClick={closeSearch} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 shrink-0" title="Close (Esc)">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Conversation</p>
+            )}
+            <div className="flex items-center gap-1">
+              {!searchOpen && pendingReminderCount > 0 && (
+                <span className="flex items-center gap-1 text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5 mr-1">
+                  <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
+                </span>
+              )}
+              {!searchOpen && (
+                <button onClick={openSearch} title="Search messages" className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors">
+                  <Search className="h-3.5 w-3.5 text-slate-400" />
+                </button>
+              )}
+              <button onClick={toggleMute} title={notifMuted ? "Unmute notifications" : "Mute notifications"} className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors">
+                {notifMuted ? <BellOff className="h-3.5 w-3.5 text-slate-400" /> : <Bell className="h-3.5 w-3.5 text-slate-400" />}
+              </button>
+              <button
+                title="AI Call Log"
+                onClick={() => setCenterView(centerView === "calls" ? "chat" : "calls")}
+                className={cn(
+                  "relative h-7 w-7 flex items-center justify-center rounded-full transition-colors",
+                  centerView === "calls" ? "bg-orange-50 text-orange-600" : "hover:bg-slate-100 text-slate-400"
+                )}
+              >
+                <PhoneIncoming className="h-3.5 w-3.5" />
+                {todayCallCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-orange-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
+                    {todayCallCount > 9 ? "9+" : todayCallCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
           <div ref={msgsContainerRef} className="space-y-4" style={{ paddingBottom: '8px' }}>
             {channelLoading ? (
@@ -3945,43 +4045,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {/* Compact single-row header */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              {searchOpen ? (
-                <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
-                  <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                  <input
-                    ref={searchInputRef}
-                    value={searchQuery}
-                    onChange={e => { setSearchQuery(e.target.value); setSearchResultIdx(0); }}
-                    onKeyDown={e => {
-                      if (e.key === "Escape") closeSearch();
-                      if (e.key === "Enter") navigateSearchResult(e.shiftKey ? -1 : 1);
-                    }}
-                    placeholder="Search messages…"
-                    className="flex-1 min-w-0 text-sm bg-transparent outline-none text-slate-800 placeholder:text-slate-400"
-                  />
-                  {searchQuery && searchMatchList.length > 0 && (
-                    <span className="text-[10px] text-slate-400 shrink-0 whitespace-nowrap">
-                      {searchResultIdx + 1}/{searchMatchList.length}
-                    </span>
-                  )}
-                  {searchQuery && searchMatchList.length === 0 && (
-                    <span className="text-[10px] text-slate-400 shrink-0">No results</span>
-                  )}
-                  {searchQuery && searchMatchList.length > 0 && (
-                    <>
-                      <button onClick={() => navigateSearchResult(-1)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500" title="Previous (Shift+Enter)">
-                        <ChevronLeft className="h-3 w-3" />
-                      </button>
-                      <button onClick={() => navigateSearchResult(1)} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500" title="Next (Enter)">
-                        <ChevronRight className="h-3 w-3" />
-                      </button>
-                    </>
-                  )}
-                  <button onClick={closeSearch} className="h-5 w-5 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 shrink-0" title="Close (Esc)">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ) : (
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold text-slate-900 leading-none">MIB Command Chat</h2>
                   {agentList && agentList.length > 0 && (() => {
@@ -4072,53 +4135,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </TooltipContent>
                   </Tooltip>
                 </div>
-              )}
-            </div>
-            {/* Icon buttons */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {!searchOpen && pendingReminderCount > 0 && (
-                <span className="flex items-center gap-1 text-[10px] font-semibold bg-sky-50 text-sky-600 border border-sky-200 rounded-full px-2 py-0.5">
-                  <Bell className="h-3 w-3" />{pendingReminderCount} reminder{pendingReminderCount !== 1 ? "s" : ""} set
-                </span>
-              )}
-              {!searchOpen && (
-                <button
-                  onClick={openSearch}
-                  title="Search messages"
-                  className="h-9 w-9 flex items-center justify-center rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
-                >
-                  <Search className="h-4 w-4 text-slate-500" />
-                </button>
-              )}
-              <button
-                onClick={toggleMute}
-                title={notifMuted ? "Unmute notifications" : "Mute notifications"}
-                className="h-9 w-9 flex items-center justify-center rounded-full border border-slate-200 hover:bg-slate-100 transition-colors"
-              >
-                {notifMuted
-                  ? <BellOff className="h-4 w-4 text-slate-400" />
-                  : <Bell className="h-4 w-4 text-slate-500" />}
-              </button>
-
-              {/* AI Call Command Center — Calls log button */}
-              <button
-                title="AI Call Log"
-                onClick={() => setCenterView(centerView === "calls" ? "chat" : "calls")}
-                className={cn(
-                  "relative h-9 w-9 flex items-center justify-center rounded-full border transition-colors",
-                  centerView === "calls"
-                    ? "border-orange-400 bg-orange-50 text-orange-600"
-                    : "border-slate-200 hover:bg-slate-100 text-slate-500"
-                )}
-              >
-                <PhoneIncoming className="h-4 w-4" />
-                {todayCallCount > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center leading-none">
-                    {todayCallCount > 9 ? "9+" : todayCallCount}
-                  </span>
-                )}
-              </button>
-
             </div>
           </div>
         </div>
@@ -4624,6 +4640,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
           onScrollToBottom={() => setNewMsgCount(0)}
           superAlertMsgSet={superAlertMsgSet}
+          searchOpen={searchOpen}
+          openSearch={openSearch}
+          closeSearch={closeSearch}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          searchResultIdx={searchResultIdx}
+          setSearchResultIdx={setSearchResultIdx}
+          searchMatchList={searchMatchList}
+          navigateSearchResult={navigateSearchResult}
+          searchInputRef={searchInputRef}
+          notifMuted={notifMuted}
+          toggleMute={toggleMute}
+          pendingReminderCount={pendingReminderCount}
+          centerView={centerView}
+          setCenterView={setCenterView}
+          todayCallCount={todayCallCount}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
