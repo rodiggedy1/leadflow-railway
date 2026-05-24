@@ -44,8 +44,18 @@ import { teamPayRouter } from "./teamPayRouter";
 import { nurtureRouter } from "./nurtureRouter";
 import { endEnrollment } from "./nurtureSequence";
 import { callsRouter } from "./callsRouter";
+import { NON_LEAD_SOURCES } from '../shared/leadSources';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
+
+// Shared SQL fragment: excludes all non-lead session sources.
+// Source of truth: shared/leadSources.ts — update there, not here.
+function nonLeadSourceFilter() {
+  const list = NON_LEAD_SOURCES.map(s => `'${s}'`).join(', ');
+  return sql.raw(`(lead_source IS NULL OR lead_source NOT IN (${list}))`);
+}
+
+
 
 // In-memory typing presence store: sessionId -> { agentName, agentId, expiresAt }
 // Ephemeral — cleared on server restart. No DB needed for real-time typing indicators.
@@ -116,7 +126,7 @@ export const appRouter = router({
           // Exception: cs_initiated sessions with lead-like stages (AI-initiated quote outreach) DO show in leads
           sql`(
             ${conversationSessions.leadSource} IS NULL OR
-            ${conversationSessions.leadSource} NOT IN ('cs-inbound', 'cs-inbound-cleaner', 'hiring_interview', 'schedule_confirm') AND
+            ${conversationSessions.leadSource} NOT IN (${sql.raw(NON_LEAD_SOURCES.map(s => `'${s}'`).join(', '))}) AND
             NOT (
               ${conversationSessions.leadSource} = 'cs_initiated' AND
               ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD')
@@ -133,7 +143,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking', 'schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner')
+              ${conversationSessions.leadSource} NOT IN (${sql.raw([...NON_LEAD_SOURCES, 'reactivation', 'command-center', 'review_rebooking'].map(s => `'${s}'`).join(', '))})
             )`,
             // Campaign sessions — show ONLY if customer has replied
             // Check messageHistory JSON for any role:"user" entry
@@ -451,7 +461,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking', 'schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner')
+              ${conversationSessions.leadSource} NOT IN (${sql.raw([...NON_LEAD_SOURCES, 'reactivation', 'command-center', 'review_rebooking'].map(s => `'${s}'`).join(', '))})
             )`
           )
         );
@@ -607,7 +617,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking', 'schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner')
+              ${conversationSessions.leadSource} NOT IN (${sql.raw([...NON_LEAD_SOURCES, 'reactivation', 'command-center', 'review_rebooking'].map(s => `'${s}'`).join(', '))})
             )`,
             sql`(
               (
@@ -4553,7 +4563,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             // Only last 7 days to keep the list focused
             sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
             // Exclude internal team/cleaner/hiring sessions — only show real customer leads
-            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} NOT IN ('schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner', 'review'))`,
+            // Source of truth: shared/leadSources.ts NON_LEAD_SOURCES
+            nonLeadSourceFilter(),
             // Exclude cs_initiated unless they have a lead-like stage
             sql`NOT (${conversationSessions.leadSource} = 'cs_initiated' AND ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))`
           )
