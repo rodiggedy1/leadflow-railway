@@ -4076,13 +4076,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </div>
                     );
                   })()}
-                  <button
-                    onClick={() => onSwitchToLeadOps?.()}
-                    title="Open Lead Ops"
-                    className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors cursor-pointer"
-                  >
-                    🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
-                  </button>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => onSwitchToLeadOps?.()}
+                        title="Open Lead Ops"
+                        className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors cursor-pointer"
+                      >
+                        🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
+                      </button>
+                    </TooltipTrigger>
+                    {todayStats?.leadList && todayStats.leadList.length > 0 && (
+                      <TooltipContent side="bottom" align="start" className="p-0 overflow-hidden min-w-[220px] max-w-[300px] max-h-[360px] overflow-y-auto bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
+                        <div className="px-3 py-2 border-b border-white/10 sticky top-0 bg-[#0f1623]">
+                          <p className="text-[11px] font-semibold text-white">{todayStats.leadList.length} leads with phone</p>
+                        </div>
+                        <div className="divide-y divide-white/[0.06]">
+                          {todayStats.leadList.map((lead, i) => (
+                            <div key={i} className="px-3 py-1.5 flex items-center justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[11px] text-white/80 truncate">{lead.leadName}</p>
+                                <p className="text-[10px] text-white/40 font-mono">{lead.leadPhone}</p>
+                              </div>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${lead.isBooked ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white/40'}`}>
+                                {lead.isBooked ? '✓ booked' : 'open'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
                   {myAssignedLeads.length > 0 && (
                     <button
                       onClick={() => setShowMyLeads(v => !v)}

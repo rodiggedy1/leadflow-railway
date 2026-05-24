@@ -436,6 +436,7 @@ export const appRouter = router({
           organic: emptyBreakdown,
           campaign: emptyBreakdown,
           bookedList: [] as Array<{ leadName: string; bookedByAgentName: string | null; amount: number; bookedAt: number | null }>,
+          leadList: [] as Array<{ leadName: string; leadPhone: string; isBooked: boolean }>,
         };
         const conditions = buildDateConditions(input?.dateFrom, input?.dateTo);
         const bookedConditions = buildBookedDateConditions(input?.dateFrom, input?.dateTo);
@@ -587,7 +588,23 @@ export const appRouter = router({
           bookedAt: r.bookedAt instanceof Date ? r.bookedAt.getTime() : r.bookedAt ? new Date(r.bookedAt as string).getTime() : null,
         })).sort((a, b) => (b.bookedAt ?? 0) - (a.bookedAt ?? 0));
 
-        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign, bookedList };
+
+        // Build lead list (only leads with real phone numbers — same filter as total count)
+        const leadListRows = await db!
+          .select({
+            leadName: conversationSessions.leadName,
+            leadPhone: conversationSessions.leadPhone,
+            isBooked: conversationSessions.isBooked,
+          })
+          .from(conversationSessions)
+          .where(conditions ? and(conditions, listVisibilityFilter, hasPhoneFilter) : and(listVisibilityFilter, hasPhoneFilter))
+          .orderBy(sql`${conversationSessions.createdAt} DESC`);
+        const leadList = leadListRows.map(r => ({
+          leadName: r.leadName ?? 'Unknown',
+          leadPhone: r.leadPhone ?? '',
+          isBooked: r.isBooked === 1,
+        }));
+        return { total, byStage, bookedCount, bookedRevenue, conversionRate, revenueBySource, organic, campaign, bookedList, leadList };
       }),
 
     /**
