@@ -52,7 +52,7 @@ const CS_SUPPORT_NUMBER = "+12028885362";
 // Source of truth: shared/leadSources.ts — update there, not here.
 function nonLeadSourceFilter() {
   const list = NON_LEAD_SOURCES.map(s => `'${s}'`).join(', ');
-  return sql.raw(`(lead_source IS NULL OR lead_source NOT IN (${list}))`);
+  return sql.raw(`(leadSource IS NULL OR leadSource NOT IN (${list}))`);
 }
 
 
