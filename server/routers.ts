@@ -133,7 +133,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking')
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking', 'schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner')
             )`,
             // Campaign sessions — show ONLY if customer has replied
             // Check messageHistory JSON for any role:"user" entry
@@ -451,7 +451,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking')
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking', 'schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner')
             )`
           )
         );
@@ -607,7 +607,7 @@ export const appRouter = router({
               ${conversationSessions.leadSource} IS NOT NULL AND
               ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
               ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
-              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking')
+              ${conversationSessions.leadSource} NOT IN ('reactivation', 'command-center', 'review', 'review_rebooking', 'schedule_confirm', 'hiring_interview', 'hiring', 'cs-inbound', 'cs-inbound-cleaner')
             )`,
             sql`(
               (
