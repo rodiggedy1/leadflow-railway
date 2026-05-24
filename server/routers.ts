@@ -590,7 +590,14 @@ export const appRouter = router({
 
 
         // Build lead list using the exact same filter as stageBreakdown (organic + campaign + hasPhone)
-        // so the list matches the count shown in the badge
+        // plus an explicit exclusion of internal team/cleaner sessions that have real phone numbers
+        const teamExclusionFilter = sql`(
+          ${conversationSessions.leadSource} IS NULL OR
+          ${conversationSessions.leadSource} NOT IN (
+            'schedule_confirm', 'hiring_interview', 'hiring', 'cs_initiated',
+            'cs-inbound', 'cs-inbound-cleaner', 'review'
+          )
+        )`;
         const leadListOrganic = await db!
           .select({
             leadName: conversationSessions.leadName,
@@ -599,7 +606,7 @@ export const appRouter = router({
             createdAt: conversationSessions.createdAt,
           })
           .from(conversationSessions)
-          .where(conditions ? and(conditions, organicFilter, hasPhoneFilter) : and(organicFilter, hasPhoneFilter));
+          .where(conditions ? and(conditions, organicFilter, hasPhoneFilter, teamExclusionFilter) : and(organicFilter, hasPhoneFilter, teamExclusionFilter));
         const leadListCampaign = await db!
           .select({
             leadName: conversationSessions.leadName,
@@ -608,7 +615,7 @@ export const appRouter = router({
             createdAt: conversationSessions.createdAt,
           })
           .from(conversationSessions)
-          .where(conditions ? and(conditions, campaignFilter, hasPhoneFilter) : and(campaignFilter, hasPhoneFilter));
+          .where(conditions ? and(conditions, campaignFilter, hasPhoneFilter, teamExclusionFilter) : and(campaignFilter, hasPhoneFilter, teamExclusionFilter));
         const leadList = [...leadListOrganic, ...leadListCampaign]
           .sort((a, b) => {
             const ta = a.createdAt instanceof Date ? a.createdAt.getTime() : Number(a.createdAt);
