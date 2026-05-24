@@ -4092,12 +4092,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       📋 My leads: {myAssignedLeads.length}
                     </button>
                   )}
-                  {/* Booking count badge */}
-                  {todayBookingCount > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                      ✓ {todayBookingCount} booked
-                    </span>
-                  )}
+                  {/* Booking count badge with agent breakdown tooltip */}
+                  {todayBookingCount > 0 && (() => {
+                    const byAgent: Record<string, number> = {};
+                    (todayStats?.bookedList ?? []).forEach(b => {
+                      const name = b.bookedByAgentName ?? 'Unassigned';
+                      byAgent[name] = (byAgent[name] ?? 0) + 1;
+                    });
+                    const agentEntries = Object.entries(byAgent).sort((a, b) => b[1] - a[1]);
+                    return (
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
+                            ✓ {todayBookingCount} booked
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="start" className="p-0 overflow-hidden min-w-[180px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
+                          <div className="px-3 py-2 border-b border-white/10">
+                            <p className="text-[11px] font-semibold text-white">Bookings by agent</p>
+                          </div>
+                          <div className="divide-y divide-white/[0.06]">
+                            {agentEntries.map(([name, count]) => (
+                              <div key={name} className="px-3 py-1.5 flex items-center justify-between gap-4">
+                                <span className="text-[11px] text-white/80 truncate">{name}</span>
+                                <span className="text-[11px] font-bold text-emerald-400 shrink-0">{count}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })()}
                   {/* Conversion rate badge */}
                   {(todayStats?.total ?? 0) > 0 && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
