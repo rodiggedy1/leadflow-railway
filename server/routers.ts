@@ -486,12 +486,12 @@ export const appRouter = router({
         );
 
         // Only count leads with a real phone number.
-        // Real phones (E.164, formatted, raw digits) NEVER contain letters.
+        // Real phones never contain letters AND have at least 10 digits (US minimum).
         // Placeholders (thumbtack-*, bark-sms-*, no-phone-*) always contain letters.
-        // This single rule catches all current and future placeholder formats.
         const hasPhoneFilter = sql`(
           ${conversationSessions.leadPhone} IS NOT NULL AND
-          ${conversationSessions.leadPhone} NOT REGEXP '[a-zA-Z]'
+          ${conversationSessions.leadPhone} NOT REGEXP '[a-zA-Z]' AND
+          LENGTH(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '')) >= 10
         )`;
 
         // Helper: run stage-count query for a given filter
