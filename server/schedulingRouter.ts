@@ -872,7 +872,14 @@ export const schedulingRouter = router({
       // Fetch real drive times using a true N×N Distance Matrix.
       // Deduplicate all unique coordinates into one array, build the full matrix once
       // via buildTravelMatrix(), then look up each pair by index — no diagonal trick.
+      //
+      // IMPORTANT: estimatedDriveMap is keyed by toId (destination job ID).
+      // Home→first pairs and job→job pairs share the same key space, so we process
+      // home→first pairs LAST so they are never overwritten by job→job pairs.
+      // homeDriveByJobId stores only home→first distances (keyed by job ID) for
+      // use in homeDriveByTeam — completely separate from job→job distances.
       const estimatedDriveMap = new Map<number, number>();
+      const homeDriveByJobId = new Map<number, number>(); // jobId -> home-to-job secs
       if (pairs.length > 0) {
         const coordKey = (p: LatLng) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
         const uniquePoints: LatLng[] = [];
@@ -887,14 +894,19 @@ export const schedulingRouter = router({
           }
         }
         const matrix = await buildTravelMatrix(uniquePoints);
-        for (const pair of pairs) {
+        // Process job→job pairs first, then home→first pairs so home distances win
+        const homePairs = pairs.filter(p => p.fromId < 0);
+        const jobPairs = pairs.filter(p => p.fromId >= 0);
+        for (const pair of [...jobPairs, ...homePairs]) {
           const fromIdx = pointIndex.get(coordKey(pair.from))!;
           const toIdx = pointIndex.get(coordKey(pair.to))!;
           const secs = matrix[fromIdx]?.[toIdx];
-          estimatedDriveMap.set(
-            pair.toId,
-            secs != null && secs > 0 ? secs : Math.round(haversineMeters(pair.from, pair.to) / 10),
-          );
+          const driveSecs = secs != null && secs > 0 ? secs : Math.round(haversineMeters(pair.from, pair.to) / 10);
+          estimatedDriveMap.set(pair.toId, driveSecs);
+          // Track home→first distances separately so they are never confused with job→job
+          if (pair.fromId < 0) {
+            homeDriveByJobId.set(pair.toId, driveSecs);
+          }
         }
       }
 
@@ -959,7 +971,8 @@ export const schedulingRouter = router({
         teamEnriched.sort((a, b) => (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0));
         const firstJob = teamEnriched[0];
         if (firstJob) {
-          const secs = estimatedDriveMap.get(firstJob.id);
+          // Use homeDriveByJobId (home→first only) so job→job distances never pollute this value
+          const secs = homeDriveByJobId.get(firstJob.id) ?? estimatedDriveMap.get(firstJob.id);
           if (secs !== undefined) {
             homeDriveByTeam.set(tid, secs);
           }
