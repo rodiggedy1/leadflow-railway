@@ -820,95 +820,55 @@ export const schedulingRouter = router({
         });
       }
 
-      // Build consecutive origin-destination pairs for Distance Matrix
-      // Also include home → first job for each team
-      // Use fromId = -teamId to distinguish home-to-first pairs (negative = home departure)
-      const pairs: Array<{ fromId: number; toId: number; from: LatLng; to: LatLng }> = [];
+      // Build drive time chain for each team: home → job1 → job2 → job3
+      // Jobs are sorted by serviceDateTime (earliest first) — same order as the UI.
+      // driveMap: jobId -> drive time in seconds from whatever came before it (home or prev job)
+      const driveMap = new Map<number, number>(); // jobId -> drive secs from previous stop
+      const firstJobIdByTeam = new Map<number, number>(); // teamId -> jobId of first job
 
-      // Pass 1: home→first pairs based on saved assignment routeOrder=0 (post-optimization view)
-      // Group saved assignments by teamId, find the job with routeOrder=0
-      const assignedFirstByTeam = new Map<number, number>(); // teamId -> jobId with routeOrder=0
-      for (const [jobId, asgn] of Array.from(assignmentMap.entries())) {
-        if (asgn.routeOrder === 0 && asgn.teamId && asgn.teamId !== 0 && asgn.isManual !== 2) {
-          assignedFirstByTeam.set(asgn.teamId, jobId);
-        }
-      }
-      const seenHomePairs = new Set<number>(); // track which jobIds already have a home pair
-      for (const [teamId, firstJobId] of Array.from(assignedFirstByTeam.entries())) {
-        const team = teams.find(t => t.id === teamId);
-        const firstJob = jobs.find(j => j.id === firstJobId);
-        if (team?.homeLat && team?.homeLng && firstJob?.jobAddress) {
-          const firstGeo = geoByAddress.get(firstJob.jobAddress.trim().toLowerCase());
-          if (firstGeo) {
-            pairs.push({ fromId: -(team.id), toId: firstJobId, from: { lat: team.homeLat, lng: team.homeLng }, to: { lat: firstGeo.lat, lng: firstGeo.lng } });
-            seenHomePairs.add(firstJobId);
-          }
-        }
-      }
+      // Collect all points needed for the distance matrix
+      const allPairPoints: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; toJobId: number }> = [];
 
-      // Pass 2: home→first pairs based on Launch27 teamName grouping (pre-optimization view)
       for (const [teamName, teamJobs] of Array.from(jobsByTeam)) {
         const team = teamByName.get(teamName);
-        // Home → first job (only if not already added from saved assignment)
-        const firstJob = teamJobs[0];
-        if (firstJob && team?.homeLat && team?.homeLng && !seenHomePairs.has(firstJob.id)) {
-          const firstGeo = geoByAddress.get(firstJob.jobAddress?.trim().toLowerCase() ?? "");
-          if (firstGeo) {
-            pairs.push({ fromId: -(team.id), toId: firstJob.id, from: { lat: team.homeLat, lng: team.homeLng }, to: { lat: firstGeo.lat, lng: firstGeo.lng } });
-          }
+        if (!team) continue;
+        // Record which job is first (earliest time = card 1)
+        if (teamJobs[0]) firstJobIdByTeam.set(team.id, teamJobs[0].id);
+        // home → first job
+        if (teamJobs[0] && team.homeLat && team.homeLng) {
+          const geo = geoByAddress.get(teamJobs[0].jobAddress?.trim().toLowerCase() ?? "");
+          if (geo) allPairPoints.push({ fromLat: team.homeLat, fromLng: team.homeLng, toLat: geo.lat, toLng: geo.lng, toJobId: teamJobs[0].id });
         }
-        // Consecutive job pairs — always include ALL pairs so drive times are always live
+        // job[i-1] → job[i]
         for (let i = 1; i < teamJobs.length; i++) {
-          const prev = teamJobs[i - 1];
-          const curr = teamJobs[i];
-          const prevGeo = geoByAddress.get(prev.jobAddress?.trim().toLowerCase() ?? "");
-          const currGeo = geoByAddress.get(curr.jobAddress?.trim().toLowerCase() ?? "");
-          if (prevGeo && currGeo) {
-            pairs.push({ fromId: prev.id, toId: curr.id, from: { lat: prevGeo.lat, lng: prevGeo.lng }, to: { lat: currGeo.lat, lng: currGeo.lng } });
-          }
+          const prevGeo = geoByAddress.get(teamJobs[i - 1].jobAddress?.trim().toLowerCase() ?? "");
+          const currGeo = geoByAddress.get(teamJobs[i].jobAddress?.trim().toLowerCase() ?? "");
+          if (prevGeo && currGeo) allPairPoints.push({ fromLat: prevGeo.lat, fromLng: prevGeo.lng, toLat: currGeo.lat, toLng: currGeo.lng, toJobId: teamJobs[i].id });
         }
       }
 
-      // Fetch real drive times using a true N×N Distance Matrix.
-      // Deduplicate all unique coordinates into one array, build the full matrix once
-      // via buildTravelMatrix(), then look up each pair by index — no diagonal trick.
-      //
-      // IMPORTANT: estimatedDriveMap is keyed by toId (destination job ID).
-      // Home→first pairs and job→job pairs share the same key space, so we process
-      // home→first pairs LAST so they are never overwritten by job→job pairs.
-      // homeDriveByJobId stores only home→first distances (keyed by job ID) for
-      // use in homeDriveByTeam — completely separate from job→job distances.
-      const estimatedDriveMap = new Map<number, number>();
-      const homeDriveByJobId = new Map<number, number>(); // jobId -> home-to-job secs
-      if (pairs.length > 0) {
-        const coordKey = (p: LatLng) => `${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
+      // Compute all drive times in one matrix call
+      if (allPairPoints.length > 0) {
+        const coordKey = (lat: number, lng: number) => `${lat.toFixed(6)},${lng.toFixed(6)}`;
         const uniquePoints: LatLng[] = [];
         const pointIndex = new Map<string, number>();
-        for (const pair of pairs) {
-          for (const pt of [pair.from, pair.to]) {
-            const key = coordKey(pt);
-            if (!pointIndex.has(key)) {
-              pointIndex.set(key, uniquePoints.length);
-              uniquePoints.push(pt);
-            }
+        for (const p of allPairPoints) {
+          for (const [lat, lng] of [[p.fromLat, p.fromLng], [p.toLat, p.toLng]] as [number, number][]) {
+            const key = coordKey(lat, lng);
+            if (!pointIndex.has(key)) { pointIndex.set(key, uniquePoints.length); uniquePoints.push({ lat, lng }); }
           }
         }
         const matrix = await buildTravelMatrix(uniquePoints);
-        // Process job→job pairs first, then home→first pairs so home distances win
-        const homePairs = pairs.filter(p => p.fromId < 0);
-        const jobPairs = pairs.filter(p => p.fromId >= 0);
-        for (const pair of [...jobPairs, ...homePairs]) {
-          const fromIdx = pointIndex.get(coordKey(pair.from))!;
-          const toIdx = pointIndex.get(coordKey(pair.to))!;
+        for (const p of allPairPoints) {
+          const fromIdx = pointIndex.get(coordKey(p.fromLat, p.fromLng))!;
+          const toIdx = pointIndex.get(coordKey(p.toLat, p.toLng))!;
           const secs = matrix[fromIdx]?.[toIdx];
-          const driveSecs = secs != null && secs > 0 ? secs : Math.round(haversineMeters(pair.from, pair.to) / 10);
-          estimatedDriveMap.set(pair.toId, driveSecs);
-          // Track home→first distances separately so they are never confused with job→job
-          if (pair.fromId < 0) {
-            homeDriveByJobId.set(pair.toId, driveSecs);
-          }
+          driveMap.set(p.toJobId, secs != null && secs > 0 ? secs : Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10));
         }
       }
+
+      // estimatedDriveMap alias — used below when building enriched jobs
+      const estimatedDriveMap = driveMap;
 
       // Build a helper to detect job type badges from the job's fields
       const enriched = jobs.map(j => {
@@ -955,29 +915,6 @@ export const schedulingRouter = router({
         };
       });
 
-      // Build homeDriveTimeSecs map: teamId -> drive time from home to first job.
-      // Use enriched (post-assignment) jobs grouped by assigned teamId so we use the
-      // optimizer-assigned team, not the original Launch27 teamName.
-      const homeDriveByTeam = new Map<number, number>();
-      const enrichedByTeam = new Map<number, typeof enriched>();
-      for (const ej of enriched) {
-        const tid = ej.assignment?.teamId;
-        if (tid == null || tid === 0) continue;
-        if (!enrichedByTeam.has(tid)) enrichedByTeam.set(tid, []);
-        enrichedByTeam.get(tid)!.push(ej);
-      }
-      for (const [tid, teamEnriched] of Array.from(enrichedByTeam.entries())) {
-        // Sort by routeOrder to find the actual first job
-        teamEnriched.sort((a, b) => (a.assignment?.routeOrder ?? 0) - (b.assignment?.routeOrder ?? 0));
-        const firstJob = teamEnriched[0];
-        if (firstJob) {
-          // Use homeDriveByJobId (home→first only) so job→job distances never pollute this value
-          const secs = homeDriveByJobId.get(firstJob.id) ?? estimatedDriveMap.get(firstJob.id);
-          if (secs !== undefined) {
-            homeDriveByTeam.set(tid, secs);
-          }
-        }
-      }
       // Compute all-time average customer rating per team (by teamName on cleanerJobs)
       const ratingRows = await db
         .select({
@@ -990,14 +927,13 @@ export const schedulingRouter = router({
         .groupBy(cleanerJobs.teamName);
       const ratingByTeamName = new Map(ratingRows.map(r => [r.teamName, { avgRating: Number(r.avgRating), ratingCount: Number(r.ratingCount) }]));
 
-      const teamsWithHomeDrive = teams.map(t => ({
+      const teamsWithRating = teams.map(t => ({
         ...t,
-        homeDriveTimeSecs: homeDriveByTeam.get(t.id) ?? null,
         avgRating: ratingByTeamName.get(t.name)?.avgRating ?? null,
         ratingCount: ratingByTeamName.get(t.name)?.ratingCount ?? 0,
       }));
 
-      return { jobs: enriched, teams: teamsWithHomeDrive, hasAssignments: assignments.length > 0 };
+      return { jobs: enriched, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
     }),
 
   // ── Run optimizer ───────────────────────────────────────────────────────────
