@@ -2550,24 +2550,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onSuccess: () => { toast.success("Pin dismissed"); refetchPin(); },
   });
 
-  // ── Lead Assignment overlay ────────────────────────────────────────────────
-  // Poll every 10s for unacknowledged assignments; also refreshed via SSE onLeadAssignment.
-  const { data: pendingAssignment } = trpc.leads.getPendingAssignment.useQuery(undefined, {
-    refetchInterval: 10_000,
-    refetchIntervalInBackground: false,
-    retry: false,
-    staleTime: 0,
-  });
-  const acknowledgeAssignmentMutation = trpc.leads.acknowledgeAssignment.useMutation({
-    onSuccess: (_data, variables) => {
-      utils.leads.getPendingAssignment.invalidate();
-      // Pass the sessionId so Lead Ops auto-selects the assigned lead
-      onSwitchToLeadOps?.(pendingAssignment?.sessionId ?? undefined);
-    },
-    onError: (err) => toast.error("Failed to acknowledge assignment", { description: err.message }),
-  });
-
-  // ── Super-alert overlay ──────────────────────────────────────────────────────
+   // ── Super-alert overlay ──────────────────────────────────────────────────────
   // Poll every 3s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
   // Server uses session cookie to identify the caller — no agentName input needed.
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
@@ -3504,48 +3487,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         );
       })()}
 
-      {/* ── Lead Assignment Blocking Overlay ────────────────────────────────────────────────────────────────────────────────── */}
-      {pendingAssignment && pendingAssignment.agentName === callerName && (
-        <div className="absolute inset-0 z-[9999] flex items-center justify-center" style={{ background: "rgba(120, 53, 15, 0.85)" }}>
-          {/* Pulsing border ring */}
-          <div
-            className="relative w-full max-w-sm mx-4 rounded-2xl overflow-hidden shadow-2xl"
-            style={{ animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite", border: "3px solid #f97316" }}
-          >
-            {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-3 bg-orange-500">
-              <Briefcase className="h-5 w-5 text-white shrink-0" />
-              <span className="text-sm font-bold text-white uppercase tracking-wider">New Lead Assigned to You</span>
-            </div>
-            {/* Body */}
-            <div className="px-5 py-4 bg-amber-50">
-              <div className="space-y-1.5 mb-4">
-                <p className="text-base font-semibold text-slate-800">👤 <span className="text-orange-700">{pendingAssignment.leadName ?? "Lead"}</span></p>
-                {pendingAssignment.leadPhone && (
-                  <p className="text-sm text-slate-600">📞 {pendingAssignment.leadPhone}</p>
-                )}
-                <p className="text-sm text-slate-600">Assigned by <span className="font-semibold">{pendingAssignment.assignedByName}</span></p>
-                {pendingAssignment.notes && (
-                  <p className="text-sm text-slate-500 italic border-t border-orange-200 pt-2 mt-2">"{pendingAssignment.notes}"</p>
-                )}
-              </div>
-              <p className="text-xs text-amber-700 font-medium mb-4">⚡ Head to Lead Ops to follow up immediately.</p>
-              <button
-                disabled={acknowledgeAssignmentMutation.isPending}
-                onClick={() => acknowledgeAssignmentMutation.mutate({ assignmentId: pendingAssignment.id })}
-                className="w-full rounded-xl bg-orange-500 hover:bg-orange-600 active:bg-orange-700 text-white font-bold py-3 text-sm transition flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {acknowledgeAssignmentMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowRight className="h-4 w-4" />
-                )}
-                Got it — Go to Lead Ops
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Lead assignment overlay is now handled globally by LeadAssignmentWatcher in App.tsx */}
 
       {/* ── Super-Alert Blocking Overlay ──────────────────────────────────────── */}
       {activeSuperAlert && (

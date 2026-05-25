@@ -5,6 +5,7 @@ import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense, useEffect, useState } from "react";
+import LeadAssignmentWatcher from "./components/LeadAssignmentWatcher";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
 
@@ -205,6 +206,7 @@ function App() {
             <Toaster />
             <Router />
             <GlobalOpsChat />
+            <LeadAssignmentWatcher />
           </TooltipProvider>
         </ThemeProvider>
       </OpsChatProvider>
