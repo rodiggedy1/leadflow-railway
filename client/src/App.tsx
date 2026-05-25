@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { lazy, Suspense, useEffect, useState } from "react";
 import LeadAssignmentWatcher from "./components/LeadAssignmentWatcher";
+import SuperAlertWatcher from "./components/SuperAlertWatcher";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
 
@@ -207,6 +208,7 @@ function App() {
             <Router />
             <GlobalOpsChat />
             <LeadAssignmentWatcher />
+            <SuperAlertWatcher />
           </TooltipProvider>
         </ThemeProvider>
       </OpsChatProvider>
