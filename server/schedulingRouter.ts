@@ -801,16 +801,27 @@ export const schedulingRouter = router({
         }));
       }
 
-      // Group jobs by team, sort by serviceDateTime
-      // Skip jobs that are explicitly unassigned (isManual=2) — they are hidden from the UI
-      // and must not participate in the consecutive drive time chain.
+      // Build teamById for fast lookup
+      const teamById = new Map(teams.map(t => [t.id, t]));
+
+      // Group jobs by team — use the saved assignment's teamId (same as the UI),
+      // falling back to the Launch27 teamName for jobs with no saved assignment.
+      // Skip jobs explicitly unassigned (isManual=2).
       const jobsByTeam = new Map<string, typeof jobs>();
       for (const j of jobs) {
-        if (!j.teamName) continue;
         const asgn = assignmentMap.get(j.id);
         if (asgn?.isManual === 2) continue; // explicitly unassigned — skip
-        if (!jobsByTeam.has(j.teamName)) jobsByTeam.set(j.teamName, []);
-        jobsByTeam.get(j.teamName)!.push(j);
+        let effectiveTeamName: string | null = null;
+        if (asgn) {
+          // Job has a saved assignment — use that team
+          effectiveTeamName = teamById.get(asgn.teamId)?.name ?? null;
+        } else if (j.teamName && teamByName.has(j.teamName)) {
+          // No saved assignment — use Launch27 team name
+          effectiveTeamName = j.teamName;
+        }
+        if (!effectiveTeamName) continue;
+        if (!jobsByTeam.has(effectiveTeamName)) jobsByTeam.set(effectiveTeamName, []);
+        jobsByTeam.get(effectiveTeamName)!.push(j);
       }
       for (const [, teamJobs] of Array.from(jobsByTeam)) {
         teamJobs.sort((a: typeof jobs[0], b: typeof jobs[0]) => {
