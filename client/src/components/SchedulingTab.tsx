@@ -289,9 +289,9 @@ function JobCard({
                   <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-purple-300 text-purple-600 bg-purple-50">Move In/Out</Badge>
                 )}
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400">
-                <MapPin className="w-3 h-3 shrink-0" />
-                <span className="truncate">{job.jobAddress ?? "No address"}</span>
+              <div className="flex items-start gap-1 text-xs text-gray-400">
+                <MapPin className="w-3 h-3 shrink-0 mt-0.5" />
+                <span className="break-words min-w-0 flex-1">{job.jobAddress ?? "No address"}</span>
               </div>
               {(job.serviceType || job.frequency) && (
                 <div className="flex items-center gap-1.5 mt-0.5">
