@@ -814,7 +814,8 @@ export const schedulingRouter = router({
         let effectiveTeamName: string | null = null;
         if (asgn) {
           // Job has a saved assignment — use that team
-          effectiveTeamName = teamById.get(asgn.teamId)?.name ?? null;
+          // Cast to Number to handle MySQL returning int columns as strings
+          effectiveTeamName = teamById.get(Number(asgn.teamId))?.name ?? null;
         } else if (j.teamName && teamByName.has(j.teamName)) {
           // No saved assignment — use Launch27 team name
           effectiveTeamName = j.teamName;
