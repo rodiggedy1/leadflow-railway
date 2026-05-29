@@ -1153,47 +1153,8 @@ const MessageList = memo(function MessageList({
                   );
                 }
 
-                // ── Call summary card (cool blue) ────────────────────────────────
-                if (isCallSummary) {
-                  const recordingMatch = msg.body.match(/\[Recording\]\((https?:\/\/[^)]+)\)/);
-                  const recordingUrl = msg.mediaUrl || (recordingMatch ? recordingMatch[1] : null);
-                  const cleanBody = msg.body.replace(/\n?🎙️\s*\[Recording\]\([^)]+\)/, "").trim();
-                  const bodyLines = cleanBody.split("\n").filter(Boolean);
-                  const headLine = bodyLines[0]?.replace(/\*\*/g, "").replace(/^📱\s*/, "") ?? "";
-                  const summaryLines = bodyLines.slice(1).map(l => l.replace(/^📋\s*/, ""));
-                  return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
-                        {/* Header band */}
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
-                          <span className="text-sm">📞</span>
-                          <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">AI Call Summary</span>
-                          <span className="ml-auto text-[10px] text-slate-500">{fmtMsgTime(msg.createdAt)}</span>
-                        </div>
-                        {/* Headline row */}
-                        <div className="px-3 pt-2.5 pb-1.5 bg-slate-50 border-b border-slate-100">
-                          <p className="text-sm font-medium text-slate-700">{headLine}</p>
-                        </div>
-                        {/* Summary */}
-                        <div className="px-3 py-2.5 bg-white">
-                          {summaryLines.map((line, i) => (
-                            <p key={i} className="text-sm text-slate-600 leading-relaxed">{line}</p>
-                          ))}
-                          {recordingUrl && (
-                            <div className="mt-2.5">
-                              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
-                              <audio
-                                controls
-                                src={recordingUrl}
-                                className="w-full h-8 rounded-lg"
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                }
+                // Call summary — hidden per user request
+                if (isCallSummary) return null;
 
                 // ── New Lead card (emerald/green) ─────────────────────────────────
                 if (msg.quickAction === "new_lead") {
