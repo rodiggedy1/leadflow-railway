@@ -891,6 +891,100 @@ type MessageListProps = {
   setCenterView: (v: "chat" | "issues" | "calls") => void;
   todayCallCount: number;
 };
+
+// ── Collapsible Call Debrief Card ────────────────────────────────────────────
+function CallDebriefCard({
+  msgId, grade, wentWell, improve, nextLine, recordingUrl, callerName, callerPhone, createdAt,
+}: {
+  msgId: number; grade: string | null; wentWell: string | null; improve: string | null;
+  nextLine: string | null; recordingUrl: string | null; callerName: string | null;
+  callerPhone: string | null; createdAt: Date;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const gradeColors: Record<string, string> = {
+    A: "bg-green-100 text-green-700 border-green-300",
+    B: "bg-blue-100 text-blue-700 border-blue-300",
+    C: "bg-amber-100 text-amber-700 border-amber-300",
+    D: "bg-orange-100 text-orange-700 border-orange-300",
+    F: "bg-red-100 text-red-700 border-red-300",
+  };
+  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
+  const hasDetails = !!(wentWell || improve || nextLine);
+  return (
+    <div key={msgId} className="flex justify-center my-2 px-4">
+      <div className="w-full max-w-sm rounded-[20px] border border-purple-200 bg-purple-50 shadow-sm overflow-hidden">
+        {/* Always-visible header — click to expand */}
+        <button
+          className="w-full p-4 flex items-center justify-between text-left hover:bg-purple-100/40 transition-colors"
+          onClick={() => setExpanded(v => !v)}
+        >
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200 shrink-0">
+              <Phone className="h-3 w-3 text-purple-600" />
+            </div>
+            <div>
+              <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
+              {(callerName || callerPhone) && (
+                <p className="text-xs font-medium text-purple-900 mt-0.5">{callerName ?? callerPhone}</p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {grade && (
+              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 text-xs font-bold ${gradeColor}`}>
+                {grade}
+              </span>
+            )}
+            <span className="text-[10px] text-purple-400">{fmtMsgTime(createdAt)}</span>
+            {hasDetails && (
+              <ChevronDown className={cn("h-3.5 w-3.5 text-purple-400 transition-transform duration-200", expanded && "rotate-180")} />
+            )}
+          </div>
+        </button>
+        {/* Audio player — always visible */}
+        {recordingUrl && (
+          <div className="px-4 pb-3">
+            <audio controls src={recordingUrl} className="w-full h-8 rounded-xl" style={{ accentColor: "#7c3aed" }} />
+          </div>
+        )}
+        {/* Expandable details */}
+        {hasDetails && expanded && (
+          <div className="px-4 pb-4 animate-in slide-in-from-top-1 duration-150">
+            <div className="border-t border-purple-200/70 mb-3" />
+            {wentWell && (
+              <div className="mb-2">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-green-500 text-xs">✔</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
+                </div>
+                <p className="text-xs text-purple-800 leading-relaxed pl-4">{wentWell}</p>
+              </div>
+            )}
+            {improve && (
+              <>
+                <div className="border-t border-purple-200/50 mb-2" />
+                <div className="mb-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className="text-amber-500 text-xs">▲</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
+                  </div>
+                  <p className="text-xs text-purple-800 leading-relaxed pl-4">{improve}</p>
+                </div>
+              </>
+            )}
+            {nextLine && (
+              <div className="rounded-2xl bg-white border border-purple-200 px-3 py-2">
+                <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
+                <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
@@ -1598,81 +1692,19 @@ const MessageList = memo(function MessageList({
                   const recordingUrl = (meta.recordingUrl as string | null) ?? null;
                   const callerName = (meta.callerName as string | null) ?? null;
                   const callerPhone = (meta.callerPhone as string | null) ?? null;
-                  const gradeColors: Record<string, string> = {
-                    A: "bg-green-100 text-green-700 border-green-300",
-                    B: "bg-blue-100 text-blue-700 border-blue-300",
-                    C: "bg-amber-100 text-amber-700 border-amber-300",
-                    D: "bg-orange-100 text-orange-700 border-orange-300",
-                    F: "bg-red-100 text-red-700 border-red-300",
-                  };
-                  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
                   return (
-                    <div key={msg.id} className="flex justify-center my-2 px-4">
-                      <div className="w-full max-w-sm rounded-[20px] border border-purple-200 bg-purple-50 shadow-sm p-4">
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200">
-                              <Phone className="h-3 w-3 text-purple-600" />
-                            </div>
-                            <div>
-                              <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
-                              {(callerName || callerPhone) && (
-                                <p className="text-xs font-medium text-purple-900 mt-0.5">{callerName ?? callerPhone}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {grade && (
-                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 text-xs font-bold ${gradeColor}`}>
-                                {grade}
-                              </span>
-                            )}
-                            <span className="text-[10px] text-purple-400">{fmtMsgTime(msg.createdAt)}</span>
-                          </div>
-                        </div>
-                        {/* Audio player */}
-                        {recordingUrl && (
-                          <div className="mb-3">
-                            <audio
-                              controls
-                              src={recordingUrl}
-                              className="w-full h-8 rounded-xl"
-                              style={{ accentColor: "#7c3aed" }}
-                            />
-                          </div>
-                        )}
-                        <div className="border-t border-purple-200/70 mb-3" />
-                        {/* Went well */}
-                        {wentWell && (
-                          <div className="mb-2">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-green-500 text-xs">✔</span>
-                              <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
-                            </div>
-                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{wentWell}</p>
-                          </div>
-                        )}
-                        <div className="border-t border-purple-200/50 mb-2" />
-                        {/* Improve */}
-                        {improve && (
-                          <div className="mb-3">
-                            <div className="flex items-center gap-1.5 mb-1">
-                              <span className="text-amber-500 text-xs">▲</span>
-                              <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
-                            </div>
-                            <p className="text-xs text-purple-800 leading-relaxed pl-4">{improve}</p>
-                          </div>
-                        )}
-                        {/* Next line */}
-                        {nextLine && (
-                          <div className="rounded-2xl bg-white border border-purple-200 px-3 py-2">
-                            <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
-                            <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <CallDebriefCard
+                      key={msg.id}
+                      msgId={msg.id}
+                      grade={grade}
+                      wentWell={wentWell}
+                      improve={improve}
+                      nextLine={nextLine}
+                      recordingUrl={recordingUrl}
+                      callerName={callerName}
+                      callerPhone={callerPhone}
+                      createdAt={msg.createdAt}
+                    />
                   );
                 }
                 // ── Stale ETA alert card (amber) ──────────────────────────────────
