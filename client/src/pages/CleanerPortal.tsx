@@ -2122,13 +2122,14 @@ export default function CleanerPortal() {
 
   // Weekly earnings: Mon–Sun of the selected week (weekOffset=0 means current week)
   const weekStart = (() => {
-    const todayStr = getTodayET();
+    const todayStr = getTodayET(); // already ET date string YYYY-MM-DD
     const [y, m, d] = todayStr.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    const day = dt.getDay(); // 0=Sun
-    const diff = day === 0 ? -6 : 1 - day;
-    dt.setDate(dt.getDate() + diff + weekOffset * 7);
-    return dt.toLocaleDateString("en-CA");
+    // Use a noon UTC time so getDay() in any timezone matches the ET date
+    const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+    const day = dt.getUTCDay(); // 0=Sun — safe because noon UTC is the same calendar day in ET
+    const diff = day === 0 ? -6 : 1 - day; // shift back to Monday
+    dt.setUTCDate(dt.getUTCDate() + diff + weekOffset * 7);
+    return dt.toISOString().slice(0, 10); // YYYY-MM-DD
   })();
   const weekEnd = addDays(weekStart, 6);
 
