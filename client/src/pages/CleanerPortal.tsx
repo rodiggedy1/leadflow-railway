@@ -2120,15 +2120,15 @@ export default function CleanerPortal() {
     { enabled: !!meQuery.data, staleTime: 5 * 60 * 1000 }
   );
 
-  // Weekly earnings: Mon–Sun of the selected week (weekOffset=0 means current week)
+  // Weekly earnings: Sun–Sat of the selected week (weekOffset=0 means current week)
   const weekStart = (() => {
     const todayStr = getTodayET(); // already ET date string YYYY-MM-DD
     const [y, m, d] = todayStr.split("-").map(Number);
-    // Use a noon UTC time so getDay() in any timezone matches the ET date
+    // Use noon UTC so getUTCDay() matches the ET calendar date on any device timezone
     const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
-    const day = dt.getUTCDay(); // 0=Sun — safe because noon UTC is the same calendar day in ET
-    const diff = day === 0 ? -6 : 1 - day; // shift back to Monday
-    dt.setUTCDate(dt.getUTCDate() + diff + weekOffset * 7);
+    const day = dt.getUTCDay(); // 0=Sun
+    // Shift back to the most recent Sunday (day=0 means already Sunday, diff=0)
+    dt.setUTCDate(dt.getUTCDate() - day + weekOffset * 7);
     return dt.toISOString().slice(0, 10); // YYYY-MM-DD
   })();
   const weekEnd = addDays(weekStart, 6);
