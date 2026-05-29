@@ -2076,6 +2076,7 @@ export default function CleanerPortal() {
   const { t, i18n } = useTranslation();
   const [date, setDate] = useState(getTodayET);
   const [activeTab, setActiveTab] = useState<"today" | "week">("today");
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week, -1 = last week, etc.
   const [showCheckin, setShowCheckin] = useState(false);
   const [showMorningPrompt, setShowMorningPrompt] = useState(false);
   const utils = trpc.useUtils();
@@ -2119,13 +2120,14 @@ export default function CleanerPortal() {
     { enabled: !!meQuery.data, staleTime: 5 * 60 * 1000 }
   );
 
-  // Weekly earnings: Mon–Sun of the current week
+  // Weekly earnings: Mon–Sun of the selected week (weekOffset=0 means current week)
   const weekStart = (() => {
-    const [y, m, d] = date.split("-").map(Number);
+    const todayStr = getTodayET();
+    const [y, m, d] = todayStr.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
     const day = dt.getDay(); // 0=Sun
     const diff = day === 0 ? -6 : 1 - day;
-    dt.setDate(dt.getDate() + diff);
+    dt.setDate(dt.getDate() + diff + weekOffset * 7);
     return dt.toLocaleDateString("en-CA");
   })();
   const weekEnd = addDays(weekStart, 6);
@@ -2339,6 +2341,52 @@ export default function CleanerPortal() {
         {activeTab === "week" ? (
           /* ── This Week View ── */
           <div className="space-y-4">
+            {/* Week navigation */}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="icon"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700 shrink-0"
+                onClick={() => setWeekOffset(o => o - 1)}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <div className="flex-1 text-center">
+                <p className="text-white font-semibold text-sm">
+                  {weekOffset === 0 ? t("tabs.thisWeek") : `${formatDate(weekStart).replace(/,.*/, "")} – ${formatDate(weekEnd)}`}
+                </p>
+                {weekOffset !== 0 && (
+                  <p className="text-slate-500 text-xs mt-0.5">{weekStart} – {weekEnd}</p>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                className={`border-slate-600 shrink-0 ${
+                  weekOffset === 0
+                    ? "text-slate-600 opacity-40 cursor-not-allowed"
+                    : "text-slate-300 hover:bg-slate-700"
+                }`}
+                onClick={() => weekOffset < 0 && setWeekOffset(o => o + 1)}
+                disabled={weekOffset === 0}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Jump to current week */}
+            {weekOffset !== 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-slate-400 hover:text-white border border-slate-700"
+                onClick={() => setWeekOffset(0)}
+              >
+                <CalendarDays className="w-3.5 h-3.5 mr-1.5" />
+                {t("tabs.thisWeek")}
+              </Button>
+            )}
+
             {/* Weekly grand total */}
             <div className="bg-gradient-to-r from-blue-900/40 to-slate-800 rounded-xl p-4 border border-blue-700/30">
               <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-1">{t("week.total")}</p>
