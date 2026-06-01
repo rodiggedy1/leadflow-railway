@@ -1376,7 +1376,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   const { data: channelMsgs = [], isLoading: channelLoading } = trpc.opsChat.listChannelMessages.useQuery(
     { channel: activeChannel },
-    { enabled: isAuthenticated && activeTab === "channels", refetchInterval: 60_000 }
+    { enabled: isAuthenticated, refetchInterval: 60_000 }
   );
 
   const { data: channelCounts } = trpc.opsChat.getChannelCounts.useQuery(undefined, {
