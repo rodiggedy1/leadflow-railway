@@ -44,7 +44,7 @@ export async function sendSms({ to, content, mediaUrl, fromNumberId: fromNumberI
   const fromNumberId = fromNumberIdOverride || ENV.openPhoneNumberId;
 
   if (!apiKey || !fromNumberId) {
-    console.error("[OpenPhone] Missing API key or phone number ID");
+    console.error(`[OpenPhone] CREDENTIALS CHECK FAILED — apiKey present: ${!!apiKey}, fromNumberId value: "${fromNumberId}", fromNumberIdOverride: "${fromNumberIdOverride}", ENV.openPhoneNumberId: "${ENV.openPhoneNumberId}"`);
     return { success: false, error: "OpenPhone credentials not configured" };
   }
 
