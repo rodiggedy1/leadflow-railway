@@ -230,7 +230,7 @@ describe("notifyNewLeadViaCall", () => {
 
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(options.body as string);
-    expect(body.phoneNumberId).toBe("f2f1c044-c70a-4d73-a755-051f8a2a96e4");
+    expect(body.phoneNumberId).toBe("61431a3e-8144-4acd-b394-8f600ec3a473"); // Twilio-backed (was: f2f1c044-c70a-4d73-a755-051f8a2a96e4)
   });
 
   it("script does not contain doubled words (no 'bedrooms bedrooms')", async () => {

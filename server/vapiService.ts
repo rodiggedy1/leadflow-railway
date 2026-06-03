@@ -977,11 +977,12 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
   // ── Guard: skip ALL post-call processing for outbound FieldMgmt / LeadAlert calls ──
   // These are calls WE placed to cleaners or the CS team — they are not inbound customer calls.
   // Processing them would fire spurious notifyOwner alerts, command chat cards, and missed-call SMSes.
-  // IMPORTANT: The same phoneNumberId (f2f1c044) is also used when inbound calls are forwarded
+  // IMPORTANT: The same phoneNumberId is also used when inbound calls are forwarded
   // from 202-888-5362 through Vapi. So we must NOT skip based on phoneNumberId alone.
   // Instead, check if a fieldMgmtCalls record exists for this vapiCallId — only outbound
   // FieldMgmt/LeadAlert calls have a pre-inserted record. Real inbound forwarded calls do not.
-  const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+  // ROLLBACK: old VAPI-bought number: f2f1c044-c70a-4d73-a755-051f8a2a96e4
+  const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
   if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
     // Check if this is a real FieldMgmt outbound call (has a pre-inserted record)
     const dbCheck = await getDb();
@@ -1034,7 +1035,8 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
     }
     // Also skip if the call's phoneNumberId matches the outbound alert phone number ID
     // (belt-and-suspenders check for FieldMgmtAlert / LeadAlert calls)
-    const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+    // ROLLBACK: old VAPI-bought number: f2f1c044-c70a-4d73-a755-051f8a2a96e4
+    const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
     if (call.phoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID) {
       console.log(`[Vapi] Skipping missed-call SMS for outbound alert call (phoneNumberId=${call.phoneNumberId}, reason: ${endedReason})`);
       return;

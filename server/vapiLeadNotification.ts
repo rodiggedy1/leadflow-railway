@@ -18,9 +18,10 @@ const VAPI_API_BASE = "https://api.vapi.ai";
 
 /**
  * The VAPI phone number ID used as the "from" number for outbound calls.
- * Discovered via GET /phone-number — +1 (934) 789-8077.
+ * Twilio-backed (+1 202-851-9290) — no daily outbound cap.
+ * ROLLBACK: old VAPI-bought number (daily limit): f2f1c044-c70a-4d73-a755-051f8a2a96e4
  */
-const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed, no daily cap
 
 /**
  * The primary number to call for new-lead alerts (configurable via DB settings).

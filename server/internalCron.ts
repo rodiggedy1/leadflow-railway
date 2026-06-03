@@ -49,7 +49,7 @@ import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
 import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
 import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
-import { and, eq, isNull, lte, lt, gte, isNotNull, desc } from "drizzle-orm";
+import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
   try {
@@ -496,8 +496,10 @@ export function startInternalCron(): void {
   });
 
   // ── Ops Reminder fire: every minute ────────────────────────────────────────
-  // Checks ops_reminders for rows where triggerAt <= now AND firedAt IS NULL,
-  // posts a reminder card to the channel, then stamps firedAt.
+  // Atomic claim pattern: stamp firedAt FIRST (UPDATE WHERE firedAt IS NULL),
+  // check affectedRows — only insert the chat message if we claimed the row.
+  // This prevents duplicate fires if a DB flake causes the update to fail after
+  // the insert already succeeded, or if two processes race on the same row.
   cron.schedule("0 * * * * *", async () => {
     try {
       const db = await getDb();
@@ -508,7 +510,14 @@ export function startInternalCron(): void {
         .from(opsReminders)
         .where(and(lte(opsReminders.triggerAt, now), isNull(opsReminders.firedAt)))
         .limit(20);
+      let fired = 0;
       for (const r of due) {
+        // Atomic claim: stamp firedAt only if still NULL — safe against races and DB flakes
+        const claimResult = await db.execute(
+          sql`UPDATE ops_reminders SET firedAt = ${now} WHERE id = ${r.id} AND firedAt IS NULL`
+        );
+        const claimed = (claimResult as any)?.[0]?.affectedRows ?? (claimResult as any)?.rowsAffected ?? 0;
+        if (claimed === 0) continue; // another process already claimed this reminder
         await db.insert(opsChatMessages).values({
           channel: r.channel,
           authorName: r.authorName,
@@ -517,13 +526,10 @@ export function startInternalCron(): void {
           quickAction: "reminder",
           metadata: JSON.stringify({ reminderBody: r.body, setBy: r.authorName }),
         });
-        await db
-          .update(opsReminders)
-          .set({ firedAt: now })
-          .where(lte(opsReminders.id, r.id));
+        fired++;
       }
-      if (due.length > 0) {
-        console.log(`[InternalCron] OpsReminders fired: ${due.length}`);
+      if (fired > 0) {
+        console.log(`[InternalCron] OpsReminders fired: ${fired}`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
