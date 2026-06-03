@@ -345,7 +345,8 @@ export function registerVapiWebhookRoute(app: Express): void {
           // These use a dedicated Vapi phone number ID and have customer.number = the
           // CS office line. Without this guard they fire spurious "call received" SMSes
           // even though no call is stored in the calls area.
-          const VAPI_OUTBOUND_PHONE_NUMBER_ID = "f2f1c044-c70a-4d73-a755-051f8a2a96e4";
+          // ROLLBACK: old VAPI-bought number: f2f1c044-c70a-4d73-a755-051f8a2a96e4
+          const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473"; // Twilio-backed
           const BUSINESS_PHONE = "+12028885362";
           const callPhoneNumberId = callObj?.phoneNumberId as string | undefined;
           const isOutboundAlertCall = callPhoneNumberId === VAPI_OUTBOUND_PHONE_NUMBER_ID;
