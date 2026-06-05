@@ -859,24 +859,10 @@ export const schedulingRouter = router({
         }
       }
 
-      // Compute all drive times in one matrix call
-      if (allPairPoints.length > 0) {
-        const coordKey = (lat: number, lng: number) => `${lat.toFixed(6)},${lng.toFixed(6)}`;
-        const uniquePoints: LatLng[] = [];
-        const pointIndex = new Map<string, number>();
-        for (const p of allPairPoints) {
-          for (const [lat, lng] of [[p.fromLat, p.fromLng], [p.toLat, p.toLng]] as [number, number][]) {
-            const key = coordKey(lat, lng);
-            if (!pointIndex.has(key)) { pointIndex.set(key, uniquePoints.length); uniquePoints.push({ lat, lng }); }
-          }
-        }
-        const matrix = await buildTravelMatrix(uniquePoints);
-        for (const p of allPairPoints) {
-          const fromIdx = pointIndex.get(coordKey(p.fromLat, p.fromLng))!;
-          const toIdx = pointIndex.get(coordKey(p.toLat, p.toLng))!;
-          const secs = matrix[fromIdx]?.[toIdx];
-          driveMap.set(p.toJobId, secs != null && secs > 0 ? secs : Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10));
-        }
+      // Use haversine straight-line distance for display drive times (no Google API call on page load).
+      // Accurate drive times are computed by the optimizer and stored in schedule_assignments.driveTimeSecs.
+      for (const p of allPairPoints) {
+        driveMap.set(p.toJobId, Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10));
       }
 
       // estimatedDriveMap alias — used below when building enriched jobs
@@ -907,13 +893,9 @@ export const schedulingRouter = router({
               rationale: null as AssignmentRationale | null,
             }
           : null;
-        // Always use the freshly-computed drive time from the live N×N matrix,
-        // overriding whatever stale value was stored in schedule_assignments.
-        const freshDriveSecs = estimatedDriveMap.get(j.id) ?? null;
-        const savedWithFreshDrive = savedAssignment && freshDriveSecs != null
-          ? { ...savedAssignment, driveTimeSecs: freshDriveSecs }
-          : savedAssignment;
-        const baseAssignment = isExplicitlyUnassigned ? null : (savedWithFreshDrive ?? syntheticAssignment);
+        // Use saved driveTimeSecs from schedule_assignments (set by the optimizer).
+        // The haversine estimate in estimatedDriveMap is only used for the synthetic assignment fallback.
+        const baseAssignment = isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment);
         // Compute badge flags
         const isNewClient = j.bookingStatus === "new";
         const isMoveInOut = /move.?in|move.?out/i.test(j.serviceType ?? "");
@@ -1152,15 +1134,8 @@ export const schedulingRouter = router({
         return { assigned: simpleAssignments.length, message: `Assigned ${simpleAssignments.length} jobs (no home addresses set — add team home addresses for route optimization).` };
       }
 
-      const allPoints: LatLng[] = [
-        ...teamConfigs.map(t => ({ lat: t.homeLat, lng: t.homeLng })),
-        ...geocoded.map(j => ({ lat: j.lat, lng: j.lng })),
-      ];
-
-      // 5. Build travel matrix
-      const travelMatrix = await buildTravelMatrix(allPoints);
-
-       // 6a/6b. Locks already loaded above — alias for clarity
+      // 5. (allPoints + travelMatrix are built below for the filtered VRP set only)
+      // 6a/6b. Locks already loaded above — alias for clarity
       const lockedTeamIds = _lockedTeamIds;
       const existingForLockedTeams = _existingForLockedTeams;
       const lockedTeamJobIdSet = _lockedTeamJobIdSet;
@@ -1190,7 +1165,7 @@ export const schedulingRouter = router({
       ];
       const vrpTravelMatrix = vrpGeocodedJobs.length > 0
         ? await buildTravelMatrix(vrpAllPoints)
-        : travelMatrix;
+        : [];
       // 6c. Solve VRP (only for unlocked jobs on unlocked teams)
       const assignments = vrpGeocodedJobs.length > 0
         ? solveVRP(vrpGeocodedJobs, vrpTeamConfigs, vrpTravelMatrix, vrpAllPoints, vrpTeamConfigs.length)
