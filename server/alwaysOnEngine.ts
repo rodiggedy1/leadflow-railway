@@ -54,8 +54,9 @@ export function getFrequencyWindowDays(frequency: string | null | undefined): nu
 
   // Check biweekly BEFORE weekly to avoid false weekly match
   if (f.includes("biweekly") || f.includes("bi-weekly") || f.includes("bi weekly") || f.includes("every 2 week") || f.includes("every other week")) return 14;
-  if (f.includes("week") && !f.includes("bi") && !f.includes("every 2") && !f.includes("every 3") && !f.includes("every 6") && !f.includes("every 8") && !f.includes("3 week") && !f.includes("6 week") && !f.includes("8 week") && !f.includes("other")) return 7;
-  if (f.includes("every 3 week") || f.includes("3 week")) return 21;
+  // Check tri-weekly (every 3 weeks) BEFORE weekly to avoid false weekly match
+  if (f.includes("tri-weekly") || f.includes("triweekly") || f.includes("tri weekly") || f.includes("every 3 week") || f.includes("3 week")) return 21;
+  if (f.includes("week") && !f.includes("bi") && !f.includes("tri") && !f.includes("every 2") && !f.includes("every 3") && !f.includes("every 6") && !f.includes("every 8") && !f.includes("3 week") && !f.includes("6 week") && !f.includes("8 week") && !f.includes("other")) return 7;
   if (f.includes("month") && !f.includes("bi") && !f.includes("every 2")) return 30;
   if (f.includes("bimonthly") || f.includes("bi-monthly") || f.includes("every 2 month") || f.includes("every 6 week") || f.includes("6 week")) return 56;
   if (f.includes("every 8 week") || f.includes("8 week")) return 56;

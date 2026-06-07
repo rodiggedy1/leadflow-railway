@@ -561,6 +561,50 @@ export function registerWebhookRoutes(app: Express) {
       const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent
 
       if (!session) {
+        // ── Active Recurring Customer Guard ────────────────────────────────────────────────────────────────────
+        // Before creating a new quote session, check if this phone belongs to an active recurring customer.
+        // If so, do NOT start the AI quote flow — send a friendly reply and alert the team instead.
+        try {
+          const { getFrequencyWindowDays, isRecurringFrequency } = await import("./alwaysOnEngine");
+          const recentJobs = await db
+            .select({ frequency: completedJobs.frequency, jobDate: completedJobs.jobDate })
+            .from(completedJobs)
+            .where(eq(completedJobs.phone, fromPhone))
+            .orderBy(desc(completedJobs.jobDate))
+            .limit(1);
+          if (recentJobs.length > 0) {
+            const { frequency, jobDate } = recentJobs[0]!;
+            if (isRecurringFrequency(frequency) && jobDate) {
+              const windowDays = getFrequencyWindowDays(frequency)!;
+              const bufferDays = 7;
+              const jobMs = new Date(jobDate + "T00:00:00Z").getTime();
+              const daysSince = Math.floor((Date.now() - jobMs) / (1000 * 60 * 60 * 24));
+              if (daysSince < windowDays + bufferDays) {
+                // Active recurring customer — do not start quote flow
+                console.log(`[Webhook] Active recurring customer ${fromPhone} (${frequency}, ${daysSince}d since last job) — skipping quote session creation.`);
+                await sendSms({
+                  to: fromPhone,
+                  content: `Hi there! It looks like you're already one of our recurring customers — thanks for reaching out! 😊 We'll have someone from our team follow up with you shortly. You can also call us at 202-888-5362.`,
+                });
+                await db.insert(opsChatMessages).values({
+                  cleanerJobId: null,
+                  channel: 'command',
+                  authorName: '📲 Recurring Customer Inbound',
+                  authorRole: 'system',
+                  body: `📲 **Recurring customer texted in** — ${fromPhone} (${frequency}, last job ${jobDate})\n\n"${inboundText}"\n\nAuto-replied with hold message. Please follow up.`,
+                  mediaUrl: null,
+                  quickAction: null,
+                  metadata: JSON.stringify({ leadPhone: fromPhone, frequency, jobDate, arrivedAt: Date.now() }),
+                });
+                return;
+              }
+            }
+          }
+        } catch (recurringCheckErr) {
+          console.error('[Webhook] Failed to check recurring customer status:', recurringCheckErr);
+          // Fall through — create session as normal if check fails
+        }
+
         // ── New Inbound Lead ────────────────────────────────────────────────────────────────────────────────────
         // Unknown number texted in — create a normal new lead session so it appears
         // in the Leads list and the AI can engage it like any other inbound lead.
