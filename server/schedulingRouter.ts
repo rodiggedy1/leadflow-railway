@@ -1240,10 +1240,12 @@ export const schedulingRouter = router({
         assignmentsByTeam.get(a.teamId)!.push(a);
       }
 
-      // For each team, sort by routeOrder and compute drive times via Google
+      // For each team, sort by appointment time (same order shown in UI) and compute drive times via Google
       for (const [teamId, teamAssignments] of Array.from(assignmentsByTeam.entries())) {
         const team = teamConfigById.get(teamId);
-        teamAssignments.sort((a, b) => a.routeOrder - b.routeOrder);
+        teamAssignments.sort((a, b) => (a.estimatedArrivalMs ?? 0) - (b.estimatedArrivalMs ?? 0));
+        // Fix routeOrder to match the sorted position so it's always correct
+        teamAssignments.forEach((a, idx) => { a.routeOrder = idx; });
 
         for (let i = 0; i < teamAssignments.length; i++) {
           const cur = teamAssignments[i];
