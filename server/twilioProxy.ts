@@ -2,10 +2,8 @@
  * twilioProxy.ts — Twilio Proxy helpers for masked cleaner ↔ client calls.
  *
  * Sessions are keyed by `job-{cleanerJobId}` as the Twilio uniqueName.
- * This makes the endpoint idempotent — if the session already exists,
- * Twilio returns it and we just fetch the proxy number. No DB storage needed.
- *
- * Sessions are closed (by uniqueName) when the job is marked complete.
+ * The cleaner dials their own proxy number → Twilio bridges to the client.
+ * Sessions are closed when the job is marked complete.
  */
 
 import twilio from "twilio";
@@ -21,9 +19,6 @@ function getClient() {
   return twilio(ACCOUNT_SID, AUTH_TOKEN);
 }
 
-/**
- * Normalize a phone number to E.164 format (+1XXXXXXXXXX for US numbers).
- */
 function toE164(phone: string): string {
   const digits = phone.replace(/\D/g, "");
   if (digits.length === 10) return `+1${digits}`;
@@ -33,10 +28,8 @@ function toE164(phone: string): string {
 
 /**
  * Get or create a Twilio Proxy session for a job.
- * Returns the proxy number the cleaner should dial to reach the client.
- *
- * Idempotent: if a session with uniqueName `job-{cleanerJobId}` already exists,
- * returns the existing proxy number without creating a new session.
+ * Returns the proxy number the CLEANER should dial to reach the client.
+ * Cleaner dials their proxy number → Twilio bridges to client's real number.
  */
 export async function getOrCreateProxySession(
   cleanerJobId: number,
@@ -50,28 +43,27 @@ export async function getOrCreateProxySession(
   const client = getClient();
   const uniqueName = `job-${cleanerJobId}`;
 
-  // Try to fetch an existing session first
-  let sessionSid: string;
+  // Try to fetch an existing session first (idempotent)
   try {
     const existing = await client.proxy.v1
       .services(PROXY_SERVICE_SID)
       .sessions(uniqueName)
       .fetch();
-    sessionSid = existing.sid;
 
-    // Session exists — fetch the cleaner participant's proxyIdentifier
     const participants = await client.proxy.v1
       .services(PROXY_SERVICE_SID)
-      .sessions(sessionSid)
+      .sessions(existing.sid)
       .participants.list();
 
-    const clientParticipant = participants.find(p => p.friendlyName === "Client");
-    if (clientParticipant?.proxyIdentifier) {
-      return clientParticipant.proxyIdentifier;
+    // Return the CLEANER's proxy number — the one they dial to reach the client
+    const cleanerParticipant = participants.find(p => p.friendlyName === "Cleaner");
+    if (cleanerParticipant?.proxyIdentifier) {
+      return cleanerParticipant.proxyIdentifier;
     }
-    // If we can't find the proxy number, fall through to recreate
+    // Session exists but can't find cleaner participant — close and recreate
+    await client.proxy.v1.services(PROXY_SERVICE_SID).sessions(existing.sid).remove().catch(() => {});
   } catch {
-    // Session doesn't exist yet — create it below
+    // Session doesn't exist yet — create below
   }
 
   // Create a new session
@@ -79,37 +71,30 @@ export async function getOrCreateProxySession(
     .services(PROXY_SERVICE_SID)
     .sessions.create({
       uniqueName,
-      ttl: 86400, // 24h safety TTL; we close manually on job completion
+      ttl: 86400,
     });
 
-  sessionSid = session.sid;
-
-  // Add cleaner as participant 1
-  await client.proxy.v1
+  // Add cleaner — capture their proxy number (this is what they dial)
+  const cleanerParticipant = await client.proxy.v1
     .services(PROXY_SERVICE_SID)
-    .sessions(sessionSid)
+    .sessions(session.sid)
     .participants.create({
       identifier: toE164(cleanerPhone),
       friendlyName: "Cleaner",
     });
 
-  // Add client as participant 2 — Twilio assigns the proxy number at this point
-  const clientParticipant = await client.proxy.v1
+  // Add client
+  await client.proxy.v1
     .services(PROXY_SERVICE_SID)
-    .sessions(sessionSid)
+    .sessions(session.sid)
     .participants.create({
       identifier: toE164(clientPhone),
       friendlyName: "Client",
     });
 
-  const proxyNumber = clientParticipant.proxyIdentifier;
+  const proxyNumber = cleanerParticipant.proxyIdentifier;
   if (!proxyNumber) {
-    // Clean up and surface a clear error
-    await client.proxy.v1
-      .services(PROXY_SERVICE_SID)
-      .sessions(sessionSid)
-      .remove()
-      .catch(() => {});
+    await client.proxy.v1.services(PROXY_SERVICE_SID).sessions(session.sid).remove().catch(() => {});
     throw new Error("No proxy number available — pool may be exhausted");
   }
 
