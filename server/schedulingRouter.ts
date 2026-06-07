@@ -1243,14 +1243,8 @@ export const schedulingRouter = router({
       // For each team, sort by appointment time (same order shown in UI) and compute drive times via Google
       for (const [teamId, teamAssignments] of Array.from(assignmentsByTeam.entries())) {
         const team = teamConfigById.get(teamId);
-        // Sort exactly as the UI does: estimatedArrivalMs first (appointment time), then routeOrder as tiebreaker
-        // This ensures same-time jobs respect the VRP's preferred ordering
-        teamAssignments.sort((a, b) => {
-          const ta = a.estimatedArrivalMs ?? 0;
-          const tb = b.estimatedArrivalMs ?? 0;
-          if (ta !== tb) return ta - tb;
-          return a.routeOrder - b.routeOrder;
-        });
+        // Sort by appointment time (estimatedArrivalMs) — matches the order shown in the UI
+        teamAssignments.sort((a, b) => (a.estimatedArrivalMs ?? 0) - (b.estimatedArrivalMs ?? 0));
         // Update routeOrder to match the final sorted position
         teamAssignments.forEach((a, idx) => { a.routeOrder = idx; });
 
