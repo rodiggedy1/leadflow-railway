@@ -844,7 +844,9 @@ export const schedulingRouter = router({
       const driveMap = new Map<number, number>(); // jobId -> drive secs from previous stop
       const firstJobIdByTeam = new Map<number, number>(); // teamId -> jobId of first job
 
-      // Collect all points needed for the distance matrix
+      // Collect drive time pairs ONLY for jobs with no saved assignment.
+      // Jobs with saved assignments already have driveTimeSecs from the DB — no Google call needed.
+      // This keeps Google API usage minimal: only fires after Reset or before first Optimize.
       const allPairPoints: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; toJobId: number }> = [];
 
       for (const [teamName, teamJobs] of Array.from(jobsByTeam)) {
@@ -852,23 +854,52 @@ export const schedulingRouter = router({
         if (!team) continue;
         // Record which job is first (earliest time = card 1)
         if (teamJobs[0]) firstJobIdByTeam.set(team.id, teamJobs[0].id);
-        // home → first job
-        if (teamJobs[0] && team.homeLat && team.homeLng) {
-          const geo = geoByAddress.get(teamJobs[0].jobAddress?.trim().toLowerCase() ?? "");
-          if (geo) allPairPoints.push({ fromLat: team.homeLat, fromLng: team.homeLng, toLat: geo.lat, toLng: geo.lng, toJobId: teamJobs[0].id });
+        // Only compute drive times for jobs that have no saved assignment
+        const unsavedJobs = teamJobs.filter(j => !assignmentMap.has(j.id) || assignmentMap.get(j.id)?.isManual === 2);
+        if (unsavedJobs.length === 0) continue;
+        // home → first unsaved job
+        if (unsavedJobs[0] && team.homeLat && team.homeLng) {
+          const geo = geoByAddress.get(unsavedJobs[0].jobAddress?.trim().toLowerCase() ?? "");
+          if (geo) allPairPoints.push({ fromLat: team.homeLat, fromLng: team.homeLng, toLat: geo.lat, toLng: geo.lng, toJobId: unsavedJobs[0].id });
         }
-        // job[i-1] → job[i]
-        for (let i = 1; i < teamJobs.length; i++) {
-          const prevGeo = geoByAddress.get(teamJobs[i - 1].jobAddress?.trim().toLowerCase() ?? "");
-          const currGeo = geoByAddress.get(teamJobs[i].jobAddress?.trim().toLowerCase() ?? "");
-          if (prevGeo && currGeo) allPairPoints.push({ fromLat: prevGeo.lat, fromLng: prevGeo.lng, toLat: currGeo.lat, toLng: currGeo.lng, toJobId: teamJobs[i].id });
+        // job[i-1] → job[i] for unsaved jobs
+        for (let i = 1; i < unsavedJobs.length; i++) {
+          const prevGeo = geoByAddress.get(unsavedJobs[i - 1].jobAddress?.trim().toLowerCase() ?? "");
+          const currGeo = geoByAddress.get(unsavedJobs[i].jobAddress?.trim().toLowerCase() ?? "");
+          if (prevGeo && currGeo) allPairPoints.push({ fromLat: prevGeo.lat, fromLng: prevGeo.lng, toLat: currGeo.lat, toLng: currGeo.lng, toJobId: unsavedJobs[i].id });
         }
       }
 
-      // Use haversine straight-line distance for display drive times (no Google API call on page load).
-      // Accurate drive times are computed by the optimizer and stored in schedule_assignments.driveTimeSecs.
-      for (const p of allPairPoints) {
-        driveMap.set(p.toJobId, Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10));
+      // Use Google Distance Matrix for real drive times on page load.
+      // Batched in chunks of 10 to stay within API limits.
+      // This only fires for jobs with no saved assignment (i.e. after Reset or before first Optimize).
+      if (allPairPoints.length > 0) {
+        const CHUNK = 10;
+        for (let ci = 0; ci < allPairPoints.length; ci += CHUNK) {
+          const chunk = allPairPoints.slice(ci, ci + CHUNK);
+          const origins = chunk.map(p => `${p.fromLat},${p.fromLng}`).join('|');
+          const destinations = chunk.map(p => `${p.toLat},${p.toLng}`).join('|');
+          try {
+            const result = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
+              origins,
+              destinations,
+              mode: 'driving',
+              units: 'metric',
+            });
+            chunk.forEach((p, idx) => {
+              const el = result?.rows?.[idx]?.elements?.[idx];
+              if (el?.status === 'OK') {
+                driveMap.set(p.toJobId, el.duration.value);
+              } else {
+                driveMap.set(p.toJobId, Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 16));
+              }
+            });
+          } catch {
+            chunk.forEach(p => {
+              driveMap.set(p.toJobId, Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 16));
+            });
+          }
+        }
       }
 
       // estimatedDriveMap alias — used below when building enriched jobs
