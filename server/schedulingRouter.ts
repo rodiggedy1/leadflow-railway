@@ -828,7 +828,13 @@ export const schedulingRouter = router({
         teamJobs.sort((a: typeof jobs[0], b: typeof jobs[0]) => {
           const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
           const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
-          return ta - tb;
+          if (ta !== tb) return ta - tb;
+          // Tiebreak by estimatedArrivalMs then routeOrder — must match frontend sort in SchedulingTab
+          const aa = assignmentMap.get(a.id);
+          const ab = assignmentMap.get(b.id);
+          const ea = aa?.estimatedArrivalMs ?? (aa?.routeOrder ?? 999) * 1e12;
+          const eb = ab?.estimatedArrivalMs ?? (ab?.routeOrder ?? 999) * 1e12;
+          return ea - eb;
         });
       }
 
