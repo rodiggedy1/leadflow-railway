@@ -23,6 +23,7 @@ import { notifyOwner } from "./_core/notification";
 import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms, sendClientEtaUpdateSms } from "./fieldMgmtEngine";
 import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
+import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,75 @@ export const cleanerRouter = router({
           .filter(r => r.cleanerJobId === job.id)
           .map(r => ({ id: r.id, label: r.appliedLabel, amount: r.appliedAmount, type: r.appliedType })),
       }));
+    }),
+
+  /**
+   * cleaner.getProxyNumber — get (or create) a Twilio Proxy masked number for a job.
+   * Idempotent: Twilio sessions are keyed by `job-{cleanerJobId}` so repeated calls
+   * return the same proxy number without creating duplicate sessions.
+   * Only works for today's active (non-completed) jobs.
+   */
+  getProxyNumber: cleanerProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Verify ownership and that this is today's active job
+      const jobRows = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          and(
+            eq(cleanerJobs.id, input.cleanerJobId),
+            eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+          )
+        )
+        .limit(1);
+
+      const job = jobRows[0];
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
+
+      // Only allow for today's jobs (ET date)
+      const todayET = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date()).replace(/(\d+)\/(\d+)\/(\d+)/, "$3-$1-$2");
+
+      if (job.jobDate !== todayET) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Call Client is only available for today\'s jobs" });
+      }
+
+      // Don't allow on completed jobs
+      if (job.bookingStatus === "completed") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This job is already completed" });
+      }
+
+      // Validate client phone
+      if (!job.customerPhone) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No client phone number on file for this job" });
+      }
+
+      // Get cleaner's phone from their profile
+      const profileRows = await db
+        .select({ phone: cleanerProfiles.phone })
+        .from(cleanerProfiles)
+        .where(eq(cleanerProfiles.id, ctx.cleaner.cleanerId))
+        .limit(1);
+
+      const cleanerPhone = profileRows[0]?.phone;
+      if (!cleanerPhone) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Your profile has no phone number on file" });
+      }
+
+      // Get or create Twilio Proxy session (idempotent via uniqueName)
+      const proxyNumber = await getOrCreateProxySession(
+        input.cleanerJobId,
+        cleanerPhone,
+        job.customerPhone
+      );
+
+      return { proxyNumber };
     }),
 
   /**
@@ -364,6 +434,12 @@ export const cleanerRouter = router({
         .update(cleanerJobs)
         .set(payUpdate as any)
         .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      // ── Twilio Proxy: Close session on job completion ────────────────────────────
+      // Fire-and-forget: close the Twilio Proxy session if one exists for this job
+      closeProxySession(input.cleanerJobId).catch(err =>
+        console.error("[TwilioProxy] closeProxySession error on markComplete:", err)
+      );
 
       // ── Field Management: Completion Flow ───────────────────────────────────────
       // Fire-and-forget: don't block the response
