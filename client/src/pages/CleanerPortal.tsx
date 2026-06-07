@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   Camera, Star, CheckCircle2, Clock, MapPin, DollarSign,
   ChevronLeft, ChevronRight, Upload, Loader2, LogOut, User,
-  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X
+  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X, Phone
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -155,6 +155,7 @@ type Job = {
   customerRating: number | null;
   missedSomething: number | null;
   photoSubmitted: number;
+  customerPhone: string | null;
   customerNotes: string | null;
   staffNotes: string | null;
   photos: { id: number; photoUrl: string; filename: string | null }[];
@@ -321,7 +322,7 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
   );
 }
 
-function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName }: {
+function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpdated, payRules, activeCustomRules, streakInfo, cleanerName, isToday }: {
   job: Job;
   allJobs: Job[];
   onPhotoUploaded: () => void;
@@ -331,6 +332,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
   activeCustomRules?: Array<{ id: number; label: string; type: string; amount: string; description: string | null }>;
   streakInfo?: { currentStreak: number; bestStreak: number } | null;
   cleanerName?: string;
+  isToday?: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showPayoutRules, setShowPayoutRules] = useState(false);
@@ -446,6 +448,16 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
 
   const toggleChecklistMutation = trpc.cleaner.toggleChecklistItem.useMutation({
     onError: (err) => toast.error(`Failed to save: ${err.message}`),
+  });
+
+  const [callingClient, setCallingClient] = useState(false);
+  const proxyMutation = trpc.cleaner.getProxyNumber.useMutation({
+    onSuccess: ({ proxyNumber }) => {
+      // Open native dialer — no extra step for the cleaner
+      window.location.href = `tel:${proxyNumber}`;
+    },
+    onError: (err) => toast.error(err.message),
+    onSettled: () => setCallingClient(false),
   });
 
   // Checklist gating: all items must be checked before Mark Complete
@@ -611,6 +623,25 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
             <p className="text-slate-400 text-sm mt-0.5">{job.serviceType}</p>
           )}
         </div>
+
+        {/* Call Client button — today's active jobs only */}
+        {isToday && job.bookingStatus !== "completed" && job.customerPhone && (
+          <button
+            onClick={() => {
+              setCallingClient(true);
+              proxyMutation.mutate({ cleanerJobId: job.id });
+            }}
+            disabled={callingClient}
+            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 disabled:opacity-60 text-white font-semibold text-sm rounded-xl py-3 transition-colors"
+          >
+            {callingClient ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Phone className="w-4 h-4" />
+            )}
+            {callingClient ? "Connecting..." : "Call Client"}
+          </button>
+        )}
 
         {/* Customer notes */}
         {job.customerNotes && (
@@ -2647,6 +2678,7 @@ export default function CleanerPortal() {
                 activeCustomRules={activeCustomRules}
                 streakInfo={streakInfo}
                 cleanerName={cleaner.name}
+                isToday={isToday}
               />
             ))}
 
