@@ -43,6 +43,7 @@ import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
 import { sendPushToAll } from "./webPush";
 import { registerBarkWebhookRoute } from "./barkWebhook";
+import { registerTwilioProxyWebhookRoute } from "./twilioProxyWebhook";
 import { registerEmailLeadWebhookRoute } from "./emailLeadWebhook";
 import { registerThumbTackWebhookRoute } from "./thumbtackWebhook";
 import { getSetting } from "./settingsRouter";
@@ -53,6 +54,9 @@ import { scoreAndCacheStatusById } from "./csStatusScorer";
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
   registerBarkWebhookRoute(app);
+
+  // Twilio Proxy call recording callback
+  registerTwilioProxyWebhookRoute(app);
 
   // Thumbtack lead integration (Zapier webhook)
   registerThumbTackWebhookRoute(app);
