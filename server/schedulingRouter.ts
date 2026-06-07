@@ -831,12 +831,10 @@ export const schedulingRouter = router({
           const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
           const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
           if (ta !== tb) return ta - tb;
-          // Tiebreak by estimatedArrivalMs then routeOrder — must match frontend sort in SchedulingTab
+          // Tiebreak by routeOrder — this matches the order drive times were calculated for in the optimizer
           const aa = assignmentMap.get(a.id);
           const ab = assignmentMap.get(b.id);
-          const ea = aa?.estimatedArrivalMs ?? (aa?.routeOrder ?? 999) * 1e12;
-          const eb = ab?.estimatedArrivalMs ?? (ab?.routeOrder ?? 999) * 1e12;
-          return ea - eb;
+          return (aa?.routeOrder ?? 999) - (ab?.routeOrder ?? 999);
         });
       }
 
