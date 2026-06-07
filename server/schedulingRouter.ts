@@ -540,7 +540,9 @@ function solveVRP(
     allRouteJobs.sort((a, b) => {
       const ta = jobs[a].serviceDateTime ? new Date(jobs[a].serviceDateTime!).getTime() : Infinity;
       const tb = jobs[b].serviceDateTime ? new Date(jobs[b].serviceDateTime!).getTime() : Infinity;
-      return ta - tb;
+      if (ta !== tb) return ta - tb;
+      // Stable tiebreaker for same-time jobs: use cleanerJobId so order is always consistent
+      return jobs[a].cleanerJobId - jobs[b].cleanerJobId;
     });
 
     // Emit all jobs in chronological order
@@ -829,12 +831,10 @@ export const schedulingRouter = router({
           const ta = a.serviceDateTime ? new Date(a.serviceDateTime).getTime() : 0;
           const tb = b.serviceDateTime ? new Date(b.serviceDateTime).getTime() : 0;
           if (ta !== tb) return ta - tb;
-          // Tiebreak by estimatedArrivalMs then routeOrder — must match frontend sort in SchedulingTab
+          // Tiebreak by routeOrder — this matches the order drive times were calculated for in the optimizer
           const aa = assignmentMap.get(a.id);
           const ab = assignmentMap.get(b.id);
-          const ea = aa?.estimatedArrivalMs ?? (aa?.routeOrder ?? 999) * 1e12;
-          const eb = ab?.estimatedArrivalMs ?? (ab?.routeOrder ?? 999) * 1e12;
-          return ea - eb;
+          return (aa?.routeOrder ?? 999) - (ab?.routeOrder ?? 999);
         });
       }
 
@@ -1227,13 +1227,141 @@ export const schedulingRouter = router({
       // 7b. Job-locked jobs were excluded from VRP entirely and restored verbatim above.
       // Their routeOrder from the existing assignment is already correct — no re-ordering needed.
 
-      // 8. Persist (replace non-manual assignments)
-      // Also exclude ALL locked jobs (team-locked + job-locked) from the persist step.
-      // Their existing DB rows must not be touched — they were already restored verbatim above.
-      const toSave = assignments.filter(a =>
-        !manualJobIds.has(a.cleanerJobId) && !lockedJobIdSet.has(a.cleanerJobId)
-      );
-      await persistAssignments(db, input.date, toSave);
+      // 8. Compute real Google drive times for EVERY assignment — locked or not.
+      // Group assignments by team, sort by routeOrder, then call Distance Matrix for each
+      // consecutive pair (team home → job[0], job[0] → job[1], etc.).
+      const geoByJobId = new Map(geocoded.map(g => [g.cleanerJobId, g]));
+      const teamConfigById = new Map(teamConfigs.map(t => [t.id, t]));
+
+      // Group all assignments by teamId
+      const assignmentsByTeam = new Map<number, Assignment[]>();
+      for (const a of assignments) {
+        if (!assignmentsByTeam.has(a.teamId)) assignmentsByTeam.set(a.teamId, []);
+        assignmentsByTeam.get(a.teamId)!.push(a);
+      }
+
+      // Helper: nearest-neighbor ordering for a group of same-time jobs using Google Distance Matrix.
+      // Given a starting lat/lng (home or previous job), orders the group by
+      // greedily picking the closest unvisited job each step via real Google drive times.
+      async function orderSameTimeGroup(group: Assignment[], fromLat: number, fromLng: number): Promise<Assignment[]> {
+        if (group.length <= 1) return group;
+        const remaining = [...group];
+        const ordered: Assignment[] = [];
+        let curLat = fromLat;
+        let curLng = fromLng;
+        while (remaining.length > 0) {
+          // Build destinations string for all remaining jobs
+          const destinations = remaining
+            .map(a => {
+              const geo = geoByJobId.get(a.cleanerJobId);
+              return geo ? `${geo.lat},${geo.lng}` : null;
+            })
+            .filter(Boolean)
+            .join('|');
+          let bestIdx = 0;
+          let bestSecs = Infinity;
+          if (destinations) {
+            try {
+              const result = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
+                origins: `${curLat},${curLng}`,
+                destinations,
+                mode: 'driving',
+                units: 'metric',
+              });
+              const elements = result?.rows?.[0]?.elements ?? [];
+              for (let i = 0; i < elements.length; i++) {
+                const secs = elements[i]?.status === 'OK' ? elements[i].duration.value : Infinity;
+                if (secs < bestSecs) { bestSecs = secs; bestIdx = i; }
+              }
+            } catch {
+              // fallback: keep current order
+            }
+          }
+          const chosen = remaining.splice(bestIdx, 1)[0];
+          const chosenGeo = geoByJobId.get(chosen.cleanerJobId);
+          if (chosenGeo) { curLat = chosenGeo.lat; curLng = chosenGeo.lng; }
+          ordered.push(chosen);
+        }
+        return ordered;
+      }
+
+      // For each team, sort by appointment time (same order shown in UI) and compute drive times via Google
+      for (const [teamId, teamAssignments] of Array.from(assignmentsByTeam.entries())) {
+        const team = teamConfigById.get(teamId);
+        // Sort by appointment time first
+        teamAssignments.sort((a, b) => (a.estimatedArrivalMs ?? 0) - (b.estimatedArrivalMs ?? 0));
+
+        // For any group of jobs sharing the same estimatedArrivalMs, use nearest-neighbor
+        // ordering (from the previous job or team home) to find the geographically optimal order.
+        // Jobs with unique times are untouched.
+        const reordered: Assignment[] = [];
+        let i = 0;
+        while (i < teamAssignments.length) {
+          const curTime = teamAssignments[i].estimatedArrivalMs ?? 0;
+          // Collect all jobs with the same time
+          let j = i;
+          while (j < teamAssignments.length && (teamAssignments[j].estimatedArrivalMs ?? 0) === curTime) j++;
+          const group = teamAssignments.slice(i, j);
+          if (group.length === 1) {
+            reordered.push(group[0]);
+          } else {
+            // Determine starting point: previous job's geo, or team home
+            let fromLat: number, fromLng: number;
+            if (reordered.length === 0) {
+              fromLat = team?.homeLat ?? 0;
+              fromLng = team?.homeLng ?? 0;
+            } else {
+              const prevGeo = geoByJobId.get(reordered[reordered.length - 1].cleanerJobId);
+              fromLat = prevGeo?.lat ?? team?.homeLat ?? 0;
+              fromLng = prevGeo?.lng ?? team?.homeLng ?? 0;
+            }
+            const optimalGroup = await orderSameTimeGroup(group, fromLat, fromLng);
+            reordered.push(...optimalGroup);
+          }
+          i = j;
+        }
+        // Replace teamAssignments contents with reordered
+        teamAssignments.splice(0, teamAssignments.length, ...reordered);
+
+        // Update routeOrder to match the final sorted position
+        teamAssignments.forEach((a, idx) => { a.routeOrder = idx; });
+
+        for (let i = 0; i < teamAssignments.length; i++) {
+          const cur = teamAssignments[i];
+          const curGeo = geoByJobId.get(cur.cleanerJobId);
+          if (!curGeo) continue;
+
+          let fromLat: number, fromLng: number;
+          if (i === 0) {
+            // First job: drive from team home
+            if (!team?.homeLat || !team?.homeLng) { cur.driveTimeSecs = 0; continue; }
+            fromLat = team.homeLat;
+            fromLng = team.homeLng;
+          } else {
+            // Subsequent jobs: drive from previous job
+            const prevGeo = geoByJobId.get(teamAssignments[i - 1].cleanerJobId);
+            if (!prevGeo) { cur.driveTimeSecs = 0; continue; }
+            fromLat = prevGeo.lat;
+            fromLng = prevGeo.lng;
+          }
+
+          try {
+            const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+              origins: `${fromLat},${fromLng}`,
+              destinations: `${curGeo.lat},${curGeo.lng}`,
+              mode: "driving",
+              units: "metric",
+            });
+            const el = result?.rows?.[0]?.elements?.[0];
+            cur.driveTimeSecs = el?.status === "OK" ? el.duration.value : Math.round(haversineMeters({ lat: fromLat, lng: fromLng }, { lat: curGeo.lat, lng: curGeo.lng }) / 16);
+          } catch {
+            cur.driveTimeSecs = Math.round(haversineMeters({ lat: fromLat, lng: fromLng }, { lat: curGeo.lat, lng: curGeo.lng }) / 16);
+          }
+        }
+      }
+
+      // 9. Persist ALL assignments (locked or not) with real drive times.
+      await persistAssignments(db, input.date, assignments);
 
       return { assigned: assignments.length, message: `Optimized ${assignments.length} jobs across ${teamConfigs.length} teams.` };
     }),
