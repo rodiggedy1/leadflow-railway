@@ -1611,7 +1611,7 @@ function MorningAvailabilityPrompt({
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
   const [maxJobs, setMaxJobs] = useState<number | null>(null);
   const [note, setNote] = useState("");
-  const [step, setStep] = useState<"greeting" | "availability" | "details" | "confirmed">("greeting");
+  const [step, setStep] = useState<"greeting" | "availability" | "details" | "confirm" | "confirmed">("greeting");
 
   const submitCheckin = trpc.cleaner.submitCheckin.useMutation({
     onSuccess: () => {
@@ -1646,8 +1646,13 @@ function MorningAvailabilityPrompt({
       toast.warning("Please select how many jobs you can do tomorrow.");
       return;
     }
+    // Show confirmation step before actually submitting
+    setStep("confirm");
+  };
+
+  const handleConfirmedSubmit = () => {
     submitCheckin.mutate({
-      isAvailable,
+      isAvailable: isAvailable!,
       maxJobs: isAvailable ? maxJobs : null,
       note: note.trim() || null,
     });
@@ -1805,6 +1810,49 @@ function MorningAvailabilityPrompt({
           </div>
         )}
 
+        {/* ── Step: Confirm ─── */}
+        {step === "confirm" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-white text-2xl font-bold">Are you sure?</h3>
+              <p className="text-slate-400 text-sm">Please read carefully before confirming.</p>
+            </div>
+            <div className="bg-amber-950/60 border border-amber-600/50 rounded-2xl p-5 space-y-3">
+              <p className="text-amber-300 font-semibold text-base leading-snug">
+                {isAvailable
+                  ? `You are confirming that you ARE available to work on ${tomorrowLabel}.`
+                  : `You are confirming that you are NOT available to work on ${tomorrowLabel}.`}
+              </p>
+              <p className="text-amber-400/90 text-sm leading-relaxed">
+                {isAvailable
+                  ? `By submitting, you may be assigned jobs on ${tomorrowLabel}. If you cancel or no-show after being assigned, you may be subject to a penalty. Only confirm if you are 100% sure you can work.`
+                  : `By submitting, you will not be scheduled for ${tomorrowLabel}. Make sure this is correct before confirming.`}
+              </p>
+            </div>
+            <div className="space-y-3 pt-2">
+              <Button
+                className={`w-full font-semibold py-3 text-base h-auto ${
+                  isAvailable
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                    : "bg-blue-600 hover:bg-blue-500 text-white"
+                }`}
+                onClick={handleConfirmedSubmit}
+                disabled={submitCheckin.isPending}
+              >
+                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Yes, I confirm — submit
+              </Button>
+              <button
+                onClick={() => setStep("details")}
+                className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
+              >
+                Go back and change my answer
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Step: Confirmed ─── */}
         {step === "confirmed" && (
           <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
@@ -1819,7 +1867,7 @@ function MorningAvailabilityPrompt({
 }
 
 // ── End-of-day Check-in Modal ────────────────────────────────────────────────
-type CheckinStep = "availability" | "details" | "confirmed";;
+type CheckinStep = "availability" | "details" | "confirm" | "confirmed";
 
 function CheckinModal({
   open,
@@ -1854,8 +1902,13 @@ function CheckinModal({
       toast.warning("Please select how many jobs you can do tomorrow.");
       return;
     }
+    // Show confirmation step before actually submitting
+    setStep("confirm");
+  };
+
+  const handleConfirmedSubmit = () => {
     submitCheckin.mutate({
-      isAvailable,
+      isAvailable: isAvailable!,
       maxJobs: isAvailable ? maxJobs : null,
       note: note.trim() || null,
     });
@@ -2008,6 +2061,49 @@ function CheckinModal({
                 className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
               >
                 {t("checkin.back")}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step: Confirm ─── */}
+        {step === "confirm" && (
+          <div className="space-y-6">
+            <div className="text-center space-y-2">
+              <div className="text-5xl mb-4">⚠️</div>
+              <h3 className="text-white text-2xl font-bold">Are you sure?</h3>
+              <p className="text-slate-400 text-sm">Please read carefully before confirming.</p>
+            </div>
+            <div className="bg-amber-950/60 border border-amber-600/50 rounded-2xl p-5 space-y-3">
+              <p className="text-amber-300 font-semibold text-base leading-snug">
+                {isAvailable
+                  ? `You are confirming that you ARE available to work on ${tomorrowLabelCheckin}.`
+                  : `You are confirming that you are NOT available to work on ${tomorrowLabelCheckin}.`}
+              </p>
+              <p className="text-amber-400/90 text-sm leading-relaxed">
+                {isAvailable
+                  ? `By submitting, you may be assigned jobs on ${tomorrowLabelCheckin}. If you cancel or no-show after being assigned, you may be subject to a penalty. Only confirm if you are 100% sure you can work.`
+                  : `By submitting, you will not be scheduled for ${tomorrowLabelCheckin}. Make sure this is correct before confirming.`}
+              </p>
+            </div>
+            <div className="space-y-3 pt-2">
+              <Button
+                className={`w-full font-semibold py-3 text-base h-auto ${
+                  isAvailable
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                    : "bg-blue-600 hover:bg-blue-500 text-white"
+                }`}
+                onClick={handleConfirmedSubmit}
+                disabled={submitCheckin.isPending}
+              >
+                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Yes, I confirm — submit
+              </Button>
+              <button
+                onClick={() => setStep("details")}
+                className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
+              >
+                Go back and change my answer
               </button>
             </div>
           </div>
