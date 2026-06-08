@@ -886,6 +886,7 @@ export const schedulingRouter = router({
               mode: 'driving',
               units: 'metric',
             });
+            // For batched independent pairs: origins[i]->destinations[i] maps to rows[i].elements[i] (diagonal)
             chunk.forEach((p, idx) => {
               const el = result?.rows?.[idx]?.elements?.[idx];
               if (el?.status === 'OK') {
@@ -1517,83 +1518,71 @@ export const schedulingRouter = router({
         if (geo) geoMap.set(job.id, { lat: geo.lat, lng: geo.lng });
       }
 
-      // Step 6: Build points array [home?, job0, job1, ...] for Distance Matrix
+      // Step 6: Find where the dragged job landed in the sorted order
+      const draggedIdx = orderedJobs.findIndex(j => j.id === input.cleanerJobId);
       const hasHome = team[0].homeLat != null && team[0].homeLng != null;
-      const points: LatLng[] = [
-        ...(hasHome ? [{ lat: team[0].homeLat!, lng: team[0].homeLng! }] : []),
-        ...orderedJobs.map(j => geoMap.get(j.id) ?? { lat: 0, lng: 0 }),
-      ];
-      const homeOffset = hasHome ? 1 : 0;
 
-      // Only call Distance Matrix if we have at least 2 real geocoded points
-      const geocodedCount = orderedJobs.filter(j => geoMap.has(j.id)).length;
-      let matrix: number[][] = [];
-      if (geocodedCount >= 2 || (hasHome && geocodedCount >= 1)) {
-        try {
-          matrix = await buildTravelMatrix(points);
-        } catch {
-          matrix = [];
+      // Step 7: Only ask Google for the 2 affected legs:
+      //   - prev stop → dragged job  (prev is home if draggedIdx===0, else previous job)
+      //   - dragged job → next job   (only if there is a next job)
+      // Build pairs for just those legs.
+      const affectedPairs: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; toJobId: number; isNextLeg: boolean }> = [];
+      if (draggedIdx >= 0) {
+        const draggedGeo = geoMap.get(orderedJobs[draggedIdx].id);
+        if (draggedGeo) {
+          // prev → dragged
+          let fromLat: number | null = null;
+          let fromLng: number | null = null;
+          if (draggedIdx === 0 && hasHome) {
+            fromLat = team[0].homeLat!;
+            fromLng = team[0].homeLng!;
+          } else if (draggedIdx > 0) {
+            const prevGeo = geoMap.get(orderedJobs[draggedIdx - 1].id);
+            if (prevGeo) { fromLat = prevGeo.lat; fromLng = prevGeo.lng; }
+          }
+          if (fromLat != null && fromLng != null) {
+            affectedPairs.push({ fromLat, fromLng, toLat: draggedGeo.lat, toLng: draggedGeo.lng, toJobId: orderedJobs[draggedIdx].id, isNextLeg: false });
+          }
+          // dragged → next
+          if (draggedIdx < orderedJobs.length - 1) {
+            const nextGeo = geoMap.get(orderedJobs[draggedIdx + 1].id);
+            if (nextGeo) {
+              affectedPairs.push({ fromLat: draggedGeo.lat, fromLng: draggedGeo.lng, toLat: nextGeo.lat, toLng: nextGeo.lng, toJobId: orderedJobs[draggedIdx + 1].id, isNextLeg: true });
+            }
+          }
         }
       }
 
-      // Step 7: Walk the ordered jobs, assign routeOrder and recalculate arrival/departure/drive
-      const BUFFER_MS = 15 * 60 * 1000;
-      let currentMs = 0;
-      const updatedAssignments: Array<{
-        cleanerJobId: number;
-        routeOrder: number;
-        estimatedArrivalMs: number;
-        estimatedDepartureMs: number;
-        driveTimeSecs: number;
-      }> = [];
+      // Fetch drive times for the affected legs from Google (batched in one request)
+      const driveUpdates = new Map<number, number>(); // jobId -> driveTimeSecs
+      if (affectedPairs.length > 0) {
+        const origins = affectedPairs.map(p => `${p.fromLat},${p.fromLng}`).join('|');
+        const destinations = affectedPairs.map(p => `${p.toLat},${p.toLng}`).join('|');
+        try {
+          const result = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
+            origins,
+            destinations,
+            mode: 'driving',
+            units: 'metric',
+          });
+          // For batched independent pairs: origins[i]->destinations[i] maps to rows[i].elements[i] (diagonal)
+          affectedPairs.forEach((p, idx) => {
+            const el = result?.rows?.[idx]?.elements?.[idx];
+            if (el?.status === 'OK') driveUpdates.set(p.toJobId, el.duration.value);
+          });
+        } catch { /* leave existing driveTimeSecs unchanged on error */ }
+      }
 
-      orderedJobs.forEach((job, idx) => {
-        const durationHours = estimateDurationHours(job.serviceType, job.bedrooms);
-        const durationMs = durationHours * 3600000;
-
-        // Arrival time: use serviceDateTime if available, otherwise chain from previous
-        let arrivalMs: number;
-        if (job.serviceDateTime) {
-          arrivalMs = new Date(job.serviceDateTime).getTime();
-        } else {
-          arrivalMs = currentMs > 0 ? currentMs : Date.now();
-        }
-
-        const departureMs = arrivalMs + durationMs;
-        currentMs = departureMs + BUFFER_MS;
-
-        // Drive time from previous point (or home)
-        let driveTimeSecs = 0;
-        if (matrix.length > 0 && geoMap.has(job.id)) {
-          const jobMatrixIdx = homeOffset + idx;
-          const prevMatrixIdx = idx === 0 ? (hasHome ? 0 : -1) : homeOffset + (idx - 1);
-          if (prevMatrixIdx >= 0) {
-            driveTimeSecs = matrix[prevMatrixIdx]?.[jobMatrixIdx] ?? 0;
-          }
-        }
-
-        updatedAssignments.push({
-          cleanerJobId: job.id,
-          routeOrder: idx,
-          estimatedArrivalMs: arrivalMs,
-          estimatedDepartureMs: departureMs,
-          driveTimeSecs,
-        });
-      });
-
-      // Step 8: Persist updated routeOrder + times for all jobs in this team
-      for (const upd of updatedAssignments) {
+      // Step 8: Update routeOrder for all jobs in the team, and driveTimeSecs only for affected legs
+      for (let idx = 0; idx < orderedJobs.length; idx++) {
+        const job = orderedJobs[idx];
+        const updateFields: Record<string, unknown> = { routeOrder: idx, updatedAt: new Date() };
+        if (driveUpdates.has(job.id)) updateFields.driveTimeSecs = driveUpdates.get(job.id);
         await db.update(scheduleAssignments)
-          .set({
-            routeOrder: upd.routeOrder,
-            estimatedArrivalMs: upd.estimatedArrivalMs,
-            estimatedDepartureMs: upd.estimatedDepartureMs,
-            driveTimeSecs: upd.driveTimeSecs,
-            updatedAt: new Date(),
-          })
+          .set(updateFields)
           .where(and(
             eq(scheduleAssignments.jobDate, input.date),
-            eq(scheduleAssignments.cleanerJobId, upd.cleanerJobId),
+            eq(scheduleAssignments.cleanerJobId, job.id),
           ));
       }
 
@@ -2119,42 +2108,57 @@ async function recalcTeamRoute(
     if (geo) geoMap.set(job.id, { lat: geo.lat, lng: geo.lng });
   }
 
-  // Build points array [home?, job0, job1, ...]
+  // Build chain pairs: home→job0, job0→job1, job1→job2, ...
+  // Only ask Google for the legs that actually changed (job removed from this team).
+  // This is N elements instead of N×N.
   const hasHome = team?.homeLat != null && team?.homeLng != null;
-  const points: LatLng[] = [
-    ...(hasHome ? [{ lat: team!.homeLat!, lng: team!.homeLng! }] : []),
-    ...orderedJobs.map(j => geoMap.get(j.id) ?? { lat: 0, lng: 0 }),
-  ];
-  const homeOffset = hasHome ? 1 : 0;
-
-  let matrix: number[][] = [];
-  const geocodedCount = orderedJobs.filter(j => geoMap.has(j.id)).length;
-  if (geocodedCount >= 2 || (hasHome && geocodedCount >= 1)) {
-    try { matrix = await buildTravelMatrix(points); } catch { matrix = []; }
+  const chainPairs: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; toJobId: number }> = [];
+  for (let i = 0; i < orderedJobs.length; i++) {
+    const currGeo = geoMap.get(orderedJobs[i].id);
+    if (!currGeo) continue;
+    let fromLat: number | null = null;
+    let fromLng: number | null = null;
+    if (i === 0 && hasHome) {
+      fromLat = team!.homeLat!;
+      fromLng = team!.homeLng!;
+    } else if (i > 0) {
+      const prevGeo = geoMap.get(orderedJobs[i - 1].id);
+      if (prevGeo) { fromLat = prevGeo.lat; fromLng = prevGeo.lng; }
+    }
+    if (fromLat != null && fromLng != null) {
+      chainPairs.push({ fromLat, fromLng, toLat: currGeo.lat, toLng: currGeo.lng, toJobId: orderedJobs[i].id });
+    }
   }
 
-  const BUFFER_MS = 15 * 60 * 1000;
-  let currentMs = 0;
+  // Fetch drive times for the chain from Google (batched in chunks of 10)
+  const driveMap = new Map<number, number>(); // jobId -> driveTimeSecs
+  const CHUNK = 10;
+  for (let ci = 0; ci < chainPairs.length; ci += CHUNK) {
+    const chunk = chainPairs.slice(ci, ci + CHUNK);
+    const origins = chunk.map(p => `${p.fromLat},${p.fromLng}`).join('|');
+    const destinations = chunk.map(p => `${p.toLat},${p.toLng}`).join('|');
+    try {
+      const result = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
+        origins,
+        destinations,
+        mode: 'driving',
+        units: 'metric',
+      });
+      // For batched independent pairs: origins[i]->destinations[i] maps to rows[i].elements[i] (diagonal)
+      chunk.forEach((p, idx) => {
+        const el = result?.rows?.[idx]?.elements?.[idx];
+        if (el?.status === 'OK') driveMap.set(p.toJobId, el.duration.value);
+      });
+    } catch { /* leave driveTimeSecs unchanged for this chunk on error */ }
+  }
 
+  // Update routeOrder and driveTimeSecs for all jobs in this team
   for (let idx = 0; idx < orderedJobs.length; idx++) {
     const job = orderedJobs[idx];
-    const durationMs = estimateDurationHours(job.serviceType, job.bedrooms) * 3600000;
-
-    const arrivalMs = job.serviceDateTime
-      ? new Date(job.serviceDateTime).getTime()
-      : (currentMs > 0 ? currentMs : Date.now());
-    const departureMs = arrivalMs + durationMs;
-    currentMs = departureMs + BUFFER_MS;
-
-    let driveTimeSecs = 0;
-    if (matrix.length > 0 && geoMap.has(job.id)) {
-      const jobMatrixIdx = homeOffset + idx;
-      const prevMatrixIdx = idx === 0 ? (hasHome ? 0 : -1) : homeOffset + (idx - 1);
-      if (prevMatrixIdx >= 0) driveTimeSecs = matrix[prevMatrixIdx]?.[jobMatrixIdx] ?? 0;
-    }
-
+    const updateFields: Record<string, unknown> = { routeOrder: idx, updatedAt: new Date() };
+    if (driveMap.has(job.id)) updateFields.driveTimeSecs = driveMap.get(job.id);
     await db.update(scheduleAssignments)
-      .set({ routeOrder: idx, estimatedArrivalMs: arrivalMs, estimatedDepartureMs: departureMs, driveTimeSecs, updatedAt: new Date() })
+      .set(updateFields)
       .where(and(
         eq(scheduleAssignments.jobDate, date),
         eq(scheduleAssignments.cleanerJobId, job.id),
