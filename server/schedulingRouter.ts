@@ -886,8 +886,9 @@ export const schedulingRouter = router({
               mode: 'driving',
               units: 'metric',
             });
+            // Each row has exactly 1 destination (independent pairs), so use elements[0] not elements[idx]
             chunk.forEach((p, idx) => {
-              const el = result?.rows?.[idx]?.elements?.[idx];
+              const el = result?.rows?.[idx]?.elements?.[0];
               if (el?.status === 'OK') {
                 driveMap.set(p.toJobId, el.duration.value);
               } else {
@@ -1564,8 +1565,9 @@ export const schedulingRouter = router({
             mode: 'driving',
             units: 'metric',
           });
+          // Each row has exactly 1 destination (independent pairs), so use elements[0] not elements[idx]
           affectedPairs.forEach((p, idx) => {
-            const el = result?.rows?.[idx]?.elements?.[idx];
+            const el = result?.rows?.[idx]?.elements?.[0];
             if (el?.status === 'OK') driveUpdates.set(p.toJobId, el.duration.value);
           });
         } catch { /* leave existing driveTimeSecs unchanged on error */ }
@@ -2142,8 +2144,9 @@ async function recalcTeamRoute(
         mode: 'driving',
         units: 'metric',
       });
+      // Each row has exactly 1 destination (independent pairs), so use elements[0] not elements[idx]
       chunk.forEach((p, idx) => {
-        const el = result?.rows?.[idx]?.elements?.[idx];
+        const el = result?.rows?.[idx]?.elements?.[0];
         if (el?.status === 'OK') driveMap.set(p.toJobId, el.duration.value);
       });
     } catch { /* leave driveTimeSecs unchanged for this chunk on error */ }
