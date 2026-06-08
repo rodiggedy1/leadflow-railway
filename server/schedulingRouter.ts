@@ -886,9 +886,9 @@ export const schedulingRouter = router({
               mode: 'driving',
               units: 'metric',
             });
-            // Each row has exactly 1 destination (independent pairs), so use elements[0] not elements[idx]
+            // For batched independent pairs: origins[i]->destinations[i] maps to rows[i].elements[i] (diagonal)
             chunk.forEach((p, idx) => {
-              const el = result?.rows?.[idx]?.elements?.[0];
+              const el = result?.rows?.[idx]?.elements?.[idx];
               if (el?.status === 'OK') {
                 driveMap.set(p.toJobId, el.duration.value);
               } else {
@@ -1565,9 +1565,9 @@ export const schedulingRouter = router({
             mode: 'driving',
             units: 'metric',
           });
-          // Each row has exactly 1 destination (independent pairs), so use elements[0] not elements[idx]
+          // For batched independent pairs: origins[i]->destinations[i] maps to rows[i].elements[i] (diagonal)
           affectedPairs.forEach((p, idx) => {
-            const el = result?.rows?.[idx]?.elements?.[0];
+            const el = result?.rows?.[idx]?.elements?.[idx];
             if (el?.status === 'OK') driveUpdates.set(p.toJobId, el.duration.value);
           });
         } catch { /* leave existing driveTimeSecs unchanged on error */ }
@@ -2144,9 +2144,9 @@ async function recalcTeamRoute(
         mode: 'driving',
         units: 'metric',
       });
-      // Each row has exactly 1 destination (independent pairs), so use elements[0] not elements[idx]
+      // For batched independent pairs: origins[i]->destinations[i] maps to rows[i].elements[i] (diagonal)
       chunk.forEach((p, idx) => {
-        const el = result?.rows?.[idx]?.elements?.[0];
+        const el = result?.rows?.[idx]?.elements?.[idx];
         if (el?.status === 'OK') driveMap.set(p.toJobId, el.duration.value);
       });
     } catch { /* leave driveTimeSecs unchanged for this chunk on error */ }
