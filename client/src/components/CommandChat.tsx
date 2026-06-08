@@ -884,6 +884,7 @@ type MessageListProps = {
   openThreadId: number | null;
   allThreadsOpen: boolean;
   setAllThreadsOpen: (v: boolean) => void;
+  activeThreadCount: number;
   superAlertMsgSet: Set<number>;
   // Conversation row action buttons
   searchOpen: boolean;
@@ -1032,6 +1033,7 @@ const MessageList = memo(function MessageList({
   openThreadId,
   allThreadsOpen,
   setAllThreadsOpen,
+  activeThreadCount,
   superAlertMsgSet,
   searchOpen,
   openSearch,
@@ -2414,6 +2416,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [openThreadId, setOpenThreadId] = useState<number | null>(null);
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [threadRefetchTick, setThreadRefetchTick] = useState(0);
+  const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+  const activeThreadCount = (activeThreads as any[]).length;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -4457,39 +4463,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
         {/* Conversation thread — relative wrapper for toast overlay */}
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
-          {/* @mention re-entry banner — sticky amber strip when there are unread @mentions */}
-          {unreadTagIds.length > 0 && (
-            <div className="shrink-0 flex items-center justify-between gap-2 px-4 py-2 bg-amber-50 border-b border-amber-200 text-amber-800">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm">🔔</span>
-                <p className="text-xs font-semibold truncate">
-                  {unreadTagIds.length === 1
-                    ? `You were mentioned in 1 message`
-                    : `You were mentioned in ${unreadTagIds.length} messages`}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
+          {/* Combined pill bar — mentions + threads in one compact row */}
+          {(unreadTagIds.length > 0 || activeThreadCount > 0) && (
+            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+              {/* Mentions pill */}
+              {unreadTagIds.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={jumpToNextMention}
+                    className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
+                  >
+                    🔔 {unreadTagIds.length} mention{unreadTagIds.length > 1 ? "s" : ""}
+                  </button>
+                  <button
+                    onClick={() => setShowMentionHistory(true)}
+                    className="text-[10px] text-amber-600 hover:text-amber-800 transition"
+                  >
+                    See all
+                  </button>
+                  <button
+                    onClick={markTagsSeen}
+                    className="text-amber-400 hover:text-amber-600 transition"
+                    title="Dismiss"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+              {/* Divider between pills */}
+              {unreadTagIds.length > 0 && activeThreadCount > 0 && (
+                <span className="text-slate-300 text-xs">|</span>
+              )}
+              {/* Threads pill */}
+              {activeThreadCount > 0 && (
                 <button
-                  onClick={() => setShowMentionHistory(true)}
-                  className="text-xs text-amber-600 hover:text-amber-800 transition"
+                  onClick={() => setAllThreadsOpen(true)}
+                  className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 transition"
                 >
-                  See all
+                  <MessageSquare className="h-3 w-3" />
+                  {activeThreadCount} thread{activeThreadCount > 1 ? "s" : ""}
                 </button>
-                <span className="text-amber-300 text-xs">|</span>
-                <button
-                  onClick={jumpToNextMention}
-                  className="text-xs font-semibold text-amber-700 hover:text-amber-900 underline"
-                >
-                  Jump {unreadTagIds.length > 1 ? `(${unreadTagIds.length})` : ""}
-                </button>
-                <button
-                  onClick={markTagsSeen}
-                  className="text-amber-500 hover:text-amber-700 transition"
-                  title="Dismiss"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              )}
             </div>
           )}
 
@@ -4684,6 +4698,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           openThreadId={openThreadId}
           allThreadsOpen={allThreadsOpen}
           setAllThreadsOpen={setAllThreadsOpen}
+          activeThreadCount={activeThreadCount}
           superAlertMsgSet={superAlertMsgSet}
           searchOpen={searchOpen}
           openSearch={openSearch}
