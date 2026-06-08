@@ -88,6 +88,30 @@ async function startServer() {
   // Raw binary parser for interview video chunks
   app.use("/api/interview/chunk", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "20mb" }));
 
+  // Media proxy — serves R2/S3 images with correct CORS headers so all users can view them
+  app.get("/api/media-proxy", async (req, res) => {
+    const url = req.query.url as string;
+    if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
+    // Only proxy our own R2 bucket — accept r2.dev URLs or the configured public URL
+    const r2PublicUrl = (process.env.R2_PUBLIC_URL ?? "").replace(/\/+$/, "");
+    const isR2 = url.includes(".r2.dev/") || (r2PublicUrl && url.startsWith(r2PublicUrl));
+    if (!isR2) {
+      return res.status(403).json({ error: "Forbidden domain" });
+    }
+    try {
+      const upstream = await fetch(url);
+      if (!upstream.ok) return res.status(upstream.status).end();
+      const ct = upstream.headers.get("content-type") ?? "application/octet-stream";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      return res.send(buf);
+    } catch {
+      return res.status(502).json({ error: "Upstream fetch failed" });
+    }
+  });
+
   // Health check for Railway — includes commit SHA for deployment verification
   app.get("/api/health", (_req, res) => res.json({
     ok: true,

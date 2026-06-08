@@ -2226,7 +2226,7 @@ const MessageList = memo(function MessageList({
                                   className="focus:outline-none"
                                 >
                                   <img
-                                    src={url}
+                                    src={url.includes(".r2.dev/") ? `/api/media-proxy?url=${encodeURIComponent(url)}` : url}
                                     alt={`attachment-${idx}`}
                                     className="rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity"
                                     style={{ width: mediaUrls.length === 1 ? "100%" : "80px", height: mediaUrls.length === 1 ? "auto" : "80px", maxWidth: "100%" }}
@@ -3623,7 +3623,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </a>
           {/* Image — stop propagation so clicking the image doesn't close */}
           <img
-            src={lightboxUrl}
+            src={lightboxUrl && lightboxUrl.includes(".r2.dev/") ? `/api/media-proxy?url=${encodeURIComponent(lightboxUrl)}` : lightboxUrl ?? undefined}
             alt="Full size"
             className="max-h-[90vh] max-w-[90vw] rounded-2xl shadow-2xl object-contain"
             onClick={(e) => e.stopPropagation()}
