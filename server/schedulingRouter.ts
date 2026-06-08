@@ -1498,16 +1498,37 @@ export const schedulingRouter = router({
 
       // Step 3: Load the actual job records for those assignments
       const assignedJobIds = teamAssignments.map(a => a.cleanerJobId);
-      const jobRows = await db.select().from(cleanerJobs)
+      const savedJobRows = await db.select().from(cleanerJobs)
         .where(inArray(cleanerJobs.id, assignedJobIds));
+      // Also load synthetic jobs on this team (no saved assignment, but teamName matches in Launch27).
+      // This ensures the 'previous job' before the dragged job is correct even when neighbours are synthetic.
+      const syntheticJobRows = await db.select().from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobDate, input.date),
+          eq(cleanerJobs.teamName, team[0].name),
+        ));
+      // Merge: saved rows take priority; synthetic rows fill in any gaps
+      const assignedIdSet = new Set(assignedJobIds);
+      const allJobRows = [
+        ...savedJobRows,
+        ...syntheticJobRows.filter(j => !assignedIdSet.has(j.id)),
+      ];
+      // Build a routeOrder map for tiebreaking same-time jobs
+      const routeOrderMap = new Map(teamAssignments.map(a => [a.cleanerJobId, a.routeOrder ?? 999]));
 
       // Step 4: Sort jobs by serviceDateTime (time-slot order)
       // Jobs with a serviceDateTime come first, sorted chronologically.
+      // Same-time jobs are tiebroken by routeOrder so order matches the UI.
       // Jobs without a serviceDateTime (unscheduled) are appended at the end.
-      const withTime = jobRows
+      const withTime = allJobRows
         .filter(j => !!j.serviceDateTime)
-        .sort((a, b) => new Date(a.serviceDateTime!).getTime() - new Date(b.serviceDateTime!).getTime());
-      const withoutTime = jobRows.filter(j => !j.serviceDateTime);
+        .sort((a, b) => {
+          const ta = new Date(a.serviceDateTime!).getTime();
+          const tb = new Date(b.serviceDateTime!).getTime();
+          if (ta !== tb) return ta - tb;
+          return (routeOrderMap.get(a.id) ?? 999) - (routeOrderMap.get(b.id) ?? 999);
+        });
+      const withoutTime = allJobRows.filter(j => !j.serviceDateTime);
       const orderedJobs = [...withTime, ...withoutTime];
 
       // Step 5: Geocode all job addresses (use cache)
