@@ -453,7 +453,7 @@ function Lightbox({ urls, startIndex, onClose }: { urls: string[]; startIndex: n
       )}
       {/* Image */}
       <img
-        src={urls[idx]}
+        src={urls[idx].includes(".r2.dev/") ? `/api/media-proxy?url=${encodeURIComponent(urls[idx])}` : urls[idx]}
         alt={`Photo ${idx + 1}`}
         className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -696,7 +696,7 @@ function ThreadMessage({ msg, callerName, isMine: isMineOverride, seenBy, onRepl
                     onClick={() => setLightboxIdx(i)}
                   >
                     <img
-                      src={url}
+                      src={url.includes(".r2.dev/") ? `/api/media-proxy?url=${encodeURIComponent(url)}` : url}
                       alt={`Photo ${i + 1}`}
                       className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105"
                     />

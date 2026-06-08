@@ -132,15 +132,18 @@ function ThreadMessage({
           try { urls = JSON.parse(msg.mediaUrl); } catch { urls = [msg.mediaUrl]; }
           return (
             <div className="mt-2 flex flex-wrap gap-2">
-              {urls.map((u, i) => (
+              {urls.map((u, i) => {
+                const proxied = u.includes(".r2.dev/") ? `/api/media-proxy?url=${encodeURIComponent(u)}` : u;
+                return (
                 <img
                   key={i}
-                  src={u}
+                  src={proxied}
                   alt="attachment"
                   className="max-h-40 rounded-lg border border-slate-200 object-cover cursor-pointer"
-                  onClick={() => window.open(u, "_blank")}
+                  onClick={() => window.open(proxied, "_blank")}
                 />
-              ))}
+                );
+              })}
             </div>
           );
         })()}
