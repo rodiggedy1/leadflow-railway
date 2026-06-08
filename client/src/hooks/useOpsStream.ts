@@ -20,7 +20,7 @@
 import { useEffect, useRef } from "react";
 
 export type OpsStreamCallbacks = {
-  onNewMessage?: (channel?: string, jobId?: number) => void;
+  onNewMessage?: (channel?: string, jobId?: number, threadParentId?: number) => void;
   onJobUpdate?: (jobId?: number) => void;
   onLeadUpdate?: () => void;
   onReactionUpdate?: () => void;
@@ -78,6 +78,7 @@ export function useOpsStream(
             type: string;
             channel?: string;
             jobId?: number;
+            threadParentId?: number;
             leadName?: string;
             newPhone?: string;
             issueKey?: string;
@@ -88,7 +89,7 @@ export function useOpsStream(
 
           switch (event.type) {
             case "new_message":
-              cbRef.current.onNewMessage?.(event.channel, event.jobId);
+              cbRef.current.onNewMessage?.(event.channel, event.jobId, event.threadParentId);
               break;
             case "issue_comment":
               cbRef.current.onIssueComment?.(event.issueKey ?? "");

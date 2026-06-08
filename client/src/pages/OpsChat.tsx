@@ -2710,7 +2710,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: Command Chat */}
         <div style={{ display: activeTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CommandChat
-            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, createdAt: new Date(m.ts) }))}
+            channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
             callerName={callerName}
             onSendMessage={(body, mediaUrl, replyTo, quickAction) => {
@@ -2741,6 +2741,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             agentList={agentStatusData?.agents ?? []}
             isVisible={activeTab === "channels" && activeChannel === "command"}
             myNames={myNames}
+            onSendThreadReply={(body, parentId) => {
+              sendMsg.mutate({
+                body,
+                channel: "command",
+                authorName: callerName,
+                threadParentId: parentId,
+              });
+            }}
           />
         </div>
 

@@ -51,6 +51,8 @@ export interface OpsEvent {
   targetAgentId?: number;
   /** For super_alert events — names of targeted agents (or ['everyone']) */
   targetAgentNames?: string[];
+  /** For thread reply events — ID of the parent message */
+  threadParentId?: number;
   ts: number;
 }
 

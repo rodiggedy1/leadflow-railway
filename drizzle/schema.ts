@@ -1711,6 +1711,12 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
    * When set, channel and cleanerJobId are both null.
    */
   dmThread: varchar("dmThread", { length: 256 }),
+  /**
+   * Slack-style thread parent: when set, this message is a reply in the thread
+   * started by the message with this ID. null = root/parent message.
+   * Only used for Command Chat channel messages (not job threads or DMs).
+   */
+  threadParentId: int("threadParentId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxJob: index("idx_ocm_job").on(table.cleanerJobId),

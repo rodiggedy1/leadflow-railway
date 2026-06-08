@@ -41,6 +41,7 @@ import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
+import ThreadPanel from "@/components/ThreadPanel";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,8 @@ interface CommandChatProps {
     replyToBody?: string | null;
     replyToAuthor?: string | null;
     cleanerJobId?: number | null;
+    threadParentId?: number | null;
+    replyCount?: number;
     createdAt: Date;
   }>;
   channelLoading: boolean;
@@ -68,6 +71,8 @@ interface CommandChatProps {
   onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }, quickAction?: string) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
+  /** Called when user sends a reply in a thread panel */
+  onSendThreadReply?: (body: string, parentId: number) => void;
   /** Called when user clicks "Ops" in the in-panel tab switcher */
   onSwitchToToday: () => void;
   /** Called when user clicks "CS" in the in-panel tab switcher */
@@ -409,6 +414,8 @@ type LeadMsg = {
   replyToBody?: string | null;
   replyToAuthor?: string | null;
   cleanerJobId?: number | null;
+  threadParentId?: number | null;
+  replyCount?: number;
   createdAt: Date;
 };
 
@@ -872,6 +879,7 @@ type MessageListProps = {
   setResolveIssueOpen: (v: boolean) => void;
   dismissSystemCard: (messageId: number) => void;
   onScrollToBottom: () => void;
+  setOpenThreadId: (id: number | null) => void;
   superAlertMsgSet: Set<number>;
   // Conversation row action buttons
   searchOpen: boolean;
@@ -1016,6 +1024,7 @@ const MessageList = memo(function MessageList({
   setResolveIssueOpen,
   dismissSystemCard,
   onScrollToBottom,
+  setOpenThreadId,
   superAlertMsgSet,
   searchOpen,
   openSearch,
@@ -2253,7 +2262,7 @@ const MessageList = memo(function MessageList({
                             </div>
                           )}
                         </div>
-                        {/* WhatsApp-style hover actions: Reply + quick-react strip */}
+                          {/* WhatsApp-style hover actions: Reply + quick-react strip */}
                         <div
                           className={cn(
                             "opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center gap-1 self-start mt-1",
@@ -2267,6 +2276,16 @@ const MessageList = memo(function MessageList({
                             >
                               <ChevronDown className="h-3 w-3" />
                               <span>Reply</span>
+                            </button>
+                          )}
+                          {/* Slack-style: Reply in Thread */}
+                          {!isAlert && !msg.threadParentId && (
+                            <button
+                              onClick={() => setOpenThreadId(msg.id)}
+                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200"
+                            >
+                              <MessageSquare className="h-3 w-3" />
+                              <span>Thread</span>
                             </button>
                           )}
                           <button
@@ -2292,6 +2311,19 @@ const MessageList = memo(function MessageList({
                           )}
                         </div>
                       </div>
+                      {/* Reply count badge — shown below the bubble when thread has replies */}
+                      {!isAlert && !msg.threadParentId && (msg.replyCount ?? 0) > 0 && (
+                        <button
+                          onClick={() => setOpenThreadId(msg.id)}
+                          className={cn(
+                            "mt-1 ml-9 flex items-center gap-1.5 text-xs font-medium text-violet-600 hover:text-violet-800 hover:bg-violet-50 px-2.5 py-1 rounded-full transition",
+                            isMine ? "ml-auto mr-9" : "ml-9"
+                          )}
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                          {msg.replyCount} {msg.replyCount === 1 ? "reply" : "replies"}
+                        </button>
+                      )}
                     </div>
                   );
                 }
@@ -2310,7 +2342,7 @@ const MessageList = memo(function MessageList({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSwitchToToday, onSwitchToCS, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // Message quality check
 
@@ -2361,6 +2393,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const threadBottomRef = useRef<HTMLDivElement>(null);
   const threadScrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // ── Slack-style thread panel state ──────────────────────────────────────────
+  const [openThreadId, setOpenThreadId] = useState<number | null>(null);
+  const [threadRefetchTick, setThreadRefetchTick] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -2381,10 +2416,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // CommandChat is rendered inside OpsChat which also calls useOpsStream.
   // Both hooks open separate SSE connections; the server handles multiple clients.
   useOpsStream({
-    onNewMessage: (channel) => {
+    onNewMessage: (channel, _jobId, threadParentId) => {
       if (channel === "command" || !channel) {
         utils.opsChat.getCommandChatData.invalidate();
         utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+        // If this is a thread reply, also bump the thread refetch tick
+        if (threadParentId) {
+          setThreadRefetchTick(t => t + 1);
+        }
       }
     },
     onJobUpdate: () => {
@@ -4623,6 +4662,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setResolveIssueOpen={setResolveIssueOpen}
           dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
           onScrollToBottom={() => setNewMsgCount(0)}
+          setOpenThreadId={setOpenThreadId}
           superAlertMsgSet={superAlertMsgSet}
           searchOpen={searchOpen}
           openSearch={openSearch}
@@ -5851,6 +5891,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         onClose={() => setCallLogOpen(false)}
         jobDate={todayDateStr}
       />
+
+      {/* ── Slack-style Thread Panel (slides in from right) ── */}
+      {openThreadId !== null && (
+        <div
+          className="fixed inset-y-0 right-0 z-[200] flex flex-col shadow-2xl"
+          style={{ width: "380px", maxWidth: "90vw" }}
+        >
+          <ThreadPanel
+            parentId={openThreadId}
+            callerName={callerName}
+            senderPhotoMap={senderPhotoMap}
+            onClose={() => setOpenThreadId(null)}
+            onSendReply={(body, parentId) => {
+              if (onSendThreadReply) {
+                onSendThreadReply(body, parentId);
+              }
+            }}
+            refetchTick={threadRefetchTick}
+          />
+        </div>
+      )}
     </div>
   );
 }

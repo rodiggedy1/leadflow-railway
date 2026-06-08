@@ -449,6 +449,8 @@ export const opsChatRouter = router({
         replyToBody: z.string().max(512).optional(),
         /** Quote-reply: display name of replied-to author */
         replyToAuthor: z.string().max(128).optional(),
+        /** Slack-style thread: ID of the parent message this is a reply to */
+        threadParentId: z.number().int().positive().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -488,6 +490,7 @@ export const opsChatRouter = router({
         replyToId: input.replyToId ?? null,
         replyToBody: input.replyToBody ?? null,
         replyToAuthor: input.replyToAuthor ?? null,
+        threadParentId: input.threadParentId ?? null,
       });
       const newMessageId = (insertResult as any).insertId as number;
 
@@ -552,6 +555,7 @@ export const opsChatRouter = router({
       broadcastOpsUpdate("new_message", {
         channel: input.channel,
         jobId: input.cleanerJobId,
+        threadParentId: input.threadParentId,
       });
 
       return { success: true, messageId: newMessageId, superAlertTargets: superAlertTargets ?? [] };
@@ -573,6 +577,25 @@ export const opsChatRouter = router({
         .orderBy(desc(opsChatMessages.createdAt))
         .limit(500);
 
+      // Count thread replies per parent message
+      const rootMsgs = msgs.filter(m => !m.threadParentId);
+      const rootIds = rootMsgs.map(m => m.id);
+      const replyCounts: Record<number, number> = {};
+      if (rootIds.length > 0) {
+        const replyRows = await db
+          .select({ threadParentId: opsChatMessages.threadParentId })
+          .from(opsChatMessages)
+          .where(
+            and(
+              eq(opsChatMessages.channel, input.channel),
+              inArray(opsChatMessages.threadParentId, rootIds)
+            )
+          );
+        for (const r of replyRows) {
+          if (r.threadParentId) replyCounts[r.threadParentId] = (replyCounts[r.threadParentId] ?? 0) + 1;
+        }
+      }
+
       return msgs.reverse().map((m) => ({
         id: m.id,
         ts: m.createdAt.getTime(),
@@ -586,7 +609,51 @@ export const opsChatRouter = router({
         replyToBody: m.replyToBody ?? null,
         replyToAuthor: m.replyToAuthor ?? null,
         cleanerJobId: m.cleanerJobId ?? null,
+        threadParentId: m.threadParentId ?? null,
+        replyCount: m.threadParentId ? 0 : (replyCounts[m.id] ?? 0),
       }));
+    }),
+
+  /**
+   * Fetch all thread replies for a given parent message ID.
+   */
+  getThreadReplies: opsChatProcedure
+    .input(z.object({ parentId: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { parent: null, replies: [] };
+
+      // Fetch parent message
+      const [parent] = await db
+        .select()
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.id, input.parentId))
+        .limit(1);
+
+      if (!parent) return { parent: null, replies: [] };
+
+      // Fetch all replies
+      const replies = await db
+        .select()
+        .from(opsChatMessages)
+        .where(eq(opsChatMessages.threadParentId, input.parentId))
+        .orderBy(opsChatMessages.createdAt);
+
+      const mapMsg = (m: typeof parent) => ({
+        id: m.id,
+        ts: m.createdAt.getTime(),
+        from: m.authorName,
+        role: m.authorRole,
+        body: m.body,
+        mediaUrl: m.mediaUrl ?? null,
+        quickAction: m.quickAction ?? null,
+        threadParentId: m.threadParentId ?? null,
+      });
+
+      return {
+        parent: mapMsg(parent),
+        replies: replies.map(mapMsg),
+      };
     }),
 
   /**
