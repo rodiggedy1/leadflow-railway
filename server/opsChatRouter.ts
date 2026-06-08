@@ -657,6 +657,70 @@ export const opsChatRouter = router({
     }),
 
   /**
+   * List all threads in the command channel that have at least one reply.
+   * Returns parent message + reply count + last reply preview, sorted by most recent activity.
+   */
+  listActiveThreads: opsChatProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return [];
+
+    // Get all reply messages in the command channel
+    const replies = await db
+      .select({
+        threadParentId: opsChatMessages.threadParentId,
+        body: opsChatMessages.body,
+        authorName: opsChatMessages.authorName,
+        createdAt: opsChatMessages.createdAt,
+      })
+      .from(opsChatMessages)
+      .where(
+        and(
+          eq(opsChatMessages.channel, "command"),
+          isNotNull(opsChatMessages.threadParentId)
+        )
+      )
+      .orderBy(opsChatMessages.createdAt);
+
+    if (replies.length === 0) return [];
+
+    // Group by parent
+    const byParent: Record<number, typeof replies> = {};
+    for (const r of replies) {
+      const pid = r.threadParentId!;
+      if (!byParent[pid]) byParent[pid] = [];
+      byParent[pid].push(r);
+    }
+
+    const parentIds = Object.keys(byParent).map(Number);
+
+    // Fetch parent messages
+    const parents = await db
+      .select()
+      .from(opsChatMessages)
+      .where(inArray(opsChatMessages.id, parentIds));
+
+    // Build result sorted by most recent reply
+    const threads = parents.map((p) => {
+      const threadReplies = byParent[p.id] ?? [];
+      const lastReply = threadReplies[threadReplies.length - 1];
+      return {
+        parentId: p.id,
+        parentBody: p.body,
+        parentFrom: p.authorName,
+        parentTs: p.createdAt.getTime(),
+        replyCount: threadReplies.length,
+        lastReplyFrom: lastReply?.authorName ?? null,
+        lastReplyBody: lastReply?.body ?? null,
+        lastReplyTs: lastReply?.createdAt.getTime() ?? p.createdAt.getTime(),
+      };
+    });
+
+    // Sort by most recent activity
+    threads.sort((a, b) => b.lastReplyTs - a.lastReplyTs);
+    return threads;
+  }),
+
+  /**
    * Channel message counts for the sidebar badges.
    */
   getChannelCounts: opsChatProcedure.query(async () => {

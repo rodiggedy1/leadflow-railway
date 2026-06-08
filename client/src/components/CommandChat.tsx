@@ -42,6 +42,7 @@ import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
+import AllThreadsPanel from "@/components/AllThreadsPanel";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -880,6 +881,9 @@ type MessageListProps = {
   dismissSystemCard: (messageId: number) => void;
   onScrollToBottom: () => void;
   setOpenThreadId: (id: number | null) => void;
+  openThreadId: number | null;
+  allThreadsOpen: boolean;
+  setAllThreadsOpen: (v: boolean) => void;
   superAlertMsgSet: Set<number>;
   // Conversation row action buttons
   searchOpen: boolean;
@@ -1025,6 +1029,9 @@ const MessageList = memo(function MessageList({
   dismissSystemCard,
   onScrollToBottom,
   setOpenThreadId,
+  openThreadId,
+  allThreadsOpen,
+  setAllThreadsOpen,
   superAlertMsgSet,
   searchOpen,
   openSearch,
@@ -1099,6 +1106,16 @@ const MessageList = memo(function MessageList({
               )}
               <button onClick={toggleMute} title={notifMuted ? "Unmute notifications" : "Mute notifications"} className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors">
                 {notifMuted ? <BellOff className="h-3.5 w-3.5 text-slate-400" /> : <Bell className="h-3.5 w-3.5 text-slate-400" />}
+              </button>
+              <button
+                title="Threads"
+                onClick={() => setAllThreadsOpen(true)}
+                className={cn(
+                  "relative h-7 w-7 flex items-center justify-center rounded-full transition-colors",
+                  allThreadsOpen ? "bg-violet-50 text-violet-600" : "hover:bg-slate-100 text-slate-400"
+                )}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
               </button>
               <button
                 title="AI Call Log"
@@ -2395,6 +2412,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const composerRef = useRef<HTMLTextAreaElement>(null);
   // ── Slack-style thread panel state ──────────────────────────────────────────
   const [openThreadId, setOpenThreadId] = useState<number | null>(null);
+  const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [threadRefetchTick, setThreadRefetchTick] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
@@ -4663,6 +4681,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           dismissSystemCard={(id) => dismissSystemCardMutation.mutate({ messageId: id })}
           onScrollToBottom={() => setNewMsgCount(0)}
           setOpenThreadId={setOpenThreadId}
+          openThreadId={openThreadId}
+          allThreadsOpen={allThreadsOpen}
+          setAllThreadsOpen={setAllThreadsOpen}
           superAlertMsgSet={superAlertMsgSet}
           searchOpen={searchOpen}
           openSearch={openSearch}
@@ -5912,6 +5933,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           />
         </div>
       )}
+      {/* All Threads browser — opened from header MessageSquare button */}
+      <AllThreadsPanel
+        open={allThreadsOpen}
+        onClose={() => setAllThreadsOpen(false)}
+        onOpenThread={(parentId) => {
+          setAllThreadsOpen(false);
+          setOpenThreadId(parentId);
+        }}
+      />
     </div>
   );
 }
