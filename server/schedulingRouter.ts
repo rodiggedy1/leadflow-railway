@@ -239,18 +239,14 @@ async function cachedDiagonalDriveTimes(
       });
       chunkPairs.forEach((p, idx) => {
         const el = apiResult?.rows?.[idx]?.elements?.[idx];
-        const secs = el?.status === 'OK'
-          ? el.duration.value
-          : Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10);
+        const secs = el?.status === 'OK' ? el.duration.value : 0;
         result[chunkIdxs[idx]] = secs;
         if (db && el?.status === 'OK') {
           setCachedDriveTime(db, p.fromLat, p.fromLng, p.toLat, p.toLng, secs).catch(() => {});
         }
       });
     } catch {
-      chunkPairs.forEach((p, idx) => {
-        result[chunkIdxs[idx]] = Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10);
-      });
+      // Google API failed — leave result[idx] as 0 (no drive time shown)
     }
   }
 
@@ -982,7 +978,7 @@ export const schedulingRouter = router({
             }
           : null;
         // Use saved driveTimeSecs from schedule_assignments (set by the optimizer).
-        // The haversine estimate in estimatedDriveMap is only used for the synthetic assignment fallback.
+        // estimatedDriveMap contains real Google drive times (0 if Google failed) for unoptimized jobs.
         const baseAssignment = isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment);
         // Compute badge flags
         const isNewClient = j.bookingStatus === "new";
@@ -1433,10 +1429,10 @@ export const schedulingRouter = router({
                   units: "metric",
                 });
                 const el = result?.rows?.[0]?.elements?.[0];
-                cur.driveTimeSecs = el?.status === "OK" ? el.duration.value : Math.round(haversineMeters({ lat: fromLat, lng: fromLng }, { lat: curGeo.lat, lng: curGeo.lng }) / 16);
+                cur.driveTimeSecs = el?.status === "OK" ? el.duration.value : 0;
                 if (db && el?.status === "OK") setCachedDriveTime(db, fromLat, fromLng, curGeo.lat, curGeo.lng, cur.driveTimeSecs).catch(() => {});
               } catch {
-                cur.driveTimeSecs = Math.round(haversineMeters({ lat: fromLat, lng: fromLng }, { lat: curGeo.lat, lng: curGeo.lng }) / 16);
+                cur.driveTimeSecs = 0;
               }
             }
           }
