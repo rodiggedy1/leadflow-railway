@@ -1120,9 +1120,12 @@ const MessageList = memo(function MessageList({
                 )}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
-                {unreadThreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white animate-pulse">
-                    {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
+                {activeThreadCount > 0 && (
+                  <span className={cn(
+                    "absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white",
+                    unreadThreadCount > 0 ? "bg-blue-500 animate-pulse" : "bg-slate-400"
+                  )}>
+                    {unreadThreadCount > 0 ? (unreadThreadCount > 9 ? "9+" : unreadThreadCount) : activeThreadCount}
                   </span>
                 )}
               </button>
@@ -4506,10 +4509,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {activeThreadCount > 0 && (
                 <button
                   onClick={() => setAllThreadsOpen(true)}
-                  className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 transition"
+                  className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 transition"
                 >
                   <MessageSquare className="h-3 w-3" />
                   {activeThreadCount} thread{activeThreadCount > 1 ? "s" : ""}
+                  {unreadThreadCount > 0 && (
+                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                      {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
+                    </span>
+                  )}
                 </button>
               )}
             </div>
