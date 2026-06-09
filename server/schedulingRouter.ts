@@ -268,83 +268,22 @@ async function cachedDiagonalDriveTimes(
  */
 async function buildTravelMatrix(
   points: LatLng[],
-  db?: NonNullable<Awaited<ReturnType<typeof getDb>>>
+  // db param kept for signature compatibility — no longer used for API calls
+  _db?: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<number[][]> {
+  // Use haversine (straight-line / avg speed) for the optimizer matrix.
+  // Eliminates Google Distance Matrix API cost for optimization runs (~$3/click).
+  // Haversine is accurate enough for routing decisions — real drive times are
+  // fetched and stored in DB after assignments are saved.
   const n = points.length;
   const matrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
-  const CHUNK = 10; // safe chunk size
-
-  // Collect all (i,j) pairs that need a live API call (cache miss)
-  type Pair = { oi: number; ri: number; di: number; ci: number };
-  const missChunks: { origins: string; destinations: string; oiBase: number; diBase: number; pairs: Pair[] }[] = [];
-
-  for (let oi = 0; oi < n; oi += CHUNK) {
-    for (let di = 0; di < n; di += CHUNK) {
-      const pairs: Pair[] = [];
-      for (let ri = 0; ri < CHUNK && oi + ri < n; ri++) {
-        for (let ci = 0; ci < CHUNK && di + ci < n; ci++) {
-          const p1 = points[oi + ri];
-          const p2 = points[di + ci];
-          if (oi + ri === di + ci) { matrix[oi + ri][di + ci] = 0; continue; }
-          // Try cache first
-          if (db) {
-            const cached = await getCachedDriveTime(db, p1.lat, p1.lng, p2.lat, p2.lng);
-            if (cached !== null) {
-              matrix[oi + ri][di + ci] = cached;
-              continue;
-            }
-          }
-          pairs.push({ oi, ri, di, ci });
-        }
-      }
-      if (pairs.length > 0) {
-        const origins = points.slice(oi, oi + CHUNK).map(p => `${p.lat},${p.lng}`).join("|");
-        const destinations = points.slice(di, di + CHUNK).map(p => `${p.lat},${p.lng}`).join("|");
-        missChunks.push({ origins, destinations, oiBase: oi, diBase: di, pairs });
-      }
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      if (i === j) continue;
+      // Estimate drive time: haversine meters / 10 m/s (~22 mph avg urban speed)
+      matrix[i][j] = Math.round(haversineMeters(points[i], points[j]) / 10);
     }
   }
-
-  // Fire API only for cache-miss chunks
-  for (const chunk of missChunks) {
-    try {
-      const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
-        origins: chunk.origins,
-        destinations: chunk.destinations,
-        mode: "driving",
-        units: "metric",
-      });
-      if (result.status === "OK") {
-        result.rows.forEach((row, ri) => {
-          row.elements.forEach((el, ci) => {
-            const absI = chunk.oiBase + ri;
-            const absJ = chunk.diBase + ci;
-            if (absI >= n || absJ >= n) return;
-            const p1 = points[absI];
-            const p2 = points[absJ];
-            let secs: number;
-            if (el.status === "OK") {
-              secs = el.duration.value;
-            } else {
-              secs = Math.round(haversineMeters(p1, p2) / 10);
-            }
-            matrix[absI][absJ] = secs;
-            if (db && el.status === "OK") {
-              setCachedDriveTime(db, p1.lat, p1.lng, p2.lat, p2.lng, secs).catch(() => {});
-            }
-          });
-        });
-      }
-    } catch {
-      // Fallback to haversine for this chunk
-      for (const { oi, ri, di, ci } of chunk.pairs) {
-        const p1 = points[oi + ri];
-        const p2 = points[di + ci];
-        matrix[oi + ri][di + ci] = Math.round(haversineMeters(p1, p2) / 10);
-      }
-    }
-  }
-
   return matrix;
 }
 
@@ -1404,17 +1343,13 @@ export const schedulingRouter = router({
           let bestIdx = 0;
           let bestSecs = Infinity;
           if (destinations) {
-            // Build pairs for cache lookup: curLat/curLng → each remaining job
-            const remainingGeos = remaining.map(a => geoByJobId.get(a.cleanerJobId)).filter(Boolean) as { lat: number; lng: number }[];
-            const pairs = remainingGeos.map(g => ({ fromLat: curLat, fromLng: curLng, toLat: g.lat, toLng: g.lng }));
-            try {
-              const secsList = await cachedDiagonalDriveTimes(db ?? undefined, pairs);
-              for (let i = 0; i < secsList.length; i++) {
-                const secs = secsList[i] > 0 ? secsList[i] : Infinity;
-                if (secs < bestSecs) { bestSecs = secs; bestIdx = i; }
-              }
-            } catch {
-              // fallback: keep current order
+            // Use haversine to find nearest job — no API cost, accurate enough for ordering
+            const remainingGeos = remaining.map(a => geoByJobId.get(a.cleanerJobId));
+            for (let i = 0; i < remainingGeos.length; i++) {
+              const geo = remainingGeos[i];
+              if (!geo) continue;
+              const secs = Math.round(haversineMeters({ lat: curLat, lng: curLng }, { lat: geo.lat, lng: geo.lng }) / 10);
+              if (secs < bestSecs) { bestSecs = secs; bestIdx = i; }
             }
           }
           const chosen = remaining.splice(bestIdx, 1)[0];
