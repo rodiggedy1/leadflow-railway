@@ -1121,7 +1121,7 @@ const MessageList = memo(function MessageList({
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 {unreadThreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white animate-pulse">
                     {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
                   </span>
                 )}
