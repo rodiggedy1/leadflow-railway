@@ -660,10 +660,10 @@ export const opsChatRouter = router({
    * List all threads in the command channel that have at least one reply.
    * Returns parent message + reply count + last reply preview, sorted by most recent activity.
    */
-  listActiveThreads: opsChatProcedure.query(async ({ ctx }) => {
+    listActiveThreads: opsChatProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return [];
-
+    console.log('[listActiveThreads] callerId=', ctx.opsCaller?.id, 'callerName=', ctx.opsCaller?.name);
     // Get all reply messages in the command channel
     const replies = await db
       .select({
@@ -736,6 +736,7 @@ export const opsChatRouter = router({
 
     // Sort by most recent activity
     threads.sort((a, b) => b.lastReplyTs - a.lastReplyTs);
+    console.log('[listActiveThreads] result:', threads.map(t => ({ id: t.parentId, hasUnread: t.hasUnread, lastReplyMsgId: t.lastReplyMsgId })));
     return threads;
   }),
 
