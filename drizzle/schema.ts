@@ -2681,3 +2681,21 @@ export const chatSuperAlerts = mysqlTable("chat_super_alerts", {
 }));
 export type ChatSuperAlert = typeof chatSuperAlerts.$inferSelect;
 export type InsertChatSuperAlert = typeof chatSuperAlerts.$inferInsert;
+
+/**
+ * driveTimeCache — cached driving duration results from Google Distance Matrix API.
+ * Key is "fromLat,fromLng->toLat,toLng" (coords rounded to 5 decimal places).
+ * Avoids re-calling the API for the same origin/destination pair on every page load.
+ */
+export const driveTimeCache = mysqlTable("drive_time_cache", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Cache key: "fromLat,fromLng->toLat,toLng" (coords rounded to 5dp) */
+  routeKey: varchar("routeKey", { length: 100 }).notNull().unique(),
+  /** Driving duration in seconds */
+  durationSeconds: int("durationSeconds").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxRouteKey: index("idx_dtc_route_key").on(t.routeKey),
+}));
+export type DriveTimeCache = typeof driveTimeCache.$inferSelect;
+export type InsertDriveTimeCache = typeof driveTimeCache.$inferInsert;
