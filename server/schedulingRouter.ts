@@ -848,9 +848,14 @@ export const schedulingRouter = router({
 
       // Build drive time chain for each team: home → job1 → job2 → job3
             // Jobs are sorted by serviceDateTime (earliest first) — same order as the UI.
-      // No page-load Google calls — drive times come from DB only (written by Optimize or Rerun Distances).
-      // Unassigned jobs show no drive time.
+      // Drive times come from DB only (written by Optimize or Rerun Distances).
+      // Populate from saved assignments so synthetic jobs show their last known drive time.
       const estimatedDriveMap = new Map<number, number>();
+      for (const a of assignments) {
+        if (a.driveTimeSecs != null && a.driveTimeSecs > 0) {
+          estimatedDriveMap.set(a.cleanerJobId, a.driveTimeSecs);
+        }
+      }
 
       // Build a helper to detect job type badges from the job's fields
       const enriched = jobs.map(j => {
@@ -2027,18 +2032,68 @@ export const schedulingRouter = router({
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
       // Load all teams
       const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teamByName = new Map(teams.map(t => [t.name, t]));
       const teamsToProcess = input.teamId ? teams.filter(t => t.id === input.teamId) : teams;
+
+      // For jobs that have no saved assignment (synthetic/default state after reset),
+      // we need to upsert an assignment row so we can write driveTimeSecs into it.
+      // Load all jobs for this date to find synthetic ones.
+      const allJobs = await db.select({
+        id: cleanerJobs.id,
+        jobDate: cleanerJobs.jobDate,
+        teamName: cleanerJobs.teamName,
+        serviceDateTime: cleanerJobs.serviceDateTime,
+      }).from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobDate, input.date),
+          sql`${cleanerJobs.status} != 'cancelled'`,
+        ));
+      const allAssignments = await db.select().from(scheduleAssignments)
+        .where(eq(scheduleAssignments.jobDate, input.date));
+      const assignedJobIds = new Set(allAssignments.map(a => a.cleanerJobId));
+
+      // Upsert synthetic assignments for jobs that have a Launch27 teamName but no DB row
+      for (const j of allJobs) {
+        if (assignedJobIds.has(j.id)) continue; // already has a row
+        if (!j.teamName) continue;
+        const team = teamByName.get(j.teamName);
+        if (!team) continue;
+        const svcMs = j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : Date.now();
+        await db.insert(scheduleAssignments)
+          .values({
+            jobDate: input.date,
+            cleanerJobId: j.id,
+            teamId: team.id,
+            teamName: team.name,
+            routeOrder: 0,
+            isManual: 0,
+            estimatedArrivalMs: svcMs,
+            estimatedDepartureMs: svcMs + 2 * 3600 * 1000,
+            driveTimeSecs: null,
+          })
+          .onDuplicateKeyUpdate({
+            set: { updatedAt: new Date() }, // no-op if row already exists
+          });
+      }
+
       let updated = 0;
       for (const team of teamsToProcess) {
-        // Load active assignments for this team on this date
+        // Load active assignments for this team on this date (including newly upserted ones)
         const assignments = await db.select().from(scheduleAssignments)
           .where(and(
             eq(scheduleAssignments.jobDate, input.date),
             eq(scheduleAssignments.teamId, team.id),
           ));
+        const jobSvcMs = new Map(allJobs.map(j => [j.id, j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0]));
         const active = assignments
           .filter(a => a.isManual !== 2)
-          .sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
+          .sort((a, b) => {
+            // Sort by serviceDateTime so drive chain matches actual job order
+            const ta = jobSvcMs.get(a.cleanerJobId) ?? 0;
+            const tb = jobSvcMs.get(b.cleanerJobId) ?? 0;
+            if (ta !== tb) return ta - tb;
+            return (a.routeOrder ?? 0) - (b.routeOrder ?? 0);
+          });
         // Renumber 0,1,2... to eliminate any duplicate routeOrders in DB
         active.forEach((a, idx) => { (a as any).routeOrder = idx; });
         if (active.length === 0) continue;
