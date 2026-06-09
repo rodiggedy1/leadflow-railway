@@ -831,27 +831,21 @@ export function registerWebhookRoutes(app: Express) {
 
       // If agent has taken over (aiMode = 0), just store the inbound message and stop.
       // The agent will reply manually from the app.
+      // NOTE: messageHistory + lastCustomerReplyAt were already saved above — no second update needed.
       if (session.aiMode === 0) {
         console.log(`[Webhook] Manual mode for session ${session.id} — storing inbound, skipping AI reply.`);
-        await db
-          .update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(history) })
-          .where(eq(conversationSessions.id, session.id));
         return;
       }
 
       // If the lead was booked within the last 30 days, do NOT send an AI auto-reply.
       // A booking older than 30 days is considered lapsed — the lead is fair game for re-engagement.
+      // NOTE: messageHistory + lastCustomerReplyAt were already saved above — no second update needed.
       const BOOKED_SILENCE_DAYS = 30;
       const bookedAt = session.bookedAt ? new Date(session.bookedAt).getTime() : null;
       const bookedRecently = session.isBooked === 1 && bookedAt !== null &&
         (Date.now() - bookedAt) < BOOKED_SILENCE_DAYS * 24 * 60 * 60 * 1000;
       if (bookedRecently) {
         console.log(`[Webhook] Lead ${fromPhone} (session ${session.id}) was booked ${Math.floor((Date.now() - bookedAt!) / 86400000)}d ago — storing inbound, skipping AI reply.`);
-        await db
-          .update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(history) })
-          .where(eq(conversationSessions.id, session.id));
         return;
       }
 
