@@ -2028,6 +2028,8 @@ export const schedulingRouter = router({
         const active = assignments
           .filter(a => a.isManual !== 2)
           .sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
+        // Renumber 0,1,2... to eliminate any duplicate routeOrders in DB
+        active.forEach((a, idx) => { (a as any).routeOrder = idx; });
         if (active.length === 0) continue;
         // Load job addresses
         const jobIds = active.map(a => a.cleanerJobId);
