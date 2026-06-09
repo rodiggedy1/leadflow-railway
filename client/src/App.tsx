@@ -42,6 +42,7 @@ const PayrollSummary = lazy(() => import("./pages/PayrollSummary"));
 const Performance = lazy(() => import("./pages/Performance"));
 const Metrics = lazy(() => import("./pages/Metrics"));
 const LeadNurturing = lazy(() => import("./pages/LeadNurturing"));
+const EmailInbox = lazy(() => import("./pages/EmailInbox"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -103,6 +104,7 @@ function Router() {
         <Route path={"/admin/performance"} component={Performance} />
         <Route path={"/admin/metrics"} component={Metrics} />
         <Route path={"/admin/lead-nurturing"} component={LeadNurturing} />
+        <Route path={"/admin/inbox"} component={EmailInbox} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
