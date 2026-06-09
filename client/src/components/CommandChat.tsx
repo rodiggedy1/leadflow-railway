@@ -4513,34 +4513,38 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Conversation thread — relative wrapper for toast overlay */}
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
-          {(unreadTagIds.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
+          {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
             <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
-              {/* Mentions pill */}
-              {unreadTagIds.length > 0 && (
+              {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
+              {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={jumpToNextMention}
-                    className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
-                  >
-                    🔔 {unreadTagIds.length} mention{unreadTagIds.length > 1 ? "s" : ""}
-                  </button>
+                  {unreadTagIds.length > 0 && (
+                    <>
+                      <button
+                        onClick={jumpToNextMention}
+                        className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
+                      >
+                        🔔 {unreadTagIds.length} mention{unreadTagIds.length > 1 ? "s" : ""}
+                      </button>
+                      <button
+                        onClick={markTagsSeen}
+                        className="text-amber-400 hover:text-amber-600 transition"
+                        title="Dismiss"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => setShowMentionHistory(true)}
                     className="text-[10px] text-amber-600 hover:text-amber-800 transition"
                   >
                     See all
                   </button>
-                  <button
-                    onClick={markTagsSeen}
-                    className="text-amber-400 hover:text-amber-600 transition"
-                    title="Dismiss"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
                 </div>
               )}
               {/* Divider between pills */}
-              {unreadTagIds.length > 0 && activeThreadCount > 0 && (
+              {(unreadTagIds.length > 0 || allMentions.length > 0) && activeThreadCount > 0 && (
                 <span className="text-slate-300 text-xs">|</span>
               )}
               {/* Threads pill */}
