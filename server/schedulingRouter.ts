@@ -25,7 +25,6 @@ import {
   teamDayUnavailability,
   teamDayLock,
   teamDayConfig,
-  driveTimeCache,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -163,93 +162,31 @@ async function geocodeWithCache(address: string): Promise<{ lat: number; lng: nu
 }
 
 
-// ── Drive Time Cache helper ───────────────────────────────────────────────────
+// ── Drive Time helper ────────────────────────────────────────────────────────
 /**
- * Round lat/lng to 5 decimal places (~1m precision) for cache key stability.
+ * Fetch drive times for N independent origin→destination pairs directly from Google.
+ * Each pair is called as 1 origin × 1 destination — no batching ambiguity, no cache.
+ * Always returns a fresh Google value. Returns 0 if Google fails.
  */
-function roundCoord(n: number): string {
-  return n.toFixed(5);
-}
-function makeDriveKey(fromLat: number, fromLng: number, toLat: number, toLng: number): string {
-  return `${roundCoord(fromLat)},${roundCoord(fromLng)}->${roundCoord(toLat)},${roundCoord(toLng)}`;
-}
-/**
- * Look up a cached drive time. Returns null on cache miss.
- */
-async function getCachedDriveTime(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  fromLat: number, fromLng: number, toLat: number, toLng: number
-): Promise<number | null> {
-  const key = makeDriveKey(fromLat, fromLng, toLat, toLng);
-  const rows = await db.select({ durationSeconds: driveTimeCache.durationSeconds })
-    .from(driveTimeCache)
-    .where(eq(driveTimeCache.routeKey, key))
-    .limit(1)
-    .catch(() => []);
-  return rows[0]?.durationSeconds ?? null;
-}
-/**
- * Store a drive time result in the cache (ignore duplicates).
- */
-async function setCachedDriveTime(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  fromLat: number, fromLng: number, toLat: number, toLng: number,
-  durationSeconds: number
-): Promise<void> {
-  const key = makeDriveKey(fromLat, fromLng, toLat, toLng);
-  await db.insert(driveTimeCache).ignore().values({ routeKey: key, durationSeconds }).catch(() => {});
-}
-/**
- * Fetch drive times for N independent origin→destination pairs using the cache.
- * Uses the "diagonal" pattern: origins[i]→destinations[i] = rows[i].elements[i].
- * Returns an array of durationSeconds (one per pair), falling back to haversine on error.
- */
-async function cachedDiagonalDriveTimes(
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>> | undefined,
+async function fetchDriveTimes(
   pairs: { fromLat: number; fromLng: number; toLat: number; toLng: number }[]
 ): Promise<number[]> {
   const result: number[] = new Array(pairs.length).fill(0);
-  const missIndices: number[] = [];
-
-  // Check cache for each pair
   for (let i = 0; i < pairs.length; i++) {
     const p = pairs[i];
-    if (db) {
-      const cached = await getCachedDriveTime(db, p.fromLat, p.fromLng, p.toLat, p.toLng);
-      if (cached !== null) { result[i] = cached; continue; }
-    }
-    missIndices.push(i);
-  }
-
-  if (missIndices.length === 0) return result;
-
-  // Batch API calls for cache misses in chunks of 10
-  const CHUNK = 10;
-  for (let ci = 0; ci < missIndices.length; ci += CHUNK) {
-    const chunkIdxs = missIndices.slice(ci, ci + CHUNK);
-    const chunkPairs = chunkIdxs.map(i => pairs[i]);
-    const origins = chunkPairs.map(p => `${p.fromLat},${p.fromLng}`).join('|');
-    const destinations = chunkPairs.map(p => `${p.toLat},${p.toLng}`).join('|');
     try {
       const apiResult = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
-        origins,
-        destinations,
+        origins: `${p.fromLat},${p.fromLng}`,
+        destinations: `${p.toLat},${p.toLng}`,
         mode: 'driving',
         units: 'metric',
       });
-      chunkPairs.forEach((p, idx) => {
-        const el = apiResult?.rows?.[idx]?.elements?.[idx];
-        const secs = el?.status === 'OK' ? el.duration.value : 0;
-        result[chunkIdxs[idx]] = secs;
-        if (db && el?.status === 'OK') {
-          setCachedDriveTime(db, p.fromLat, p.fromLng, p.toLat, p.toLng, secs).catch(() => {});
-        }
-      });
+      const el = apiResult?.rows?.[0]?.elements?.[0];
+      result[i] = el?.status === 'OK' ? el.duration.value : 0;
     } catch {
-      // Google API failed — leave result[idx] as 0 (no drive time shown)
+      result[i] = 0;
     }
   }
-
   return result;
 }
 
@@ -943,7 +880,7 @@ export const schedulingRouter = router({
       // Cost: ~$0.10/day (only fires for jobs with no saved assignment — start of day before first Optimize).
       // After Optimize runs, all jobs have saved driveTimeSecs in DB so this block is skipped entirely.
       if (allPairPoints.length > 0) {
-        const driveSecs = await cachedDiagonalDriveTimes(db, allPairPoints);
+        const driveSecs = await fetchDriveTimes(allPairPoints);
         allPairPoints.forEach((p, idx) => {
           driveMap.set(p.toJobId, driveSecs[idx]);
         });
@@ -1417,23 +1354,17 @@ export const schedulingRouter = router({
           }
 
           {
-            const cached = db ? await getCachedDriveTime(db, fromLat, fromLng, curGeo.lat, curGeo.lng) : null;
-            if (cached !== null) {
-              cur.driveTimeSecs = cached;
-            } else {
-              try {
-                const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
-                  origins: `${fromLat},${fromLng}`,
-                  destinations: `${curGeo.lat},${curGeo.lng}`,
-                  mode: "driving",
-                  units: "metric",
-                });
-                const el = result?.rows?.[0]?.elements?.[0];
-                cur.driveTimeSecs = el?.status === "OK" ? el.duration.value : 0;
-                if (db && el?.status === "OK") setCachedDriveTime(db, fromLat, fromLng, curGeo.lat, curGeo.lng, cur.driveTimeSecs).catch(() => {});
-              } catch {
-                cur.driveTimeSecs = 0;
-              }
+            try {
+              const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+                origins: `${fromLat},${fromLng}`,
+                destinations: `${curGeo.lat},${curGeo.lng}`,
+                mode: "driving",
+                units: "metric",
+              });
+              const el = result?.rows?.[0]?.elements?.[0];
+              cur.driveTimeSecs = el?.status === "OK" ? el.duration.value : 0;
+            } catch {
+              cur.driveTimeSecs = 0;
             }
           }
         }
@@ -1624,7 +1555,7 @@ export const schedulingRouter = router({
       // Fetch drive times for the affected legs (with cache)
       const driveUpdates = new Map<number, number>(); // jobId -> driveTimeSecs
       if (affectedPairs.length > 0) {
-        const driveSecs = await cachedDiagonalDriveTimes(db, affectedPairs);
+        const driveSecs = await fetchDriveTimes(affectedPairs);
         affectedPairs.forEach((p, idx) => {
           if (driveSecs[idx] > 0) driveUpdates.set(p.toJobId, driveSecs[idx]);
         });
@@ -2018,7 +1949,7 @@ export const schedulingRouter = router({
 
       // 6. Batch distance matrix for all pairs (with cache)
       const driveSecs: number[] = allPairs.length > 0
-        ? await cachedDiagonalDriveTimes(db, allPairs)
+        ? await fetchDriveTimes(allPairs)
         : [];
 
       // 7. Compute insertion cost for each gap
@@ -2158,7 +2089,7 @@ async function recalcTeamRoute(
   // Fetch drive times for the chain (with cache)
   const driveMap = new Map<number, number>(); // jobId -> driveTimeSecs
   if (chainPairs.length > 0) {
-    const chainDriveSecs = await cachedDiagonalDriveTimes(db, chainPairs);
+    const chainDriveSecs = await fetchDriveTimes(chainPairs);
     chainPairs.forEach((p, idx) => {
       if (chainDriveSecs[idx] > 0) driveMap.set(p.toJobId, chainDriveSecs[idx]);
     });
