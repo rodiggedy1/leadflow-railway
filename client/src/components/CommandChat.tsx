@@ -1958,7 +1958,7 @@ const MessageList = memo(function MessageList({
                         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
                           <PhoneOff className="h-3 w-3 text-red-100" />
                           <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">
-                            {isNoAnswer ? "No Answer" : "Call Failed"}
+                            {isNoAnswer ? "No Answer" : "Did Not Confirm"}
                           </span>
                           <span className="ml-auto text-[10px] text-red-300">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
@@ -1967,7 +1967,7 @@ const MessageList = memo(function MessageList({
                             {cleanerName} — schedule unconfirmed
                           </p>
                           <p className="text-xs text-red-700 mt-0.5">
-                            {isNoAnswer ? "Did not answer" : "Call failed"} after 8 PM escalation call
+                            {isNoAnswer ? "Did not answer" : "Did not confirm"} after 8 PM escalation call
                             {jobCount > 0 ? ` · ${jobCount} job${jobCount !== 1 ? "s" : ""} tomorrow` : ""}
                           </p>
                           {cleanerPhone && (
