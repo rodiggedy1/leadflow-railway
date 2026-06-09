@@ -943,11 +943,14 @@ export const schedulingRouter = router({
         }
       }
 
-      // Use haversine for page-load drive time estimates on unoptimized jobs — $0 cost.
-      // Real Google drive times are fetched once after Optimize runs and saved to DB.
-      for (const p of allPairPoints) {
-        const secs = Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10);
-        driveMap.set(p.toJobId, secs);
+      // Fetch real Google drive times for unoptimized jobs on page load (with cache).
+      // Cost: ~$0.10/day (only fires for jobs with no saved assignment — start of day before first Optimize).
+      // After Optimize runs, all jobs have saved driveTimeSecs in DB so this block is skipped entirely.
+      if (allPairPoints.length > 0) {
+        const driveSecs = await cachedDiagonalDriveTimes(db, allPairPoints);
+        allPairPoints.forEach((p, idx) => {
+          driveMap.set(p.toJobId, driveSecs[idx]);
+        });
       }
 
       // estimatedDriveMap alias — used below when building enriched jobs
