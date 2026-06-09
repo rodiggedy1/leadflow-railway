@@ -943,14 +943,11 @@ export const schedulingRouter = router({
         }
       }
 
-      // Use Google Distance Matrix for real drive times on page load (with cache).
-      // Cache eliminates repeat API calls for the same address pairs across page loads.
-      // This only fires for jobs with no saved assignment (i.e. after Reset or before first Optimize).
-      if (allPairPoints.length > 0) {
-        const driveSecs = await cachedDiagonalDriveTimes(db, allPairPoints);
-        allPairPoints.forEach((p, idx) => {
-          driveMap.set(p.toJobId, driveSecs[idx]);
-        });
+      // Use haversine for page-load drive time estimates on unoptimized jobs — $0 cost.
+      // Real Google drive times are fetched once after Optimize runs and saved to DB.
+      for (const p of allPairPoints) {
+        const secs = Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10);
+        driveMap.set(p.toJobId, secs);
       }
 
       // estimatedDriveMap alias — used below when building enriched jobs
