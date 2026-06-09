@@ -808,10 +808,12 @@ export function registerWebhookRoutes(app: Express) {
       // ── CRITICAL: Persist the user message to DB IMMEDIATELY ──────────────────
       // This MUST happen before ANY LLM/AI call. If the AI engine crashes, times out,
       // or throws, the customer's message is guaranteed to be in the DB already.
+      // Also stamp lastCustomerReplyAt so the CommandChat lead-replies notification
+      // fires immediately — regardless of whether the AI replies afterward.
       // The history will be updated again later with the assistant reply appended.
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(history) } as any)
+        .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now } as any)
         .where(eq(conversationSessions.id, session.id));
 
       // Log the inbound reply as an activity event

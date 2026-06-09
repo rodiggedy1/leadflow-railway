@@ -392,6 +392,15 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * a ts newer than this value (or this is null).
    */
   lastReadAt: bigint("lastReadAt", { mode: "number" }),
+  /**
+   * Unix ms timestamp of the most recent inbound customer message.
+   * Updated every time a customer SMS is received, regardless of AI response.
+   * Used for the CommandChat lead-replies notification: shows whenever
+   * lastCustomerReplyAt > lastReadAt (or lastReadAt is null), so agents
+   * always see a notification when a lead has replied — even if the AI
+   * already responded.
+   */
+  lastCustomerReplyAt: bigint("lastCustomerReplyAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

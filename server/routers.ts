@@ -4719,9 +4719,17 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
     }),
 
     /**
-     * leads.getLeadReplies — returns active leads where the client replied last
-     * (lastInboundAt > lastOutboundAt, or no outbound at all) and the lead is not
-     * booked/terminal. Used for the "lead replies" notification button in CommandChat.
+     * leads.getLeadReplies — returns active leads where the customer has replied
+     * and the agent has not yet read the conversation since that reply.
+     *
+     * Logic: show a session if lastCustomerReplyAt IS NOT NULL AND
+     *   (lastReadAt IS NULL OR lastCustomerReplyAt > lastReadAt)
+     *
+     * This is purely timestamp-based — it does NOT care whether the AI already
+     * replied. The notification persists until the agent opens the lead drawer
+     * (which stamps lastReadAt via leads.markRead). This means an agent always
+     * sees the notification even after Jade has already responded.
+     *
      * Lightweight: no full messageHistory blob in return — just the fields needed.
      */
     getLeadReplies: opsChatProcedure.query(async () => {
@@ -4729,65 +4737,55 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       if (!db) return [];
       const rows = await db
         .select({
-          id:                conversationSessions.id,
-          leadName:          conversationSessions.leadName,
-          leadPhone:         conversationSessions.leadPhone,
-          leadSource:        conversationSessions.leadSource,
-          stage:             conversationSessions.stage,
-          assignedAgentName: conversationSessions.assignedAgentName,
-          messageHistory:    conversationSessions.messageHistory,
-          lastReadAt:        conversationSessions.lastReadAt,
-          createdAt:         conversationSessions.createdAt,
+          id:                    conversationSessions.id,
+          leadName:              conversationSessions.leadName,
+          leadPhone:             conversationSessions.leadPhone,
+          leadSource:            conversationSessions.leadSource,
+          stage:                 conversationSessions.stage,
+          assignedAgentName:     conversationSessions.assignedAgentName,
+          lastCustomerReplyAt:   conversationSessions.lastCustomerReplyAt,
+          lastReadAt:            conversationSessions.lastReadAt,
+          createdAt:             conversationSessions.createdAt,
         })
         .from(conversationSessions)
         .where(
           and(
+            // Must have a recorded customer reply
+            isNotNull(conversationSessions.lastCustomerReplyAt),
+            // Notification fires if agent hasn't read since the last customer reply
+            or(
+              isNull(conversationSessions.lastReadAt),
+              sql`${conversationSessions.lastCustomerReplyAt} > ${conversationSessions.lastReadAt}`,
+            ),
+            // Exclude terminal stages
             sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
+            // Only look at sessions from the last 7 days
             sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
             nonLeadSourceFilter(),
             sql`NOT (${conversationSessions.leadSource} = 'cs_initiated' AND ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))`,
           )
         )
-        .orderBy(desc(conversationSessions.createdAt))
+        .orderBy(desc(conversationSessions.lastCustomerReplyAt))
         .limit(300);
 
-      const results: Array<{
-        id: number;
-        leadName: string;
-        leadPhone: string | null;
-        leadSource: string | null;
-        stage: string;
-        assignedAgentName: string | null;
-        lastInboundAt: number;
-        isUnread: boolean;
-        ageMs: number;
-      }> = [];
-
       const now = Date.now();
-      for (const r of rows) {
-        try {
-          const history: Array<{ role: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
-          if (history.length === 0) continue;
-          // Last message must be from customer
-          const lastMsg = history[history.length - 1];
-          if (lastMsg.role !== 'user' && lastMsg.role !== 'customer') continue;
-          if (!lastMsg.ts) continue;
-          const lastInboundAt = lastMsg.ts;
-          const lastReadAt = r.lastReadAt as number | null | undefined;
-          const isUnread = !lastReadAt || lastInboundAt > lastReadAt;
-          results.push({
-            id: r.id,
-            leadName: r.leadName ?? 'Unknown',
-            leadPhone: r.leadPhone,
-            leadSource: r.leadSource,
-            stage: r.stage ?? 'QUOTE_SENT',
-            assignedAgentName: r.assignedAgentName,
-            lastInboundAt,
-            isUnread,
-            ageMs: now - lastInboundAt,
-          });
-        } catch { /* skip malformed */ }
-      }
+      const results = rows.map(r => {
+        const lastCustomerReplyAt = r.lastCustomerReplyAt as number;
+        const lastReadAt = r.lastReadAt as number | null | undefined;
+        const isUnread = !lastReadAt || lastCustomerReplyAt > lastReadAt;
+        return {
+          id: r.id,
+          leadName: r.leadName ?? 'Unknown',
+          leadPhone: r.leadPhone,
+          leadSource: r.leadSource,
+          stage: r.stage ?? 'QUOTE_SENT',
+          assignedAgentName: r.assignedAgentName,
+          lastInboundAt: lastCustomerReplyAt,
+          isUnread,
+          ageMs: now - lastCustomerReplyAt,
+        };
+      });
+
       // Sort: unread first, then by most recent reply
       results.sort((a, b) => {
         if (a.isUnread !== b.isUnread) return a.isUnread ? -1 : 1;
@@ -6635,6 +6633,7 @@ async function processWidgetLeadInBackground(input: {
     "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF",
     "ADDRESS", "CONFIRMATION", "WIDGET_SIZING",
     "FLOWC_ADDON", "FLOWC_DATE", "FLOWC_QUOTE_SENT",
+    "REACTIVATION", "REACTIVATION_TIME",
   ];
   try {
     const supersededCount = await db
@@ -6890,6 +6889,7 @@ async function processQuoteInBackground(
     "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "TIME_PREF",
     "ADDRESS", "CONFIRMATION", "WIDGET_SIZING",
     "FLOWC_ADDON", "FLOWC_DATE", "FLOWC_QUOTE_SENT",
+    "REACTIVATION", "REACTIVATION_TIME",
   ];
   try {
     const supersededCount = await db
