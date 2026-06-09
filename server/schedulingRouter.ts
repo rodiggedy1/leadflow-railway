@@ -1650,17 +1650,68 @@ export const schedulingRouter = router({
     }),
 
   /**
-   * resetOptimization — clears all non-manual schedule assignments and all locks
-   * for the given date, restoring the original Launch27 order.
+   * resetOptimization — restores the original Launch27 team assignments and order.
+   *
+   * Strategy:
+   * - Keep assignment rows (jobs are still assigned to teams after reset)
+   * - Reset optimizer fields: routeOrder=0, estimatedArrivalMs/DepartureMs back to
+   *   serviceDateTime, isManual=0, rationale=null
+   * - For jobs whose saved teamId matches their Launch27 default team: keep driveTimeSecs
+   *   (route didn't change, drive time is still valid)
+   * - For jobs whose saved teamId differs from their Launch27 default team: null driveTimeSecs
+   *   (route changed, stale drive time would be wrong)
+   * - For jobs with no saved assignment row: nothing to do (they're already synthetic)
+   * - Clear all job-level and team-day locks
    */
   resetOptimization: agentProcedure
     .input(z.object({ date: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      // Delete ALL assignments for this date (regardless of lock/manual status)
-      await db.delete(scheduleAssignments)
+
+      // Load current assignments for the date
+      const existingAssignments = await db.select().from(scheduleAssignments)
         .where(eq(scheduleAssignments.jobDate, input.date));
+
+      // Load jobs to get their Launch27 default teamName and serviceDateTime
+      const jobIds = existingAssignments.map(a => a.cleanerJobId);
+      const jobRows = jobIds.length > 0
+        ? await db.select({ id: cleanerJobs.id, teamName: cleanerJobs.teamName, serviceDateTime: cleanerJobs.serviceDateTime })
+            .from(cleanerJobs).where(inArray(cleanerJobs.id, jobIds))
+        : [];
+      const jobById = new Map(jobRows.map(j => [j.id, j]));
+
+      // Load teams to resolve Launch27 teamName → teamId
+      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teamByName = new Map(teams.map(t => [t.name, t]));
+
+      // Update each assignment: reset optimizer fields, preserve driveTimeSecs only if team didn't change
+      for (const a of existingAssignments) {
+        const job = jobById.get(a.cleanerJobId);
+        if (!job) continue;
+        const defaultTeam = job.teamName ? teamByName.get(job.teamName) : null;
+        const defaultTeamId = defaultTeam?.id ?? null;
+        const svcMs = job.serviceDateTime ? new Date(job.serviceDateTime).getTime() : null;
+        // Keep drive time only if this job is staying on the same team
+        const teamUnchanged = defaultTeamId != null && Number(a.teamId) === defaultTeamId;
+        await db.update(scheduleAssignments)
+          .set({
+            teamId: defaultTeamId ?? Number(a.teamId), // revert to Launch27 team, or keep current if no default
+            teamName: defaultTeam?.name ?? a.teamName,
+            routeOrder: 0,
+            isManual: 0,
+            rationale: null,
+            estimatedArrivalMs: svcMs,
+            estimatedDepartureMs: svcMs ? svcMs + 2 * 3600 * 1000 : null,
+            driveTimeSecs: teamUnchanged ? a.driveTimeSecs : null,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(scheduleAssignments.jobDate, input.date),
+            eq(scheduleAssignments.cleanerJobId, a.cleanerJobId),
+          ));
+      }
+
       // Clear all job-level locks for this date
       await db.delete(scheduleJobLocks)
         .where(eq(scheduleJobLocks.date, input.date));
@@ -2046,7 +2097,7 @@ export const schedulingRouter = router({
       }).from(cleanerJobs)
         .where(and(
           eq(cleanerJobs.jobDate, input.date),
-          sql`${cleanerJobs.status} != 'cancelled'`,
+          sql`${cleanerJobs.bookingStatus} != 'cancelled'`,
         ));
       const allAssignments = await db.select().from(scheduleAssignments)
         .where(eq(scheduleAssignments.jobDate, input.date));
