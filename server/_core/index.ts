@@ -26,6 +26,7 @@ import { ENV } from "./env";
 import { registerInterviewUploadRoutes } from "../interviewUpload";
 import { registerDeepgramStreamRoute } from "../deepgramStream";
 import { registerAgentLoginRoute } from "../agentLoginRoute";
+import { registerGmailRoutes } from "../gmailRoutes";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
@@ -170,6 +171,8 @@ async function startServer() {
   registerCallCenterCronRoute(app);
   // Plain REST login — bypasses /api/trpc to avoid platform rate limit on that path
   registerAgentLoginRoute(app as any);
+  // Gmail OAuth + Pub/Sub webhook routes
+  registerGmailRoutes(app);
 
   // Preview auto-login: when PREVIEW_MODE=true, visiting /api/preview-login sets
   // an admin agent session cookie automatically so the UI is accessible without credentials.

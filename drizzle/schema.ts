@@ -2758,3 +2758,13 @@ export const teamDayOverride = mysqlTable("team_day_override", {
 }));
 export type TeamDayOverride = typeof teamDayOverride.$inferSelect;
 export type InsertTeamDayOverride = typeof teamDayOverride.$inferInsert;
+
+// ── Gmail integration state ────────────────────────────────────────────────────
+export const gmailState = mysqlTable("gmail_state", {
+  id: int("id").primaryKey(),
+  refreshToken: text("refreshToken").notNull(),
+  historyId: varchar("historyId", { length: 50 }).notNull().default("0"),
+  watchExpiration: bigint("watchExpiration", { mode: "number" }).notNull().default(0),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GmailState = typeof gmailState.$inferSelect;

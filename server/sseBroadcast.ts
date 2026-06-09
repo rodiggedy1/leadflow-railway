@@ -34,7 +34,8 @@ export type OpsEventType =
   | "issue_comment"
   | "lead_assignment"
   | "super_alert"
-  | "ping";
+  | "ping"
+  | "gmail_new_messages";
 
 export interface OpsEvent {
   type: OpsEventType;

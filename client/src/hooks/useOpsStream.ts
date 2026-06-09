@@ -37,6 +37,8 @@ export type OpsStreamCallbacks = {
   onLeadAssignment?: (assignmentId: number, targetAgentId: number) => void;
   /** Called when a super-alert (double-tag) is posted in Command Chat */
   onSuperAlert?: (targetAgentNames: string[]) => void;
+  /** Called when new Gmail messages arrive via Pub/Sub push */
+  onGmailNewMessages?: () => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -117,6 +119,9 @@ export function useOpsStream(
               break;
             case "super_alert":
               cbRef.current.onSuperAlert?.((event as { targetAgentNames?: string[] }).targetAgentNames ?? []);
+              break;
+            case "gmail_new_messages":
+              cbRef.current.onGmailNewMessages?.();
               break;
             case "ping":
               // keepalive — no action needed

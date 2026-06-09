@@ -44,6 +44,7 @@ import { teamPayRouter } from "./teamPayRouter";
 import { nurtureRouter } from "./nurtureRouter";
 import { endEnrollment } from "./nurtureSequence";
 import { callsRouter } from "./callsRouter";
+import { gmailRouter } from "./gmailRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -85,6 +86,7 @@ const quoteFormSchema = z.object({
 
 export const appRouter = router({
   system: systemRouter,
+  gmail: gmailRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

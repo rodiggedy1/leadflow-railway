@@ -24,4 +24,9 @@ export const ENV = {
   quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://maidsquotes-b55s3sg4.manus.space",
   businessTimezone: process.env.BUSINESS_TIMEZONE ?? "America/Los_Angeles",
   isPreviewMode: process.env.PREVIEW_MODE === "true",
+  gmailClientId: process.env.GMAIL_CLIENT_ID ?? "",
+  gmailClientSecret: process.env.GMAIL_CLIENT_SECRET ?? "",
+  gmailRedirectUri: process.env.GMAIL_REDIRECT_URI ?? "https://quote.maidinblack.com/api/gmail/oauth/callback",
+  gmailRefreshToken: process.env.GMAIL_REFRESH_TOKEN ?? "",
+  gmailPubsubTopic: process.env.GMAIL_PUBSUB_TOPIC ?? "",
 };
