@@ -1647,12 +1647,12 @@ export const schedulingRouter = router({
           ));
       }
 
-      // Step 9: Recalculate the source team (the one the job was moved FROM)
-      // so its remaining jobs get correct routeOrder and drive times.
+            // Step 9: Recalculate the destination team's full chain so all drive times are accurate.
+      await recalcTeamRoute(db, input.date, input.teamId);
+      // Also recalculate the source team (the one the job was moved FROM).
       if (input.sourceTeamId && input.sourceTeamId !== input.teamId) {
         await recalcTeamRoute(db, input.date, input.sourceTeamId);
       }
-
       return { ok: true };
     }),
 
