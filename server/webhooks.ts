@@ -545,14 +545,17 @@ export function registerWebhookRoutes(app: Express) {
           || s.stage === "SCHEDULE_CONFIRM_SENT"
       );
       // INTERVIEW_LINK_SENT / NUDGE sessions are for hiring candidates, not customers.
-      // If a newer active lead session exists (created after the interview session), the
-      // lead session takes priority — otherwise the interview session would steal the reply
-      // and the new lead session would be incorrectly marked DONE by the supersede logic.
-      const isInterviewSession = reviewSession &&
+      // REACTIVATION sessions are for past customers being re-engaged.
+      // In BOTH cases: if a NEWER active lead session exists (created after the special session),
+      // the newer lead session takes priority — so a fresh widget/quote submission is never
+      // hijacked by an older reactivation or interview session.
+      const isSpecialSession = reviewSession &&
         (reviewSession.stage === "INTERVIEW_LINK_SENT" ||
          reviewSession.stage === "INTERVIEW_NUDGE_1" ||
-         reviewSession.stage === "INTERVIEW_NUDGE_2");
-      const newerLeadSession = isInterviewSession
+         reviewSession.stage === "INTERVIEW_NUDGE_2" ||
+         reviewSession.stage === "REACTIVATION" ||
+         reviewSession.stage === "REACTIVATION_TIME");
+      const newerLeadSession = isSpecialSession
         ? reversedSessions.find(
             s => s.stage !== "DONE" &&
               s.id !== reviewSession!.id &&

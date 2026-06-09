@@ -65,7 +65,6 @@ export async function sendSms({ to, content, mediaUrl, fromNumberId: fromNumberI
         content,
         from: fromNumberId,
         to: [normalizedTo],
-        setInboxStatus: "done",
         ...(mediaUrl ? { media: [mediaUrl] } : {}),
       }),
     });
