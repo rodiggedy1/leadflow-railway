@@ -199,7 +199,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 
 function JobCard({
   job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
-  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, hasConflict, isLastJob,
+  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, hasConflict, isLastJob, jobIndex,
 }: {
   job: Job;
   teams: Team[];
@@ -216,6 +216,7 @@ function JobCard({
   onIssueClick?: () => void;
   hasConflict?: boolean;
   isLastJob?: boolean;
+  jobIndex?: number;
 }) {
   // Open reassign dialog on card click (in addition to map selection)
   const utils = trpc.useUtils();
@@ -258,10 +259,12 @@ function JobCard({
   const a = job.assignment;
   // Show the actual booked time from Launch27 (serviceDateTime), not the optimizer's estimated arrival
   const bookedTimeStr = job.serviceDateTime ? formatTime(new Date(job.serviceDateTime).getTime()) : "—";
-  // Always use driveTimeSecs from DB — first job (routeOrder===0) is home→job, rest are job→job
+  // Always use driveTimeSecs from DB
+  // isFirstJob is determined by position in the sorted team list (jobIndex), not routeOrder from DB.
+  // This ensures correct label after reset (all routeOrder=0) and in default/synthetic state.
   const rawDriveSecs = a?.driveTimeSecs ?? null;
   const driveStr = formatDrive(rawDriveSecs);
-  const isFirstJob = (a?.routeOrder ?? -1) === 0;
+  const isFirstJob = (jobIndex ?? (a?.routeOrder ?? -1)) === 0;
   // Home return time for last job — use homeReturnBonus from rationale (it's the actual home-return drive time in secs)
   const homeReturnSecs = isLastJob && a?.rationale?.homeReturnBonus && a.rationale.homeReturnBonus > 0
     ? a.rationale.homeReturnBonus
@@ -2165,6 +2168,7 @@ export default function SchedulingTab() {
                           hasConflict={conflictJobIds.has(job.id)}
                           homeDriveTimeSecs={idx === 0 ? (team as any).homeDriveTimeSecs ?? null : null}
                           isLastJob={idx === teamJobs.length - 1}
+                          jobIndex={idx}
                           onIssueClick={() => setIssueDialogJob({ id: job.id, date })}
                           onLockToggle={(locked, position) => {
                             if (locked) {
