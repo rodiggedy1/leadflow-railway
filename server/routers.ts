@@ -4719,6 +4719,84 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
     }),
 
     /**
+     * leads.getLeadReplies — returns active leads where the client replied last
+     * (lastInboundAt > lastOutboundAt, or no outbound at all) and the lead is not
+     * booked/terminal. Used for the "lead replies" notification button in CommandChat.
+     * Lightweight: no full messageHistory blob in return — just the fields needed.
+     */
+    getLeadReplies: opsChatProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          id:                conversationSessions.id,
+          leadName:          conversationSessions.leadName,
+          leadPhone:         conversationSessions.leadPhone,
+          leadSource:        conversationSessions.leadSource,
+          stage:             conversationSessions.stage,
+          assignedAgentName: conversationSessions.assignedAgentName,
+          messageHistory:    conversationSessions.messageHistory,
+          lastReadAt:        conversationSessions.lastReadAt,
+          createdAt:         conversationSessions.createdAt,
+        })
+        .from(conversationSessions)
+        .where(
+          and(
+            sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
+            sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+            nonLeadSourceFilter(),
+            sql`NOT (${conversationSessions.leadSource} = 'cs_initiated' AND ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))`,
+          )
+        )
+        .orderBy(desc(conversationSessions.createdAt))
+        .limit(300);
+
+      const results: Array<{
+        id: number;
+        leadName: string;
+        leadPhone: string | null;
+        leadSource: string | null;
+        stage: string;
+        assignedAgentName: string | null;
+        lastInboundAt: number;
+        isUnread: boolean;
+        ageMs: number;
+      }> = [];
+
+      const now = Date.now();
+      for (const r of rows) {
+        try {
+          const history: Array<{ role: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
+          if (history.length === 0) continue;
+          // Last message must be from customer
+          const lastMsg = history[history.length - 1];
+          if (lastMsg.role !== 'user' && lastMsg.role !== 'customer') continue;
+          if (!lastMsg.ts) continue;
+          const lastInboundAt = lastMsg.ts;
+          const lastReadAt = r.lastReadAt as number | null | undefined;
+          const isUnread = !lastReadAt || lastInboundAt > lastReadAt;
+          results.push({
+            id: r.id,
+            leadName: r.leadName ?? 'Unknown',
+            leadPhone: r.leadPhone,
+            leadSource: r.leadSource,
+            stage: r.stage ?? 'QUOTE_SENT',
+            assignedAgentName: r.assignedAgentName,
+            lastInboundAt,
+            isUnread,
+            ageMs: now - lastInboundAt,
+          });
+        } catch { /* skip malformed */ }
+      }
+      // Sort: unread first, then by most recent reply
+      results.sort((a, b) => {
+        if (a.isUnread !== b.isUnread) return a.isUnread ? -1 : 1;
+        return b.lastInboundAt - a.lastInboundAt;
+      });
+      return results;
+    }),
+
+    /**
      * leads.getTeamActivity — returns per-agent stats for the Live Team panel.
      * For each active agent: online status, away status, leads claimed/booked for the
      * requested time range (today | week | month | all), conv%, and avg response time.

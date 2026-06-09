@@ -886,7 +886,13 @@ type MessageListProps = {
   setAllThreadsOpen: (v: boolean) => void;
   activeThreadCount: number;
   unreadThreadCount: number;
-  superAlertMsgSet: Set<number>;
+  leadRepliesOpen: boolean;
+  setLeadRepliesOpen: (v: boolean) => void;
+  leadReplies: Array<{ id: number; leadName: string; leadPhone: string | null; leadSource: string | null; stage: string; assignedAgentName: string | null; lastInboundAt: number; isUnread: boolean; ageMs: number }>;
+  leadRepliesCount: number;
+  unreadLeadRepliesCount: number;
+  onSwitchToLeadOps?: (sessionId?: number) => void;
+  superAlertMsgSet: Set<number>; // keep this - it was already here
   // Conversation row action buttons
   searchOpen: boolean;
   openSearch: () => void;
@@ -1036,6 +1042,12 @@ const MessageList = memo(function MessageList({
   setAllThreadsOpen,
   activeThreadCount,
   unreadThreadCount,
+  leadRepliesOpen,
+  setLeadRepliesOpen,
+  leadReplies,
+  leadRepliesCount,
+  unreadLeadRepliesCount,
+  onSwitchToLeadOps,
   superAlertMsgSet,
   searchOpen,
   openSearch,
@@ -1126,6 +1138,24 @@ const MessageList = memo(function MessageList({
                     unreadThreadCount > 0 ? "bg-blue-500 animate-pulse" : "bg-slate-400"
                   )}>
                     {unreadThreadCount > 0 ? (unreadThreadCount > 9 ? "9+" : unreadThreadCount) : activeThreadCount}
+                  </span>
+                )}
+              </button>
+              <button
+                title="Lead Replies"
+                onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
+                className={cn(
+                  "relative h-7 w-7 flex items-center justify-center rounded-full transition-colors",
+                  leadRepliesOpen ? "bg-emerald-50 text-emerald-600" : "hover:bg-slate-100 text-slate-400"
+                )}
+              >
+                <MessageCircle className="h-3.5 w-3.5" />
+                {leadRepliesCount > 0 && (
+                  <span className={cn(
+                    "absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white",
+                    unreadLeadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                  )}>
+                    {unreadLeadRepliesCount > 0 ? (unreadLeadRepliesCount > 9 ? "9+" : unreadLeadRepliesCount) : leadRepliesCount}
                   </span>
                 )}
               </button>
@@ -2425,12 +2455,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Slack-style thread panel state ──────────────────────────────────────────
   const [openThreadId, setOpenThreadId] = useState<number | null>(null);
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
+  const [leadRepliesOpen, setLeadRepliesOpen] = useState(false);
   const [threadRefetchTick, setThreadRefetchTick] = useState(0);
   const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
     refetchInterval: 30_000,
   });
   const activeThreadCount = (activeThreads as any[]).length;
   const unreadThreadCount = (activeThreads as any[]).filter((t: any) => t.hasUnread).length;
+  const { data: leadReplies = [] } = trpc.leads.getLeadReplies.useQuery(undefined, {
+    refetchInterval: 30_000,
+  });
+  const leadRepliesCount = leadReplies.length;
+  const unreadLeadRepliesCount = (leadReplies as any[]).filter((l: any) => l.isUnread).length;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -4716,6 +4752,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setAllThreadsOpen={setAllThreadsOpen}
           activeThreadCount={activeThreadCount}
           unreadThreadCount={unreadThreadCount}
+          leadRepliesOpen={leadRepliesOpen}
+          setLeadRepliesOpen={setLeadRepliesOpen}
+          leadReplies={leadReplies as any}
+          leadRepliesCount={leadRepliesCount}
+          unreadLeadRepliesCount={unreadLeadRepliesCount}
+          onSwitchToLeadOps={onSwitchToLeadOps}
           superAlertMsgSet={superAlertMsgSet}
           searchOpen={searchOpen}
           openSearch={openSearch}
@@ -5974,6 +6016,91 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setOpenThreadId(parentId);
         }}
       />
+      {/* Lead Replies panel — opened from header MessageCircle button */}
+      {leadRepliesOpen && (
+        <div
+          className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-white shadow-2xl border-l border-slate-200 animate-in slide-in-from-right-2 duration-200"
+          style={{ width: "360px", maxWidth: "90vw" }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <MessageCircle className="h-4 w-4 text-emerald-600" />
+              <span className="text-sm font-semibold text-slate-900">Lead Replies</span>
+              {unreadLeadRepliesCount > 0 && (
+                <span className="bg-emerald-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                  {unreadLeadRepliesCount} new
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setLeadRepliesOpen(false)}
+              className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {/* Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {leadReplies.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-16">
+                <MessageCircle className="h-8 w-8 opacity-30" />
+                <p className="text-sm font-medium">No pending lead replies</p>
+                <p className="text-xs text-slate-400">You\'re all caught up!</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {leadReplies.map((lead) => {
+                  const ageMin = Math.floor(lead.ageMs / 60_000);
+                  const ageLabel = ageMin < 1 ? 'just now' : ageMin < 60 ? `${ageMin}m ago` : `${Math.floor(ageMin / 60)}h ${ageMin % 60}m ago`;
+                  const sourceLabel: Record<string, string> = {
+                    thumbtack: 'Thumbtack', bark: 'Bark', yelp: 'Yelp',
+                    form: 'Website', widget: 'Widget', voice: 'Phone',
+                  };
+                  const src = lead.leadSource ? (sourceLabel[lead.leadSource] ?? lead.leadSource) : 'Direct';
+                  return (
+                    <button
+                      key={lead.id}
+                      onClick={() => {
+                        setLeadRepliesOpen(false);
+                        onSwitchToLeadOps?.(lead.id);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Unread dot */}
+                        <div className={cn(
+                          "mt-1.5 h-2 w-2 rounded-full shrink-0",
+                          lead.isUnread ? "bg-emerald-500" : "bg-slate-200"
+                        )} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900 truncate">{lead.leadName}</span>
+                            <span className={cn(
+                              "text-[10px] font-semibold shrink-0",
+                              ageMin < 10 ? "text-red-500" : ageMin < 60 ? "text-amber-500" : "text-slate-400"
+                            )}>{ageLabel}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-slate-400">{src}</span>
+                            {lead.assignedAgentName && (
+                              <>
+                                <span className="text-[10px] text-slate-300">·</span>
+                                <span className="text-[10px] text-slate-400">{lead.assignedAgentName}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0 mt-1" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
