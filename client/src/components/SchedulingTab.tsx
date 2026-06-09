@@ -24,7 +24,7 @@ import {
   Sparkles, Settings2, ChevronLeft, ChevronRight, MapPin,
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
   GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
-  SlidersHorizontal, Power, AlertTriangle, Phone,
+  SlidersHorizontal, Power, AlertTriangle, Phone, Calendar,
 } from "lucide-react";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -48,6 +48,11 @@ interface Team {
   ratingCount?: number;
   tag?: string | null;
   regionTags?: string | null; // comma-separated, e.g. "DC,MD"
+  // Weekly availability schedule fields (from getSchedule)
+  workScheduleUnavailable?: boolean;
+  overrideNote?: string | null;
+  overrideIsAvailable?: number | null;
+  schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null;
 }
 
 interface Job {
@@ -561,6 +566,8 @@ function TeamHeaderRow({
   team, isUnavailable, isTeamLocked, teamConflictCount, teamCheckin,
   driveLabel, recalculating, date,
   onMarkUnavailable, onMarkAvailable, onLockTeam, onUnlockTeam, onSaveLimits, onSaveTag, onSaveRegionTags, onRerunDistances,
+  workScheduleUnavailable, schedule, overrideNote, overrideIsAvailable,
+  onSetWorkSchedule, onSetDayOverride,
 }: {
   team: { id: number; name: string; color?: string | null; avgRating?: number | null; ratingCount?: number;
     minJobs?: number | null; maxJobs?: number | null; earliestStartTime?: string | null; tag?: string | null; regionTags?: string | null };
@@ -579,6 +586,13 @@ function TeamHeaderRow({
   onSaveTag: (tag: string | null) => void;
   onSaveRegionTags: (regionTags: string | null) => void;
   onRerunDistances?: () => void;
+  // Work schedule props
+  workScheduleUnavailable?: boolean;
+  schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null;
+  overrideNote?: string | null;
+  overrideIsAvailable?: number | null;
+  onSetWorkSchedule?: (sched: { mon:number; tue:number; wed:number; thu:number; fri:number; sat:number; sun:number }) => void;
+  onSetDayOverride?: (isAvailable: number | null, note: string | null) => void;
 }) {
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const popRef = React.useRef<HTMLDivElement>(null);
@@ -589,15 +603,22 @@ function TeamHeaderRow({
   // Tag editing state
   const [tagInput, setTagInput] = React.useState(team.tag ?? '');
   React.useEffect(() => { setTagInput(team.tag ?? ''); }, [team.tag]);
+  // Schedule section expand state
+  const [schedExpanded, setSchedExpanded] = React.useState(false);
+  // Day override note editing state
+  const [overrideNoteInput, setOverrideNoteInput] = React.useState(overrideNote ?? '');
+  React.useEffect(() => { setOverrideNoteInput(overrideNote ?? ''); }, [overrideNote]);
 
   const openPopup = () => {
     if (!btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
-    const w = 260;
+    const w = 280;
+    const estimatedHeight = 480;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const top = spaceBelow >= 320 ? rect.bottom + 4 : rect.top - 320 - 4;
+    const top = spaceBelow >= estimatedHeight ? rect.bottom + 4 : Math.max(8, rect.top - estimatedHeight - 4);
     let left = rect.right - w;
     if (left < 8) left = 8;
+    if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
     setPopStyle({ position: 'fixed', top, left, width: w, zIndex: 9999 });
     setOpen(true);
   };
@@ -797,6 +818,108 @@ function TeamHeaderRow({
                 <span title={`Start after ${fmtTime(team.earliestStartTime)}`} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded">
                   <Timer className="w-2.5 h-2.5" />{fmtTime(team.earliestStartTime)}
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* Work Schedule section */}
+          {onSetWorkSchedule && (
+            <div className="border-t border-gray-100 pt-3">
+              <button
+                onClick={() => setSchedExpanded(v => !v)}
+                className="w-full flex items-center gap-2 text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2 hover:text-gray-700 transition-colors"
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                Work Schedule
+                <span className="ml-auto text-gray-400">{schedExpanded ? '▲' : '▼'}</span>
+              </button>
+              {schedExpanded && (
+                <div className="space-y-2">
+                  {/* Weekly day toggles */}
+                  <div className="flex gap-1 justify-between">
+                    {(['mon','tue','wed','thu','fri','sat','sun'] as const).map(day => {
+                      const defaultSched = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
+                      const effectiveSched = schedule ?? defaultSched;
+                      const isOn = effectiveSched[day] === 1;
+                      const label = day.charAt(0).toUpperCase() + day.slice(1);
+                      return (
+                        <button
+                          key={day}
+                          onClick={() => {
+                            const defaultSched2 = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
+                            const current = schedule ?? defaultSched2;
+                            const next = { ...current, [day]: isOn ? 0 : 1 };
+                            onSetWorkSchedule(next);
+                          }}
+                          className={`flex-1 text-[10px] font-bold py-1 rounded border transition-colors ${
+                            isOn
+                              ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                              : 'bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100'
+                          }`}
+                          title={`Toggle ${label}`}
+                        >
+                          {label.slice(0,1)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Day override for today */}
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] text-gray-400 font-medium">Today's override</p>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => onSetDayOverride?.(overrideIsAvailable === 1 ? null : 1, overrideNoteInput || null)}
+                        className={`flex-1 text-[10px] font-semibold py-1 rounded border transition-colors ${
+                          overrideIsAvailable === 1
+                            ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        Force ON
+                      </button>
+                      <button
+                        onClick={() => onSetDayOverride?.(overrideIsAvailable === 0 ? null : 0, overrideNoteInput || null)}
+                        className={`flex-1 text-[10px] font-semibold py-1 rounded border transition-colors ${
+                          overrideIsAvailable === 0
+                            ? 'bg-red-100 text-red-600 border-red-300'
+                            : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100'
+                        }`}
+                      >
+                        Force OFF
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      maxLength={200}
+                      placeholder="Note (optional)"
+                      value={overrideNoteInput}
+                      onChange={e => setOverrideNoteInput(e.target.value)}
+                      onBlur={() => {
+                        if (overrideIsAvailable !== null || overrideNoteInput.trim()) {
+                          onSetDayOverride?.(overrideIsAvailable ?? null, overrideNoteInput.trim() || null);
+                        }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          onSetDayOverride?.(overrideIsAvailable ?? null, overrideNoteInput.trim() || null);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400 bg-white"
+                    />
+                    {(overrideIsAvailable !== null || overrideNote) && (
+                      <button
+                        onClick={() => {
+                          setOverrideNoteInput('');
+                          onSetDayOverride?.(null, null);
+                        }}
+                        className="text-[10px] text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        Clear override
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -1432,6 +1555,16 @@ export default function SchedulingTab() {
     onSuccess: () => utils.scheduling.getTeams.invalidate(),
     onError: (e) => toast.error(e.message),
   });
+  // Weekly work schedule
+  const setTeamWorkSchedule = trpc.scheduling.setTeamWorkSchedule.useMutation({
+    onSuccess: () => utils.scheduling.getSchedule.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
+  // Day-specific override (force on/off + note)
+  const setTeamDayOverride = trpc.scheduling.setTeamDayOverride.useMutation({
+    onSuccess: () => utils.scheduling.getSchedule.invalidate({ date }),
+    onError: (e) => toast.error(e.message),
+  });
 
   const jobs: Job[] = (data?.jobs ?? []) as Job[];
   const teams: Team[] = (data?.teams ?? []) as Team[];
@@ -1957,8 +2090,37 @@ export default function SchedulingTab() {
               const isTeamLocked = lockedTeamSet.has(team.id);
               const teamConflictCount = teamJobs.filter(j => conflictJobIds.has(j.id)).length;
               const teamCheckin = checkins.find(c => (c.cleanerName ?? '').toLowerCase() === team.name.toLowerCase());
+              // Work schedule unavailability (from weekly template + day override)
+              const workSchedUnavail = team.workScheduleUnavailable === true;
+              // Combined: a team card is greyed out if either the manual OFF toggle OR the work schedule says unavailable
+              const isEffectivelyUnavailable = isUnavailable || workSchedUnavail;
               return (
-                <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${isUnavailable ? "opacity-50 border-red-200" : "border-gray-100"}`}>
+                <div key={team.id} className={`bg-white rounded-xl border overflow-hidden transition-opacity ${
+                  isEffectivelyUnavailable
+                    ? workSchedUnavail && !isUnavailable
+                      ? 'opacity-60 border-gray-300 bg-gray-50'
+                      : 'opacity-50 border-red-200'
+                    : 'border-gray-100'
+                }`}>
+                  {/* Work schedule unavailable banner */}
+                  {workSchedUnavail && !isUnavailable && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border-b border-gray-200">
+                      <Calendar className="w-3 h-3 text-gray-400 shrink-0" />
+                      <span className="text-[10px] font-medium text-gray-500">
+                        {team.overrideIsAvailable === 0
+                          ? 'Forced OFF today'
+                          : 'Off today (schedule)'}
+                        {team.overrideNote ? ` · ${team.overrideNote}` : ''}
+                      </span>
+                    </div>
+                  )}
+                  {/* Override note banner (when force-on with note) */}
+                  {!workSchedUnavail && team.overrideNote && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border-b border-blue-100">
+                      <Calendar className="w-3 h-3 text-blue-400 shrink-0" />
+                      <span className="text-[10px] font-medium text-blue-600">{team.overrideNote}</span>
+                    </div>
+                  )}
                   {/* Team header — clean row with popup for details/controls */}
                   <TeamHeaderRow
                     team={team}
@@ -1979,6 +2141,12 @@ export default function SchedulingTab() {
                     onSaveTag={(tag) => setTeamTag.mutate({ teamId: team.id, tag })}
                     onSaveRegionTags={(regionTags) => setTeamRegionTags.mutate({ teamId: team.id, regionTags })}
                     onRerunDistances={() => rerunDistances.mutate({ date, teamId: team.id })}
+                    workScheduleUnavailable={workSchedUnavail}
+                    schedule={team.schedule ?? null}
+                    overrideNote={team.overrideNote ?? null}
+                    overrideIsAvailable={team.overrideIsAvailable ?? null}
+                    onSetWorkSchedule={(sched) => setTeamWorkSchedule.mutate({ teamId: team.id, ...sched })}
+                    onSetDayOverride={(isAvailable, note) => setTeamDayOverride.mutate({ teamId: team.id, date, isAvailable, note })}
                   />
                   {/* Jobs */}
                   <div className="p-2 space-y-1.5">

@@ -25,6 +25,8 @@ import {
   teamDayUnavailability,
   teamDayLock,
   teamDayConfig,
+  teamWorkSchedule,
+  teamDayOverride,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -901,14 +903,48 @@ export const schedulingRouter = router({
         .from(cleanerJobs)
         .where(sql`${cleanerJobs.customerRating} IS NOT NULL AND ${cleanerJobs.teamName} IS NOT NULL`)
         .groupBy(cleanerJobs.teamName);
-      const ratingByTeamName = new Map(ratingRows.map(r => [r.teamName, { avgRating: Number(r.avgRating), ratingCount: Number(r.ratingCount) }]));
-
-      const teamsWithRating = teams.map(t => ({
-        ...t,
-        avgRating: ratingByTeamName.get(t.name)?.avgRating ?? null,
-        ratingCount: ratingByTeamName.get(t.name)?.ratingCount ?? 0,
-      }));
-
+            const ratingByTeamName = new Map(ratingRows.map(r => [r.teamName, { avgRating: Number(r.avgRating), ratingCount: Number(r.ratingCount) }]));
+      // Load work schedules and day overrides for schedule-status display
+      const dayOfWeek = new Date(input.date + "T12:00:00Z").getUTCDay();
+      const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayOfWeek] as
+        "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+      const workSchedules = await db.select().from(teamWorkSchedule);
+      const scheduleByTeamId = new Map(workSchedules.map(s => [s.teamId, s]));
+      const dayOverrides = await db.select().from(teamDayOverride)
+        .where(eq(teamDayOverride.date, input.date));
+      const overrideByTeamId = new Map(dayOverrides.map(o => [o.teamId, o]));
+      const teamsWithRating = teams.map(t => {
+        const sched = scheduleByTeamId.get(t.id);
+        const override = overrideByTeamId.get(t.id);
+        const defaultSchedule = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
+        const effectiveSched = sched ?? defaultSchedule;
+        const worksToday = effectiveSched[dayKey] === 1;
+        let workScheduleUnavailable: boolean;
+        if (override?.isAvailable === 1) {
+          workScheduleUnavailable = false;
+        } else if (override?.isAvailable === 0) {
+          workScheduleUnavailable = true;
+        } else {
+          workScheduleUnavailable = !worksToday;
+        }
+        return {
+          ...t,
+          avgRating: ratingByTeamName.get(t.name)?.avgRating ?? null,
+          ratingCount: ratingByTeamName.get(t.name)?.ratingCount ?? 0,
+          workScheduleUnavailable,
+          overrideNote: override?.note ?? null,
+          overrideIsAvailable: override?.isAvailable ?? null,
+          schedule: {
+            mon: effectiveSched.mon,
+            tue: effectiveSched.tue,
+            wed: effectiveSched.wed,
+            thu: effectiveSched.thu,
+            fri: effectiveSched.fri,
+            sat: effectiveSched.sat,
+            sun: effectiveSched.sun,
+          },
+        };
+      });
       return { jobs: enriched, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
     }),
 
@@ -2054,6 +2090,192 @@ export const schedulingRouter = router({
         }
       }
       return { updated, message: `Updated drive times for ${updated} job legs.` };
+    }),
+
+  // ── Team Work Schedule (weekly template) ────────────────────────────────────
+
+  /** Returns the weekly work schedule for all active teams (or a specific team). */
+  getTeamWorkSchedule: agentProcedure
+    .input(z.object({ teamId: z.number().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = input.teamId != null
+        ? await db.select().from(teamWorkSchedule).where(eq(teamWorkSchedule.teamId, input.teamId))
+        : await db.select().from(teamWorkSchedule);
+      return rows;
+    }),
+
+  /** Upsert the weekly work schedule for a team. */
+  setTeamWorkSchedule: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      mon: z.number().int().min(0).max(1),
+      tue: z.number().int().min(0).max(1),
+      wed: z.number().int().min(0).max(1),
+      thu: z.number().int().min(0).max(1),
+      fri: z.number().int().min(0).max(1),
+      sat: z.number().int().min(0).max(1),
+      sun: z.number().int().min(0).max(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.insert(teamWorkSchedule)
+        .values({
+          teamId: input.teamId,
+          mon: input.mon,
+          tue: input.tue,
+          wed: input.wed,
+          thu: input.thu,
+          fri: input.fri,
+          sat: input.sat,
+          sun: input.sun,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            mon: input.mon,
+            tue: input.tue,
+            wed: input.wed,
+            thu: input.thu,
+            fri: input.fri,
+            sat: input.sat,
+            sun: input.sun,
+          },
+        });
+      return { ok: true };
+    }),
+
+  // ── Team Day Override ────────────────────────────────────────────────────────
+
+  /**
+   * Returns the day override for a specific team+date, or all overrides for a date.
+   * isAvailable: null = no override, 1 = force available, 0 = force unavailable.
+   */
+  getTeamDayOverride: agentProcedure
+    .input(z.object({
+      date: z.string(),
+      teamId: z.number().optional(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = input.teamId != null
+        ? await db.select().from(teamDayOverride)
+            .where(and(
+              eq(teamDayOverride.teamId, input.teamId),
+              eq(teamDayOverride.date, input.date),
+            ))
+        : await db.select().from(teamDayOverride)
+            .where(eq(teamDayOverride.date, input.date));
+      return rows;
+    }),
+
+  /**
+   * Upsert a day override for a team.
+   * Pass isAvailable=null to clear the availability override (keep note only).
+   * Pass note=null to clear the note.
+   * Pass both null to effectively remove the override (or use clearTeamDayOverride).
+   */
+  setTeamDayOverride: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      date: z.string(),
+      isAvailable: z.number().int().min(0).max(1).nullable(),
+      note: z.string().max(500).nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      // If both isAvailable and note are null, delete the row entirely
+      if (input.isAvailable === null && (input.note === null || input.note === "")) {
+        await db.delete(teamDayOverride)
+          .where(and(
+            eq(teamDayOverride.teamId, input.teamId),
+            eq(teamDayOverride.date, input.date),
+          ));
+        return { ok: true, deleted: true };
+      }
+      await db.insert(teamDayOverride)
+        .values({
+          teamId: input.teamId,
+          date: input.date,
+          isAvailable: input.isAvailable,
+          note: input.note || null,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            isAvailable: input.isAvailable,
+            note: input.note || null,
+          },
+        });
+      return { ok: true, deleted: false };
+    }),
+
+  /**
+   * Returns schedule availability info for all teams for a given date.
+   * Combines weekly template + day override to compute:
+   *   - workScheduleUnavailable: true if the team is off today by their weekly template
+   *     AND no override forces them available
+   *   - overrideNote: the note from team_day_override if one exists
+   *   - overrideIsAvailable: the isAvailable value from team_day_override (null/0/1)
+   */
+  getTeamScheduleStatus: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      // Day of week for the requested date (0=Sun, 1=Mon, ..., 6=Sat)
+      const dayOfWeek = new Date(input.date + "T12:00:00Z").getUTCDay();
+      const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayOfWeek] as
+        "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+      // Load all active teams
+      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      // Load all work schedules
+      const schedules = await db.select().from(teamWorkSchedule);
+      const scheduleByTeam = new Map(schedules.map(s => [s.teamId, s]));
+      // Load all day overrides for this date
+      const overrides = await db.select().from(teamDayOverride)
+        .where(eq(teamDayOverride.date, input.date));
+      const overrideByTeam = new Map(overrides.map(o => [o.teamId, o]));
+      return teams.map(t => {
+        const sched = scheduleByTeam.get(t.id);
+        const override = overrideByTeam.get(t.id);
+        // Determine if team works today by weekly template
+        // Default: Mon-Fri=1, Sat-Sun=0 if no schedule row exists
+        const defaultSchedule = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
+        const effectiveSched = sched ?? defaultSchedule;
+        const worksToday = effectiveSched[dayKey] === 1;
+        // Apply override
+        let workScheduleUnavailable: boolean;
+        if (override?.isAvailable === 1) {
+          // Force available — even if template says off
+          workScheduleUnavailable = false;
+        } else if (override?.isAvailable === 0) {
+          // Force unavailable — even if template says work day
+          workScheduleUnavailable = true;
+        } else {
+          // No override — use template
+          workScheduleUnavailable = !worksToday;
+        }
+        return {
+          teamId: t.id,
+          teamName: t.name,
+          workScheduleUnavailable,
+          overrideNote: override?.note ?? null,
+          overrideIsAvailable: override?.isAvailable ?? null,
+          worksToday,
+          schedule: {
+            mon: effectiveSched.mon,
+            tue: effectiveSched.tue,
+            wed: effectiveSched.wed,
+            thu: effectiveSched.thu,
+            fri: effectiveSched.fri,
+            sat: effectiveSched.sat,
+            sun: effectiveSched.sun,
+          },
+        };
+      });
     }),
 });
 // ── Helpers ───────────────────────────────────────────────────────────────────

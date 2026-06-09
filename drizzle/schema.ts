@@ -2699,3 +2699,53 @@ export const driveTimeCache = mysqlTable("drive_time_cache", {
 }));
 export type DriveTimeCache = typeof driveTimeCache.$inferSelect;
 export type InsertDriveTimeCache = typeof driveTimeCache.$inferInsert;
+
+/**
+ * teamWorkSchedule — weekly availability template per team.
+ * Defines which days of the week a team normally works.
+ * One row per team; upserted when the schedule is changed.
+ */
+export const teamWorkSchedule = mysqlTable("team_work_schedule", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to schedulingTeams.id */
+  teamId: int("teamId").notNull().unique(),
+  /** Which days the team works (1 = works, 0 = off) */
+  mon: tinyint("mon").notNull().default(1),
+  tue: tinyint("tue").notNull().default(1),
+  wed: tinyint("wed").notNull().default(1),
+  thu: tinyint("thu").notNull().default(1),
+  fri: tinyint("fri").notNull().default(1),
+  sat: tinyint("sat").notNull().default(0),
+  sun: tinyint("sun").notNull().default(0),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TeamWorkSchedule = typeof teamWorkSchedule.$inferSelect;
+export type InsertTeamWorkSchedule = typeof teamWorkSchedule.$inferInsert;
+
+/**
+ * teamDayOverride — date-specific override for a team's availability.
+ * Can force a team to be available on an off day, or unavailable on a work day,
+ * and optionally attach a note (e.g. "only after 12:30 PM").
+ * Takes precedence over the weekly template.
+ */
+export const teamDayOverride = mysqlTable("team_day_override", {
+  id: int("id").autoincrement().primaryKey(),
+  /** FK to schedulingTeams.id */
+  teamId: int("teamId").notNull(),
+  /** Date string YYYY-MM-DD */
+  date: varchar("date", { length: 20 }).notNull(),
+  /**
+   * null = no override (use weekly template)
+   * 1    = force available (override off day)
+   * 0    = force unavailable (override work day)
+   */
+  isAvailable: tinyint("isAvailable"),
+  /** Optional note shown on the schedule card, e.g. "Only after 12:30 PM" */
+  note: varchar("note", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  uniqTeamDate: uniqueIndex("uniq_tdo_team_date").on(t.teamId, t.date),
+}));
+export type TeamDayOverride = typeof teamDayOverride.$inferSelect;
+export type InsertTeamDayOverride = typeof teamDayOverride.$inferInsert;
