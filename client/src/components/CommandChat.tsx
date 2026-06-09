@@ -2505,6 +2505,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Also refresh channel messages so the hot leads tray reflects claim changes
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
       utils.leads.list.invalidate();
+      // Refresh lead replies notification immediately on any inbound lead event
+      utils.leads.getLeadReplies.invalidate();
     },
     onReactionUpdate: () => {
       refetchReactions();

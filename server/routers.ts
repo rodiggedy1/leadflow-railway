@@ -4776,6 +4776,10 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           );
           if (!lastCustomerMsg || !lastCustomerMsg.ts) continue;
           const lastInboundAt = lastCustomerMsg.ts;
+          // Only show replies that came in after this feature's deploy cutoff
+          // (prevents showing 30+ old sessions that happened to have customer messages)
+          const DEPLOY_CUTOFF_MS = 1781029060130; // ~Jun 9 2026 deploy time
+          if (lastInboundAt < DEPLOY_CUTOFF_MS) continue;
           const lastReadAt = r.lastReadAt as number | null | undefined;
           const isUnread = !lastReadAt || lastInboundAt > lastReadAt;
           results.push({
