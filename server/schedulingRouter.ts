@@ -846,34 +846,9 @@ export const schedulingRouter = router({
 
       // Build drive time chain for each team: home → job1 → job2 → job3
             // Jobs are sorted by serviceDateTime (earliest first) — same order as the UI.
-      // driveMap: jobId -> drive time in seconds from whatever came before it (home or prev job)
-      const driveMap = new Map<number, number>(); // jobId -> drive secs from previous stop
-      const firstJobIdByTeam = new Map<number, number>(); // teamId -> jobId of first job
-      // Collect drive time pairs ONLY for jobs with no saved assignment.
-      // Jobs with saved assignments use the driveTimeSecs written by the optimizer or rerunDistances.
-      const allPairPoints: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; toJobId: number }> = [];
-      for (const [teamName, teamJobs] of Array.from(jobsByTeam)) {
-        const team = teamByName.get(teamName);
-        if (!team) continue;
-        if (teamJobs[0]) firstJobIdByTeam.set(team.id, teamJobs[0].id);
-        const unsavedJobs = teamJobs.filter(j => !assignmentMap.has(j.id) || assignmentMap.get(j.id)?.isManual === 2);
-        if (unsavedJobs.length === 0) continue;
-        if (unsavedJobs[0] && team.homeLat && team.homeLng) {
-          const geo = geoByAddress.get(unsavedJobs[0].jobAddress?.trim().toLowerCase() ?? "");
-          if (geo) allPairPoints.push({ fromLat: team.homeLat, fromLng: team.homeLng, toLat: geo.lat, toLng: geo.lng, toJobId: unsavedJobs[0].id });
-        }
-        for (let i = 1; i < unsavedJobs.length; i++) {
-          const prevGeo = geoByAddress.get(unsavedJobs[i - 1].jobAddress?.trim().toLowerCase() ?? "");
-          const currGeo = geoByAddress.get(unsavedJobs[i].jobAddress?.trim().toLowerCase() ?? "");
-          if (prevGeo && currGeo) allPairPoints.push({ fromLat: prevGeo.lat, fromLng: prevGeo.lng, toLat: currGeo.lat, toLng: currGeo.lng, toJobId: unsavedJobs[i].id });
-        }
-      }
-      if (allPairPoints.length > 0) {
-        const driveSecs = await fetchDriveTimes(allPairPoints);
-        allPairPoints.forEach((p, idx) => { driveMap.set(p.toJobId, driveSecs[idx]); });
-      }
-      // estimatedDriveMap alias — used below when building enriched jobs
-      const estimatedDriveMap = driveMap;
+      // No page-load Google calls — drive times come from DB only (written by Optimize or Rerun Distances).
+      // Unassigned jobs show no drive time.
+      const estimatedDriveMap = new Map<number, number>();
 
       // Build a helper to detect job type badges from the job's fields
       const enriched = jobs.map(j => {
