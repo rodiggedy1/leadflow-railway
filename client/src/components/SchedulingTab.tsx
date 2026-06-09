@@ -253,9 +253,10 @@ function JobCard({
   const a = job.assignment;
   // Show the actual booked time from Launch27 (serviceDateTime), not the optimizer's estimated arrival
   const bookedTimeStr = job.serviceDateTime ? formatTime(new Date(job.serviceDateTime).getTime()) : "—";
-  // For the first job in a team, show drive time from home; for subsequent jobs, show job-to-job drive time
-  const rawDriveSecs = homeDriveTimeSecs != null ? homeDriveTimeSecs : (a?.driveTimeSecs ?? null);
+  // Always use driveTimeSecs from DB — first job (routeOrder===0) is home→job, rest are job→job
+  const rawDriveSecs = a?.driveTimeSecs ?? null;
   const driveStr = formatDrive(rawDriveSecs);
+  const isFirstJob = (a?.routeOrder ?? -1) === 0;
   // Home return time for last job — use homeReturnBonus from rationale (it's the actual home-return drive time in secs)
   const homeReturnSecs = isLastJob && a?.rationale?.homeReturnBonus && a.rationale.homeReturnBonus > 0
     ? a.rationale.homeReturnBonus
@@ -327,7 +328,7 @@ function JobCard({
                 {driveStr && (
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs text-gray-400">
-                      {homeDriveTimeSecs != null
+                      {isFirstJob
                         ? `🏠 ${driveStr.replace(" drive", "")} from home`
                         : `🚗 ${driveStr.replace(" drive", "")} drive to get here`}
                     </span>
