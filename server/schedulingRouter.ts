@@ -845,47 +845,33 @@ export const schedulingRouter = router({
       }
 
       // Build drive time chain for each team: home → job1 → job2 → job3
-      // Jobs are sorted by serviceDateTime (earliest first) — same order as the UI.
+            // Jobs are sorted by serviceDateTime (earliest first) — same order as the UI.
       // driveMap: jobId -> drive time in seconds from whatever came before it (home or prev job)
       const driveMap = new Map<number, number>(); // jobId -> drive secs from previous stop
       const firstJobIdByTeam = new Map<number, number>(); // teamId -> jobId of first job
-
       // Collect drive time pairs ONLY for jobs with no saved assignment.
-      // Jobs with saved assignments already have driveTimeSecs from the DB — no Google call needed.
-      // This keeps Google API usage minimal: only fires after Reset or before first Optimize.
+      // Jobs with saved assignments use the driveTimeSecs written by the optimizer or rerunDistances.
       const allPairPoints: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; toJobId: number }> = [];
-
       for (const [teamName, teamJobs] of Array.from(jobsByTeam)) {
         const team = teamByName.get(teamName);
         if (!team) continue;
-        // Record which job is first (earliest time = card 1)
         if (teamJobs[0]) firstJobIdByTeam.set(team.id, teamJobs[0].id);
-        // Only compute drive times for jobs that have no saved assignment
         const unsavedJobs = teamJobs.filter(j => !assignmentMap.has(j.id) || assignmentMap.get(j.id)?.isManual === 2);
         if (unsavedJobs.length === 0) continue;
-        // home → first unsaved job
         if (unsavedJobs[0] && team.homeLat && team.homeLng) {
           const geo = geoByAddress.get(unsavedJobs[0].jobAddress?.trim().toLowerCase() ?? "");
           if (geo) allPairPoints.push({ fromLat: team.homeLat, fromLng: team.homeLng, toLat: geo.lat, toLng: geo.lng, toJobId: unsavedJobs[0].id });
         }
-        // job[i-1] → job[i] for unsaved jobs
         for (let i = 1; i < unsavedJobs.length; i++) {
           const prevGeo = geoByAddress.get(unsavedJobs[i - 1].jobAddress?.trim().toLowerCase() ?? "");
           const currGeo = geoByAddress.get(unsavedJobs[i].jobAddress?.trim().toLowerCase() ?? "");
           if (prevGeo && currGeo) allPairPoints.push({ fromLat: prevGeo.lat, fromLng: prevGeo.lng, toLat: currGeo.lat, toLng: currGeo.lng, toJobId: unsavedJobs[i].id });
         }
       }
-
-      // Fetch real Google drive times for unoptimized jobs on page load (with cache).
-      // Cost: ~$0.10/day (only fires for jobs with no saved assignment — start of day before first Optimize).
-      // After Optimize runs, all jobs have saved driveTimeSecs in DB so this block is skipped entirely.
       if (allPairPoints.length > 0) {
         const driveSecs = await fetchDriveTimes(allPairPoints);
-        allPairPoints.forEach((p, idx) => {
-          driveMap.set(p.toJobId, driveSecs[idx]);
-        });
+        allPairPoints.forEach((p, idx) => { driveMap.set(p.toJobId, driveSecs[idx]); });
       }
-
       // estimatedDriveMap alias — used below when building enriched jobs
       const estimatedDriveMap = driveMap;
 
@@ -914,8 +900,8 @@ export const schedulingRouter = router({
               rationale: null as AssignmentRationale | null,
             }
           : null;
-        // Use saved driveTimeSecs from schedule_assignments (set by the optimizer).
-        // estimatedDriveMap contains real Google drive times (0 if Google failed) for unoptimized jobs.
+        // driveTimeSecs: use the value saved by the optimizer or rerunDistances.
+        // For unsaved jobs, estimatedDriveMap has a fresh Google value.
         const baseAssignment = isExplicitlyUnassigned ? null : (savedAssignment ?? syntheticAssignment);
         // Compute badge flags
         const isNewClient = j.bookingStatus === "new";
@@ -1362,8 +1348,11 @@ export const schedulingRouter = router({
                 units: "metric",
               });
               const el = result?.rows?.[0]?.elements?.[0];
-              cur.driveTimeSecs = el?.status === "OK" ? el.duration.value : 0;
-            } catch {
+              const secs = el?.status === "OK" ? el.duration.value : 0;
+              console.log(`[DRIVE] job=${cur.cleanerJobId} from=(${fromLat.toFixed(4)},${fromLng.toFixed(4)}) to=(${curGeo.lat.toFixed(4)},${curGeo.lng.toFixed(4)}) status=${el?.status} secs=${secs} (${Math.round(secs/60)}m)`);
+              cur.driveTimeSecs = secs;
+            } catch (err) {
+              console.log(`[DRIVE] job=${cur.cleanerJobId} ERROR: ${err}`);
               cur.driveTimeSecs = 0;
             }
           }
@@ -2014,10 +2003,82 @@ export const schedulingRouter = router({
         .sort((a, b) => a.addedDriveSecs - b.addedDriveSecs)
         .slice(0, 5);
 
-      return { slots: ranked, geocodedAddress: newGeo.formattedAddress };
+            return { slots: ranked, geocodedAddress: newGeo.formattedAddress };
+    }),
+
+  // ── Rerun Distances ──────────────────────────────────────────────────────────────────
+  // Fetch fresh Google drive times for all assigned jobs on a date and persist them.
+  // Optional teamId: if provided, only recalculates that one team.
+  rerunDistances: agentProcedure
+    .input(z.object({ date: z.string(), teamId: z.number().optional() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+      // Load all teams
+      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teamsToProcess = input.teamId ? teams.filter(t => t.id === input.teamId) : teams;
+      let updated = 0;
+      for (const team of teamsToProcess) {
+        // Load active assignments for this team on this date
+        const assignments = await db.select().from(scheduleAssignments)
+          .where(and(
+            eq(scheduleAssignments.jobDate, input.date),
+            eq(scheduleAssignments.teamId, team.id),
+          ));
+        const active = assignments
+          .filter(a => a.isManual !== 2)
+          .sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
+        if (active.length === 0) continue;
+        // Load job addresses
+        const jobIds = active.map(a => a.cleanerJobId);
+        const jobRows = await db.select({ id: cleanerJobs.id, jobAddress: cleanerJobs.jobAddress })
+          .from(cleanerJobs).where(inArray(cleanerJobs.id, jobIds));
+        const addrById = new Map(jobRows.map(j => [j.id, j.jobAddress]));
+        // Geocode all addresses
+        const geoById = new Map<number, { lat: number; lng: number }>();
+        for (const a of active) {
+          const addr = addrById.get(a.cleanerJobId);
+          if (!addr) continue;
+          const geo = await geocodeWithCache(addr);
+          if (geo) geoById.set(a.cleanerJobId, { lat: geo.lat, lng: geo.lng });
+        }
+        // Build chain pairs: home→job0, job0→job1, ...
+        const pairs: Array<{ fromLat: number; fromLng: number; toLat: number; toLng: number; jobId: number }> = [];
+        for (let i = 0; i < active.length; i++) {
+          const curGeo = geoById.get(active[i].cleanerJobId);
+          if (!curGeo) continue;
+          let fromLat: number | null = null, fromLng: number | null = null;
+          if (i === 0 && team.homeLat != null && team.homeLng != null) {
+            fromLat = team.homeLat; fromLng = team.homeLng;
+          } else if (i > 0) {
+            const prevGeo = geoById.get(active[i - 1].cleanerJobId);
+            if (prevGeo) { fromLat = prevGeo.lat; fromLng = prevGeo.lng; }
+          }
+          if (fromLat != null && fromLng != null) {
+            pairs.push({ fromLat, fromLng, toLat: curGeo.lat, toLng: curGeo.lng, jobId: active[i].cleanerJobId });
+          }
+        }
+        // Fetch fresh Google drive times
+        const pairsOnly = pairs.map(p => ({ fromLat: p.fromLat, fromLng: p.fromLng, toLat: p.toLat, toLng: p.toLng }));
+        const driveSecs = await fetchDriveTimes(pairsOnly);
+        // Persist updated driveTimeSecs
+        for (let i = 0; i < pairs.length; i++) {
+          const secs = driveSecs[i];
+          if (secs > 0) {
+            await db.update(scheduleAssignments)
+              .set({ driveTimeSecs: secs, updatedAt: new Date() })
+              .where(and(
+                eq(scheduleAssignments.jobDate, input.date),
+                eq(scheduleAssignments.cleanerJobId, pairs[i].jobId),
+                eq(scheduleAssignments.teamId, team.id),
+              ));
+            updated++;
+          }
+        }
+      }
+      return { updated, message: `Updated drive times for ${updated} job legs.` };
     }),
 });
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**

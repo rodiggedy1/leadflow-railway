@@ -559,7 +559,7 @@ const TIME_PRESETS = [
 function TeamHeaderRow({
   team, isUnavailable, isTeamLocked, teamConflictCount, teamCheckin,
   driveLabel, recalculating, date,
-  onMarkUnavailable, onMarkAvailable, onLockTeam, onUnlockTeam, onSaveLimits, onSaveTag,
+  onMarkUnavailable, onMarkAvailable, onLockTeam, onUnlockTeam, onSaveLimits, onSaveTag, onSaveRegionTags, onRerunDistances,
 }: {
   team: { id: number; name: string; color?: string | null; avgRating?: number | null; ratingCount?: number;
     minJobs?: number | null; maxJobs?: number | null; earliestStartTime?: string | null; tag?: string | null; regionTags?: string | null };
@@ -577,6 +577,7 @@ function TeamHeaderRow({
   onSaveLimits: (minJobs: number | null, maxJobs: number | null, earliestStartTime: string | null) => void;
   onSaveTag: (tag: string | null) => void;
   onSaveRegionTags: (regionTags: string | null) => void;
+  onRerunDistances?: () => void;
 }) {
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const popRef = React.useRef<HTMLDivElement>(null);
@@ -826,6 +827,16 @@ function TeamHeaderRow({
               {isTeamLocked ? 'Unlock team' : 'Lock team'}
             </button>
 
+            {/* Rerun Distances for this team */}
+            {onRerunDistances && (
+              <button
+                onClick={() => { onRerunDistances(); setOpen(false); }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-blue-50 text-blue-700 hover:bg-blue-100"
+              >
+                <MapPin className="w-4 h-4" />
+                Rerun distances
+              </button>
+            )}
             {/* Edit limits — no wrapper onClick; config popover manages its own open state */}
             <TeamDayConfigButton
               teamId={team.id}
@@ -1371,6 +1382,13 @@ export default function SchedulingTab() {
     },
     onError: (e) => toast.error(e.message),
   });
+  const rerunDistances = trpc.scheduling.rerunDistances.useMutation({
+    onSuccess: (result) => {
+      utils.scheduling.getSchedule.invalidate({ date });
+      toast.success(result.message);
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
   // Team unavailability for the selected date
   const { data: unavailableTeamIds = [] } = trpc.scheduling.getTeamUnavailability.useQuery({ date });
@@ -1622,6 +1640,20 @@ export default function SchedulingTab() {
             >
               <RotateCcw className="w-3.5 h-3.5" />
               Reset
+            </Button>
+          )}
+          {/* Rerun Distances button — recalculates all drive times from Google */}
+          {hasAssignments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => rerunDistances.mutate({ date })}
+              disabled={rerunDistances.isPending || optimize.isPending}
+              className="gap-1.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+              title="Recalculate all drive times from Google Maps"
+            >
+              {rerunDistances.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MapPin className="w-3.5 h-3.5" />}
+              Rerun Distances
             </Button>
           )}
           {/* Call Log button */}
@@ -1945,6 +1977,7 @@ export default function SchedulingTab() {
                     }
                     onSaveTag={(tag) => setTeamTag.mutate({ teamId: team.id, tag })}
                     onSaveRegionTags={(regionTags) => setTeamRegionTags.mutate({ teamId: team.id, regionTags })}
+                    onRerunDistances={() => rerunDistances.mutate({ date, teamId: team.id })}
                   />
                   {/* Jobs */}
                   <div className="p-2 space-y-1.5">
