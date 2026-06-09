@@ -660,7 +660,7 @@ export const opsChatRouter = router({
    * List all threads in the command channel that have at least one reply.
    * Returns parent message + reply count + last reply preview, sorted by most recent activity.
    */
-  listActiveThreads: opsChatProcedure.query(async () => {
+  listActiveThreads: opsChatProcedure.query(async ({ ctx }) => {
     const db = await getDb();
     if (!db) return [];
 
@@ -668,6 +668,7 @@ export const opsChatRouter = router({
     const replies = await db
       .select({
         threadParentId: opsChatMessages.threadParentId,
+        id: opsChatMessages.id,
         body: opsChatMessages.body,
         authorName: opsChatMessages.authorName,
         createdAt: opsChatMessages.createdAt,
@@ -699,10 +700,26 @@ export const opsChatRouter = router({
       .from(opsChatMessages)
       .where(inArray(opsChatMessages.id, parentIds));
 
+    // Fetch this caller's read records for thread channels (keyed as "thread:{parentId}")
+    const callerId = ctx.opsCaller.id;
+    const threadChannelKeys = parentIds.map(id => `thread:${id}`);
+    const readRows = threadChannelKeys.length > 0
+      ? await db.select({ channel: opsChatReads.channel, lastReadMessageId: opsChatReads.lastReadMessageId })
+          .from(opsChatReads)
+          .where(and(
+            eq(opsChatReads.callerId, callerId),
+            inArray(opsChatReads.channel, threadChannelKeys),
+          ))
+      : [];
+    const readByChannel = new Map(readRows.map(r => [r.channel!, r.lastReadMessageId]));
+
     // Build result sorted by most recent reply
     const threads = parents.map((p) => {
       const threadReplies = byParent[p.id] ?? [];
       const lastReply = threadReplies[threadReplies.length - 1];
+      const lastReplyMsgId = lastReply?.id ?? 0;
+      const lastReadMsgId = readByChannel.get(`thread:${p.id}`) ?? 0;
+      const hasUnread = lastReplyMsgId > lastReadMsgId;
       return {
         parentId: p.id,
         parentBody: p.body,
@@ -712,6 +729,8 @@ export const opsChatRouter = router({
         lastReplyFrom: lastReply?.authorName ?? null,
         lastReplyBody: lastReply?.body ?? null,
         lastReplyTs: lastReply?.createdAt.getTime() ?? p.createdAt.getTime(),
+        lastReplyMsgId,
+        hasUnread,
       };
     });
 

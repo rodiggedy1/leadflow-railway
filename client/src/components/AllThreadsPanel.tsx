@@ -4,6 +4,10 @@
  * Opens from the MessageSquare icon in the Command Chat header.
  * Lists all threads that have at least one reply, sorted by most recent activity.
  * Clicking a thread row calls onOpenThread(parentId) to open the ThreadPanel.
+ *
+ * Unread indicators:
+ *  - Blue dot on each thread row where hasUnread === true
+ *  - Unread count badge in the panel header
  */
 
 import { MessageSquare, Loader2, MessageCircle } from "lucide-react";
@@ -47,6 +51,7 @@ type ThreadSummary = {
   lastReplyFrom: string | null;
   lastReplyBody: string | null;
   lastReplyTs: number;
+  hasUnread?: boolean;
 };
 
 function ThreadRow({
@@ -58,21 +63,28 @@ function ThreadRow({
 }) {
   const fromColor = senderHex(thread.parentFrom);
   const lastColor = thread.lastReplyFrom ? senderHex(thread.lastReplyFrom) : "#94a3b8";
+  const hasUnread = thread.hasUnread === true;
 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left px-4 py-3.5 border-b border-slate-100 hover:bg-violet-50 transition-colors group"
+      className={`w-full text-left px-4 py-3.5 border-b border-slate-100 hover:bg-violet-50 transition-colors group ${hasUnread ? "bg-violet-50/40" : ""}`}
     >
       {/* Parent message preview */}
       <div className="flex items-start gap-2 mb-2">
-        <MessageSquare className="h-3.5 w-3.5 text-violet-400 shrink-0 mt-0.5" />
+        {/* Unread dot */}
+        <div className="relative shrink-0 mt-0.5">
+          <MessageSquare className="h-3.5 w-3.5 text-violet-400" />
+          {hasUnread && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-blue-500 ring-1 ring-white" />
+          )}
+        </div>
         <div className="flex-1 min-w-0">
           <span className="text-xs font-semibold mr-1.5" style={{ color: fromColor }}>
             {thread.parentFrom}
           </span>
           <span className="text-[10px] text-slate-400">{fmtTime(thread.parentTs)}</span>
-          <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+          <p className={`text-xs mt-0.5 leading-relaxed ${hasUnread ? "text-slate-800 font-medium" : "text-slate-600"}`}>
             {truncate(thread.parentBody, 100)}
           </p>
         </div>
@@ -85,7 +97,7 @@ function ThreadRow({
             {thread.lastReplyFrom}
           </span>
           <span className="text-[10px] text-slate-400">{fmtTime(thread.lastReplyTs)}</span>
-          <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+          <p className={`text-[11px] mt-0.5 leading-snug ${hasUnread ? "text-slate-700 font-medium" : "text-slate-500"}`}>
             {truncate(thread.lastReplyBody ?? "", 80)}
           </p>
         </div>
@@ -95,6 +107,11 @@ function ThreadRow({
       <div className="mt-2 ml-5.5 flex items-center gap-1 text-[10px] text-violet-500 font-medium group-hover:text-violet-700">
         <MessageCircle className="h-3 w-3" />
         {thread.replyCount} {thread.replyCount === 1 ? "reply" : "replies"} · View thread →
+        {hasUnread && (
+          <span className="ml-1 px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold leading-none">
+            NEW
+          </span>
+        )}
       </div>
     </button>
   );
@@ -118,6 +135,8 @@ export default function AllThreadsPanel({
     refetchInterval: open ? 15_000 : false,
   });
 
+  const unreadCount = (threads as ThreadSummary[]).filter(t => t.hasUnread).length;
+
   return (
     <Sheet open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <SheetContent className="w-full sm:max-w-md p-0 flex flex-col overflow-hidden">
@@ -125,11 +144,15 @@ export default function AllThreadsPanel({
           <SheetTitle className="flex items-center gap-2 text-sm">
             <MessageSquare className="w-4 h-4 text-violet-500" />
             Threads
-            {threads.length > 0 && (
+            {unreadCount > 0 ? (
+              <span className="px-1.5 py-0.5 rounded-full bg-blue-500 text-white text-[10px] font-bold leading-none">
+                {unreadCount} unread
+              </span>
+            ) : threads.length > 0 ? (
               <span className="text-xs text-slate-400 font-normal">
                 {threads.length} active
               </span>
-            )}
+            ) : null}
           </SheetTitle>
         </SheetHeader>
 

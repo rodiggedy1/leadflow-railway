@@ -885,6 +885,7 @@ type MessageListProps = {
   allThreadsOpen: boolean;
   setAllThreadsOpen: (v: boolean) => void;
   activeThreadCount: number;
+  unreadThreadCount: number;
   superAlertMsgSet: Set<number>;
   // Conversation row action buttons
   searchOpen: boolean;
@@ -1034,6 +1035,7 @@ const MessageList = memo(function MessageList({
   allThreadsOpen,
   setAllThreadsOpen,
   activeThreadCount,
+  unreadThreadCount,
   superAlertMsgSet,
   searchOpen,
   openSearch,
@@ -1118,6 +1120,11 @@ const MessageList = memo(function MessageList({
                 )}
               >
                 <MessageSquare className="h-3.5 w-3.5" />
+                {unreadThreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white">
+                    {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
+                  </span>
+                )}
               </button>
               <button
                 title="AI Call Log"
@@ -2420,6 +2427,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     refetchInterval: 30_000,
   });
   const activeThreadCount = (activeThreads as any[]).length;
+  const unreadThreadCount = (activeThreads as any[]).filter((t: any) => t.hasUnread).length;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -4699,6 +4707,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           allThreadsOpen={allThreadsOpen}
           setAllThreadsOpen={setAllThreadsOpen}
           activeThreadCount={activeThreadCount}
+          unreadThreadCount={unreadThreadCount}
           superAlertMsgSet={superAlertMsgSet}
           searchOpen={searchOpen}
           openSearch={openSearch}

@@ -182,11 +182,25 @@ export default function ThreadPanel({
     { parentId },
     { refetchInterval: 30_000 }
   );
+  const markRead = trpc.opsChat.markRead.useMutation();
+  const utils = trpc.useUtils();
 
   // Refetch when SSE fires a new_message for this thread
   useEffect(() => {
     if (refetchTick > 0) refetch();
   }, [refetchTick, refetch]);
+
+  // Mark thread as read whenever replies load or new replies arrive
+  useEffect(() => {
+    const replies = data?.replies;
+    if (!replies || replies.length === 0) return;
+    const lastId = replies[replies.length - 1].id;
+    markRead.mutate(
+      { lastMessageId: lastId, channel: `thread:${parentId}` },
+      { onSuccess: () => utils.opsChat.listActiveThreads.invalidate() }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.replies?.length, parentId]);
 
   // Scroll to bottom when replies load or new reply arrives
   useEffect(() => {
