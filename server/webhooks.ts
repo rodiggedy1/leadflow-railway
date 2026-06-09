@@ -802,7 +802,14 @@ export function registerWebhookRoutes(app: Express) {
       // Append the lead's inbound message to history first (always stored)
       history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
 
-
+      // ── CRITICAL: Persist the user message to DB IMMEDIATELY ──────────────────
+      // This MUST happen before ANY LLM/AI call. If the AI engine crashes, times out,
+      // or throws, the customer's message is guaranteed to be in the DB already.
+      // The history will be updated again later with the assistant reply appended.
+      await db
+        .update(conversationSessions)
+        .set({ messageHistory: JSON.stringify(history) } as any)
+        .where(eq(conversationSessions.id, session.id));
 
       // Log the inbound reply as an activity event
       logActivity({
@@ -1125,11 +1132,25 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       }
 
       // Process the reply through the LLM-first AI engine
-      const result = await processLeadReplyV2(inboundText, context);
+      // Wrapped in its own try/catch so an AI crash never silently drops the message.
+      // The user's message is already saved to DB above — this only handles the reply.
+      let result: Awaited<ReturnType<typeof processLeadReplyV2>>;
+      try {
+        result = await processLeadReplyV2(inboundText, context);
+      } catch (aiErr) {
+        console.error(`[Webhook] AI engine threw for session ${session.id} (stage=${session.stage}):`, aiErr);
+        // Message is already saved. Send a human-fallback SMS so the lead isn't left hanging.
+        await sendSms({
+          to: fromPhone,
+          content: "Hey! We got your message and a team member will follow up with you shortly. 😊",
+        }).catch((smsErr: unknown) => console.error("[Webhook] Failed to send AI fallback SMS:", smsErr));
+        return;
+      }
 
       // DONE / CALL_SCHEDULED — no AI reply, human handles post-booking messages
       if (result === null) {
         console.log(`[Webhook] Skipping AI reply for post-booking stage=${session.stage} from ${fromPhone}`);
+        // History is already saved above — nothing more to do.
         return;
       }
 
