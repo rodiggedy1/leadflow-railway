@@ -312,7 +312,7 @@ Write the reply now:`;
     )
     .mutation(async ({ input, ctx }) => {
       const { db } = await requireGmailConnected();
-      const agentOpenId = ctx.user.openId;
+      const agentOpenId = ctx.agent.agentId;
 
       let issueSummary: string | null = null;
 
