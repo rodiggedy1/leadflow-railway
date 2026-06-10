@@ -43,7 +43,6 @@ import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
-import { useLocation } from "wouter";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -2471,7 +2470,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const leadRepliesCount = leadReplies.length;
   const unreadLeadRepliesCount = (leadReplies as any[]).filter((l: any) => l.isUnread).length;
   // ── Email inbox unread count ─────────────────────────────────────────────────
-  const [, navigateTo] = useLocation();
   const { data: emailUnreadData } = trpc.gmail.getUnreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
     retry: false,
@@ -4605,7 +4603,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     <span className="text-slate-300 text-xs">|</span>
                   )}
                   <button
-                    onClick={() => navigateTo("/admin/inbox")}
+                    onClick={() => { window.location.href = "/admin/inbox"; }}
                     className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
                   >
                     <Mail className="h-3 w-3" />

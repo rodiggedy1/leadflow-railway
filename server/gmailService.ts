@@ -392,14 +392,38 @@ export async function getAttachmentData(
   return { data, size };
 }
 
-/** Return the count of unread threads in the Conversations tab (non-Thumbtack) */
+/** Return the count of unread threads in the Conversations tab (non-Thumbtack).
+ * Mirrors EmailInbox exactly: load up to 100 threads with the Conversations tab
+ * query (-from:thumbtack.com), then count those that have the UNREAD label.
+ * Uses metadata format (no body fetch) to keep this cheap. */
 export async function getConversationsUnreadCount(): Promise<number> {
   const gmail = await getGmailClient();
-  // Use Gmail's q param: inbox, unread, not from thumbtack
-  const res = await gmail.users.threads.list({
+  // Step 1: list up to 100 thread IDs — same query as EmailInbox Conversations tab
+  const listRes = await gmail.users.threads.list({
     userId: "me",
-    maxResults: 500,
-    q: "in:inbox is:unread -from:thumbtack.com",
+    maxResults: 100,
+    q: "in:inbox -from:thumbtack.com",
   });
-  return (res.data.threads ?? []).length;
+  const threadItems = listRes.data.threads ?? [];
+  if (threadItems.length === 0) return 0;
+  // Step 2: fetch each thread with metadata format (cheap — no body)
+  // to check whether any message in the thread carries the UNREAD label
+  const checks = await Promise.all(
+    threadItems.map(async (t) => {
+      try {
+        const res = await gmail.users.threads.get({
+          userId: "me",
+          id: t.id!,
+          format: "metadata",
+          metadataHeaders: ["Subject"],
+        });
+        return (res.data.messages ?? []).some((m: any) =>
+          (m.labelIds ?? []).includes("UNREAD")
+        );
+      } catch {
+        return false;
+      }
+    })
+  );
+  return checks.filter(Boolean).length;
 }
