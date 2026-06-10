@@ -16,6 +16,7 @@ import {
   Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { senderColorClass, senderHex } from "@/lib/senderColor";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
 
@@ -59,32 +60,53 @@ function NotConnectedBanner() {
 }
 
 function ThreadItem({ thread, active, onClick }: { thread: GmailThread; active: boolean; onClick: () => void }) {
+  const senderName = thread.from || thread.fromEmail || "?";
+  const accentColor = senderHex(senderName);
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-4 py-3.5 rounded-2xl border transition-all mb-2",
-        active ? "border-blue-200 bg-blue-50/60 shadow-sm" : "border-transparent bg-white hover:bg-slate-50",
-        thread.isUnread && !active && "border-blue-100"
+        "w-full text-left px-4 py-3.5 border-b border-slate-100 transition-colors group relative",
+        active
+          ? "bg-blue-50/70"
+          : thread.isUnread
+          ? "bg-white hover:bg-slate-50/80"
+          : "bg-white hover:bg-slate-50/60"
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <span className={cn("text-sm leading-snug line-clamp-1", thread.isUnread ? "font-black text-slate-900" : "font-semibold text-slate-700")}>
-          {thread.subject}
-        </span>
-        <span className="text-xs text-slate-400 shrink-0 mt-0.5">{formatDate(thread.date)}</span>
-      </div>
-      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
-        <span className={cn("text-slate-600", thread.isUnread && "font-semibold")}>{thread.from || thread.fromEmail}</span>
-        {thread.snippet ? ` · ${thread.snippet.slice(0, 70)}` : ""}
-      </p>
-      <div className="flex items-center gap-2 mt-1.5">
-        {thread.isUnread && (
-          <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-100">UNREAD</span>
-        )}
-        {thread.messageCount > 1 && (
-          <span className="text-[10px] text-slate-400">{thread.messageCount} messages</span>
-        )}
+      {/* Active left accent bar */}
+      {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-blue-500" />}
+
+      <div className="flex items-start gap-2.5">
+        {/* Sender avatar */}
+        <div
+          className={cn("w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5", senderColorClass(senderName))}
+        >
+          {getInitials(senderName)}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-0.5">
+            <span
+              className={cn("text-sm leading-snug truncate", thread.isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700")}
+              style={thread.isUnread ? { color: accentColor } : undefined}
+            >
+              {senderName}
+            </span>
+            <span className="text-[11px] text-slate-400 shrink-0">{formatDate(thread.date)}</span>
+          </div>
+          <p className={cn("text-xs leading-snug truncate mb-1", thread.isUnread ? "text-slate-700 font-medium" : "text-slate-500")}>
+            {thread.subject}
+          </p>
+          <p className="text-[11px] text-slate-400 line-clamp-1 leading-relaxed">
+            {thread.snippet?.slice(0, 80)}
+          </p>
+          {thread.isUnread && (
+            <span className="inline-block mt-1.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+              UNREAD
+            </span>
+          )}
+        </div>
       </div>
     </button>
   );
@@ -92,24 +114,31 @@ function ThreadItem({ thread, active, onClick }: { thread: GmailThread; active: 
 
 function MessageBubble({ msg }: { msg: GmailMessage }) {
   const sanitizedHtml = msg.bodyHtml ? DOMPurify.sanitize(msg.bodyHtml, { USE_PROFILES: { html: true } }) : null;
+  const senderName = msg.from || msg.fromEmail || "?";
+  const accentColor = senderHex(senderName);
   return (
-    <div className="bg-white border border-slate-200 rounded-[18px] shadow-[0_4px_20px_rgba(22,34,51,0.06)] p-6 max-w-3xl mb-4">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm shrink-0">
-          {getInitials(msg.from || msg.fromEmail || "?")}
+    <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-6 mb-4">
+      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100">
+        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0", senderColorClass(senderName))}>
+          {getInitials(senderName)}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-slate-800 truncate">{msg.from || msg.fromEmail}</p>
-          <p className="text-xs text-slate-400">
-            {msg.fromEmail !== msg.from && <span className="mr-1">{msg.fromEmail} ·</span>}
+          <p className="font-bold text-sm text-slate-900 truncate" style={{ color: accentColor }}>{senderName}</p>
+          <p className="text-xs text-slate-400 truncate">
+            {msg.fromEmail !== msg.from && msg.fromEmail ? `${msg.fromEmail} · ` : ""}
             {formatDate(msg.date)}
           </p>
         </div>
       </div>
       {sanitizedHtml ? (
-        <div className="text-[14px] text-slate-700 leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
+        <div
+          className="text-[14px] text-slate-700 leading-relaxed prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+        />
       ) : (
-        <div className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">{msg.bodyText || msg.snippet}</div>
+        <div className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+          {msg.bodyText || msg.snippet}
+        </div>
       )}
     </div>
   );
@@ -125,25 +154,33 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
     onError: (err) => toast.error(err.message || "Failed to send email"),
   });
   return (
-    <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-2xl shadow-2xl w-[560px] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
-          <p className="font-black text-sm text-slate-800">New Email</p>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+    <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-center justify-center p-6" style={{ paddingRight: "280px" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[560px] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <p className="font-bold text-sm text-slate-800">New Email</p>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors text-xs">✕</button>
         </div>
         <div className="p-4 space-y-3">
           <Input placeholder="To" value={to} onChange={(e) => setTo(e.target.value)} className="text-sm" />
           <Input placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} className="text-sm" />
-          <Textarea placeholder="Write your message…" value={body} onChange={(e) => setBody(e.target.value)} className="min-h-[200px] text-sm resize-none" />
+          <Textarea
+            placeholder="Write your message…"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            className="min-h-[200px] text-sm resize-none"
+          />
         </div>
-        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100">
           <div className="flex items-center gap-3 text-slate-400">
             <button className="hover:text-slate-600"><Paperclip className="w-4 h-4" /></button>
             <button className="hover:text-slate-600"><Link2 className="w-4 h-4" /></button>
           </div>
-          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs gap-1.5"
+          <Button
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5"
             disabled={composeMutation.isPending || !to || !subject || !body}
-            onClick={() => composeMutation.mutate({ to, subject, bodyHtml: body.replace(/\n/g, "<br>") })}>
+            onClick={() => composeMutation.mutate({ to, subject, bodyHtml: body.replace(/\n/g, "<br>") })}
+          >
             {composeMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             Send
           </Button>
@@ -171,11 +208,18 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
     UNHANDLED: "bg-amber-100 text-amber-700",
   };
 
+  const senderName = lead?.name ?? validEmail ?? "?";
+
   return (
     <aside className="w-[260px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto">
       {!validEmail ? (
         <div className="flex-1 flex items-center justify-center p-6">
-          <p className="text-xs text-slate-400 text-center">Select a thread to see customer context</p>
+          <div className="text-center">
+            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+              <Mail className="w-5 h-5 text-slate-300" />
+            </div>
+            <p className="text-xs text-slate-400">Select a thread to see customer context</p>
+          </div>
         </div>
       ) : contextQuery.isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -185,14 +229,17 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
         <div className="p-4 space-y-5">
           {/* Sender header */}
           <div className="flex items-center gap-3 pt-1">
-            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm shrink-0">
-              {lead?.name ? getInitials(lead.name) : (validEmail[0] ?? "?").toUpperCase()}
+            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0", senderColorClass(senderName))}>
+              {getInitials(senderName)}
             </div>
             <div className="min-w-0">
-              <p className="font-black text-sm text-slate-900 truncate">{lead?.name ?? "Unknown"}</p>
+              <p className="font-bold text-sm text-slate-900 truncate">{lead?.name ?? "Unknown"}</p>
               <p className="text-xs text-slate-400 truncate">{validEmail}</p>
             </div>
           </div>
+
+          {/* Divider */}
+          <div className="border-t border-slate-100" />
 
           {/* Quote / Lead data */}
           <div>
@@ -200,17 +247,19 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
             {lead ? (
               <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">{lead.serviceType ?? "Service"}</span>
+                  <span className="text-xs text-slate-600 font-medium">{lead.serviceType ?? "Service"}</span>
                   {session?.stage && (
-                    <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full", stageBadgeColor[session.stage] ?? "bg-blue-50 text-blue-700")}>
+                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", stageBadgeColor[session.stage] ?? "bg-blue-50 text-blue-700")}>
                       {session.stage}
                     </span>
                   )}
                 </div>
-                {lead.phone && <p className="text-xs text-slate-500">{lead.phone}</p>}
+                {lead.phone && <p className="text-xs text-slate-400">{lead.phone}</p>}
               </div>
             ) : (
-              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-400 italic">No customer record found</div>
+              <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
+                <p className="text-xs text-slate-400 italic">No customer record found</p>
+              </div>
             )}
           </div>
 
@@ -219,12 +268,13 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Home Profile</p>
               <div className="grid grid-cols-3 gap-2">
-                {[{ label: "Est.", value: session?.quotedPrice ? `$${session.quotedPrice}` : (lead ? "—" : null) },
-                  { label: "Beds/Baths", value: lead.bedrooms && lead.bathrooms ? `${lead.bedrooms}bd/${lead.bathrooms}ba` : "—" },
-                  { label: "Extras", value: lead.extras ? (() => { try { const e = JSON.parse(lead.extras); return Array.isArray(e) && e.length > 0 ? `${e.length} add-on${e.length > 1 ? "s" : ""}` : "None"; } catch { return "—"; } })() : "None" },
+                {[
+                  { label: "Est.", value: session?.quotedPrice ? `$${session.quotedPrice}` : "—" },
+                  { label: "Beds/Baths", value: lead.bedrooms && lead.bathrooms ? `${lead.bedrooms}/${lead.bathrooms}` : "—" },
+                  { label: "Extras", value: lead.extras ? (() => { try { const e = JSON.parse(lead.extras); return Array.isArray(e) && e.length > 0 ? `${e.length}` : "0"; } catch { return "—"; } })() : "0" },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-slate-50 rounded-xl p-2.5 text-center">
-                    <p className="text-sm font-black text-slate-800">{value}</p>
+                    <p className="text-sm font-bold text-slate-800">{value}</p>
                     <p className="text-[10px] text-slate-400 mt-0.5">{label}</p>
                   </div>
                 ))}
@@ -248,8 +298,8 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
                         item!.status === "BOOKED" ? "bg-green-500" : item!.status === "NOT_INTERESTED" ? "bg-red-400" : "bg-blue-400")} />
                       <span className="text-xs text-slate-700 truncate">{item!.label}</span>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
-                      {item!.status === "BOOKED" ? "Booked" : item!.status === "slot" ? "Slot" : item!.status === "address" ? "Address" : "Open"}
+                    <span className="text-[10px] font-semibold text-slate-400 shrink-0">
+                      {item!.status === "BOOKED" ? "Booked" : item!.status === "slot" ? "Slot" : item!.status === "address" ? "Addr" : "Open"}
                     </span>
                   </div>
                 ))}
@@ -272,14 +322,25 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
             </div>
           )}
 
+          {/* Divider */}
+          <div className="border-t border-slate-100" />
+
           {/* Automation */}
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Automation</p>
             <div className="flex flex-col gap-1.5">
-              <button className="text-left text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
-                onClick={() => toast.info("Create follow-up — coming soon")}>Create follow-up</button>
-              <button className="text-left text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
-                onClick={() => toast.info("Send quote link — coming soon")}>Send quote link</button>
+              <button
+                className="text-left text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                onClick={() => toast.info("Create follow-up — coming soon")}
+              >
+                Create follow-up
+              </button>
+              <button
+                className="text-left text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                onClick={() => toast.info("Send quote link — coming soon")}
+              >
+                Send quote link
+              </button>
             </div>
           </div>
         </div>
@@ -369,6 +430,7 @@ export default function EmailInbox() {
   const allThreads = threadsQuery.data?.threads ?? [];
   const threads = unreadOnly ? allThreads.filter((t) => t.isUnread) : allThreads;
   const selectedThread = threadQuery.data ?? null;
+  const unreadCount = allThreads.filter((t) => t.isUnread).length;
 
   // Auto-select the most recently received thread when inbox loads
   useEffect(() => {
@@ -379,62 +441,97 @@ export default function EmailInbox() {
   }, [threads.length > 0 && !selectedThreadId]);
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#f6f8fb] font-sans">
+    <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
       {/* Thread sidebar */}
-      <aside className="w-[300px] bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-hidden">
-        <div className="p-5 pb-3">
-          <div className="flex items-center justify-between mb-1">
+      <aside className="w-[280px] bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-4 pt-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-3">
             <div>
-              <h1 className="text-lg font-black text-slate-900">Maids Inbox</h1>
-              <p className="text-xs text-slate-400">Shared Gmail inbox</p>
+              <h1 className="text-base font-bold text-slate-900 tracking-tight">Maids Inbox</h1>
+              <p className="text-[11px] text-slate-400">Shared Gmail inbox</p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <button onClick={() => { utils.gmail.listThreads.invalidate(); utils.gmail.getConnectionStatus.invalidate(); }}
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:bg-slate-100 transition-colors" title="Refresh">
-                <RefreshCw className={cn("w-4 h-4", threadsQuery.isFetching && "animate-spin")} />
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { utils.gmail.listThreads.invalidate(); utils.gmail.getConnectionStatus.invalidate(); }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"
+                title="Refresh"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", threadsQuery.isFetching && "animate-spin")} />
               </button>
-              <button onClick={() => setShowCompose(true)}
-                className="bg-slate-900 text-white text-lg font-bold w-9 h-9 rounded-[14px] flex items-center justify-center hover:bg-slate-800 transition-colors" title="Compose">
-                <Plus className="w-4 h-4" />
+              <button
+                onClick={() => setShowCompose(true)}
+                className="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center hover:bg-slate-800 transition-colors"
+                title="Compose"
+              >
+                <Plus className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
-          <div className="relative mt-3">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input placeholder="Search inbox…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-slate-50 border-slate-200 rounded-[14px] text-sm h-10" />
+          {/* Search */}
+          <div className="relative mb-2.5">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <Input
+              placeholder="Search inbox…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 bg-slate-50 border-slate-200 rounded-lg text-xs h-8"
+            />
           </div>
-          <div className="flex items-center gap-1.5 mt-2">
-            <button onClick={() => setUnreadOnly(false)}
-              className={cn("text-xs font-bold px-3 py-1 rounded-full transition-colors",
-                !unreadOnly ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100")}>
+          {/* Filter pills */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setUnreadOnly(false)}
+              className={cn(
+                "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
+                !unreadOnly ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
+              )}
+            >
               All
             </button>
-            <button onClick={() => setUnreadOnly(true)}
-              className={cn("text-xs font-bold px-3 py-1 rounded-full transition-colors",
-                unreadOnly ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100")}>
-              Unread {allThreads.filter(t => t.isUnread).length > 0 && `(${allThreads.filter(t => t.isUnread).length})`}
+            <button
+              onClick={() => setUnreadOnly(true)}
+              className={cn(
+                "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
+                unreadOnly ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"
+              )}
+            >
+              Unread {unreadCount > 0 && `(${unreadCount})`}
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-3 pb-3">
-          {statusQuery.isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>}
+
+        {/* Thread list */}
+        <div className="flex-1 overflow-y-auto">
+          {statusQuery.isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            </div>
+          )}
           {statusQuery.data?.connected === false && (
-            <div className="px-2 py-4 text-center">
-              <AlertCircle className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+            <div className="px-4 py-6 text-center">
+              <AlertCircle className="w-7 h-7 text-amber-400 mx-auto mb-2" />
               <p className="text-xs text-slate-500">Gmail not connected</p>
             </div>
           )}
-          {threadsQuery.isLoading && statusQuery.data?.connected && <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>}
+          {threadsQuery.isLoading && statusQuery.data?.connected && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            </div>
+          )}
           {threadsQuery.isError && (
-            <div className="px-2 py-4 text-center">
+            <div className="px-4 py-6 text-center">
               <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-2" />
               <p className="text-xs text-red-500">{threadsQuery.error.message}</p>
             </div>
           )}
-          {threads.map((t) => <ThreadItem key={t.id} thread={t} active={t.id === selectedThreadId} onClick={() => selectThread(t.id)} />)}
+          {threads.map((t) => (
+            <ThreadItem key={t.id} thread={t} active={t.id === selectedThreadId} onClick={() => selectThread(t.id)} />
+          ))}
           {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
-            <div className="text-center py-12 text-slate-400 text-sm">{debouncedQuery ? "No results" : "Inbox is empty"}</div>
+            <div className="text-center py-12 text-slate-400 text-xs">
+              {debouncedQuery ? "No results" : unreadOnly ? "No unread messages" : "Inbox is empty"}
+            </div>
           )}
         </div>
       </aside>
@@ -445,69 +542,127 @@ export default function EmailInbox() {
         {statusQuery.data?.connected && !selectedThreadId && (
           <div className="flex-1 flex items-center justify-center text-slate-400">
             <div className="text-center">
-              <Mail className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Select a thread to read</p>
+              <Mail className="w-10 h-10 mx-auto mb-3 opacity-20" />
+              <p className="text-sm text-slate-400">Select a thread to read</p>
             </div>
           </div>
         )}
         {selectedThreadId && statusQuery.data?.connected && (
           <>
-            <div className="h-[72px] bg-white border-b border-slate-200 flex items-center justify-between px-7 shrink-0">
-              <h2 className="text-xl font-black text-slate-900 truncate mr-4">{selectedThread?.subject ?? "Loading…"}</h2>
-              <div className="flex items-center gap-2 shrink-0">
-                <Button variant="outline" size="sm" className="text-xs font-bold gap-1.5"
-                  onClick={() => { if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId }); else markUnreadMutation.mutate({ threadId: selectedThreadId }); }}
-                  disabled={markReadMutation.isPending || markUnreadMutation.isPending}>
-                  {selectedThread?.isUnread ? <><MailCheck className="w-3.5 h-3.5" /> Mark read</> : <><MailOpen className="w-3.5 h-3.5" /> Mark unread</>}
+            {/* Thread header */}
+            <div className="h-[60px] bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
+              <h2 className="text-base font-bold text-slate-900 truncate mr-4">
+                {selectedThread?.subject ?? "Loading…"}
+              </h2>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs font-semibold gap-1.5 h-8"
+                  onClick={() => {
+                    if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId });
+                    else markUnreadMutation.mutate({ threadId: selectedThreadId });
+                  }}
+                  disabled={markReadMutation.isPending || markUnreadMutation.isPending}
+                >
+                  {selectedThread?.isUnread
+                    ? <><MailCheck className="w-3.5 h-3.5" /> Mark read</>
+                    : <><MailOpen className="w-3.5 h-3.5" /> Mark unread</>}
                 </Button>
-                <Button variant="outline" size="sm" className="text-xs font-bold gap-1.5"
-                  onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })} disabled={archiveMutation.isPending}>
-                  {archiveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs font-semibold gap-1.5 h-8"
+                  onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })}
+                  disabled={archiveMutation.isPending}
+                >
+                  {archiveMutation.isPending
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Archive className="w-3.5 h-3.5" />}
                   Archive
                 </Button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-7">
-              <div className="max-w-3xl mx-auto">
-              {threadQuery.isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>}
-              {threadQuery.isError && <div className="text-center py-12"><AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" /><p className="text-sm text-red-500">{threadQuery.error.message}</p></div>}
-              {selectedThread?.messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
-              {selectedThread && (
-                <div className="bg-white border border-slate-200 rounded-[18px] shadow-[0_4px_20px_rgba(22,34,51,0.06)] overflow-hidden">
-                  <div className="flex border-b border-slate-200">
-                    {(["reply", "note"] as const).map((mode) => (
-                      <button key={mode} onClick={() => setReplyMode(mode)}
-                        className={cn("px-5 py-3.5 text-sm font-black capitalize transition-colors border-b-2",
-                          replyMode === mode ? "text-blue-600 border-blue-600" : "text-slate-500 border-transparent hover:text-slate-700")}>
-                        {mode === "note" ? "Internal note" : "Reply"}
-                      </button>
-                    ))}
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="max-w-2xl mx-auto">
+                {threadQuery.isLoading && (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
                   </div>
-                  <Textarea value={replyText} onChange={(e) => setReplyText(e.target.value)}
-                    className="border-0 rounded-none resize-none min-h-[160px] text-[15px] leading-relaxed text-slate-700 focus-visible:ring-0 p-5"
-                    placeholder={replyMode === "note" ? "Add an internal note…" : "Write a reply…"}
-                    onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (replyMode === "reply") sendReply(); } }} />
-                  <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
-                    <div className="flex items-center gap-3 text-slate-400">
-                      <button className="hover:text-slate-600"><Paperclip className="w-4 h-4" /></button>
-                      <button className="hover:text-slate-600"><Link2 className="w-4 h-4" /></button>
-                      <button className="hover:text-slate-600"><Zap className="w-4 h-4" /></button>
+                )}
+                {threadQuery.isError && (
+                  <div className="text-center py-12">
+                    <AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" />
+                    <p className="text-sm text-red-500">{threadQuery.error.message}</p>
+                  </div>
+                )}
+                {selectedThread?.messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
+
+                {/* Reply box */}
+                {selectedThread && (
+                  <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden mb-4">
+                    <div className="flex border-b border-slate-100">
+                      {(["reply", "note"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setReplyMode(mode)}
+                          className={cn(
+                            "px-5 py-3 text-sm font-semibold capitalize transition-colors border-b-2",
+                            replyMode === mode
+                              ? "text-blue-600 border-blue-600"
+                              : "text-slate-400 border-transparent hover:text-slate-600"
+                          )}
+                        >
+                          {mode === "note" ? "Internal note" : "Reply"}
+                        </button>
+                      ))}
                     </div>
-                    {replyMode === "reply" ? (
-                      <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-black text-xs gap-1.5"
-                        disabled={replyMutation.isPending || !replyText.trim()} onClick={sendReply}>
-                        {replyMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        Send ⌘+Enter
-                      </Button>
-                    ) : (
-                      <Button size="sm" variant="outline" className="font-black text-xs gap-1.5" disabled={!replyText.trim()}
-                        onClick={() => { toast.info("Internal notes are not yet saved to a backend."); setReplyText(""); }}>
-                        Save note
-                      </Button>
-                    )}
+                    <Textarea
+                      value={replyText}
+                      onChange={(e) => setReplyText(e.target.value)}
+                      className="border-0 rounded-none resize-none min-h-[140px] text-[14px] leading-relaxed text-slate-700 focus-visible:ring-0 p-5"
+                      placeholder={replyMode === "note" ? "Add an internal note…" : "Write a reply…"}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault();
+                          if (replyMode === "reply") sendReply();
+                        }
+                      }}
+                    />
+                    <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+                      <div className="flex items-center gap-3 text-slate-400">
+                        <button className="hover:text-slate-600"><Paperclip className="w-4 h-4" /></button>
+                        <button className="hover:text-slate-600"><Link2 className="w-4 h-4" /></button>
+                        <button className="hover:text-slate-600"><Zap className="w-4 h-4" /></button>
+                      </div>
+                      {replyMode === "reply" ? (
+                        <Button
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5"
+                          disabled={replyMutation.isPending || !replyText.trim()}
+                          onClick={sendReply}
+                        >
+                          {replyMutation.isPending
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Send className="w-3.5 h-3.5" />}
+                          Send ⌘+Enter
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="font-bold text-xs gap-1.5"
+                          disabled={!replyText.trim()}
+                          onClick={() => { toast.info("Internal notes are not yet saved to a backend."); setReplyText(""); }}
+                        >
+                          Save note
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
               </div>
             </div>
           </>
