@@ -116,7 +116,7 @@ export const gmailRouter = router({
       });
 
       // Log which agent sent this reply
-      if (result?.messageId && ctx.user) {
+      if (result?.id && ctx.user) {
         // Look up agent's profile photo from users table
         const [agentRow] = await db
           .select({ profilePhotoUrl: users.profilePhotoUrl })
@@ -126,7 +126,7 @@ export const gmailRouter = router({
 
         await db.insert(gmailSentLog).values({
           threadId: input.threadId,
-          messageId: result.messageId,
+          messageId: result.id,
           agentOpenId: ctx.user.openId,
           agentName: ctx.user.name ?? "Agent",
           agentPhotoUrl: agentRow?.profilePhotoUrl ?? null,
