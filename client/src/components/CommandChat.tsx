@@ -1165,24 +1165,6 @@ const MessageList = memo(function MessageList({
                 )}
               </button>
               <button
-                title="Email Inbox"
-                onClick={onNavigateToInbox}
-                className={cn(
-                  "relative h-7 w-7 flex items-center justify-center rounded-full transition-colors",
-                  "hover:bg-slate-100 text-slate-400"
-                )}
-              >
-                <Mail className="h-3.5 w-3.5" />
-                {emailUnreadCount > 0 && (
-                  <span className={cn(
-                    "absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white",
-                    "bg-sky-500 animate-pulse"
-                  )}>
-                    {emailUnreadCount > 9 ? "9+" : emailUnreadCount}
-                  </span>
-                )}
-              </button>
-              <button
                 title="AI Call Log"
                 onClick={() => setCenterView(centerView === "calls" ? "chat" : "calls")}
                 className={cn(
@@ -4544,7 +4526,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Conversation thread — relative wrapper for toast overlay */}
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
-          {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
+          {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0 || emailUnreadCount > 0) && (
             <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
@@ -4615,6 +4597,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         {unreadLeadRepliesCount > 9 ? "9+" : unreadLeadRepliesCount}
                       </span>
                     )}
+                  </button>
+                </>
+              )}
+              {/* Email Inbox pill */}
+              {emailUnreadCount > 0 && (
+                <>
+                  {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
+                    <span className="text-slate-300 text-xs">|</span>
+                  )}
+                  <button
+                    onClick={onNavigateToInbox}
+                    className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
+                  >
+                    <Mail className="h-3 w-3" />
+                    {emailUnreadCount} email{emailUnreadCount > 1 ? "s" : ""}
+                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                      {emailUnreadCount > 9 ? "9+" : emailUnreadCount}
+                    </span>
                   </button>
                 </>
               )}
