@@ -870,6 +870,8 @@ export const schedulingRouter = router({
           estimatedDriveMap.set(a.cleanerJobId, a.driveTimeSecs);
         }
       }
+      // DEBUG: log all assignment driveTimeSecs for this date
+      console.log(`[GETSCHED] date=${input.date} assignments:`, assignments.map(a => `job${a.cleanerJobId}(team${a.teamId}) drive=${a.driveTimeSecs}`).join(', '));
 
       // Build a helper to detect job type badges from the job's fields
       const enriched = jobs.map(j => {
