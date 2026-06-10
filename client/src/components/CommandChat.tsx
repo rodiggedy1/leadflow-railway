@@ -912,7 +912,6 @@ type MessageListProps = {
   setCenterView: (v: "chat" | "issues" | "calls") => void;
   todayCallCount: number;
   emailUnreadCount: number;
-  onNavigateToInbox: () => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1069,7 +1068,6 @@ const MessageList = memo(function MessageList({
   setCenterView,
   todayCallCount,
   emailUnreadCount,
-  onNavigateToInbox,
 }: MessageListProps) {
   return (
     <>
@@ -4607,7 +4605,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     <span className="text-slate-300 text-xs">|</span>
                   )}
                   <button
-                    onClick={onNavigateToInbox}
+                    onClick={() => navigateTo("/admin/inbox")}
                     className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
                   >
                     <Mail className="h-3 w-3" />
@@ -4838,7 +4836,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setCenterView={setCenterView}
           todayCallCount={todayCallCount}
           emailUnreadCount={emailUnreadCount}
-          onNavigateToInbox={() => navigateTo("/admin/inbox")}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
