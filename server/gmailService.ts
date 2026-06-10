@@ -14,9 +14,27 @@ import { eq } from "drizzle-orm";
 // In-memory cache so we don't hit the DB on every API call.
 // Cleared when a new token is stored via the OAuth callback.
 let _cachedRefreshToken: string | null = null;
+let _cachedInboxEmail: string | null = null;
 
 export function clearRefreshTokenCache() {
   _cachedRefreshToken = null;
+  _cachedInboxEmail = null; // also clear inbox email so it re-fetches on next use
+}
+
+/**
+ * Returns the authenticated Gmail account's email address.
+ * Cached in memory after the first call — same lifecycle as the refresh token.
+ */
+export async function getInboxEmailAddress(): Promise<string | null> {
+  if (_cachedInboxEmail) return _cachedInboxEmail;
+  try {
+    const gmail = await getGmailClient();
+    const profile = await gmail.users.getProfile({ userId: "me" });
+    _cachedInboxEmail = profile.data.emailAddress ?? null;
+    return _cachedInboxEmail;
+  } catch {
+    return null;
+  }
 }
 
 async function getRefreshToken(): Promise<string | null> {
@@ -102,6 +120,8 @@ export interface GmailThread {
   isUnread: boolean;
   messageCount: number;
   messages: GmailMessage[];
+  /** The authenticated inbox email address — used by clients to identify outbound messages */
+  inboxEmail: string | null;
 }
 
 function decodeBase64(data: string): string {
@@ -178,16 +198,31 @@ export async function getThreadDetail(threadId: string): Promise<GmailThread> {
   const messages = (res.data.messages ?? []).map(parseMessage);
   const latest = messages[messages.length - 1];
   const first = messages[0];
+
+  // Get the inbox email address (cached after first call)
+  const inboxEmail = await getInboxEmailAddress();
+
+  // The thread's display contact is always the OTHER person — not the inbox.
+  // Find the last message sent by someone other than the inbox address.
+  // This correctly handles threads where we sent first, replied last, or both.
+  const otherParty = inboxEmail
+    ? [...messages].reverse().find((m) => m.fromEmail.toLowerCase() !== inboxEmail.toLowerCase())
+    : null;
+
+  // Fallback: if somehow every message is from the inbox (shouldn't happen), use first message
+  const contactMsg = otherParty ?? first;
+
   return {
     id: threadId,
     subject: first?.subject ?? "(no subject)",
     snippet: latest?.snippet ?? "",
-    from: latest?.from ?? "",
-    fromEmail: latest?.fromEmail ?? "",
+    from: contactMsg?.from ?? "",
+    fromEmail: contactMsg?.fromEmail ?? "",
     date: latest?.date ?? 0,
     isUnread: messages.some((m) => m.isUnread),
     messageCount: messages.length,
     messages,
+    inboxEmail,
   };
 }
 

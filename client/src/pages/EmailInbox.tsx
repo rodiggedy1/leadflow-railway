@@ -637,9 +637,16 @@ export default function EmailInbox() {
     const readyAttachments = pendingAttachments
       .filter((a) => a.url && !a.error)
       .map((a) => ({ url: a.url!, filename: a.filename, mimeType: a.mimeType }));
+    // Find the correct 'to' address: the last message from someone other than the inbox.
+    // This ensures we always reply to the customer, not ourselves.
+    const inboxEmail = thread.inboxEmail?.toLowerCase();
+    const otherPartyMsg = inboxEmail
+      ? [...thread.messages].reverse().find((m) => m.fromEmail.toLowerCase() !== inboxEmail)
+      : null;
+    const toEmail = otherPartyMsg?.fromEmail ?? thread.fromEmail;
     replyMutation.mutate({
       threadId: selectedThreadId,
-      to: lastMsg?.fromEmail ?? thread.fromEmail,
+      to: toEmail,
       subject: thread.subject,
       bodyHtml: replyText.replace(/\n/g, "<br>"),
       inReplyToMessageId: lastMsg?.id,
