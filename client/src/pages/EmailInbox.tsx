@@ -482,8 +482,8 @@ export default function EmailInbox() {
   const statusQuery = trpc.gmail.getConnectionStatus.useQuery(undefined, { staleTime: 60_000, retry: false });
   // Build the Gmail search query by composing tab filter + user search
   const TAB_QUERIES: Record<string, string> = {
-    conversations: '-subject:"New Direct Lead"',
-    leads: 'subject:"New Direct Lead"',
+    conversations: "-from:thumbtack.com",
+    leads: "from:thumbtack.com",
     all: "",
   };
   const tabQuery = TAB_QUERIES[activeTab] ?? "";
