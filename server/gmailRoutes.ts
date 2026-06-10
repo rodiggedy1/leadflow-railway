@@ -2,7 +2,8 @@
  * gmailRoutes.ts — Gmail OAuth callback + Pub/Sub push webhook
  */
 import type { Express } from "express";
-import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache } from "./gmailService";
+import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
+import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { getDb } from "./db";
 import { gmailState } from "../drizzle/schema";
@@ -47,6 +48,32 @@ export function registerGmailRoutes(app: Express) {
     } catch (err) {
       console.error("[Gmail] OAuth callback error:", err);
       res.status(500).send("OAuth error: " + String(err));
+    }
+  });
+
+  // ── Watch setup — one-time call to register Gmail Pub/Sub watch ────────────────
+  app.get("/api/gmail/watch/setup", async (_req, res) => {
+    try {
+      const topicName = ENV.gmailPubsubTopic;
+      if (!topicName) return res.status(400).send("GMAIL_PUBSUB_TOPIC env var not set.");
+      const db = await getDb();
+      if (!db) return res.status(500).send("DB not available");
+      const [state] = await db.select().from(gmailState).where(eq(gmailState.id, 1));
+      if (!state?.refreshToken) return res.status(400).send("Gmail not connected. Run OAuth first.");
+      const { historyId, expiration } = await setupGmailWatch(topicName);
+      await db.update(gmailState).set({ historyId, watchExpiration: Number(expiration) }).where(eq(gmailState.id, 1));
+      console.log("[Gmail] Watch set up — historyId:", historyId, "expiration:", expiration);
+      res.send(`
+        <html><body style="font-family:sans-serif;padding:40px">
+          <h2>✅ Gmail Pub/Sub watch activated!</h2>
+          <p>History ID: <code>${historyId}</code></p>
+          <p>Expires: <code>${new Date(Number(expiration)).toLocaleString()}</code></p>
+          <p>Real-time inbox notifications are now active.</p>
+        </body></html>
+      `);
+    } catch (err) {
+      console.error("[Gmail] Watch setup error:", err);
+      res.status(500).send("Watch setup error: " + String(err));
     }
   });
 
