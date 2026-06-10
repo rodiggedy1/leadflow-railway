@@ -251,7 +251,7 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
   const senderName = lead?.name ?? validEmail ?? "?";
 
   return (
-    <aside className="w-[260px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto">
+    <aside className="w-[260px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {!validEmail ? (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center">
@@ -638,7 +638,7 @@ export default function EmailInbox() {
         </div>
 
         {/* Thread list */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {statusQuery.isLoading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
@@ -766,7 +766,7 @@ export default function EmailInbox() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-6 py-5">
+            <div className="flex-1 overflow-y-auto px-[6%] py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="w-full">
                 {threadQuery.isLoading && (
                   <div className="flex items-center justify-center py-12">
