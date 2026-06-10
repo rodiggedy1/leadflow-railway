@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import DOMPurify from "dompurify";
 import {
-  Mail, Search, Paperclip, Link2, Zap, Send, RefreshCw,
-  Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus,
+  Mail, Search, Paperclip, Link2, Send, RefreshCw,
+  Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { senderColorClass, senderHex } from "@/lib/senderColor";
@@ -436,6 +436,28 @@ export default function EmailInbox() {
     },
     onError: (err) => toast.error(err.message || "Failed to send reply"),
   });
+  const draftMutation = trpc.gmail.draftReply.useMutation({
+    onSuccess: ({ draft }) => {
+      setReplyText(draft);
+      setReplyMode("reply");
+      toast.success("AI draft ready — review and send!");
+    },
+    onError: (err) => toast.error(err.message || "AI draft failed"),
+  });
+  function generateDraft() {
+    if (!selectedThreadId || !threadQuery.data) return;
+    const thread = threadQuery.data;
+    draftMutation.mutate({
+      threadId: selectedThreadId,
+      customerEmail: thread.fromEmail || undefined,
+      messages: thread.messages.map((m) => ({
+        from: m.from,
+        bodyText: m.bodyText || m.snippet || "",
+        date: m.date,
+        isOutbound: m.fromEmail?.toLowerCase().includes("maidinblack") ?? false,
+      })),
+    });
+  }
 
   useOpsStream(
     {
@@ -690,10 +712,26 @@ export default function EmailInbox() {
                       }}
                     />
                     <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
-                      <div className="flex items-center gap-3 text-slate-400">
-                        <button className="hover:text-slate-600"><Paperclip className="w-4 h-4" /></button>
-                        <button className="hover:text-slate-600"><Link2 className="w-4 h-4" /></button>
-                        <button className="hover:text-slate-600"><Zap className="w-4 h-4" /></button>
+                      <div className="flex items-center gap-3">
+                        <button className="text-slate-400 hover:text-slate-600"><Paperclip className="w-4 h-4" /></button>
+                        <button className="text-slate-400 hover:text-slate-600"><Link2 className="w-4 h-4" /></button>
+                        {replyMode === "reply" && (
+                          <button
+                            onClick={generateDraft}
+                            disabled={draftMutation.isPending || !threadQuery.data}
+                            className={cn(
+                              "flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors",
+                              draftMutation.isPending
+                                ? "text-violet-400 bg-violet-50 cursor-not-allowed"
+                                : "text-violet-600 bg-violet-50 hover:bg-violet-100"
+                            )}
+                          >
+                            {draftMutation.isPending
+                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              : <Sparkles className="w-3.5 h-3.5" />}
+                            {draftMutation.isPending ? "Drafting…" : "AI Draft"}
+                          </button>
+                        )}
                       </div>
                       {replyMode === "reply" ? (
                         <Button

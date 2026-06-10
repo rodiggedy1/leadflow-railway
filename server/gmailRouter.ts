@@ -6,6 +6,7 @@
  */
 import { z } from "zod";
 import { router, adminAgentProcedure } from "./_core/trpc";
+import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users } from "../drizzle/schema";
@@ -176,6 +177,83 @@ export const gmailRouter = router({
     .mutation(async ({ input }) => {
       await archiveThread(input.threadId);
       return { success: true };
+    }),
+
+  /** Generate an AI draft reply for the current thread */
+  draftReply: adminAgentProcedure
+    .input(
+      z.object({
+        threadId: z.string(),
+        customerEmail: z.string().email().optional(),
+        messages: z.array(
+          z.object({
+            from: z.string(),
+            bodyText: z.string(),
+            date: z.number(),
+            isOutbound: z.boolean().optional(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
+
+      // Look up customer context from DB if email provided
+      let customerName = "there";
+      let serviceType: string | null = null;
+      let jobCount = 0;
+      if (input.customerEmail) {
+        const [lead] = await db.select().from(quoteLeads).where(eq(quoteLeads.email, input.customerEmail)).limit(1);
+        if (lead) {
+          customerName = lead.name?.split(" ")[0] ?? "there";
+          serviceType = lead.serviceType ?? null;
+          const jobs = await db.select({ id: completedJobs.id }).from(completedJobs).where(eq(completedJobs.email, input.customerEmail)).limit(10);
+          jobCount = jobs.length;
+        }
+      }
+
+      // Build conversation transcript (last 8 messages)
+      const transcript = input.messages
+        .slice(-8)
+        .map((m) => {
+          const role = m.isOutbound ? "Maids in Black (us)" : `Customer (${m.from})`;
+          const text = m.bodyText.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 500);
+          return `${role}: ${text}`;
+        })
+        .join("\n\n");
+
+      const serviceInfo = serviceType ? ` regarding ${serviceType}` : "";
+      const historyNote = jobCount > 0
+        ? ` They have had ${jobCount} previous cleaning${jobCount > 1 ? "s" : ""} with us.`
+        : "";
+
+      const systemPrompt = `You are a friendly, professional customer service agent for Maids in Black, a premium residential cleaning company.
+Write a concise, warm reply to this email thread.
+Rules:
+- Address the customer by their first name: ${customerName}
+- Keep it under 120 words
+- Be helpful and specific to what they asked — do not be generic
+- Do NOT use placeholders like [Name] or [Date] or [Time]
+- Sign off as: The Maids in Black Team
+- Plain text only, no markdown, no HTML${historyNote}`;
+
+      const userPrompt = `Customer: ${customerName}${serviceInfo}
+
+Email thread (most recent last):
+${transcript}
+
+Write the reply now:`;
+
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      const draft = (result.choices[0]?.message?.content as string ?? "").trim();
+      if (!draft) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "AI returned empty draft" });
+      return { draft };
     }),
 
   /** Look up customer context by email — used in the inbox right panel */
