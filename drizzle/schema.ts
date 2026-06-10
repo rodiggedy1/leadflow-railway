@@ -2806,6 +2806,14 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   flaggedBy: varchar("flaggedBy", { length: 64 }),
   /** When it was flagged */
   flaggedAt: timestamp("flaggedAt"),
+  /** Agent ID (agents.id) this thread is assigned to — null = unassigned */
+  assignedToId: int("assignedToId"),
+  /** Cached display name of the assigned agent */
+  assignedToName: varchar("assignedToName", { length: 255 }),
+  /** Cached profile photo URL of the assigned agent */
+  assignedToPhotoUrl: varchar("assignedToPhotoUrl", { length: 1024 }),
+  /** When the assignment was made */
+  assignedAt: timestamp("assignedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

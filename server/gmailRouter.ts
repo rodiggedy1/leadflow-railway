@@ -333,7 +333,7 @@ Write the reply now:`;
     )
     .mutation(async ({ input, ctx }) => {
       const { db } = await requireGmailConnected();
-      const agentOpenId = ctx.agent.agentId;
+      const agentOpenId = String(ctx.agent.agentId);
 
       let issueSummary: string | null = null;
 
@@ -444,6 +444,97 @@ Write the reply now:`;
     await requireGmailConnected();
     const count = await getConversationsUnreadCount();
     return { count };
+  }),
+
+  /** Assign a thread to an agent (or reassign). Agents can assign to themselves. */
+  assignThread: adminAgentProcedure
+    .input(z.object({
+      threadId: z.string(),
+      agentId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
+      // Fetch agent info to cache name + photo
+      const [agent] = await db
+        .select({ id: agents.id, name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
+        .from(agents)
+        .where(eq(agents.id, input.agentId))
+        .limit(1);
+      if (!agent) throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+      // Upsert the meta row
+      await db
+        .insert(gmailThreadMeta)
+        .values({
+          threadId: input.threadId,
+          isIssue: 0,
+          assignedToId: agent.id,
+          assignedToName: agent.name,
+          assignedToPhotoUrl: agent.profilePhotoUrl ?? null,
+          assignedAt: new Date(),
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            assignedToId: agent.id,
+            assignedToName: agent.name,
+            assignedToPhotoUrl: agent.profilePhotoUrl ?? null,
+            assignedAt: new Date(),
+          },
+        });
+      return { success: true, assignedToName: agent.name };
+    }),
+
+  /** Remove assignment from a thread */
+  unassignThread: adminAgentProcedure
+    .input(z.object({ threadId: z.string() }))
+    .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
+      await db
+        .update(gmailThreadMeta)
+        .set({ assignedToId: null, assignedToName: null, assignedToPhotoUrl: null, assignedAt: null })
+        .where(eq(gmailThreadMeta.threadId, input.threadId));
+      return { success: true };
+    }),
+
+  /** List active agents available for thread assignment */
+  listAgentsForAssignment: adminAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { agents: [] };
+    const rows = await db
+      .select({ id: agents.id, name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
+      .from(agents)
+      .where(eq(agents.isActive, 1));
+    return { agents: rows };
+  }),
+
+  /** Inbox analytics: unread count, flagged count, assigned count, avg first-response time */
+  getInboxAnalytics: adminAgentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { unread: 0, flagged: 0, assigned: 0, avgResponseMs: null };
+    // Flagged and assigned counts from meta table
+    const metaRows = await db.select().from(gmailThreadMeta);
+    const flagged = metaRows.filter((r) => r.isIssue === 1).length;
+    const assigned = metaRows.filter((r) => r.assignedToId !== null).length;
+    // Avg first-response time from gmailSentLog (time between first inbound and first reply per thread)
+    const sentRows = await db
+      .select({ threadId: gmailSentLog.threadId, sentAt: gmailSentLog.sentAt })
+      .from(gmailSentLog)
+      .orderBy(gmailSentLog.sentAt);
+    // Group by threadId — take the earliest sent timestamp per thread
+    const firstReplyByThread = new Map<string, Date>();
+    for (const row of sentRows) {
+      if (!firstReplyByThread.has(row.threadId) && row.sentAt) {
+        firstReplyByThread.set(row.threadId, row.sentAt);
+      }
+    }
+    // Get unread count (lightweight — reuse existing helper)
+    let unread = 0;
+    try {
+      unread = await getConversationsUnreadCount();
+    } catch { /* Gmail may not be connected */ }
+    // Avg response time: we don't have inbound timestamps in DB, so return sent count as proxy
+    // Return null for avgResponseMs when we don't have enough data
+    const avgResponseMs = firstReplyByThread.size > 0 ? null : null; // placeholder — extend later
+    return { unread, flagged, assigned, avgResponseMs, repliedThreadCount: firstReplyByThread.size };
   }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
