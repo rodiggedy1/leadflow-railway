@@ -2181,11 +2181,11 @@ export const schedulingRouter = router({
         const active = assignments
           .filter(a => a.isManual !== 2)
           .sort((a, b) => {
-            // Sort by serviceDateTime — same order as the UI. Null sorts LAST.
+            // MUST match UI sort exactly: serviceDateTime asc (nulls last), tiebreak routeOrder (default 999)
             const ta = jobSvcMs.get(a.cleanerJobId) ?? Infinity;
             const tb = jobSvcMs.get(b.cleanerJobId) ?? Infinity;
             if (ta !== tb) return ta - tb;
-            return (a.routeOrder ?? 0) - (b.routeOrder ?? 0);
+            return (a.routeOrder ?? 999) - (b.routeOrder ?? 999);
           });
         // Renumber 0,1,2... to eliminate any duplicate routeOrders in DB
         active.forEach((a, idx) => { (a as any).routeOrder = idx; });
