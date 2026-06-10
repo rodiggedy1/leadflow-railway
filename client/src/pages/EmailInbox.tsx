@@ -125,7 +125,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
     onError: (err) => toast.error(err.message || "Failed to send email"),
   });
   return (
-    <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-end justify-end p-6">
+    <div className="fixed inset-0 bg-slate-900/40 z-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl shadow-2xl w-[560px] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
           <p className="font-black text-sm text-slate-800">New Email</p>
@@ -295,6 +295,7 @@ export default function EmailInbox() {
   const [replyText, setReplyText] = useState("");
   const [replyMode, setReplyMode] = useState<"reply" | "note">("reply");
   const [showCompose, setShowCompose] = useState(false);
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const utils = trpc.useUtils();
 
@@ -365,8 +366,17 @@ export default function EmailInbox() {
     });
   }
 
-  const threads = threadsQuery.data?.threads ?? [];
+  const allThreads = threadsQuery.data?.threads ?? [];
+  const threads = unreadOnly ? allThreads.filter((t) => t.isUnread) : allThreads;
   const selectedThread = threadQuery.data ?? null;
+
+  // Auto-select the most recently received thread when inbox loads
+  useEffect(() => {
+    if (!selectedThreadId && threads.length > 0) {
+      selectThread(threads[0].id);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threads.length > 0 && !selectedThreadId]);
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f6f8fb] font-sans">
@@ -393,6 +403,18 @@ export default function EmailInbox() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input placeholder="Search inbox…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 bg-slate-50 border-slate-200 rounded-[14px] text-sm h-10" />
+          </div>
+          <div className="flex items-center gap-1.5 mt-2">
+            <button onClick={() => setUnreadOnly(false)}
+              className={cn("text-xs font-bold px-3 py-1 rounded-full transition-colors",
+                !unreadOnly ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100")}>
+              All
+            </button>
+            <button onClick={() => setUnreadOnly(true)}
+              className={cn("text-xs font-bold px-3 py-1 rounded-full transition-colors",
+                unreadOnly ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100")}>
+              Unread {allThreads.filter(t => t.isUnread).length > 0 && `(${allThreads.filter(t => t.isUnread).length})`}
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-3 pb-3">
