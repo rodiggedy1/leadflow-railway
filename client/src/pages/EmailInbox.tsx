@@ -473,7 +473,7 @@ export default function EmailInbox() {
   const allThreads = [
     ...baseThreads,
     ...extraThreads.filter((t) => !baseThreads.some((b) => b.id === t.id)),
-  ];
+  ].sort((a, b) => b.date - a.date);
   const threads = unreadOnly ? allThreads.filter((t) => t.isUnread) : allThreads;
   const selectedThread = threadQuery.data ?? null;
   const unreadCount = allThreads.filter((t) => t.isUnread).length;
