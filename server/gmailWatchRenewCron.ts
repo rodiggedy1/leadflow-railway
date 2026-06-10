@@ -10,15 +10,37 @@
  * Auth: x-manus-cron-task-uid header (set by the Manus platform gateway).
  * Also accepts CRON_SECRET header for manual triggers.
  *
- * On failure: notifies the owner via ntfy so they can investigate.
+ * On failure: posts a system message to Command Chat so the team sees it immediately.
  */
 import type { Express, Request, Response } from "express";
 import { getDb } from "./db";
-import { gmailState } from "../drizzle/schema";
+import { gmailState, opsChatMessages } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { ENV } from "./_core/env";
 import { setupGmailWatch } from "./gmailService";
-import { notifyOwner } from "./_core/notification";
+
+/**
+ * Posts a cron failure alert to the Command Chat channel so the team is notified.
+ * Fire-and-forget — never throws.
+ */
+async function postCronFailure(error: string, triggeredAt: string): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(opsChatMessages).values({
+      channel: "command",
+      authorName: "System",
+      authorRole: "system",
+      body: `🚨 Gmail Watch Renewal Failed\n\nError: ${error}\n\nTriggered at: ${triggeredAt}\n\nManual fix: visit /api/gmail/watch/setup`,
+      quickAction: "cron_failure",
+      metadata: JSON.stringify({ cronName: "gmail-watch-renew", error, triggeredAt }),
+    });
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("new_message", { channel: "command" });
+  } catch (err) {
+    console.error("[GmailWatchRenew] Failed to post failure to Command Chat:", err);
+  }
+}
 
 export function registerGmailWatchRenewCron(app: Express): void {
   app.post("/api/scheduled/gmail-watch-renew", async (req: Request, res: Response) => {
@@ -40,10 +62,7 @@ export function registerGmailWatchRenewCron(app: Express): void {
       if (!topicName) {
         const msg = "GMAIL_PUBSUB_TOPIC env var not set — cannot renew watch.";
         console.error("[GmailWatchRenew]", msg);
-        await notifyOwner({
-          title: "⚠️ Gmail Watch Renewal Failed",
-          content: `${msg}\n\nTriggered at: ${startedAt}`,
-        });
+        await postCronFailure(msg, startedAt);
         return res.status(500).json({ error: msg });
       }
 
@@ -52,10 +71,7 @@ export function registerGmailWatchRenewCron(app: Express): void {
       if (!db) {
         const msg = "DB unavailable — cannot renew Gmail watch.";
         console.error("[GmailWatchRenew]", msg);
-        await notifyOwner({
-          title: "⚠️ Gmail Watch Renewal Failed",
-          content: `${msg}\n\nTriggered at: ${startedAt}`,
-        });
+        await postCronFailure(msg, startedAt);
         return res.status(500).json({ error: msg });
       }
 
@@ -63,10 +79,7 @@ export function registerGmailWatchRenewCron(app: Express): void {
       if (!state?.refreshToken) {
         const msg = "No Gmail refresh token in DB — OAuth not completed. Visit /api/gmail/oauth/start.";
         console.error("[GmailWatchRenew]", msg);
-        await notifyOwner({
-          title: "⚠️ Gmail Watch Renewal Failed",
-          content: `${msg}\n\nTriggered at: ${startedAt}`,
-        });
+        await postCronFailure(msg, startedAt);
         return res.status(500).json({ error: msg });
       }
 
@@ -86,11 +99,8 @@ export function registerGmailWatchRenewCron(app: Express): void {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error("[GmailWatchRenew] ❌ Error:", err);
 
-      // Notify owner so they can investigate before the watch fully expires
-      await notifyOwner({
-        title: "🚨 Gmail Watch Renewal Failed",
-        content: `The automatic Gmail watch renewal failed.\n\nError: ${errMsg}\n\nTriggered at: ${startedAt}\n\nManual fix: visit https://quote.maidinblack.com/api/gmail/watch/setup`,
-      });
+      // Post failure to Command Chat so the team sees it immediately
+      await postCronFailure(errMsg, startedAt);
 
       return res.status(500).json({
         error: errMsg,
