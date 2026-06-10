@@ -4522,7 +4522,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Conversation thread — relative wrapper for toast overlay */}
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
-          {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0 || emailUnreadCount > 0) && (
+          {true && (
             <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
@@ -4596,24 +4596,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </button>
                 </>
               )}
-              {/* Email Inbox pill */}
-              {emailUnreadCount > 0 && (
-                <>
-                  {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
-                    <span className="text-slate-300 text-xs">|</span>
-                  )}
-                  <button
-                    onClick={() => { window.location.href = "/admin/inbox"; }}
-                    className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
-                  >
-                    <Mail className="h-3 w-3" />
-                    {emailUnreadCount} email{emailUnreadCount > 1 ? "s" : ""}
-                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
-                      {emailUnreadCount > 9 ? "9+" : emailUnreadCount}
-                    </span>
-                  </button>
-                </>
+              {/* Email Inbox pill — always visible */}
+              {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
+                <span className="text-slate-300 text-xs">|</span>
               )}
+              <button
+                onClick={() => { window.location.href = "/admin/inbox"; }}
+                className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
+              >
+                <Mail className="h-3 w-3" />
+                Inbox
+                {emailUnreadCount > 0 && (
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                    {emailUnreadCount > 9 ? "9+" : emailUnreadCount}
+                  </span>
+                )}
+              </button>
             </div>
           )}
 

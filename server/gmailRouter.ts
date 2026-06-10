@@ -1,11 +1,11 @@
 /**
  * gmailRouter.ts — tRPC router for the shared Gmail inbox
  *
- * All procedures require agent authentication (adminAgentProcedure) so only
+ * All procedures require agent authentication (agentProcedure) so only
  * logged-in agents can read/send email through the shared inbox.
  */
 import { z } from "zod";
-import { router, adminAgentProcedure } from "./_core/trpc";
+import { router, agentProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -41,7 +41,7 @@ async function requireGmailConnected() {
 
 export const gmailRouter = router({
   /** Check whether Gmail is connected (refresh token stored in DB) */
-  getConnectionStatus: adminAgentProcedure.query(async () => {
+  getConnectionStatus: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return { connected: false, historyId: null, watchExpiration: null };
     const [state] = await db.select().from(gmailState).where(eq(gmailState.id, 1));
@@ -53,7 +53,7 @@ export const gmailRouter = router({
   }),
 
   /** List inbox threads with optional pagination and search */
-  listThreads: adminAgentProcedure
+  listThreads: agentProcedure
     .input(
       z.object({
         pageToken: z.string().optional(),
@@ -71,7 +71,7 @@ export const gmailRouter = router({
     }),
 
   /** Get full thread detail including all messages, with agent sentBy info */
-  getThread: adminAgentProcedure
+  getThread: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .query(async ({ input }) => {
       const { db } = await requireGmailConnected();
@@ -99,7 +99,7 @@ export const gmailRouter = router({
     }),
 
   /** Reply to an existing thread */
-  sendReply: adminAgentProcedure
+  sendReply: agentProcedure
     .input(
       z.object({
         threadId: z.string(),
@@ -159,7 +159,7 @@ export const gmailRouter = router({
     }),
 
   /** Compose and send a brand-new email */
-  composeNew: adminAgentProcedure
+  composeNew: agentProcedure
     .input(
       z.object({
         to: z.string().email(),
@@ -177,7 +177,7 @@ export const gmailRouter = router({
     }),
 
   /** Mark a thread as read */
-  markRead: adminAgentProcedure
+  markRead: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await markThreadRead(input.threadId);
@@ -185,7 +185,7 @@ export const gmailRouter = router({
     }),
 
   /** Mark a thread as unread */
-  markUnread: adminAgentProcedure
+  markUnread: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await markThreadUnread(input.threadId);
@@ -193,7 +193,7 @@ export const gmailRouter = router({
     }),
 
   /** Archive a thread (remove from inbox) */
-  archiveThread: adminAgentProcedure
+  archiveThread: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await archiveThread(input.threadId);
@@ -201,7 +201,7 @@ export const gmailRouter = router({
     }),
 
   /** Generate an AI draft reply for the current thread */
-  draftReply: adminAgentProcedure
+  draftReply: agentProcedure
     .input(
       z.object({
         threadId: z.string(),
@@ -278,7 +278,7 @@ Write the reply now:`;
     }),
 
   /** Look up customer context by email — used in the inbox right panel */
-  getCustomerContext: adminAgentProcedure
+  getCustomerContext: agentProcedure
     .input(z.object({ email: z.string().email() }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -314,7 +314,7 @@ Write the reply now:`;
     }),
 
   /** Toggle issue flag on a thread. Generates AI summary when flagging. */
-  flagIssue: adminAgentProcedure
+  flagIssue: agentProcedure
     .input(
       z.object({
         threadId: z.string(),
@@ -390,7 +390,7 @@ Write the reply now:`;
     }),
 
   /** Fetch thread meta for a list of thread IDs (used to hydrate issue badges) */
-  listThreadMeta: adminAgentProcedure
+  listThreadMeta: agentProcedure
     .input(z.object({ threadIds: z.array(z.string()).max(200) }))
     .query(async ({ input }) => {
       if (input.threadIds.length === 0) return { meta: [] };
@@ -403,7 +403,7 @@ Write the reply now:`;
     }),
 
   /** Fetch attachment bytes from Gmail API and return as base64 data URL */
-  getAttachment: adminAgentProcedure
+  getAttachment: agentProcedure
     .input(z.object({
       messageId: z.string(),
       attachmentId: z.string(),
@@ -419,7 +419,7 @@ Write the reply now:`;
     }),
 
   /** Upload a file attachment to S3 for use in email replies */
-  uploadAttachment: adminAgentProcedure
+  uploadAttachment: agentProcedure
     .input(z.object({
       filename: z.string(),
       mimeType: z.string(),
@@ -439,14 +439,14 @@ Write the reply now:`;
     }),
 
   /** Return unread count for the Conversations tab (non-Thumbtack inbox threads) */
-  getUnreadCount: adminAgentProcedure.query(async () => {
+  getUnreadCount: agentProcedure.query(async () => {
     await requireGmailConnected();
     const count = await getConversationsUnreadCount();
     return { count };
   }),
 
   /** Assign a thread to an agent (or reassign). Agents can assign to themselves. */
-  assignThread: adminAgentProcedure
+  assignThread: agentProcedure
     .input(z.object({
       threadId: z.string(),
       agentId: z.number().int().positive(),
@@ -483,7 +483,7 @@ Write the reply now:`;
     }),
 
   /** Remove assignment from a thread */
-  unassignThread: adminAgentProcedure
+  unassignThread: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       const { db } = await requireGmailConnected();
@@ -495,7 +495,7 @@ Write the reply now:`;
     }),
 
   /** List active agents available for thread assignment */
-  listAgentsForAssignment: adminAgentProcedure.query(async () => {
+  listAgentsForAssignment: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return { agents: [] };
     const rows = await db
@@ -506,7 +506,7 @@ Write the reply now:`;
   }),
 
   /** Inbox analytics: unread count, flagged count, assigned count, avg first-response time */
-  getInboxAnalytics: adminAgentProcedure.query(async () => {
+  getInboxAnalytics: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) return { unread: 0, flagged: 0, assigned: 0, avgResponseMs: null };
     // Flagged and assigned counts from meta table
@@ -537,7 +537,7 @@ Write the reply now:`;
   }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
-  setupWatch: adminAgentProcedure.mutation(async () => {
+  setupWatch: agentProcedure.mutation(async () => {
     const topicName = ENV.gmailPubsubTopic;
     if (!topicName) {
       throw new TRPCError({
