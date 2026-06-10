@@ -27,6 +27,7 @@ import { registerInterviewUploadRoutes } from "../interviewUpload";
 import { registerDeepgramStreamRoute } from "../deepgramStream";
 import { registerAgentLoginRoute } from "../agentLoginRoute";
 import { registerGmailRoutes } from "../gmailRoutes";
+import { registerGmailWatchRenewCron } from "../gmailWatchRenewCron";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
@@ -173,6 +174,8 @@ async function startServer() {
   registerAgentLoginRoute(app as any);
   // Gmail OAuth + Pub/Sub webhook routes
   registerGmailRoutes(app);
+  // Gmail watch auto-renewal cron (Heartbeat, every 6 days)
+  registerGmailWatchRenewCron(app);
 
   // Preview auto-login: when PREVIEW_MODE=true, visiting /api/preview-login sets
   // an admin agent session cookie automatically so the UI is accessible without credentials.
