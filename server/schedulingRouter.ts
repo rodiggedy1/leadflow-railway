@@ -662,13 +662,21 @@ export const schedulingRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      // Geocode home address if provided
+      // Geocode home address:
+      // - Always geocode when a homeAddress is provided (new team or address change)
+      // - On update with no address in input: load saved address from DB and geocode if homeLat is null
       let homeLat: number | undefined;
       let homeLng: number | undefined;
-      if (input.homeAddress) {
-        const geo = await geocodeWithCache(input.homeAddress);
+      const addrToGeocode = input.homeAddress ?? (input.id ? (
+        await db.select({ homeAddress: schedulingTeams.homeAddress, homeLat: schedulingTeams.homeLat })
+          .from(schedulingTeams).where(eq(schedulingTeams.id, input.id)).limit(1)
+          .then(r => r[0]?.homeLat == null ? r[0]?.homeAddress : null)
+      ) : null);
+      if (addrToGeocode) {
+        const geo = await geocodeWithCache(addrToGeocode);
         if (geo) { homeLat = geo.lat; homeLng = geo.lng; }
       }
+      // Note: geocodeWithCache is defined locally in this file and handles caching automatically.
 
       // Determine regionTags:
       // - If explicitly provided (including empty string), use that value
