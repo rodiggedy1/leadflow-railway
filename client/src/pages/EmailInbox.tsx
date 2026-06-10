@@ -462,7 +462,7 @@ export default function EmailInbox() {
   const [replyText, setReplyText] = useState("");
   const [replyMode, setReplyMode] = useState<"reply" | "note">("reply");
   const [showCompose, setShowCompose] = useState(false);
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [activeTab, setActiveTab] = useState<"conversations" | "leads" | "all">("conversations");
   const [extraThreads, setExtraThreads] = useState<GmailThread[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<{
@@ -480,8 +480,17 @@ export default function EmailInbox() {
   }, [searchQuery]);
 
   const statusQuery = trpc.gmail.getConnectionStatus.useQuery(undefined, { staleTime: 60_000, retry: false });
+  // Build the Gmail search query by composing tab filter + user search
+  const TAB_QUERIES: Record<string, string> = {
+    conversations: '-subject:"New Direct Lead"',
+    leads: 'subject:"New Direct Lead"',
+    all: "",
+  };
+  const tabQuery = TAB_QUERIES[activeTab] ?? "";
+  const composedQuery = [tabQuery, debouncedQuery].filter(Boolean).join(" ") || undefined;
+
   const threadsQuery = trpc.gmail.listThreads.useQuery(
-    { maxResults: 100, query: debouncedQuery || undefined },
+    { maxResults: 100, query: composedQuery },
     { enabled: statusQuery.data?.connected === true, staleTime: 30_000, retry: false }
   );
 
@@ -493,7 +502,7 @@ export default function EmailInbox() {
       const result = await utils.gmail.listThreads.fetch({
         maxResults: 100,
         pageToken: nextToken,
-        query: debouncedQuery || undefined,
+        query: composedQuery,
       });
       setExtraThreads((prev) => {
         const existingIds = new Set(prev.map((t) => t.id));
@@ -705,7 +714,7 @@ export default function EmailInbox() {
     if (bIssue !== aIssue) return bIssue - aIssue;
     return b.date - a.date;
   });
-  const threads = unreadOnly ? sortedThreads.filter((t) => t.isUnread) : sortedThreads;
+  const threads = sortedThreads;
   const selectedThread = threadQuery.data ?? null;
   const unreadCount = allThreads.filter((t) => t.isUnread).length;
 
@@ -755,26 +764,29 @@ export default function EmailInbox() {
               className="pl-8 bg-slate-50 border-slate-200 rounded-lg text-xs h-8"
             />
           </div>
-          {/* Filter pills */}
+          {/* Tab filter */}
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setUnreadOnly(false)}
-              className={cn(
-                "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
-                !unreadOnly ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setUnreadOnly(true)}
-              className={cn(
-                "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
-                unreadOnly ? "bg-blue-600 text-white" : "text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              Unread {unreadCount > 0 && `(${unreadCount})`}
-            </button>
+            {([
+              { key: "conversations", label: "Convos", badge: activeTab === "conversations" ? unreadCount : 0 },
+              { key: "leads", label: "Leads", badge: 0 },
+              { key: "all", label: "All", badge: 0 },
+            ] as const).map(({ key, label, badge }) => (
+              <button
+                key={key}
+                onClick={() => {
+                  if (activeTab === key) return;
+                  setActiveTab(key);
+                  setExtraThreads([]);
+                  setSelectedThreadId(null);
+                }}
+                className={cn(
+                  "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
+                  activeTab === key ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                {label}{badge > 0 ? ` (${badge})` : ""}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -817,10 +829,10 @@ export default function EmailInbox() {
           })}
           {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
             <div className="text-center py-12 text-slate-400 text-xs">
-              {debouncedQuery ? "No results" : unreadOnly ? "No unread messages" : "Inbox is empty"}
+              {debouncedQuery ? "No results" : activeTab === "leads" ? "No new leads" : activeTab === "conversations" ? "No conversations" : "Inbox is empty"}
             </div>
           )}
-          {!unreadOnly && threadsQuery.data?.nextPageToken && (
+          {threadsQuery.data?.nextPageToken && (
             <div className="px-4 py-3 border-t border-slate-100">
               <button
                 onClick={loadMore}
