@@ -128,7 +128,33 @@ interface AssignmentRationale {
 async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; formattedAddress: string } | null> {
   try {
     const result = await makeRequest<GeocodingResult>("/maps/api/geocode/json", { address });
-    if (result.status !== "OK" || !result.results[0]) return null;
+    if (result.status !== "OK" || !result.results?.length) return null;
+
+    // Extract the state abbreviation from the input address (e.g. "DC", "MD", "VA")
+    // to validate that Google returned a result in the correct state.
+    const stateMatch = address.match(/,\s*([A-Z]{2})\s*(\d{5})?\s*$/i);
+    const expectedState = stateMatch ? stateMatch[1].toUpperCase() : null;
+
+    // Find the first result whose state matches the input address.
+    // This prevents accepting a result in MD when the address says DC, etc.
+    for (const r of result.results) {
+      if (expectedState) {
+        const stateComponent = r.address_components?.find(
+          (c: any) => c.types.includes('administrative_area_level_1')
+        );
+        const resultState = stateComponent?.short_name?.toUpperCase();
+        // DC is special: Google returns "DC" as the state
+        if (resultState && resultState !== expectedState) {
+          console.warn(`[GEOCODE] Skipping result for "${address}": expected state ${expectedState}, got ${resultState} (${r.formatted_address})`);
+          continue;
+        }
+      }
+      const loc = r.geometry.location;
+      return { lat: loc.lat, lng: loc.lng, formattedAddress: r.formatted_address };
+    }
+
+    // No result matched the expected state — fall back to first result with a warning
+    console.warn(`[GEOCODE] No state-matching result for "${address}", using first result: ${result.results[0].formatted_address}`);
     const loc = result.results[0].geometry.location;
     return { lat: loc.lat, lng: loc.lng, formattedAddress: result.results[0].formatted_address };
   } catch {
