@@ -393,37 +393,22 @@ export async function getAttachmentData(
 }
 
 /** Return the count of unread threads in the Conversations tab (non-Thumbtack).
- * Mirrors EmailInbox exactly: load up to 100 threads with the Conversations tab
- * query (-from:thumbtack.com), then count those that have the UNREAD label.
- * Uses metadata format (no body fetch) to keep this cheap. */
+ * Uses 2 Gmail API calls total:
+ *   1. labels.get("INBOX") → exact threadsUnread count for the whole inbox
+ *   2. threads.list(q="is:unread from:thumbtack.com") → subtract Thumbtack unread threads
+ * This replaces the old approach of fetching up to 100 threads individually (101 API calls). */
 export async function getConversationsUnreadCount(): Promise<number> {
   const gmail = await getGmailClient();
-  // Step 1: list up to 100 thread IDs — same query as EmailInbox Conversations tab
-  const listRes = await gmail.users.threads.list({
-    userId: "me",
-    maxResults: 100,
-    q: "in:inbox -from:thumbtack.com",
-  });
-  const threadItems = listRes.data.threads ?? [];
-  if (threadItems.length === 0) return 0;
-  // Step 2: fetch each thread with metadata format (cheap — no body)
-  // to check whether any message in the thread carries the UNREAD label
-  const checks = await Promise.all(
-    threadItems.map(async (t) => {
-      try {
-        const res = await gmail.users.threads.get({
-          userId: "me",
-          id: t.id!,
-          format: "metadata",
-          metadataHeaders: ["Subject"],
-        });
-        return (res.data.messages ?? []).some((m: any) =>
-          (m.labelIds ?? []).includes("UNREAD")
-        );
-      } catch {
-        return false;
-      }
-    })
-  );
-  return checks.filter(Boolean).length;
+  // Call 1: get exact unread thread count for INBOX label — single API call
+  const [labelRes, thumbtackRes] = await Promise.all([
+    gmail.users.labels.get({ userId: "me", id: "INBOX" }),
+    gmail.users.threads.list({
+      userId: "me",
+      maxResults: 500,
+      q: "in:inbox is:unread from:thumbtack.com",
+    }),
+  ]);
+  const totalUnread = labelRes.data.threadsUnread ?? 0;
+  const thumbtackUnread = (thumbtackRes.data.threads ?? []).length;
+  return Math.max(0, totalUnread - thumbtackUnread);
 }
