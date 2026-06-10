@@ -184,8 +184,14 @@ async function fetchDriveTimes(
         units: 'metric',
       });
       const el = apiResult?.rows?.[0]?.elements?.[0];
-      result[i] = el?.status === 'OK' ? el.duration.value : 0;
-    } catch {
+      if (el?.status === 'OK') {
+        result[i] = el.duration.value;
+      } else {
+        console.warn(`[DRIVE] pair ${i} status=${el?.status ?? 'NO_ELEMENT'} from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng}) el=${JSON.stringify(el)}`);
+        result[i] = 0;
+      }
+    } catch (err) {
+      console.error(`[DRIVE] pair ${i} EXCEPTION from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng}):`, err);
       result[i] = 0;
     }
   }
@@ -2179,10 +2185,12 @@ export const schedulingRouter = router({
         }
         // Fetch fresh Google drive times
         const pairsOnly = pairs.map(p => ({ fromLat: p.fromLat, fromLng: p.fromLng, toLat: p.toLat, toLng: p.toLng }));
+        console.log(`[RERUN] team=${team.name} date=${input.date} pairs=${pairs.length}:`, pairs.map(p => `job${p.jobId}(${p.fromLat.toFixed(4)},${p.fromLng.toFixed(4)})->(${p.toLat.toFixed(4)},${p.toLng.toFixed(4)})`).join(', '));
         const driveSecs = await fetchDriveTimes(pairsOnly);
         // Persist updated driveTimeSecs
         for (let i = 0; i < pairs.length; i++) {
           const secs = driveSecs[i];
+          console.log(`[RERUN] job=${pairs[i].jobId} secs=${secs} (${Math.round(secs/60)}m) ${secs > 0 ? 'WRITTEN' : 'SKIPPED (0 or error)'}`);
           if (secs > 0) {
             await db.update(scheduleAssignments)
               .set({ driveTimeSecs: secs, updatedAt: new Date() })
