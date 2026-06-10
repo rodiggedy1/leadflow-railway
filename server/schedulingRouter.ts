@@ -2175,6 +2175,8 @@ export const schedulingRouter = router({
           let fromLat: number | null = null, fromLng: number | null = null;
           if (i === 0 && team.homeLat != null && team.homeLng != null) {
             fromLat = team.homeLat; fromLng = team.homeLng;
+          } else if (i === 0) {
+            console.warn(`[RERUN] team=${team.name} SKIPPING first job pair — homeLat/homeLng is null`);
           } else if (i > 0) {
             const prevGeo = geoById.get(active[i - 1].cleanerJobId);
             if (prevGeo) { fromLat = prevGeo.lat; fromLng = prevGeo.lng; }
