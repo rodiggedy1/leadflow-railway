@@ -767,7 +767,7 @@ export default function EmailInbox() {
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="max-w-2xl mx-auto">
+              <div className="w-full">
                 {threadQuery.isLoading && (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
