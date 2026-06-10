@@ -17,6 +17,235 @@ import {
   UserCheck, ChevronDown,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
+
+// ---------------------------------------------------------------------------
+// Canned reply templates
+// ---------------------------------------------------------------------------
+const CANNED_TEMPLATES = [
+  {
+    id: 1,
+    label: "Confirm Booking",
+    subject: "Your Cleaning is Confirmed! 🎉",
+    body: `Hi {{first_name}},
+
+You're all set! Your cleaning has been confirmed for {{date}} at {{time}}.
+
+Our team will arrive within the scheduled arrival window and will come fully equipped with supplies unless otherwise requested.
+
+If you have any special instructions, parking information, or entry details, simply reply to this email.
+
+We look forward to making your home shine!
+
+Thanks,
+The Maid in Black Team`,
+  },
+  {
+    id: 2,
+    label: "Request Address",
+    subject: "Quick Question Before We Finalize Your Quote",
+    body: `Hi {{first_name}},
+
+Thanks for reaching out!
+
+Before we can provide an accurate quote, could you please send us the full service address for the property?
+
+Once we have that, we'll get pricing over to you right away.
+
+Thanks,
+The Maid in Black Team`,
+  },
+  {
+    id: 3,
+    label: "Send Quote Link",
+    subject: "Your Cleaning Quote is Ready",
+    body: `Hi {{first_name}},
+
+Great news! Your personalized cleaning quote is ready.
+
+You can review your pricing and book online here:
+
+{{quote_link}}
+
+If you have any questions or would like to make changes before booking, simply reply to this email and we're happy to help.
+
+Thanks,
+The Maid in Black Team`,
+  },
+  {
+    id: 4,
+    label: "Follow Up (No Response)",
+    subject: "Just Checking In",
+    body: `Hi {{first_name}},
+
+Just wanted to follow up in case you were still looking for a cleaning service.
+
+Your quote is still available, and we'd be happy to get you on the schedule.
+
+You can view and book here:
+
+{{quote_link}}
+
+Let us know if you have any questions!
+
+Thanks,
+The Maid in Black Team`,
+  },
+  {
+    id: 5,
+    label: "Need Entry Instructions",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Before your appointment, could you let us know how our team should access the property?
+
+Examples include:
+• Door code
+• Lockbox
+• Concierge
+• Someone will be home
+• Key under mat
+
+Thanks!`,
+  },
+  {
+    id: 6,
+    label: "Running Late",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Just a quick update—our team is running a little behind due to the previous appointment taking longer than expected.
+
+Our estimated arrival time is now approximately {{arrival_time}}.
+
+We appreciate your patience and apologize for the inconvenience.`,
+  },
+  {
+    id: 7,
+    label: "Team On The Way",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Our cleaning team is officially on the way and should arrive shortly.
+
+If you have any last-minute instructions, feel free to reply here.
+
+See you soon!`,
+  },
+  {
+    id: 8,
+    label: "Payment Reminder",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Just a friendly reminder that we still need a card on file before your appointment.
+
+You can securely update your payment information here:
+
+{{payment_link}}
+
+If you have any questions, let us know!`,
+  },
+  {
+    id: 9,
+    label: "Thank You After Service",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Thank you for choosing Maid in Black!
+
+We hope you loved your cleaning. If everything looks great, we'd really appreciate a quick review—it helps our small business tremendously.
+
+If there's anything that isn't perfect, please reply directly and we'll make it right.
+
+Thanks again!`,
+  },
+  {
+    id: 10,
+    label: "Recurring Cleaning Offer",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Many of our customers save both time and money by switching to recurring cleanings.
+
+Weekly, bi-weekly, and monthly services receive discounted pricing and priority scheduling.
+
+If you'd like a recurring quote, just let us know and we'll set it up for you.`,
+  },
+  {
+    id: 11,
+    label: "Quote Expiring",
+    subject: "",
+    body: `Hi {{first_name}},
+
+Just a heads up—your quote will expire soon.
+
+If you'd still like to book at the current rate, you can reserve your appointment here:
+
+{{quote_link}}
+
+Hope to see you soon!`,
+  },
+  {
+    id: 12,
+    label: "Unable to Reach",
+    subject: "",
+    body: `Hi {{first_name}},
+
+We tried reaching you regarding your upcoming cleaning but haven't been able to connect.
+
+Please reply or give us a call at your earliest convenience so we can finalize your appointment.
+
+We look forward to hearing from you!`,
+  },
+  {
+    id: 13,
+    label: "Cancellation Confirmed",
+    subject: "",
+    body: `Hi {{first_name}},
+
+We've successfully canceled your scheduled cleaning for {{date}}.
+
+If you'd like to reschedule for another day, simply reply to this email and we'd be happy to help.
+
+Thank you!`,
+  },
+  {
+    id: 14,
+    label: "Request Photos for Quote",
+    subject: "",
+    body: `Hi {{first_name}},
+
+To provide the most accurate estimate, could you send us a few photos of the areas you'd like cleaned?
+
+Photos of the kitchen, bathrooms, living areas, and any areas of concern are especially helpful.
+
+Once we receive them, we'll get your quote over as quickly as possible.
+
+Thanks!`,
+  },
+  {
+    id: 15,
+    label: "Deep Cleaning Explanation",
+    subject: "",
+    body: `Hi {{first_name}},
+
+A deep cleaning includes everything in our standard cleaning plus extra attention to buildup and hard-to-reach areas.
+
+Typical deep cleaning tasks include:
+• Baseboards
+• Doors and door frames
+• Window sills
+• Cabinet fronts
+• Detailed bathroom scrubbing
+• Detailed kitchen cleaning
+• Dusting reachable vents and fixtures
+• Extra attention to buildup throughout the home
+
+It's the perfect option for first-time customers or homes that haven't been professionally cleaned in a while.
+
+Let us know if you have any questions!`,
+  },
+] as const;
 import { senderColorClass, senderHex } from "@/lib/senderColor";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
@@ -496,8 +725,19 @@ export default function EmailInbox() {
   const meQuery = trpc.agents.me.useQuery(undefined, { staleTime: 300_000, retry: false });
   const currentAgentId = meQuery.data?.id ?? null;
   const agentsQuery = trpc.gmail.listAgentsForAssignment.useQuery(undefined, { staleTime: 120_000, retry: false, enabled: statusQuery.data?.connected === true });
-  const analyticsQuery = trpc.gmail.getInboxAnalytics.useQuery(undefined, { staleTime: 60_000, retry: false, enabled: statusQuery.data?.connected === true });
   const [assignDropdownOpen, setAssignDropdownOpen] = useState<string | null>(null); // threadId of open dropdown
+  const [showTemplates, setShowTemplates] = useState(false);
+
+  // Insert a canned template into the reply box, substituting {{first_name}} with the contact's first name
+  const insertTemplate = (template: typeof CANNED_TEMPLATES[number]) => {
+    const firstName = selectedThread?.from
+      ? selectedThread.from.split(" ")[0]
+      : "there";
+    const filled = template.body.replace(/\{\{first_name\}\}/g, firstName);
+    setReplyText(filled);
+    setReplyMode("reply");
+    setShowTemplates(false);
+  };
   // Build the Gmail search query by composing tab filter + user search
   const TAB_QUERIES: Record<string, string> = {
     conversations: "-from:thumbtack.com",
@@ -811,25 +1051,6 @@ export default function EmailInbox() {
               className="pl-8 bg-slate-50 border-slate-200 rounded-lg text-xs h-8"
             />
           </div>
-          {/* Analytics strip */}
-          {analyticsQuery.data && (
-            <div className="flex items-center gap-3 mb-2.5 px-0.5 text-[10px] text-slate-400 font-medium">
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-                <span className="font-semibold text-slate-600">{analyticsQuery.data.unread}</span> unread
-              </span>
-              <span className="text-slate-200">·</span>
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
-                <span className="font-semibold text-slate-600">{analyticsQuery.data.flagged}</span> flagged
-              </span>
-              <span className="text-slate-200">·</span>
-              <span className="flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-                <span className="font-semibold text-slate-600">{analyticsQuery.data.assigned}</span> assigned
-              </span>
-            </div>
-          )}
           {/* Tab filter */}
           <div className="flex items-center gap-1 flex-wrap">
             {([
@@ -1194,6 +1415,41 @@ export default function EmailInbox() {
                             {draftMutation.isPending ? "Drafting…" : "AI Draft"}
                           </button>
                         )}
+                        {/* Template picker */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowTemplates((v) => !v)}
+                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                            title="Insert canned reply"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            Templates
+                          </button>
+                          {showTemplates && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setShowTemplates(false)} />
+                              <div className="absolute bottom-full mb-2 left-0 bg-white border border-slate-200 rounded-xl shadow-xl z-20 w-72 overflow-hidden">
+                                <div className="px-3 py-2 border-b border-slate-100">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Saved Replies</p>
+                                </div>
+                                <div className="max-h-72 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                  {CANNED_TEMPLATES.map((tpl) => (
+                                    <button
+                                      key={tpl.id}
+                                      className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
+                                      onClick={() => insertTemplate(tpl)}
+                                    >
+                                      <p className="text-xs font-semibold text-slate-800">{tpl.label}</p>
+                                      {tpl.subject && (
+                                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">Subject: {tpl.subject}</p>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                       {replyMode === "reply" ? (
                         <Button
