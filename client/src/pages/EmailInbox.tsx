@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import DOMPurify from "dompurify";
 import {
   Mail, Search, Paperclip, Link2, Send, RefreshCw,
-  Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag,
+  Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag, X, FileText,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { senderColorClass, senderHex } from "@/lib/senderColor";
@@ -230,7 +230,7 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | null }) {
+function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail: string | null; threadFrom?: string | null }) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const validEmail = threadFromEmail && emailRegex.test(threadFromEmail) ? threadFromEmail : null;
 
@@ -273,7 +273,7 @@ function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | n
               {getInitials(senderName)}
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-sm text-slate-900 truncate">{lead?.name ?? "Unknown"}</p>
+              <p className="font-bold text-sm text-slate-900 truncate">{lead?.name ?? threadFrom ?? validEmail ?? "Unknown"}</p>
               <p className="text-xs text-slate-400 truncate">{validEmail}</p>
             </div>
           </div>
@@ -399,6 +399,11 @@ export default function EmailInbox() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [extraThreads, setExtraThreads] = useState<GmailThread[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<{
+    id: string; filename: string; mimeType: string; size: number;
+    url?: string; key?: string; preview?: string; uploading: boolean; error?: string;
+  }[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const utils = trpc.useUtils();
 
@@ -454,6 +459,7 @@ export default function EmailInbox() {
     onSuccess: () => {
       toast.success("Reply sent!");
       setReplyText("");
+      setPendingAttachments([]);
       if (selectedThreadId) { utils.gmail.getThread.invalidate({ threadId: selectedThreadId }); utils.gmail.listThreads.invalidate(); }
     },
     onError: (err) => toast.error(err.message || "Failed to send reply"),
@@ -466,6 +472,61 @@ export default function EmailInbox() {
     },
     onError: (err) => toast.error(err.message || "AI draft failed"),
   });
+  const uploadAttachmentMutation = trpc.gmail.uploadAttachment.useMutation();
+
+  async function handleFileSelect(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    const newFiles = Array.from(files);
+    for (const file of newFiles) {
+      if (file.size > 25 * 1024 * 1024) {
+        toast.error(`${file.name} exceeds the 25 MB limit.`);
+        continue;
+      }
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      // Generate preview URL for images
+      const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined;
+      setPendingAttachments((prev) => [
+        ...prev,
+        { id, filename: file.name, mimeType: file.type, size: file.size, preview, uploading: true },
+      ]);
+      // Read file as base64 and upload
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64Data = (reader.result as string).split(",")[1];
+          const result = await uploadAttachmentMutation.mutateAsync({
+            filename: file.name,
+            mimeType: file.type,
+            base64Data,
+          });
+          setPendingAttachments((prev) =>
+            prev.map((a) => a.id === id
+              ? { ...a, url: result.url, key: result.key, uploading: false }
+              : a
+            )
+          );
+        } catch (err: any) {
+          setPendingAttachments((prev) =>
+            prev.map((a) => a.id === id
+              ? { ...a, uploading: false, error: err.message || "Upload failed" }
+              : a
+            )
+          );
+          toast.error(`Failed to upload ${file.name}`);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function removeAttachment(id: string) {
+    setPendingAttachments((prev) => {
+      const att = prev.find((a) => a.id === id);
+      if (att?.preview) URL.revokeObjectURL(att.preview);
+      return prev.filter((a) => a.id !== id);
+    });
+  }
+
   function generateDraft() {
     if (!selectedThreadId || !threadQuery.data) return;
     const thread = threadQuery.data;
@@ -503,13 +564,20 @@ export default function EmailInbox() {
     if (!selectedThreadId || !replyText.trim()) return;
     const thread = threadQuery.data;
     if (!thread) return;
+    // Block send if any attachment is still uploading
+    const stillUploading = pendingAttachments.some((a) => a.uploading);
+    if (stillUploading) { toast.warning("Please wait for attachments to finish uploading."); return; }
     const lastMsg = thread.messages[thread.messages.length - 1];
+    const readyAttachments = pendingAttachments
+      .filter((a) => a.url && !a.error)
+      .map((a) => ({ url: a.url!, filename: a.filename, mimeType: a.mimeType }));
     replyMutation.mutate({
       threadId: selectedThreadId,
       to: lastMsg?.fromEmail ?? thread.fromEmail,
       subject: thread.subject,
       bodyHtml: replyText.replace(/\n/g, "<br>"),
       inReplyToMessageId: lastMsg?.id,
+      attachments: readyAttachments.length > 0 ? readyAttachments : undefined,
     });
   }
 
@@ -800,6 +868,40 @@ export default function EmailInbox() {
                         </button>
                       ))}
                     </div>
+                    {/* Attachment chips — shown when files are queued */}
+                    {pendingAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
+                        {pendingAttachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className={cn(
+                              "flex items-center gap-1.5 rounded-lg border text-xs font-medium pr-1.5 pl-2 py-1 max-w-[180px]",
+                              att.error
+                                ? "border-red-200 bg-red-50 text-red-600"
+                                : att.uploading
+                                ? "border-slate-200 bg-slate-50 text-slate-500"
+                                : "border-blue-200 bg-blue-50 text-blue-700"
+                            )}
+                          >
+                            {att.preview ? (
+                              <img src={att.preview} alt={att.filename} className="w-5 h-5 rounded object-cover shrink-0" />
+                            ) : (
+                              <FileText className="w-3.5 h-3.5 shrink-0" />
+                            )}
+                            <span className="truncate max-w-[100px]">{att.filename}</span>
+                            {att.uploading && <Loader2 className="w-3 h-3 animate-spin shrink-0" />}
+                            {!att.uploading && (
+                              <button
+                                onClick={() => removeAttachment(att.id)}
+                                className="ml-0.5 rounded hover:bg-blue-100 p-0.5 shrink-0"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <Textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
@@ -814,7 +916,23 @@ export default function EmailInbox() {
                     />
                     <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <button className="text-slate-400 hover:text-slate-600"><Paperclip className="w-4 h-4" /></button>
+                        {/* Hidden file input */}
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip"
+                          className="hidden"
+                          onChange={(e) => handleFileSelect(e.target.files)}
+                          onClick={(e) => { (e.target as HTMLInputElement).value = ""; }}
+                        />
+                        <button
+                          className="text-slate-400 hover:text-slate-600"
+                          title="Attach files"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Paperclip className="w-4 h-4" />
+                        </button>
                         <button className="text-slate-400 hover:text-slate-600"><Link2 className="w-4 h-4" /></button>
                         {replyMode === "reply" && (
                           <button
@@ -867,7 +985,7 @@ export default function EmailInbox() {
       </main>
 
       {/* Customer context panel */}
-      <CustomerContextPanel threadFromEmail={selectedThread?.fromEmail ?? null} />
+      <CustomerContextPanel threadFromEmail={selectedThread?.fromEmail ?? null} threadFrom={selectedThread?.from ?? null} />
 
       {showCompose && <ComposeModal onClose={() => setShowCompose(false)} />}
     </div>

@@ -15,6 +15,7 @@ import {
   listInboxThreads,
   getThreadDetail,
   sendGmailReply,
+  sendGmailReplyWithAttachments,
   sendNewGmailEmail,
   markThreadRead,
   markThreadUnread,
@@ -104,17 +105,32 @@ export const gmailRouter = router({
         subject: z.string(),
         bodyHtml: z.string(),
         inReplyToMessageId: z.string().optional(),
+        attachments: z.array(z.object({
+          url: z.string(),
+          filename: z.string(),
+          mimeType: z.string(),
+        })).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = await requireGmailConnected();
-      const result = await sendGmailReply({
-        threadId: input.threadId,
-        to: input.to,
-        subject: input.subject,
-        bodyHtml: input.bodyHtml,
-        inReplyToMessageId: input.inReplyToMessageId,
-      });
+      // Use multipart/mixed when attachments are present, plain HTML otherwise
+      const result = (input.attachments && input.attachments.length > 0)
+        ? await sendGmailReplyWithAttachments({
+            threadId: input.threadId,
+            to: input.to,
+            subject: input.subject,
+            bodyHtml: input.bodyHtml,
+            inReplyToMessageId: input.inReplyToMessageId,
+            attachments: input.attachments,
+          })
+        : await sendGmailReply({
+            threadId: input.threadId,
+            to: input.to,
+            subject: input.subject,
+            bodyHtml: input.bodyHtml,
+            inReplyToMessageId: input.inReplyToMessageId,
+          });
 
             // Log which agent sent this reply (wrapped in try/catch — email already sent above)
       try {
@@ -383,6 +399,26 @@ Write the reply now:`;
         .from(gmailThreadMeta)
         .where(inArray(gmailThreadMeta.threadId, input.threadIds));
       return { meta: rows };
+    }),
+
+  /** Upload a file attachment to S3 for use in email replies */
+  uploadAttachment: adminAgentProcedure
+    .input(z.object({
+      filename: z.string(),
+      mimeType: z.string(),
+      base64Data: z.string(), // base64-encoded file content
+    }))
+    .mutation(async ({ input }) => {
+      const { storagePut } = await import("./storage");
+      const buf = Buffer.from(input.base64Data, "base64");
+      // Limit: 25MB per attachment (Gmail's limit)
+      if (buf.length > 25 * 1024 * 1024) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Attachment exceeds 25 MB limit." });
+      }
+      const safeName = input.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const key = `gmail-attachments/${Date.now()}-${Math.random().toString(36).slice(2)}-${safeName}`;
+      const { url } = await storagePut(key, buf, input.mimeType);
+      return { url, key, filename: input.filename, mimeType: input.mimeType, size: buf.length };
     }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */

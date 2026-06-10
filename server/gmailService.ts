@@ -208,6 +208,75 @@ export async function sendGmailReply(opts: {
   return { messageId: res.data.id!, threadId: res.data.threadId! };
 }
 
+/**
+ * Send a Gmail reply with one or more file attachments.
+ * Builds a proper multipart/mixed MIME message so attachments are delivered
+ * as real email attachments (not inline images or links).
+ */
+export async function sendGmailReplyWithAttachments(opts: {
+  threadId: string;
+  to: string;
+  subject: string;
+  bodyHtml: string;
+  inReplyToMessageId?: string;
+  attachments: { url: string; filename: string; mimeType: string }[];
+}): Promise<{ messageId: string; threadId: string }> {
+  const gmail = await getGmailClient();
+  const subject = opts.subject.startsWith("Re:") ? opts.subject : `Re: ${opts.subject}`;
+  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+  // Fetch all attachment buffers in parallel
+  const attachmentBuffers = await Promise.all(
+    opts.attachments.map(async (att) => {
+      const res = await fetch(att.url);
+      if (!res.ok) throw new Error(`Failed to fetch attachment: ${att.filename}`);
+      const buf = Buffer.from(await res.arrayBuffer());
+      return { ...att, buf };
+    })
+  );
+
+  // Part 1: HTML body
+  const bodyPart =
+    `--${boundary}\r\n` +
+    `Content-Type: text/html; charset=utf-8\r\n` +
+    `Content-Transfer-Encoding: 7bit\r\n` +
+    `\r\n` +
+    `${opts.bodyHtml}\r\n`;
+
+  // Part 2+: Attachments
+  const attachmentParts = attachmentBuffers.map((att) => {
+    const b64 = att.buf.toString("base64");
+    const b64Lines = b64.match(/.{1,76}/g)?.join("\r\n") ?? b64;
+    return (
+      `--${boundary}\r\n` +
+      `Content-Type: ${att.mimeType}; name="${att.filename}"\r\n` +
+      `Content-Transfer-Encoding: base64\r\n` +
+      `Content-Disposition: attachment; filename="${att.filename}"\r\n` +
+      `\r\n` +
+      `${b64Lines}\r\n`
+    );
+  });
+
+  const headers = [
+    `To: ${opts.to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ...(opts.inReplyToMessageId
+      ? [`In-Reply-To: ${opts.inReplyToMessageId}`, `References: ${opts.inReplyToMessageId}`]
+      : []),
+  ].join("\r\n");
+
+  const rawBody = `${headers}\r\n\r\n${bodyPart}${attachmentParts.join("")}\r\n--${boundary}--`;
+  const raw = Buffer.from(rawBody).toString("base64url");
+
+  const res = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: { raw, threadId: opts.threadId },
+  });
+  return { messageId: res.data.id!, threadId: res.data.threadId! };
+}
+
 export async function sendNewGmailEmail(opts: {
   to: string; subject: string; bodyHtml: string;
 }): Promise<{ messageId: string; threadId: string }> {
