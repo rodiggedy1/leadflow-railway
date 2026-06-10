@@ -2169,12 +2169,19 @@ export const schedulingRouter = router({
             eq(scheduleAssignments.jobDate, input.date),
             eq(scheduleAssignments.teamId, team.id),
           ));
-        const jobSvcMs = new Map(allJobs.map(j => [j.id, j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : Infinity]));
+        // Load serviceDateTime directly from cleanerJobs for these assignment job IDs.
+        // Do NOT use allJobs (filtered by jobDate) — a job's jobDate may differ from the schedule date.
+        // This guarantees the sort order matches the UI exactly.
+        const assignmentJobIds = assignments.map(a => a.cleanerJobId);
+        const svcTimeRows = assignmentJobIds.length > 0
+          ? await db.select({ id: cleanerJobs.id, serviceDateTime: cleanerJobs.serviceDateTime })
+              .from(cleanerJobs).where(inArray(cleanerJobs.id, assignmentJobIds))
+          : [];
+        const jobSvcMs = new Map(svcTimeRows.map(j => [j.id, j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : Infinity]));
         const active = assignments
           .filter(a => a.isManual !== 2)
           .sort((a, b) => {
-            // Sort by serviceDateTime so drive chain matches actual job order in the UI.
-            // Null serviceDateTime sorts LAST (Infinity) — never treat missing time as earliest.
+            // Sort by serviceDateTime — same order as the UI. Null sorts LAST.
             const ta = jobSvcMs.get(a.cleanerJobId) ?? Infinity;
             const tb = jobSvcMs.get(b.cleanerJobId) ?? Infinity;
             if (ta !== tb) return ta - tb;
