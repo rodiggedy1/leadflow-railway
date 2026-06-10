@@ -8,8 +8,8 @@ import { z } from "zod";
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { gmailState, quoteLeads, conversationSessions, completedJobs } from "../drizzle/schema";
+import { eq, or } from "drizzle-orm";
 import {
   listInboxThreads,
   getThreadDetail,
@@ -136,6 +136,43 @@ export const gmailRouter = router({
     .mutation(async ({ input }) => {
       await archiveThread(input.threadId);
       return { success: true };
+    }),
+
+  /** Look up customer context by email — used in the inbox right panel */
+  getCustomerContext: adminAgentProcedure
+    .input(z.object({ email: z.string().email() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available." });
+
+      // Find lead by email
+      const [lead] = await db
+        .select()
+        .from(quoteLeads)
+        .where(eq(quoteLeads.email, input.email))
+        .limit(1);
+
+      // Get most recent conversation session for this lead
+      let session = null;
+      if (lead) {
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.quoteLeadId, lead.id))
+          .limit(1);
+        session = sessions[0] ?? null;
+      }
+
+      // Get completed job history by email or phone
+      const jobs = lead
+        ? await db
+            .select()
+            .from(completedJobs)
+            .where(or(eq(completedJobs.email, input.email), eq(completedJobs.phone, lead.phone)))
+            .limit(5)
+        : [];
+
+      return { lead: lead ?? null, session: session ?? null, completedJobs: jobs };
     }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */

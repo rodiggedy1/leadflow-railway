@@ -153,6 +153,141 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function CustomerContextPanel({ threadFromEmail }: { threadFromEmail: string | null }) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const validEmail = threadFromEmail && emailRegex.test(threadFromEmail) ? threadFromEmail : null;
+
+  const contextQuery = trpc.gmail.getCustomerContext.useQuery(
+    { email: validEmail! },
+    { enabled: Boolean(validEmail), staleTime: 60_000, retry: false }
+  );
+
+  const { lead, session, completedJobs: jobs } = contextQuery.data ?? {};
+
+  const stageBadgeColor: Record<string, string> = {
+    BOOKED: "bg-green-100 text-green-700",
+    DONE: "bg-slate-100 text-slate-600",
+    NOT_INTERESTED: "bg-red-100 text-red-600",
+    UNHANDLED: "bg-amber-100 text-amber-700",
+  };
+
+  return (
+    <aside className="w-[260px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto">
+      {!validEmail ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <p className="text-xs text-slate-400 text-center">Select a thread to see customer context</p>
+        </div>
+      ) : contextQuery.isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+        </div>
+      ) : (
+        <div className="p-4 space-y-5">
+          {/* Sender header */}
+          <div className="flex items-center gap-3 pt-1">
+            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-sm shrink-0">
+              {lead?.name ? getInitials(lead.name) : (validEmail[0] ?? "?").toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <p className="font-black text-sm text-slate-900 truncate">{lead?.name ?? "Unknown"}</p>
+              <p className="text-xs text-slate-400 truncate">{validEmail}</p>
+            </div>
+          </div>
+
+          {/* Quote / Lead data */}
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Cleaning Customer Data</p>
+            {lead ? (
+              <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">{lead.serviceType ?? "Service"}</span>
+                  {session?.stage && (
+                    <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full", stageBadgeColor[session.stage] ?? "bg-blue-50 text-blue-700")}>
+                      {session.stage}
+                    </span>
+                  )}
+                </div>
+                {lead.phone && <p className="text-xs text-slate-500">{lead.phone}</p>}
+              </div>
+            ) : (
+              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-400 italic">No customer record found</div>
+            )}
+          </div>
+
+          {/* Home profile */}
+          {lead && (
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Home Profile</p>
+              <div className="grid grid-cols-3 gap-2">
+                {[{ label: "Est.", value: session?.quotedPrice ? `$${session.quotedPrice}` : (lead ? "—" : null) },
+                  { label: "Beds/Baths", value: lead.bedrooms && lead.bathrooms ? `${lead.bedrooms}bd/${lead.bathrooms}ba` : "—" },
+                  { label: "Extras", value: lead.extras ? (() => { try { const e = JSON.parse(lead.extras); return Array.isArray(e) && e.length > 0 ? `${e.length} add-on${e.length > 1 ? "s" : ""}` : "None"; } catch { return "—"; } })() : "None" },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-slate-50 rounded-xl p-2.5 text-center">
+                    <p className="text-sm font-black text-slate-800">{value}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Job details from session */}
+          {session && (
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Job Details</p>
+              <div className="space-y-2">
+                {[
+                  { label: session.serviceType ?? "Service type", status: session.stage },
+                  session.selectedSlot ? { label: session.selectedSlot, status: "slot" } : null,
+                  session.address ? { label: session.address, status: "address" } : null,
+                ].filter(Boolean).map((item, i) => (
+                  <div key={i} className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className={cn("w-2 h-2 rounded-full shrink-0",
+                        item!.status === "BOOKED" ? "bg-green-500" : item!.status === "NOT_INTERESTED" ? "bg-red-400" : "bg-blue-400")} />
+                      <span className="text-xs text-slate-700 truncate">{item!.label}</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                      {item!.status === "BOOKED" ? "Booked" : item!.status === "slot" ? "Slot" : item!.status === "address" ? "Address" : "Open"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Booking history */}
+          {jobs && jobs.length > 0 && (
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Booking History</p>
+              <div className="space-y-1.5">
+                {jobs.map((job) => (
+                  <div key={job.id} className="bg-slate-50 rounded-xl p-2.5">
+                    <p className="text-xs font-bold text-slate-700">{job.serviceType ?? "Cleaning"}</p>
+                    <p className="text-[10px] text-slate-400">{job.jobDate} · {job.frequency ?? "One-time"}{job.lastBookingPrice ? ` · $${job.lastBookingPrice}` : ""}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Automation */}
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Automation</p>
+            <div className="flex flex-col gap-1.5">
+              <button className="text-left text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                onClick={() => toast.info("Create follow-up — coming soon")}>Create follow-up</button>
+              <button className="text-left text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
+                onClick={() => toast.info("Send quote link — coming soon")}>Send quote link</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </aside>
+  );
+}
+
 export default function EmailInbox() {
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -354,6 +489,9 @@ export default function EmailInbox() {
           </>
         )}
       </main>
+
+      {/* Customer context panel */}
+      <CustomerContextPanel threadFromEmail={selectedThread?.fromEmail ?? null} />
 
       {showCompose && <ComposeModal onClose={() => setShowCompose(false)} />}
     </div>
