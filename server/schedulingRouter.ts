@@ -2141,6 +2141,24 @@ export const schedulingRouter = router({
           });
       }
 
+      // Geocode any teams that are missing homeLat/homeLng right now, before building pairs.
+      // This ensures rerunDistances always works even if startup backfill hasn't run yet.
+      for (const team of teamsToProcess) {
+        if (team.homeLat == null && team.homeAddress) {
+          const geo = await geocodeWithCache(team.homeAddress);
+          if (geo) {
+            await db.update(schedulingTeams)
+              .set({ homeLat: geo.lat, homeLng: geo.lng } as any)
+              .where(eq(schedulingTeams.id, team.id));
+            (team as any).homeLat = geo.lat;
+            (team as any).homeLng = geo.lng;
+            console.log(`[RERUN] Geocoded team "${team.name}" on-the-fly: (${geo.lat}, ${geo.lng})`);
+          } else {
+            console.warn(`[RERUN] Could not geocode team "${team.name}": ${team.homeAddress}`);
+          }
+        }
+      }
+
       let updated = 0;
       for (const team of teamsToProcess) {
         // Load active assignments for this team on this date (including newly upserted ones)
