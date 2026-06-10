@@ -2789,3 +2789,24 @@ export const gmailSentLog = mysqlTable("gmail_sent_log", {
   sentAt: timestamp("sentAt").defaultNow().notNull(),
 });
 export type GmailSentLog = typeof gmailSentLog.$inferSelect;
+
+/**
+ * gmail_thread_meta — stores per-thread metadata that lives outside Gmail.
+ * One row per thread ID. Created on first flag; upserted on updates.
+ */
+export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Gmail thread ID */
+  threadId: varchar("threadId", { length: 255 }).notNull().unique(),
+  /** Whether this thread is flagged as an issue (1 = yes, 0 = no) */
+  isIssue: int("isIssue").default(0).notNull(),
+  /** AI-generated one-line summary of why it's an issue */
+  issueSummary: text("issueSummary"),
+  /** Agent openId who flagged it */
+  flaggedBy: varchar("flaggedBy", { length: 64 }),
+  /** When it was flagged */
+  flaggedAt: timestamp("flaggedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GmailThreadMeta = typeof gmailThreadMeta.$inferSelect;

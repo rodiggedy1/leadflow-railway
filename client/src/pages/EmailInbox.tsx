@@ -3,7 +3,7 @@
  * Wired to real Gmail data via tRPC gmail.* procedures.
  * Real-time refresh via SSE gmail_new_messages event.
  */
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import DOMPurify from "dompurify";
 import {
   Mail, Search, Paperclip, Link2, Send, RefreshCw,
-  Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles,
+  Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import { senderColorClass, senderHex } from "@/lib/senderColor";
@@ -61,37 +61,46 @@ function NotConnectedBanner() {
   );
 }
 
-function ThreadItem({ thread, active, onClick }: { thread: GmailThread; active: boolean; onClick: () => void }) {
+function ThreadItem({ thread, active, onClick, isIssue, issueSummary }: { thread: GmailThread; active: boolean; onClick: () => void; isIssue?: boolean; issueSummary?: string | null }) {
   const senderName = thread.from || thread.fromEmail || "?";
-  const accentColor = senderHex(senderName);
+  const accentColor = isIssue ? "#dc2626" : senderHex(senderName);
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-4 py-3.5 border-b border-slate-100 transition-colors group relative",
+        "w-full text-left px-4 py-3.5 border-b transition-colors group relative",
+        isIssue ? "border-red-100" : "border-slate-100",
         active
-          ? "bg-blue-50/70"
+          ? isIssue ? "bg-red-50/80" : "bg-blue-50/70"
+          : isIssue
+          ? "bg-red-50/40 hover:bg-red-50/70"
           : thread.isUnread
           ? "bg-white hover:bg-slate-50/80"
           : "bg-white hover:bg-slate-50/60"
       )}
     >
-      {/* Active left accent bar */}
-      {active && <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full bg-blue-500" />}
-
+      {/* Left accent bar */}
+      {(active || isIssue) && (
+        <span className={cn(
+          "absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full",
+          isIssue ? "bg-red-500" : "bg-blue-500"
+        )} />
+      )}
       <div className="flex items-start gap-2.5">
         {/* Sender avatar */}
         <div
-          className={cn("w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5", senderColorClass(senderName))}
+          className={cn(
+            "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5",
+            isIssue ? "bg-red-100 text-red-700" : senderColorClass(senderName)
+          )}
         >
-          {getInitials(senderName)}
+          {isIssue ? <Flag className="w-3.5 h-3.5" /> : getInitials(senderName)}
         </div>
-
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
             <span
-              className={cn("text-sm leading-snug truncate", thread.isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700")}
-              style={thread.isUnread ? { color: accentColor } : undefined}
+              className={cn("text-sm leading-snug truncate font-bold")}
+              style={{ color: accentColor }}
             >
               {senderName}
             </span>
@@ -100,14 +109,27 @@ function ThreadItem({ thread, active, onClick }: { thread: GmailThread; active: 
           <p className={cn("text-xs leading-snug truncate mb-1", thread.isUnread ? "text-slate-700 font-medium" : "text-slate-500")}>
             {thread.subject}
           </p>
-          <p className="text-[11px] text-slate-400 line-clamp-1 leading-relaxed">
-            {thread.snippet?.slice(0, 80)}
-          </p>
-          {thread.isUnread && (
-            <span className="inline-block mt-1.5 text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
-              UNREAD
-            </span>
+          {isIssue && issueSummary ? (
+            <p className="text-[11px] text-red-500 line-clamp-1 leading-relaxed font-medium">
+              {issueSummary}
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-400 line-clamp-1 leading-relaxed">
+              {thread.snippet?.slice(0, 80)}
+            </p>
           )}
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            {isIssue && (
+              <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">
+                ISSUE
+              </span>
+            )}
+            {thread.isUnread && (
+              <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                UNREAD
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </button>
@@ -496,7 +518,53 @@ export default function EmailInbox() {
     ...baseThreads,
     ...extraThreads.filter((t) => !baseThreads.some((b) => b.id === t.id)),
   ].sort((a, b) => b.date - a.date);
-  const threads = unreadOnly ? allThreads.filter((t) => t.isUnread) : allThreads;
+
+  // Fetch thread meta (issue flags) for all visible threads
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allThreadIds = useMemo(() => allThreads.map((t) => t.id), [allThreads.map((t) => t.id).join(",")]);
+  const threadMetaQuery = trpc.gmail.listThreadMeta.useQuery(
+    { threadIds: allThreadIds },
+    { enabled: allThreadIds.length > 0 && statusQuery.data?.connected === true, staleTime: 30_000 }
+  );
+  const metaMap = new Map(
+    (threadMetaQuery.data?.meta ?? []).map((m) => [m.threadId, m])
+  );
+
+  // Flag issue mutation
+  const flagIssueMutation = trpc.gmail.flagIssue.useMutation({
+    onSuccess: (data, vars) => {
+      threadMetaQuery.refetch();
+      toast.success(vars.flag ? `Flagged as issue${data.issueSummary ? " — AI summary added" : ""}` : "Issue flag removed");
+    },
+    onError: (err) => toast.error(err.message || "Failed to update issue flag"),
+  });
+
+  function toggleIssue() {
+    if (!selectedThreadId || !threadQuery.data) return;
+    const currentMeta = metaMap.get(selectedThreadId);
+    const isCurrentlyIssue = (currentMeta?.isIssue ?? 0) === 1;
+    const thread = threadQuery.data;
+    flagIssueMutation.mutate({
+      threadId: selectedThreadId,
+      flag: !isCurrentlyIssue,
+      subject: thread.subject,
+      messages: thread.messages.map((m) => ({
+        from: m.from,
+        bodyText: m.bodyText || m.snippet || "",
+        date: m.date,
+        isOutbound: m.fromEmail?.toLowerCase().includes("maidinblack") ?? false,
+      })),
+    });
+  }
+
+  // Sort: issues first, then by date
+  const sortedThreads = [...allThreads].sort((a, b) => {
+    const aIssue = (metaMap.get(a.id)?.isIssue ?? 0) === 1 ? 1 : 0;
+    const bIssue = (metaMap.get(b.id)?.isIssue ?? 0) === 1 ? 1 : 0;
+    if (bIssue !== aIssue) return bIssue - aIssue;
+    return b.date - a.date;
+  });
+  const threads = unreadOnly ? sortedThreads.filter((t) => t.isUnread) : sortedThreads;
   const selectedThread = threadQuery.data ?? null;
   const unreadCount = allThreads.filter((t) => t.isUnread).length;
 
@@ -593,9 +661,19 @@ export default function EmailInbox() {
               <p className="text-xs text-red-500">{threadsQuery.error.message}</p>
             </div>
           )}
-          {threads.map((t) => (
-            <ThreadItem key={t.id} thread={t} active={t.id === selectedThreadId} onClick={() => selectThread(t.id)} />
-          ))}
+          {threads.map((t) => {
+            const meta = metaMap.get(t.id);
+            return (
+              <ThreadItem
+                key={t.id}
+                thread={t}
+                active={t.id === selectedThreadId}
+                onClick={() => selectThread(t.id)}
+                isIssue={(meta?.isIssue ?? 0) === 1}
+                issueSummary={meta?.issueSummary ?? null}
+              />
+            );
+          })}
           {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
             <div className="text-center py-12 text-slate-400 text-xs">
               {debouncedQuery ? "No results" : unreadOnly ? "No unread messages" : "Inbox is empty"}
@@ -635,6 +713,29 @@ export default function EmailInbox() {
                 {selectedThread?.subject ?? "Loading…"}
               </h2>
               <div className="flex items-center gap-1.5 shrink-0">
+                {(() => {
+                  const isCurrentIssue = (metaMap.get(selectedThreadId)?.isIssue ?? 0) === 1;
+                  return (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "text-xs font-semibold gap-1.5 h-8 transition-colors",
+                        isCurrentIssue
+                          ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                          : "hover:border-red-200 hover:text-red-500"
+                      )}
+                      onClick={toggleIssue}
+                      disabled={flagIssueMutation.isPending}
+                      title={isCurrentIssue ? "Remove issue flag" : "Flag as issue"}
+                    >
+                      {flagIssueMutation.isPending
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Flag className={cn("w-3.5 h-3.5", isCurrentIssue && "fill-red-500")} />}
+                      {isCurrentIssue ? "Issue" : "Flag"}
+                    </Button>
+                  );
+                })()}
                 <Button
                   variant="outline"
                   size="sm"

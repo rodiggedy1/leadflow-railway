@@ -9,7 +9,7 @@ import { router, adminAgentProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users } from "../drizzle/schema";
+import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta } from "../drizzle/schema";
 import { eq, or, inArray } from "drizzle-orm";
 import {
   listInboxThreads,
@@ -291,6 +291,95 @@ Write the reply now:`;
         : [];
 
       return { lead: lead ?? null, session: session ?? null, completedJobs: jobs };
+    }),
+
+  /** Toggle issue flag on a thread. Generates AI summary when flagging. */
+  flagIssue: adminAgentProcedure
+    .input(
+      z.object({
+        threadId: z.string(),
+        flag: z.boolean(), // true = flag as issue, false = unflag
+        messages: z.array(
+          z.object({
+            from: z.string(),
+            bodyText: z.string(),
+            date: z.number(),
+            isOutbound: z.boolean().optional(),
+          })
+        ).optional(),
+        subject: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { db } = await requireGmailConnected();
+      const agentOpenId = ctx.user.openId;
+
+      let issueSummary: string | null = null;
+
+      if (input.flag && input.messages && input.messages.length > 0) {
+        // Generate AI summary of why this is an issue
+        try {
+          const transcript = input.messages
+            .slice(-6)
+            .map((m) => {
+              const role = m.isOutbound ? "Agent" : `Customer (${m.from})`;
+              const text = m.bodyText.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 300);
+              return `${role}: ${text}`;
+            })
+            .join("\n\n");
+
+          const result = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: "You are a customer service manager. In ONE sentence (max 15 words), describe the core issue in this email thread. Be specific. Start with the problem, not 'Customer says'. Example: 'Missed cleaning on June 3rd, customer requesting refund.'",
+              },
+              {
+                role: "user",
+                content: `Subject: ${input.subject ?? "(no subject)"}\n\n${transcript}`,
+              },
+            ],
+          });
+          issueSummary = (result.choices[0]?.message?.content as string ?? "").trim().replace(/^"|"$/g, "");
+        } catch {
+          // Non-fatal — flag still works without summary
+        }
+      }
+
+      // Upsert the thread meta row
+      await db
+        .insert(gmailThreadMeta)
+        .values({
+          threadId: input.threadId,
+          isIssue: input.flag ? 1 : 0,
+          issueSummary: input.flag ? issueSummary : null,
+          flaggedBy: input.flag ? agentOpenId : null,
+          flaggedAt: input.flag ? new Date() : null,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            isIssue: input.flag ? 1 : 0,
+            issueSummary: input.flag ? issueSummary : null,
+            flaggedBy: input.flag ? agentOpenId : null,
+            flaggedAt: input.flag ? new Date() : null,
+            updatedAt: new Date(),
+          },
+        });
+
+      return { success: true, issueSummary };
+    }),
+
+  /** Fetch thread meta for a list of thread IDs (used to hydrate issue badges) */
+  listThreadMeta: adminAgentProcedure
+    .input(z.object({ threadIds: z.array(z.string()).max(200) }))
+    .query(async ({ input }) => {
+      if (input.threadIds.length === 0) return { meta: [] };
+      const { db } = await requireGmailConnected();
+      const rows = await db
+        .select()
+        .from(gmailThreadMeta)
+        .where(inArray(gmailThreadMeta.threadId, input.threadIds));
+      return { meta: rows };
     }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
