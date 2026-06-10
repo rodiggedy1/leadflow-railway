@@ -8,8 +8,8 @@ import { z } from "zod";
 import { router, adminAgentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState, quoteLeads, conversationSessions, completedJobs } from "../drizzle/schema";
-import { eq, or } from "drizzle-orm";
+import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users } from "../drizzle/schema";
+import { eq, or, inArray } from "drizzle-orm";
 import {
   listInboxThreads,
   getThreadDetail,
@@ -53,7 +53,7 @@ export const gmailRouter = router({
     .input(
       z.object({
         pageToken: z.string().optional(),
-        maxResults: z.number().min(1).max(100).default(30),
+        maxResults: z.number().min(1).max(500).default(100),
         query: z.string().optional(),
       })
     )
@@ -66,12 +66,32 @@ export const gmailRouter = router({
       });
     }),
 
-  /** Get full thread detail including all messages */
+  /** Get full thread detail including all messages, with agent sentBy info */
   getThread: adminAgentProcedure
     .input(z.object({ threadId: z.string() }))
     .query(async ({ input }) => {
-      await requireGmailConnected();
-      return getThreadDetail(input.threadId);
+      const { db } = await requireGmailConnected();
+      const thread = await getThreadDetail(input.threadId);
+
+      // Fetch agent log entries for this thread
+      const sentLogs = await db
+        .select()
+        .from(gmailSentLog)
+        .where(eq(gmailSentLog.threadId, input.threadId));
+
+      // Build a map of messageId -> agent info
+      const sentByMap: Record<string, { name: string; photoUrl: string | null }> = {};
+      for (const log of sentLogs) {
+        sentByMap[log.messageId] = { name: log.agentName, photoUrl: log.agentPhotoUrl ?? null };
+      }
+
+      // Attach sentBy to each message
+      const messagesWithAgent = thread.messages.map((msg: any) => ({
+        ...msg,
+        sentBy: sentByMap[msg.id] ?? null,
+      }));
+
+      return { ...thread, messages: messagesWithAgent };
     }),
 
   /** Reply to an existing thread */
@@ -85,15 +105,35 @@ export const gmailRouter = router({
         inReplyToMessageId: z.string().optional(),
       })
     )
-    .mutation(async ({ input }) => {
-      await requireGmailConnected();
-      return sendGmailReply({
+    .mutation(async ({ ctx, input }) => {
+      const { db } = await requireGmailConnected();
+      const result = await sendGmailReply({
         threadId: input.threadId,
         to: input.to,
         subject: input.subject,
         bodyHtml: input.bodyHtml,
         inReplyToMessageId: input.inReplyToMessageId,
       });
+
+      // Log which agent sent this reply
+      if (result?.id && ctx.user) {
+        // Look up agent's profile photo from users table
+        const [agentRow] = await db
+          .select({ profilePhotoUrl: users.profilePhotoUrl })
+          .from(users)
+          .where(eq(users.openId, ctx.user.openId))
+          .limit(1);
+
+        await db.insert(gmailSentLog).values({
+          threadId: input.threadId,
+          messageId: result.id,
+          agentOpenId: ctx.user.openId,
+          agentName: ctx.user.name ?? "Agent",
+          agentPhotoUrl: agentRow?.profilePhotoUrl ?? null,
+        }).onDuplicateKeyUpdate({ set: { agentName: ctx.user.name ?? "Agent" } });
+      }
+
+      return result;
     }),
 
   /** Compose and send a brand-new email */

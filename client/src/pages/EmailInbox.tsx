@@ -22,7 +22,9 @@ import type { AppRouter } from "../../../server/routers";
 
 type RouterOutput = inferRouterOutputs<AppRouter>;
 type GmailThread = RouterOutput["gmail"]["listThreads"]["threads"][number];
-type GmailMessage = GmailThread["messages"][number];
+type GmailMessage = GmailThread["messages"][number] & {
+  sentBy?: { name: string; photoUrl: string | null } | null;
+};
 
 function getInitials(name: string): string {
   return name.split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
@@ -138,6 +140,22 @@ function MessageBubble({ msg }: { msg: GmailMessage }) {
       ) : (
         <div className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">
           {msg.bodyText || msg.snippet}
+        </div>
+      )}
+      {msg.sentBy && (
+        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
+          {msg.sentBy.photoUrl ? (
+            <img
+              src={msg.sentBy.photoUrl}
+              alt={msg.sentBy.name}
+              className="w-5 h-5 rounded-full object-cover shrink-0"
+            />
+          ) : (
+            <div className={cn("w-5 h-5 rounded-full flex items-center justify-center font-bold text-[9px] shrink-0", senderColorClass(msg.sentBy.name))}>
+              {getInitials(msg.sentBy.name)}
+            </div>
+          )}
+          <span className="text-[11px] text-slate-400">Sent by <span className="font-semibold text-slate-500">{msg.sentBy.name}</span></span>
         </div>
       )}
     </div>
@@ -357,6 +375,8 @@ export default function EmailInbox() {
   const [replyMode, setReplyMode] = useState<"reply" | "note">("reply");
   const [showCompose, setShowCompose] = useState(false);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [extraThreads, setExtraThreads] = useState<GmailThread[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const utils = trpc.useUtils();
 
@@ -368,9 +388,31 @@ export default function EmailInbox() {
 
   const statusQuery = trpc.gmail.getConnectionStatus.useQuery(undefined, { staleTime: 60_000, retry: false });
   const threadsQuery = trpc.gmail.listThreads.useQuery(
-    { maxResults: 30, query: debouncedQuery || undefined },
+    { maxResults: 100, query: debouncedQuery || undefined },
     { enabled: statusQuery.data?.connected === true, staleTime: 30_000, retry: false }
   );
+
+  async function loadMore() {
+    const nextToken = threadsQuery.data?.nextPageToken;
+    if (!nextToken || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const result = await utils.gmail.listThreads.fetch({
+        maxResults: 100,
+        pageToken: nextToken,
+        query: debouncedQuery || undefined,
+      });
+      setExtraThreads((prev) => {
+        const existingIds = new Set(prev.map((t) => t.id));
+        const newOnes = result.threads.filter((t) => !existingIds.has(t.id));
+        return [...prev, ...newOnes];
+      });
+    } catch {
+      toast.error("Failed to load more threads");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   const threadQuery = trpc.gmail.getThread.useQuery(
     { threadId: selectedThreadId! },
     { enabled: Boolean(selectedThreadId) && statusQuery.data?.connected === true, staleTime: 30_000, retry: false }
@@ -427,7 +469,11 @@ export default function EmailInbox() {
     });
   }
 
-  const allThreads = threadsQuery.data?.threads ?? [];
+  const baseThreads = threadsQuery.data?.threads ?? [];
+  const allThreads = [
+    ...baseThreads,
+    ...extraThreads.filter((t) => !baseThreads.some((b) => b.id === t.id)),
+  ];
   const threads = unreadOnly ? allThreads.filter((t) => t.isUnread) : allThreads;
   const selectedThread = threadQuery.data ?? null;
   const unreadCount = allThreads.filter((t) => t.isUnread).length;
@@ -531,6 +577,18 @@ export default function EmailInbox() {
           {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
             <div className="text-center py-12 text-slate-400 text-xs">
               {debouncedQuery ? "No results" : unreadOnly ? "No unread messages" : "Inbox is empty"}
+            </div>
+          )}
+          {!unreadOnly && threadsQuery.data?.nextPageToken && (
+            <div className="px-4 py-3 border-t border-slate-100">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full text-xs font-semibold text-slate-500 hover:text-slate-700 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                {loadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                {loadingMore ? "Loading…" : "Load more"}
+              </button>
             </div>
           )}
         </div>

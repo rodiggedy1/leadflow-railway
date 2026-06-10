@@ -2768,3 +2768,24 @@ export const gmailState = mysqlTable("gmail_state", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type GmailState = typeof gmailState.$inferSelect;
+
+/**
+ * gmail_sent_log — tracks which agent sent each outgoing Gmail reply.
+ * Purely internal — no effect on email deliverability.
+ */
+export const gmailSentLog = mysqlTable("gmail_sent_log", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Gmail thread ID */
+  threadId: varchar("threadId", { length: 255 }).notNull(),
+  /** Gmail message ID of the sent message */
+  messageId: varchar("messageId", { length: 255 }).notNull().unique(),
+  /** Agent's Manus openId */
+  agentOpenId: varchar("agentOpenId", { length: 64 }).notNull(),
+  /** Agent's display name at time of send */
+  agentName: text("agentName").notNull(),
+  /** Agent's profile photo URL at time of send */
+  agentPhotoUrl: text("agentPhotoUrl"),
+  /** UTC timestamp of when the reply was sent */
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+});
+export type GmailSentLog = typeof gmailSentLog.$inferSelect;
