@@ -10,7 +10,7 @@ import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents } from "../drizzle/schema";
-import { eq, or, inArray } from "drizzle-orm";
+import { eq, or, inArray, desc } from "drizzle-orm";
 import {
   listInboxThreads,
   getThreadDetail,
@@ -298,20 +298,37 @@ Write the reply now:`;
           .select()
           .from(conversationSessions)
           .where(eq(conversationSessions.quoteLeadId, lead.id))
+          .orderBy(desc(conversationSessions.id))
           .limit(1);
         session = sessions[0] ?? null;
       }
 
-      // Get completed job history by email or phone
-      const jobs = lead
+      // Get ALL completed jobs by email or phone for stats + recent list
+      const allJobs = lead
         ? await db
             .select()
             .from(completedJobs)
-            .where(or(eq(completedJobs.email, input.email), eq(completedJobs.phone, lead.phone)))
-            .limit(5)
+            .where(or(eq(completedJobs.email, input.email), eq(completedJobs.phone, lead.phone ?? "")))
+            .orderBy(desc(completedJobs.jobDate))
+            .limit(200)
         : [];
 
-      return { lead: lead ?? null, session: session ?? null, completedJobs: jobs };
+      // Compute lifetime stats
+      const jobCount = allJobs.length;
+      const lifetimeValue = allJobs.reduce((sum, j) => sum + (j.lastBookingPrice ?? 0), 0);
+      const avgJobPrice = jobCount > 0 ? Math.round(lifetimeValue / jobCount) : 0;
+      const firstJobDate = allJobs.length > 0 ? allJobs[allJobs.length - 1].jobDate : null;
+      const lastJobDate = allJobs.length > 0 ? allJobs[0].jobDate : null;
+
+      // Return only the 20 most recent jobs for the UI timeline
+      const recentJobs = allJobs.slice(0, 20);
+
+      return {
+        lead: lead ?? null,
+        session: session ?? null,
+        completedJobs: recentJobs,
+        stats: { jobCount, lifetimeValue, avgJobPrice, firstJobDate, lastJobDate },
+      };
     }),
 
   /** Toggle issue flag on a thread. Generates AI summary when flagging. */

@@ -547,26 +547,53 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
     { enabled: Boolean(validEmail), staleTime: 60_000, retry: false }
   );
 
-  const { lead, session, completedJobs: jobs } = contextQuery.data ?? {};
+  const { lead, session, completedJobs: jobs, stats } = contextQuery.data ?? {};
 
   const stageBadgeColor: Record<string, string> = {
     BOOKED: "bg-green-100 text-green-700",
     DONE: "bg-slate-100 text-slate-600",
     NOT_INTERESTED: "bg-red-100 text-red-600",
     UNHANDLED: "bg-amber-100 text-amber-700",
+    COLD: "bg-slate-100 text-slate-500",
+    LOST: "bg-red-50 text-red-500",
+    QUOTE_SENT: "bg-blue-50 text-blue-600",
   };
 
-  const senderName = lead?.name ?? validEmail ?? "?";
+  const displayName = lead?.name ?? threadFrom ?? validEmail ?? "Unknown";
+  const firstName = displayName.split(" ")[0];
+
+  // Frequency color coding
+  const freqColor = (freq: string | null) => {
+    if (!freq) return "bg-slate-200";
+    const f = freq.toLowerCase();
+    if (f.includes("week")) return "bg-green-400";
+    if (f.includes("bi") || f.includes("every 2")) return "bg-emerald-400";
+    if (f.includes("month")) return "bg-teal-400";
+    return "bg-blue-400";
+  };
+
+  const formatJobDate = (d: string | null) => {
+    if (!d) return "—";
+    try {
+      return new Date(d + "T12:00:00").toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    } catch { return d; }
+  };
+
+  const customerSince = stats?.firstJobDate
+    ? new Date(stats.firstJobDate + "T12:00:00").getFullYear()
+    : null;
+
+  const isLongTimeCustomer = customerSince !== null && new Date().getFullYear() - customerSince >= 2;
 
   return (
-    <aside className="w-[260px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <aside className="w-[272px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {!validEmail ? (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center">
             <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
               <Mail className="w-5 h-5 text-slate-300" />
             </div>
-            <p className="text-xs text-slate-400">Select a thread to see customer context</p>
+            <p className="text-xs text-slate-400">Select a thread to see customer details</p>
           </div>
         </div>
       ) : contextQuery.isLoading ? (
@@ -574,122 +601,175 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
           <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
         </div>
       ) : (
-        <div className="p-4 space-y-5">
-          {/* Sender header */}
-          <div className="flex items-center gap-3 pt-1">
-            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0", senderColorClass(senderName))}>
-              {getInitials(senderName)}
-            </div>
-            <div className="min-w-0">
-              <p className="font-bold text-sm text-slate-900 truncate">{lead?.name ?? threadFrom ?? validEmail ?? "Unknown"}</p>
-              <p className="text-xs text-slate-400 truncate">{validEmail}</p>
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="border-t border-slate-100" />
-
-          {/* Quote / Lead data */}
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Cleaning Customer Data</p>
-            {lead ? (
-              <div className="bg-slate-50 rounded-xl p-3 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-600 font-medium">{lead.serviceType ?? "Service"}</span>
-                  {session?.stage && (
-                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full", stageBadgeColor[session.stage] ?? "bg-blue-50 text-blue-700")}>
-                      {session.stage}
-                    </span>
+        <div className="flex flex-col">
+          {/* ── Customer header ─────────────────────────────── */}
+          <div className="px-4 pt-5 pb-4 bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
+            <div className="flex items-start gap-3">
+              <div className={cn(
+                "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base shrink-0 shadow-sm",
+                senderColorClass(displayName)
+              )}>
+                {getInitials(displayName)}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="font-black text-sm text-slate-900 leading-tight">{displayName}</p>
+                  {isLongTimeCustomer && (
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 shrink-0">⭐ LOYAL</span>
                   )}
                 </div>
-                {lead.phone && <p className="text-xs text-slate-400">{lead.phone}</p>}
+                <p className="text-[11px] text-slate-400 truncate mt-0.5">{validEmail}</p>
+                {lead?.phone && <p className="text-[11px] text-slate-400 mt-0.5">{lead.phone}</p>}
+                {customerSince && (
+                  <p className="text-[10px] text-slate-400 mt-1">Customer since {customerSince}</p>
+                )}
               </div>
-            ) : (
-              <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
-                <p className="text-xs text-slate-400 italic">No customer record found</p>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Home profile */}
-          {lead && (
+          <div className="p-4 space-y-5">
+
+          {/* ── Lifetime Value Stats ────────────────────────── */}
+          {stats && stats.jobCount > 0 && (
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Home Profile</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Lifetime Value</p>
               <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: "Est.", value: session?.quotedPrice ? `$${session.quotedPrice}` : "—" },
-                  { label: "Beds/Baths", value: lead.bedrooms && lead.bathrooms ? `${lead.bedrooms}/${lead.bathrooms}` : "—" },
-                  { label: "Extras", value: lead.extras ? (() => { try { const e = JSON.parse(lead.extras); return Array.isArray(e) && e.length > 0 ? `${e.length}` : "0"; } catch { return "—"; } })() : "0" },
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-slate-50 rounded-xl p-2.5 text-center">
-                    <p className="text-sm font-bold text-slate-800">{value}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">{label}</p>
-                  </div>
-                ))}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-2.5 text-center border border-green-100">
+                  <p className="text-sm font-black text-green-700">
+                    {stats.lifetimeValue >= 1000
+                      ? `$${(stats.lifetimeValue / 1000).toFixed(1)}k`
+                      : `$${stats.lifetimeValue}`}
+                  </p>
+                  <p className="text-[9px] text-green-600 font-semibold mt-0.5">Total Spent</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-2.5 text-center border border-slate-100">
+                  <p className="text-sm font-black text-slate-700">{stats.jobCount}</p>
+                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Cleanings</p>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-2.5 text-center border border-slate-100">
+                  <p className="text-sm font-black text-slate-700">${stats.avgJobPrice}</p>
+                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Avg/Visit</p>
+                </div>
               </div>
+              {stats.lastJobDate && (
+                <p className="text-[10px] text-slate-400 mt-2 text-center">
+                  Last cleaned {formatJobDate(stats.lastJobDate)}
+                </p>
+              )}
             </div>
           )}
 
-          {/* Job details from session */}
+          {/* ── No customer record ──────────────────────────── */}
+          {!lead && (
+            <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
+              <p className="text-xs text-slate-400 italic">No customer record found</p>
+            </div>
+          )}
+
+          {/* ── Active Pipeline Status ──────────────────────── */}
           {session && (
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Job Details</p>
-              <div className="space-y-2">
-                {[
-                  { label: session.serviceType ?? "Service type", status: session.stage },
-                  session.selectedSlot ? { label: session.selectedSlot, status: "slot" } : null,
-                  session.address ? { label: session.address, status: "address" } : null,
-                ].filter(Boolean).map((item, i) => (
-                  <div key={i} className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className={cn("w-2 h-2 rounded-full shrink-0",
-                        item!.status === "BOOKED" ? "bg-green-500" : item!.status === "NOT_INTERESTED" ? "bg-red-400" : "bg-blue-400")} />
-                      <span className="text-xs text-slate-700 truncate">{item!.label}</span>
-                    </div>
-                    <span className="text-[10px] font-semibold text-slate-400 shrink-0">
-                      {item!.status === "BOOKED" ? "Booked" : item!.status === "slot" ? "Slot" : item!.status === "address" ? "Addr" : "Open"}
-                    </span>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pipeline Status</p>
+              <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-700">{session.serviceType ?? lead?.serviceType ?? "Cleaning"}</span>
+                  <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full", stageBadgeColor[session.stage] ?? "bg-blue-50 text-blue-600")}>
+                    {session.stage}
+                  </span>
+                </div>
+                {(session.quotedPrice || session.bookedAmount) && (
+                  <div className="flex items-center gap-3">
+                    {session.quotedPrice && (
+                      <span className="text-[11px] text-slate-500">Quote: <strong className="text-slate-700">${session.quotedPrice}</strong></span>
+                    )}
+                    {session.bookedAmount && (
+                      <span className="text-[11px] text-green-600 font-bold">Booked: ${session.bookedAmount}</span>
+                    )}
                   </div>
-                ))}
+                )}
+                {session.selectedSlot && (
+                  <p className="text-[11px] text-slate-500">📅 {session.selectedSlot}</p>
+                )}
+                {session.address && (
+                  <p className="text-[11px] text-slate-500 leading-relaxed">📍 {session.address}</p>
+                )}
               </div>
             </div>
           )}
 
-          {/* Booking history */}
+          {/* ── Home Profile (from lead) ─────────────────────── */}
+          {lead && (lead.bedrooms || lead.bathrooms) && (
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Home Profile</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                {lead.bedrooms && (
+                  <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
+                    🛏 {lead.bedrooms} bed{lead.bedrooms !== "1" ? "s" : ""}
+                  </span>
+                )}
+                {lead.bathrooms && (
+                  <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
+                    🚿 {lead.bathrooms} bath{lead.bathrooms !== "1" ? "s" : ""}
+                  </span>
+                )}
+                {lead.extras && (() => {
+                  try {
+                    const e = JSON.parse(lead.extras);
+                    return Array.isArray(e) && e.length > 0 ? (
+                      <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
+                        ✨ {e.length} extra{e.length > 1 ? "s" : ""}
+                      </span>
+                    ) : null;
+                  } catch { return null; }
+                })()}
+              </div>
+            </div>
+          )}
+
+          {/* ── Booking History Timeline ─────────────────────── */}
           {jobs && jobs.length > 0 && (
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Booking History</p>
-              <div className="space-y-1.5">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Recent Bookings</p>
+              <div className="space-y-1.5 max-h-64 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {jobs.map((job) => (
-                  <div key={job.id} className="bg-slate-50 rounded-xl p-2.5">
-                    <p className="text-xs font-bold text-slate-700">{job.serviceType ?? "Cleaning"}</p>
-                    <p className="text-[10px] text-slate-400">{job.jobDate} · {job.frequency ?? "One-time"}{job.lastBookingPrice ? ` · $${job.lastBookingPrice}` : ""}</p>
+                  <div key={job.id} className="flex items-center gap-2.5 py-1.5 border-b border-slate-50 last:border-0">
+                    <span className={cn("w-2 h-2 rounded-full shrink-0", freqColor(job.frequency ?? null))} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-[11px] font-semibold text-slate-700 truncate">
+                          {job.frequency ?? "One-time"}
+                        </p>
+                        {job.lastBookingPrice ? (
+                          <p className="text-[11px] font-bold text-slate-800 shrink-0">${job.lastBookingPrice}</p>
+                        ) : null}
+                      </div>
+                      <p className="text-[10px] text-slate-400">{formatJobDate(job.jobDate ?? null)}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Divider */}
-          <div className="border-t border-slate-100" />
-
-          {/* Automation */}
-          <div>
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Automation</p>
+          {/* ── Automation ──────────────────────────────────── */}
+          <div className="border-t border-slate-100 pt-4">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Quick Actions</p>
             <div className="flex flex-col gap-1.5">
               <button
                 className="text-left text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                 onClick={() => toast.info("Create follow-up — coming soon")}
               >
-                Create follow-up
+                + Create follow-up
               </button>
               <button
                 className="text-left text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                 onClick={() => toast.info("Send quote link — coming soon")}
               >
-                Send quote link
+                + Send quote link
               </button>
             </div>
+          </div>
+
           </div>
         </div>
       )}
