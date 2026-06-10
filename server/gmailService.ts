@@ -336,3 +336,23 @@ export async function getNewMessagesSince(startHistoryId: string): Promise<Gmail
     return messages.filter(Boolean) as GmailMessage[];
   } catch { return []; }
 }
+
+/**
+ * Fetch a single attachment's raw bytes from Gmail API.
+ * Returns base64url-encoded data (convert to standard base64 for data URLs).
+ */
+export async function getAttachmentData(
+  messageId: string,
+  attachmentId: string
+): Promise<{ data: string; size: number }> {
+  const gmail = await getGmailClient();
+  const res = await gmail.users.messages.attachments.get({
+    userId: "me",
+    messageId,
+    id: attachmentId,
+  });
+  // Gmail returns base64url — convert to standard base64 for data URLs
+  const data = (res.data.data ?? "").replace(/-/g, "+").replace(/_/g, "/");
+  const size = res.data.size ?? 0;
+  return { data, size };
+}

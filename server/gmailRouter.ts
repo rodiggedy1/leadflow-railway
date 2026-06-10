@@ -21,6 +21,7 @@ import {
   markThreadUnread,
   archiveThread,
   setupGmailWatch,
+  getAttachmentData,
 } from "./gmailService";
 import { ENV } from "./_core/env";
 
@@ -399,6 +400,22 @@ Write the reply now:`;
         .from(gmailThreadMeta)
         .where(inArray(gmailThreadMeta.threadId, input.threadIds));
       return { meta: rows };
+    }),
+
+  /** Fetch attachment bytes from Gmail API and return as base64 data URL */
+  getAttachment: adminAgentProcedure
+    .input(z.object({
+      messageId: z.string(),
+      attachmentId: z.string(),
+      mimeType: z.string(),
+    }))
+    .query(async ({ input }) => {
+      await requireGmailConnected();
+      const { data, size } = await getAttachmentData(input.messageId, input.attachmentId);
+      return {
+        dataUrl: `data:${input.mimeType};base64,${data}`,
+        size,
+      };
     }),
 
   /** Upload a file attachment to S3 for use in email replies */

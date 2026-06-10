@@ -136,6 +136,64 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary }: { thread
   );
 }
 
+/** Renders a single attachment — image thumbnail or file download chip */
+function AttachmentItem({ messageId, att }: {
+  messageId: string;
+  att: { filename: string; mimeType: string; attachmentId: string };
+}) {
+  const isImage = att.mimeType.startsWith("image/");
+  const attachmentQuery = trpc.gmail.getAttachment.useQuery(
+    { messageId, attachmentId: att.attachmentId, mimeType: att.mimeType },
+    { staleTime: Infinity, retry: false }
+  );
+  if (isImage) {
+    return (
+      <div className="mt-2">
+        {attachmentQuery.isLoading ? (
+          <div className="w-48 h-32 rounded-xl bg-slate-100 flex items-center justify-center">
+            <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+          </div>
+        ) : attachmentQuery.data ? (
+          <a href={attachmentQuery.data.dataUrl} download={att.filename} target="_blank" rel="noreferrer">
+            <img
+              src={attachmentQuery.data.dataUrl}
+              alt={att.filename}
+              className="max-w-sm max-h-64 rounded-xl border border-slate-100 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+            />
+          </a>
+        ) : (
+          <div className="flex items-center gap-2 text-xs text-red-400">
+            <AlertCircle className="w-3.5 h-3.5" /> Failed to load image
+          </div>
+        )}
+      </div>
+    );
+  }
+  // Non-image: download chip
+  return (
+    <div className="mt-2">
+      {attachmentQuery.data ? (
+        <a
+          href={attachmentQuery.data.dataUrl}
+          download={att.filename}
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors"
+        >
+          <FileText className="w-3.5 h-3.5 text-slate-400" />
+          <span className="truncate max-w-[180px]">{att.filename}</span>
+        </a>
+      ) : attachmentQuery.isLoading ? (
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-400">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" /> {att.filename}
+        </div>
+      ) : (
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-100 bg-red-50 text-xs text-red-400">
+          <AlertCircle className="w-3.5 h-3.5" /> {att.filename}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MessageBubble({ msg }: { msg: GmailMessage }) {
   const sanitizedHtml = msg.bodyHtml ? DOMPurify.sanitize(msg.bodyHtml, { USE_PROFILES: { html: true } }) : null;
   const senderName = msg.from || msg.fromEmail || "?";
@@ -162,6 +220,14 @@ function MessageBubble({ msg }: { msg: GmailMessage }) {
       ) : (
         <div className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">
           {msg.bodyText || msg.snippet}
+        </div>
+      )}
+      {/* Attachments */}
+      {msg.attachments && msg.attachments.length > 0 && (
+        <div className="mt-3 flex flex-col gap-1">
+          {msg.attachments.map((att) => (
+            <AttachmentItem key={att.attachmentId} messageId={msg.id} att={att} />
+          ))}
         </div>
       )}
       {msg.sentBy && (
