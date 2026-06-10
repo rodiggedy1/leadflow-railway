@@ -2169,13 +2169,14 @@ export const schedulingRouter = router({
             eq(scheduleAssignments.jobDate, input.date),
             eq(scheduleAssignments.teamId, team.id),
           ));
-        const jobSvcMs = new Map(allJobs.map(j => [j.id, j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : 0]));
+        const jobSvcMs = new Map(allJobs.map(j => [j.id, j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : Infinity]));
         const active = assignments
           .filter(a => a.isManual !== 2)
           .sort((a, b) => {
-            // Sort by serviceDateTime so drive chain matches actual job order
-            const ta = jobSvcMs.get(a.cleanerJobId) ?? 0;
-            const tb = jobSvcMs.get(b.cleanerJobId) ?? 0;
+            // Sort by serviceDateTime so drive chain matches actual job order in the UI.
+            // Null serviceDateTime sorts LAST (Infinity) — never treat missing time as earliest.
+            const ta = jobSvcMs.get(a.cleanerJobId) ?? Infinity;
+            const tb = jobSvcMs.get(b.cleanerJobId) ?? Infinity;
             if (ta !== tb) return ta - tb;
             return (a.routeOrder ?? 0) - (b.routeOrder ?? 0);
           });
