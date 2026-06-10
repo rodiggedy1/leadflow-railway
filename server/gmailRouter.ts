@@ -9,7 +9,7 @@ import { router, adminAgentProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta } from "../drizzle/schema";
+import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents } from "../drizzle/schema";
 import { eq, or, inArray } from "drizzle-orm";
 import {
   listInboxThreads,
@@ -116,22 +116,25 @@ export const gmailRouter = router({
         inReplyToMessageId: input.inReplyToMessageId,
       });
 
-      // Log which agent sent this reply
-      if (result?.id && ctx.user) {
-        // Look up agent's profile photo from users table
-        const [agentRow] = await db
-          .select({ profilePhotoUrl: users.profilePhotoUrl })
-          .from(users)
-          .where(eq(users.openId, ctx.user.openId))
-          .limit(1);
-
-        await db.insert(gmailSentLog).values({
-          threadId: input.threadId,
-          messageId: result.id,
-          agentOpenId: ctx.user.openId,
-          agentName: ctx.user.name ?? "Agent",
-          agentPhotoUrl: agentRow?.profilePhotoUrl ?? null,
-        }).onDuplicateKeyUpdate({ set: { agentName: ctx.user.name ?? "Agent" } });
+            // Log which agent sent this reply (wrapped in try/catch — email already sent above)
+      try {
+        if (result?.messageId) {
+          // Look up agent's profile photo from agents table
+          const [agentRow] = await db
+            .select({ profilePhotoUrl: agents.profilePhotoUrl })
+            .from(agents)
+            .where(eq(agents.id, ctx.agent.agentId))
+            .limit(1);
+          await db.insert(gmailSentLog).values({
+            threadId: input.threadId,
+            messageId: result.messageId,
+            agentOpenId: String(ctx.agent.agentId),
+            agentName: ctx.agent.agentName ?? "Agent",
+            agentPhotoUrl: agentRow?.profilePhotoUrl ?? null,
+          }).onDuplicateKeyUpdate({ set: { agentName: ctx.agent.agentName ?? "Agent" } });
+        }
+      } catch (logErr) {
+        console.error("[sendReply] Failed to log agent attribution (non-fatal):", logErr);
       }
 
       return result;
