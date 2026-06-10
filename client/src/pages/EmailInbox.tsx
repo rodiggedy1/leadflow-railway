@@ -446,11 +446,12 @@ export default function EmailInbox() {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-7">
+              <div className="max-w-3xl mx-auto">
               {threadQuery.isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>}
               {threadQuery.isError && <div className="text-center py-12"><AlertCircle className="w-8 h-8 text-red-400 mx-auto mb-2" /><p className="text-sm text-red-500">{threadQuery.error.message}</p></div>}
               {selectedThread?.messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
               {selectedThread && (
-                <div className="bg-white border border-slate-200 rounded-[18px] shadow-[0_4px_20px_rgba(22,34,51,0.06)] max-w-3xl overflow-hidden">
+                <div className="bg-white border border-slate-200 rounded-[18px] shadow-[0_4px_20px_rgba(22,34,51,0.06)] overflow-hidden">
                   <div className="flex border-b border-slate-200">
                     {(["reply", "note"] as const).map((mode) => (
                       <button key={mode} onClick={() => setReplyMode(mode)}
@@ -485,6 +486,7 @@ export default function EmailInbox() {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </>
         )}
