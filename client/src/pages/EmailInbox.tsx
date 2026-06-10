@@ -547,7 +547,7 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
     { enabled: Boolean(validEmail), staleTime: 60_000, retry: false }
   );
 
-  const { lead, session, completedJobs: jobs, stats } = contextQuery.data ?? {};
+  const { customerName, customerPhone, completedJobs: jobs, stats } = contextQuery.data ?? {};
 
   const stageBadgeColor: Record<string, string> = {
     BOOKED: "bg-green-100 text-green-700",
@@ -559,7 +559,7 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
     QUOTE_SENT: "bg-blue-50 text-blue-600",
   };
 
-  const displayName = lead?.name ?? threadFrom ?? validEmail ?? "Unknown";
+  const displayName = customerName ?? threadFrom ?? validEmail ?? "Unknown";
   const firstName = displayName.split(" ")[0];
 
   // Frequency color coding
@@ -619,7 +619,7 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
                   )}
                 </div>
                 <p className="text-[11px] text-slate-400 truncate mt-0.5">{validEmail}</p>
-                {lead?.phone && <p className="text-[11px] text-slate-400 mt-0.5">{lead.phone}</p>}
+                {customerPhone && <p className="text-[11px] text-slate-400 mt-0.5">{customerPhone}</p>}
                 {customerSince && (
                   <p className="text-[10px] text-slate-400 mt-1">Customer since {customerSince}</p>
                 )}
@@ -660,68 +660,29 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
           )}
 
           {/* ── No customer record ──────────────────────────── */}
-          {!lead && (
+          {(!jobs || jobs.length === 0) && (
             <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
-              <p className="text-xs text-slate-400 italic">No customer record found</p>
+              <p className="text-xs text-slate-400 italic">No booking history found</p>
             </div>
           )}
 
-          {/* ── Active Pipeline Status ──────────────────────── */}
-          {session && (
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pipeline Status</p>
-              <div className="bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-100">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-700">{session.serviceType ?? lead?.serviceType ?? "Cleaning"}</span>
-                  <span className={cn("text-[10px] font-black px-2 py-0.5 rounded-full", stageBadgeColor[session.stage] ?? "bg-blue-50 text-blue-600")}>
-                    {session.stage}
-                  </span>
-                </div>
-                {(session.quotedPrice || session.bookedAmount) && (
-                  <div className="flex items-center gap-3">
-                    {session.quotedPrice && (
-                      <span className="text-[11px] text-slate-500">Quote: <strong className="text-slate-700">${session.quotedPrice}</strong></span>
-                    )}
-                    {session.bookedAmount && (
-                      <span className="text-[11px] text-green-600 font-bold">Booked: ${session.bookedAmount}</span>
-                    )}
-                  </div>
-                )}
-                {session.selectedSlot && (
-                  <p className="text-[11px] text-slate-500">📅 {session.selectedSlot}</p>
-                )}
-                {session.address && (
-                  <p className="text-[11px] text-slate-500 leading-relaxed">📍 {session.address}</p>
-                )}
-              </div>
-            </div>
-          )}
 
-          {/* ── Home Profile (from lead) ─────────────────────── */}
-          {lead && (lead.bedrooms || lead.bathrooms) && (
+
+          {/* ── Home Profile (from most recent job) ──────────────── */}
+          {jobs && jobs.length > 0 && (jobs[0].bedrooms || jobs[0].bathrooms) && (
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Home Profile</p>
               <div className="flex items-center gap-2 flex-wrap">
-                {lead.bedrooms && (
+                {jobs[0].bedrooms && (
                   <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
-                    🛏 {lead.bedrooms} bed{lead.bedrooms !== "1" ? "s" : ""}
+                    🛏 {jobs[0].bedrooms} bed{jobs[0].bedrooms !== 1 ? "s" : ""}
                   </span>
                 )}
-                {lead.bathrooms && (
+                {jobs[0].bathrooms && (
                   <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
-                    🚿 {lead.bathrooms} bath{lead.bathrooms !== "1" ? "s" : ""}
+                    🚿 {jobs[0].bathrooms} bath{jobs[0].bathrooms !== 1 ? "s" : ""}
                   </span>
                 )}
-                {lead.extras && (() => {
-                  try {
-                    const e = JSON.parse(lead.extras);
-                    return Array.isArray(e) && e.length > 0 ? (
-                      <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
-                        ✨ {e.length} extra{e.length > 1 ? "s" : ""}
-                      </span>
-                    ) : null;
-                  } catch { return null; }
-                })()}
               </div>
             </div>
           )}

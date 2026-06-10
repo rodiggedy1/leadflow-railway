@@ -284,34 +284,13 @@ Write the reply now:`;
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available." });
 
-      // Find lead by email
-      const [lead] = await db
+      // Query completed_jobs directly by email — no quoteLeads lookup needed
+      const allJobs = await db
         .select()
-        .from(quoteLeads)
-        .where(eq(quoteLeads.email, input.email))
-        .limit(1);
-
-      // Get most recent conversation session for this lead
-      let session = null;
-      if (lead) {
-        const sessions = await db
-          .select()
-          .from(conversationSessions)
-          .where(eq(conversationSessions.quoteLeadId, lead.id))
-          .orderBy(desc(conversationSessions.id))
-          .limit(1);
-        session = sessions[0] ?? null;
-      }
-
-      // Get ALL completed jobs by email or phone for stats + recent list
-      const allJobs = lead
-        ? await db
-            .select()
-            .from(completedJobs)
-            .where(or(eq(completedJobs.email, input.email), eq(completedJobs.phone, lead.phone ?? "")))
-            .orderBy(desc(completedJobs.jobDate))
-            .limit(200)
-        : [];
+        .from(completedJobs)
+        .where(eq(completedJobs.email, input.email))
+        .orderBy(desc(completedJobs.jobDate))
+        .limit(200);
 
       // Compute lifetime stats
       const jobCount = allJobs.length;
@@ -320,12 +299,15 @@ Write the reply now:`;
       const firstJobDate = allJobs.length > 0 ? allJobs[allJobs.length - 1].jobDate : null;
       const lastJobDate = allJobs.length > 0 ? allJobs[0].jobDate : null;
 
+      // Pull name and phone from the most recent job
+      const mostRecentJob = allJobs[0] ?? null;
+
       // Return only the 20 most recent jobs for the UI timeline
       const recentJobs = allJobs.slice(0, 20);
 
       return {
-        lead: lead ?? null,
-        session: session ?? null,
+        customerName: mostRecentJob?.name ?? null,
+        customerPhone: mostRecentJob?.phone ?? null,
         completedJobs: recentJobs,
         stats: { jobCount, lifetimeValue, avgJobPrice, firstJobDate, lastJobDate },
       };
