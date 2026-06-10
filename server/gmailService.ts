@@ -166,7 +166,10 @@ export async function listInboxThreads(opts: {
       try { return await getThreadDetail(t.id!); } catch { return null; }
     })
   );
-  return { threads: threads.filter(Boolean) as GmailThread[], nextPageToken };
+  // Sort by latest message date descending — Gmail's list order is not purely
+  // chronological and Promise.all doesn't preserve input order.
+  const sorted = (threads.filter(Boolean) as GmailThread[]).sort((a, b) => b.date - a.date);
+  return { threads: sorted, nextPageToken };
 }
 
 export async function getThreadDetail(threadId: string): Promise<GmailThread> {
