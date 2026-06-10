@@ -22,6 +22,7 @@ import {
   archiveThread,
   setupGmailWatch,
   getAttachmentData,
+  getConversationsUnreadCount,
 } from "./gmailService";
 import { ENV } from "./_core/env";
 
@@ -437,6 +438,13 @@ Write the reply now:`;
       const { url } = await storagePut(key, buf, input.mimeType);
       return { url, key, filename: input.filename, mimeType: input.mimeType, size: buf.length };
     }),
+
+  /** Return unread count for the Conversations tab (non-Thumbtack inbox threads) */
+  getUnreadCount: adminAgentProcedure.query(async () => {
+    await requireGmailConnected();
+    const count = await getConversationsUnreadCount();
+    return { count };
+  }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: adminAgentProcedure.mutation(async () => {

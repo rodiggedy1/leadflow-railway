@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -43,6 +43,7 @@ import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
+import { useLocation } from "wouter";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -1156,6 +1157,24 @@ const MessageList = memo(function MessageList({
                     unreadLeadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
                   )}>
                     {unreadLeadRepliesCount > 0 ? (unreadLeadRepliesCount > 9 ? "9+" : unreadLeadRepliesCount) : leadRepliesCount}
+                  </span>
+                )}
+              </button>
+              <button
+                title="Email Inbox"
+                onClick={() => navigateTo("/admin/inbox")}
+                className={cn(
+                  "relative h-7 w-7 flex items-center justify-center rounded-full transition-colors",
+                  "hover:bg-slate-100 text-slate-400"
+                )}
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {emailUnreadCount > 0 && (
+                  <span className={cn(
+                    "absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white",
+                    "bg-sky-500 animate-pulse"
+                  )}>
+                    {emailUnreadCount > 9 ? "9+" : emailUnreadCount}
                   </span>
                 )}
               </button>
@@ -2467,6 +2486,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const leadRepliesCount = leadReplies.length;
   const unreadLeadRepliesCount = (leadReplies as any[]).filter((l: any) => l.isUnread).length;
+  // ── Email inbox unread count ─────────────────────────────────────────────────
+  const [, navigateTo] = useLocation();
+  const { data: emailUnreadData } = trpc.gmail.getUnreadCount.useQuery(undefined, {
+    refetchInterval: 60_000,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const emailUnreadCount = emailUnreadData?.count ?? 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);

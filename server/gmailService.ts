@@ -391,3 +391,15 @@ export async function getAttachmentData(
   const size = res.data.size ?? 0;
   return { data, size };
 }
+
+/** Return the count of unread threads in the Conversations tab (non-Thumbtack) */
+export async function getConversationsUnreadCount(): Promise<number> {
+  const gmail = await getGmailClient();
+  // Use Gmail's q param: inbox, unread, not from thumbtack
+  const res = await gmail.users.threads.list({
+    userId: "me",
+    maxResults: 500,
+    q: "in:inbox is:unread -from:thumbtack.com",
+  });
+  return (res.data.threads ?? []).length;
+}
