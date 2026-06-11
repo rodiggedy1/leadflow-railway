@@ -133,7 +133,7 @@ Categories (pick exactly one):
 - refund_request: customer asking for refund, credit, or compensation
 - quote_request: customer asking for a price quote or estimate
 - booking_confirmation: confirming, scheduling, or rescheduling a cleaning appointment
-- recurring_cancellation: customer cancelling or pausing their recurring/subscription cleaning plan
+- recurring_cancellation: any cancellation of a recurring/subscription cleaning plan — including system-generated notifications from booking software that say "This Booking and all Future Bookings" or "Cancellation Type: This Booking and all Future Bookings". If the cancellation type mentions future bookings, always use this category.
 - payroll_issue: cleaner or staff pay, hours, or compensation issue
 - upset_customer: complaint, dissatisfied customer, negative feedback
 - revenue_opportunity: upsell, add-on service, referral, or new revenue potential
