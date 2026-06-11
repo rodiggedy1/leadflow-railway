@@ -1279,17 +1279,17 @@ export default function EmailInbox() {
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
   }).length;
 
-  // Auto-select the first thread when none is selected (e.g. on initial load or tab switch).
+  // Auto-select the first thread when tab or category filter changes.
   // Uses setSelectedThreadId directly — NOT selectThread — so it does NOT call markRead.
   // The thread is displayed but stays unread until the user explicitly clicks it.
-  const lastAutoSelectedTab = useRef<string | null>(null);
+  const lastAutoSelectedKey = useRef<string | null>(null);
   useEffect(() => {
-    if (selectedThreadId) return;           // already have a selection
     if (threads.length === 0) return;       // nothing loaded yet
-    if (lastAutoSelectedTab.current === activeTab) return; // already auto-selected for this tab
-    lastAutoSelectedTab.current = activeTab;
+    const key = `${activeTab}::${activeCategoryFilter ?? ""}`;
+    if (lastAutoSelectedKey.current === key) return; // already auto-selected for this tab+filter combo
+    lastAutoSelectedKey.current = key;
     setSelectedThreadId(threads[0].id);
-  }, [threads, selectedThreadId, activeTab]);
+  }, [threads, activeTab, activeCategoryFilter]);
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
