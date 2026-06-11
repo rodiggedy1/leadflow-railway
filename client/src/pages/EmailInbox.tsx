@@ -926,7 +926,7 @@ export default function EmailInbox() {
   const [showTemplates, setShowTemplates] = useState(false);
   // Glance panel state: which category is active as a filter
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
-  const [glancePanelOpen, setGlancePanelOpen] = useState(true);
+  const [glancePanelOpen, setGlancePanelOpen] = useState(false);
   // Agent assignment filter state
   const [activeAgentFilter, setActiveAgentFilter] = useState<number | null>(null);
   const [agentPanelOpen, setAgentPanelOpen] = useState(true);
