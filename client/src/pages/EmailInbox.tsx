@@ -1597,7 +1597,12 @@ export default function EmailInbox() {
               className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
             >
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today at a Glance</span>
-              <ChevronRight className={cn("w-3 h-3 text-slate-300 transition-transform", glancePanelOpen && "rotate-90")} />
+              <ChevronRight className={cn(
+                "w-3.5 h-3.5 transition-transform duration-200",
+                glancePanelOpen
+                  ? "text-violet-500 rotate-90"
+                  : "text-violet-400 animate-pulse"
+              )} />
             </button>
             {glancePanelOpen && (
               <div className="px-3 pb-3 space-y-1">
