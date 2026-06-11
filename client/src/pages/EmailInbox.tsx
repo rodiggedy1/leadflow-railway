@@ -1118,13 +1118,9 @@ export default function EmailInbox() {
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
   }).length;
 
-  // Auto-select the most recently received thread when inbox loads
-  useEffect(() => {
-    if (!selectedThreadId && threads.length > 0) {
-      selectThread(threads[0].id);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threads.length > 0 && !selectedThreadId]);
+  // Threads are only selected (and marked read) on explicit user click.
+  // No auto-select — auto-selecting would silently mark the first unread thread
+  // as read without the user intending to, corrupting the unread count.
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
