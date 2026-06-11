@@ -562,62 +562,88 @@ Write the reply now:`;
   // ── AI Glance procedures ─────────────────────────────────────────────────────
 
   /**
-   * Get the "Today at a Glance" summary: counts per category, from DB only.
-   * Pure DB read — no Gmail API, no LLM. Returns in <10ms.
+   * Get the "Today at a Glance" summary: counts per category.
+   * DB read for counts + Gmail API fetch for thread objects so the client
+   * can inject them into the list — guaranteeing count == visible threads.
    * staleTime on client: 60s.
    */
   getGlance: agentProcedure.query(async () => {
-    const db = await getDb();
-    if (!db) return { categories: [], totalProcessed: 0, totalPending: 0 };
+    const { db } = await requireGmailConnected();
 
     const rows = await db
       .select({
         threadId: gmailThreadMeta.threadId,
         aiCategory: gmailThreadMeta.aiCategory,
         aiUrgency: gmailThreadMeta.aiUrgency,
-        aiSummary: gmailThreadMeta.aiSummary,
         aiResolvedAt: gmailThreadMeta.aiResolvedAt,
-        aiProcessedAt: gmailThreadMeta.aiProcessedAt,
-        isInInbox: gmailThreadMeta.isInInbox,
       })
       .from(gmailThreadMeta)
       .where(isNotNull(gmailThreadMeta.aiCategory));
 
-    // Count by category, excluding resolved, 'general', and threads not in inbox
-    const counts: Record<string, { count: number; threadIds: string[]; urgentCount: number }> = {};
-    let totalProcessed = 0;
-
-    // Initialize all non-general categories with zero so they always appear
+    // Build category buckets — exclude resolved and general
+    const buckets: Record<string, { threadIds: string[]; urgentCount: number }> = {};
     const allCategories = Object.keys(GLANCE_CATEGORY_META).filter((c) => c !== "general") as GlanceCategory[];
     for (const cat of allCategories) {
-      counts[cat] = { count: 0, threadIds: [], urgentCount: 0 };
+      buckets[cat] = { threadIds: [], urgentCount: 0 };
     }
 
     for (const row of rows) {
       if (!row.aiCategory || row.aiCategory === "general") continue;
-      if (row.aiResolvedAt) continue; // resolved — hidden from glance
-      if (!row.isInInbox) continue; // not in inbox (archived) — exclude from counts
-      totalProcessed++;
-      if (!counts[row.aiCategory]) counts[row.aiCategory] = { count: 0, threadIds: [], urgentCount: 0 };
-      counts[row.aiCategory].count++;
-      counts[row.aiCategory].threadIds.push(row.threadId);
-      if (row.aiUrgency === "high") counts[row.aiCategory].urgentCount++;
+      if (row.aiResolvedAt) continue;
+      if (!buckets[row.aiCategory]) buckets[row.aiCategory] = { threadIds: [], urgentCount: 0 };
+      buckets[row.aiCategory].threadIds.push(row.threadId);
+      if (row.aiUrgency === "high") buckets[row.aiCategory].urgentCount++;
     }
 
-    const categories = Object.entries(counts)
-      // Always return all categories (including zeros) — client shows 0 for empty ones
-      .filter(([cat]) => cat !== "general")
-      .map(([category, data]) => ({
-        category: category as GlanceCategory,
-        ...GLANCE_CATEGORY_META[category as GlanceCategory],
-        count: data.count,
-        urgentCount: data.urgentCount,
-        threadIds: data.threadIds,
-      }))
-      // Sort by urgentCount desc, then count desc
+    // Fetch actual thread objects from Gmail for all non-empty categories.
+    // This guarantees that count == threads the client can actually display.
+    // Threads that have been archived/deleted from Gmail will simply not return
+    // from getThreadDetail and are excluded — keeping counts honest.
+    const allThreadIds = allCategories.flatMap((c) => buckets[c].threadIds);
+    const uniqueIds = Array.from(new Set(allThreadIds));
+
+    // Fetch in parallel (max 20 concurrent to avoid rate limits)
+    const BATCH = 20;
+    const threadMap = new Map<string, any>();
+    for (let i = 0; i < uniqueIds.length; i += BATCH) {
+      const batch = uniqueIds.slice(i, i + BATCH);
+      const results = await Promise.allSettled(batch.map((id) => getThreadDetail(id)));
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") threadMap.set(batch[idx], r.value);
+      });
+    }
+
+    // Build final categories using only threads that actually exist in Gmail
+    const categories = allCategories
+      .map((category) => {
+        const bucket = buckets[category];
+        const threads = bucket.threadIds
+          .map((id) => threadMap.get(id))
+          .filter(Boolean);
+        return {
+          category,
+          ...GLANCE_CATEGORY_META[category],
+          count: threads.length,
+          urgentCount: bucket.urgentCount,
+          threadIds: threads.map((t: any) => t.id),
+          threads, // full thread objects for client injection
+        };
+      })
       .sort((a, b) => b.urgentCount - a.urgentCount || b.count - a.count);
 
-    return { categories, totalProcessed };
+    // Also mark fetched threads as isInInbox=1 so future DB queries stay accurate
+    if (threadMap.size > 0) {
+      await Promise.all(
+        Array.from(threadMap.keys()).map((tid) =>
+          db.insert(gmailThreadMeta)
+            .values({ threadId: tid, isInInbox: 1 })
+            .onDuplicateKeyUpdate({ set: { isInInbox: 1 } })
+            .catch(() => {})
+        )
+      );
+    }
+
+    return { categories, totalProcessed: threadMap.size };
   }),
 
   /**

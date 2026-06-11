@@ -1440,10 +1440,19 @@ export default function EmailInbox() {
                       // Always reset selection and force auto-select to re-fire for the new filter
                       setSelectedThreadId(null);
                       lastAutoSelectedKey.current = null;
+                      // Inject the category's full thread objects into extraThreads
+                      // so they appear in the list even if not yet loaded via pagination
+                      if (newFilter) {
+                        const categoryData = glanceQuery.data?.categories.find((c) => c.category === newFilter);
+                        if (categoryData?.threads?.length) {
+                          setExtraThreads(categoryData.threads as any[]);
+                        }
+                      } else {
+                        setExtraThreads([]);
+                      }
                       // Switch to conversations tab so filter applies
                       if (activeTab === "unread" || activeTab === "all" || activeTab === "mine") {
                         setActiveTab("conversations");
-                        setExtraThreads([]);
                       }
                     }}
                   >
