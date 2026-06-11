@@ -927,6 +927,9 @@ export default function EmailInbox() {
   // Glance panel state: which category is active as a filter
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [glancePanelOpen, setGlancePanelOpen] = useState(true);
+  // Agent assignment filter state
+  const [activeAgentFilter, setActiveAgentFilter] = useState<number | null>(null);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(true);
 
   // Insert a canned template into the reply box, substituting {{first_name}} with the contact's first name
   const insertTemplate = (template: typeof CANNED_TEMPLATES[number]) => {
@@ -938,6 +941,13 @@ export default function EmailInbox() {
     setReplyMode("reply");
     setShowTemplates(false);
   };
+  // Agent assignment buckets — refreshes every 60s
+  const agentAssignmentsQuery = trpc.gmail.getAgentAssignments.useQuery(undefined, {
+    enabled: statusQuery.data?.connected === true,
+    staleTime: 60_000,
+    retry: false,
+  });
+
   // Today at a Glance — pure DB read, no LLM, stale after 60s
   const glanceQuery = trpc.gmail.getGlance.useQuery(undefined, {
     enabled: statusQuery.data?.connected === true,
@@ -971,7 +981,16 @@ export default function EmailInbox() {
       if (nextThread && nextThread.id !== resolvedId) {
         setSelectedThreadId(nextThread.id);
       }
+      // If we're in an agent filter and the resolved thread was the last one, clear the filter
+      if (activeAgentFilter !== null) {
+        const remaining = filteredThreadsRef.current.filter((t) => t.id !== resolvedId);
+        if (remaining.length === 0) {
+          setActiveAgentFilter(null);
+          setExtraThreads([]);
+        }
+      }
       utils.gmail.getGlance.invalidate();
+      utils.gmail.getAgentAssignments.invalidate();
       if (resolvedId) utils.gmail.getThreadAiData.invalidate({ threadId: resolvedId });
       toast.success("Resolved — removed from glance");
     },
@@ -1279,7 +1298,7 @@ export default function EmailInbox() {
     return b.date - a.date;
   });
   // Mine tab: client-side filter by assignedToId matching current agent
-  // Also apply glance category filter if one is active
+  // Also apply glance category filter or agent assignment filter if active
   // Keep ref in sync so mutation callbacks can read the latest list
   const threads = (() => {
     let base = activeTab === "mine"
@@ -1292,6 +1311,11 @@ export default function EmailInbox() {
       const cat = glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter);
       const catThreadIds = new Set(cat?.threadIds ?? []);
       base = base.filter((t) => catThreadIds.has(t.id));
+    }
+    if (activeAgentFilter !== null) {
+      const agentData = agentAssignmentsQuery.data?.agents.find((a) => a.agentId === activeAgentFilter);
+      const agentThreadIds = new Set((agentData?.threads ?? []).map((t: any) => t.id));
+      base = base.filter((t) => agentThreadIds.has(t.id));
     }
     return base;
   })();
@@ -1317,17 +1341,17 @@ export default function EmailInbox() {
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
   }).length;
 
-  // Auto-select the first thread when tab or category filter changes.
+  // Auto-select the first thread when tab or category/agent filter changes.
   // Uses setSelectedThreadId directly — NOT selectThread — so it does NOT call markRead.
   // The thread is displayed but stays unread until the user explicitly clicks it.
   const lastAutoSelectedKey = useRef<string | null>(null);
   useEffect(() => {
     if (threads.length === 0) return;       // nothing loaded yet
-    const key = `${activeTab}::${activeCategoryFilter ?? ""}`;
+    const key = `${activeTab}::${activeCategoryFilter ?? ""}::${activeAgentFilter ?? ""}`;
     if (lastAutoSelectedKey.current === key) return; // already auto-selected for this tab+filter combo
     lastAutoSelectedKey.current = key;
     setSelectedThreadId(threads[0].id);
-  }, [threads, activeTab, activeCategoryFilter]);
+  }, [threads, activeTab, activeCategoryFilter, activeAgentFilter]);
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
@@ -1440,6 +1464,117 @@ export default function EmailInbox() {
           </div>
         </div>
 
+        {/* Agent Assignment Buckets — show on all tabs */}
+        {agentAssignmentsQuery.data && agentAssignmentsQuery.data.agents.length > 0 && (
+          <div className="border-b border-slate-100">
+            <button
+              onClick={() => setAgentPanelOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
+            >
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assignments</span>
+              <ChevronRight className={cn("w-3 h-3 text-slate-300 transition-transform", agentPanelOpen && "rotate-90")} />
+            </button>
+            {agentPanelOpen && (
+              <div className="px-3 pb-3">
+                {/* Clear filter row */}
+                {activeAgentFilter !== null && (
+                  <button
+                    onClick={() => {
+                      setActiveAgentFilter(null);
+                      setExtraThreads([]);
+                      lastAutoSelectedKey.current = null;
+                    }}
+                    className="w-full flex items-center gap-1.5 text-[10px] font-semibold text-violet-600 hover:text-violet-700 px-2 py-1 mb-1 rounded-md hover:bg-violet-50 transition-colors"
+                  >
+                    <X className="w-3 h-3" /> Clear filter
+                  </button>
+                )}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {agentAssignmentsQuery.data.agents.map((agent) => {
+                    const isActive = activeAgentFilter === agent.agentId;
+                    const hasWork = agent.count > 0;
+                    const firstName = agent.agentName.split(" ")[0];
+                    return (
+                      <button
+                        key={agent.agentId}
+                        title={`${agent.agentName} — ${agent.count} open assignment${agent.count !== 1 ? "s" : ""}`}
+                        onClick={() => {
+                          if (isActive) {
+                            // Toggle off
+                            setActiveAgentFilter(null);
+                            setExtraThreads([]);
+                            lastAutoSelectedKey.current = null;
+                          } else {
+                            setActiveAgentFilter(agent.agentId);
+                            setSelectedThreadId(null);
+                            lastAutoSelectedKey.current = null;
+                            // Inject this agent's threads into extraThreads so they appear
+                            // even if not loaded via the current pagination
+                            if (agent.threads?.length) {
+                              setExtraThreads(agent.threads as any[]);
+                            } else {
+                              setExtraThreads([]);
+                            }
+                            // Switch to conversations tab so filter applies
+                            if (activeTab === "unread" || activeTab === "all" || activeTab === "mine") {
+                              setActiveTab("conversations");
+                            }
+                          }
+                        }}
+                        className={cn(
+                          "relative flex flex-col items-center gap-1 transition-all duration-150 group",
+                          !hasWork && "opacity-40"
+                        )}
+                      >
+                        {/* Avatar circle */}
+                        <div className={cn(
+                          "relative w-9 h-9 rounded-full overflow-hidden ring-2 transition-all duration-150",
+                          isActive
+                            ? "ring-violet-500 ring-offset-1"
+                            : hasWork
+                            ? "ring-slate-200 group-hover:ring-violet-300"
+                            : "ring-slate-100"
+                        )}>
+                          {agent.agentPhotoUrl ? (
+                            <img
+                              src={agent.agentPhotoUrl}
+                              alt={agent.agentName}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className={cn(
+                              "w-full h-full flex items-center justify-center font-black text-[11px]",
+                              isActive ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"
+                            )}>
+                              {getInitials(agent.agentName)}
+                            </div>
+                          )}
+                          {/* Count badge */}
+                          {hasWork && (
+                            <span className={cn(
+                              "absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full text-[9px] font-black leading-none flex items-center justify-center border border-white",
+                              isActive ? "bg-violet-600 text-white" : "bg-slate-700 text-white"
+                            )}>
+                              {agent.count}
+                            </span>
+                          )}
+                        </div>
+                        {/* Name label */}
+                        <span className={cn(
+                          "text-[9px] font-semibold leading-none max-w-[36px] truncate",
+                          isActive ? "text-violet-600" : "text-slate-400"
+                        )}>
+                          {firstName}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Today at a Glance panel — only on Inbox/Unread/All/Mine tabs, not Leads */}
         {activeTab !== "leads" && glanceQuery.data && glanceQuery.data.categories.length > 0 && (
           <div className="border-b border-slate-100">
@@ -1456,7 +1591,10 @@ export default function EmailInbox() {
                 {/* Clear filter row */}
                 {activeCategoryFilter && (
                   <button
-                    onClick={() => setActiveCategoryFilter(null)}
+                    onClick={() => {
+                      setActiveCategoryFilter(null);
+                      lastAutoSelectedKey.current = null;
+                    }}
                     className="w-full flex items-center gap-1.5 text-[10px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
                   >
                     <X className="w-3 h-3" /> Clear filter
@@ -1475,6 +1613,8 @@ export default function EmailInbox() {
                     onClick={() => {
                       const newFilter = activeCategoryFilter === cat.category ? null : cat.category;
                       setActiveCategoryFilter(newFilter);
+                      // Clear agent filter when switching to category filter
+                      setActiveAgentFilter(null);
                       // Always reset selection and force auto-select to re-fire for the new filter
                       setSelectedThreadId(null);
                       lastAutoSelectedKey.current = null;
@@ -1584,7 +1724,7 @@ export default function EmailInbox() {
               {activeCategoryFilter ? (
                 <>
                   <span className="text-2xl block mb-2">
-                    {glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter)?.emoji ?? "📭"}
+                    {glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter)?.emoji ?? "💭"}
                   </span>
                   <p className="text-xs font-semibold text-slate-500 mb-1">
                     {glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter)?.label ?? "Category"}
@@ -1593,6 +1733,20 @@ export default function EmailInbox() {
                   <button
                     onClick={() => { setActiveCategoryFilter(null); lastAutoSelectedKey.current = null; }}
                     className="mt-3 text-[10px] font-semibold text-blue-500 hover:text-blue-700"
+                  >
+                    ← Back to inbox
+                  </button>
+                </>
+              ) : activeAgentFilter !== null ? (
+                <>
+                  <span className="text-2xl block mb-2">📥</span>
+                  <p className="text-xs font-semibold text-slate-500 mb-1">
+                    {agentAssignmentsQuery.data?.agents.find((a) => a.agentId === activeAgentFilter)?.agentName ?? "Agent"}
+                  </p>
+                  <p className="text-xs text-slate-400">No open assignments</p>
+                  <button
+                    onClick={() => { setActiveAgentFilter(null); setExtraThreads([]); lastAutoSelectedKey.current = null; }}
+                    className="mt-3 text-[10px] font-semibold text-violet-500 hover:text-violet-700"
                   >
                     ← Back to inbox
                   </button>

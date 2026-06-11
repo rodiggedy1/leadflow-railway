@@ -742,6 +742,76 @@ Write the reply now:`;
       return { success: true };
     }),
 
+  /**
+   * Get agent assignment buckets — returns all active agents with their open
+   * (unresolved) assigned thread counts and full thread objects for filtering.
+   * "Open" means: assignedToId IS NOT NULL AND aiResolvedAt IS NULL.
+   */
+  getAgentAssignments: agentProcedure.query(async () => {
+    const { db } = await requireGmailConnected();
+
+    // 1. Get all active agents
+    const agentRows = await db
+      .select({ id: agents.id, name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
+      .from(agents)
+      .where(eq(agents.isActive, 1));
+
+    if (agentRows.length === 0) return { agents: [] };
+
+    // 2. Get all open assigned threads (not resolved, has an assignee)
+    const metaRows = await db
+      .select({
+        threadId: gmailThreadMeta.threadId,
+        assignedToId: gmailThreadMeta.assignedToId,
+        assignedToName: gmailThreadMeta.assignedToName,
+        assignedToPhotoUrl: gmailThreadMeta.assignedToPhotoUrl,
+        aiResolvedAt: gmailThreadMeta.aiResolvedAt,
+      })
+      .from(gmailThreadMeta)
+      .where(isNotNull(gmailThreadMeta.assignedToId));
+
+    // Filter to only unresolved
+    const openRows = metaRows.filter((r) => !r.aiResolvedAt);
+
+    // 3. Group thread IDs by agent ID
+    const threadsByAgent = new Map<number, string[]>();
+    for (const row of openRows) {
+      if (row.assignedToId == null) continue;
+      if (!threadsByAgent.has(row.assignedToId)) threadsByAgent.set(row.assignedToId, []);
+      threadsByAgent.get(row.assignedToId)!.push(row.threadId);
+    }
+
+    // 4. Fetch thread objects for all assigned threads (parallel, batched)
+    const allThreadIds = Array.from(new Set(openRows.map((r) => r.threadId)));
+    const BATCH = 20;
+    const threadMap = new Map<string, any>();
+    for (let i = 0; i < allThreadIds.length; i += BATCH) {
+      const batch = allThreadIds.slice(i, i + BATCH);
+      const results = await Promise.allSettled(batch.map((id) => getThreadDetail(id)));
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") threadMap.set(batch[idx], r.value);
+      });
+    }
+
+    // 5. Build per-agent result — include ALL active agents (0-count ones too)
+    const result = agentRows.map((agent) => {
+      const tids = threadsByAgent.get(agent.id) ?? [];
+      const threads = tids.map((id) => threadMap.get(id)).filter(Boolean);
+      return {
+        agentId: agent.id,
+        agentName: agent.name,
+        agentPhotoUrl: agent.profilePhotoUrl ?? null,
+        count: threads.length,
+        threads,
+      };
+    });
+
+    // Sort: agents with assignments first, then alphabetically
+    result.sort((a, b) => b.count - a.count || a.agentName.localeCompare(b.agentName));
+
+    return { agents: result };
+  }),
+
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {
     const topicName = ENV.gmailPubsubTopic;
