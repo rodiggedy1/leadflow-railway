@@ -1435,12 +1435,15 @@ export default function EmailInbox() {
                         : "hover:bg-slate-50"
                     )}
                     onClick={() => {
-                      setActiveCategoryFilter((prev) => prev === cat.category ? null : cat.category);
+                      const newFilter = activeCategoryFilter === cat.category ? null : cat.category;
+                      setActiveCategoryFilter(newFilter);
+                      // Always reset selection and force auto-select to re-fire for the new filter
+                      setSelectedThreadId(null);
+                      lastAutoSelectedKey.current = null;
                       // Switch to conversations tab so filter applies
                       if (activeTab === "unread" || activeTab === "all" || activeTab === "mine") {
                         setActiveTab("conversations");
                         setExtraThreads([]);
-                        setSelectedThreadId(null);
                       }
                     }}
                   >
@@ -1529,8 +1532,28 @@ export default function EmailInbox() {
             );
           })}
           {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
-            <div className="text-center py-12 text-slate-400 text-xs">
-              {debouncedQuery ? "No results" : activeTab === "leads" ? "No new leads" : activeTab === "conversations" ? "No conversations" : activeTab === "unread" ? "No unread messages" : activeTab === "mine" ? "No threads assigned to you" : "Inbox is empty"}
+            <div className="text-center py-12 px-4">
+              {activeCategoryFilter ? (
+                <>
+                  <span className="text-2xl block mb-2">
+                    {glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter)?.emoji ?? "📭"}
+                  </span>
+                  <p className="text-xs font-semibold text-slate-500 mb-1">
+                    {glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter)?.label ?? "Category"}
+                  </p>
+                  <p className="text-xs text-slate-400">No threads in this category right now</p>
+                  <button
+                    onClick={() => { setActiveCategoryFilter(null); lastAutoSelectedKey.current = null; }}
+                    className="mt-3 text-[10px] font-semibold text-blue-500 hover:text-blue-700"
+                  >
+                    ← Back to inbox
+                  </button>
+                </>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  {debouncedQuery ? "No results" : activeTab === "leads" ? "No new leads" : activeTab === "conversations" ? "No conversations" : activeTab === "unread" ? "No unread messages" : activeTab === "mine" ? "No threads assigned to you" : "Inbox is empty"}
+                </p>
+              )}
             </div>
           )}
           {threadsQuery.data?.nextPageToken && (
