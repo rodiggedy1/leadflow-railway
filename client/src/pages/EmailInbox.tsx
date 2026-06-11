@@ -1424,7 +1424,13 @@ export default function EmailInbox() {
                     <X className="w-3 h-3" /> Clear filter
                   </button>
                 )}
-                {glanceQuery.data.categories.map((cat) => (
+                {glanceQuery.data.categories.map((cat) => {
+                  // Only count threads that are actually visible in the current inbox list
+                  const allThreadIdSet = new Set(allThreads.map((t) => t.id));
+                  const visibleThreadIds = cat.threadIds.filter((id) => allThreadIdSet.has(id));
+                  const visibleCount = visibleThreadIds.length;
+                  if (visibleCount === 0) return null;
+                  return (
                   <div
                     key={cat.category}
                     className={cn(
@@ -1473,7 +1479,8 @@ export default function EmailInbox() {
                       <CheckCircle2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
