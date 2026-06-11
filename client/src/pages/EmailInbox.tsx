@@ -938,9 +938,15 @@ export default function EmailInbox() {
     onError: (err) => toast.error(err.message || "AI analysis failed"),
   });
   const resolveGlanceMutation = trpc.gmail.resolveGlanceItem.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, { threadId: resolvedId }) => {
+      // Advance to the next thread in the current list before the glance refreshes
+      const currentIndex = filteredThreads.findIndex((t) => t.id === resolvedId);
+      const nextThread = filteredThreads[currentIndex + 1] ?? filteredThreads[currentIndex - 1] ?? null;
+      if (nextThread && nextThread.id !== resolvedId) {
+        setSelectedThreadId(nextThread.id);
+      }
       utils.gmail.getGlance.invalidate();
-      if (selectedThreadId) utils.gmail.getThreadAiData.invalidate({ threadId: selectedThreadId });
+      if (resolvedId) utils.gmail.getThreadAiData.invalidate({ threadId: resolvedId });
       toast.success("Resolved — removed from glance");
     },
     onError: (err) => toast.error(err.message || "Failed to resolve"),
