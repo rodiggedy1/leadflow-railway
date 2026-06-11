@@ -756,6 +756,34 @@ export default function EmailInbox() {
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const utils = trpc.useUtils();
 
+  // ---------------------------------------------------------------------------
+  // Local read-state overlay (Gmail/HubSpot pattern)
+  // ---------------------------------------------------------------------------
+  // `localReadSet` tracks thread IDs the user has opened in this session.
+  // It is the authoritative client-side override: a thread is "effectively unread"
+  // only if the server says so AND the user hasn't opened it yet.
+  // This gives instant UI feedback without any cache patching or query key juggling.
+  // On the next server refetch the server truth reconciles naturally.
+  // ---------------------------------------------------------------------------
+  const localReadSet = useRef<Set<string>>(new Set());
+  const [readTick, setReadTick] = useState(0); // increment to force re-render after set mutation
+
+  /** Mark a thread as locally read and trigger a re-render. */
+  function markLocallyRead(threadId: string) {
+    if (!localReadSet.current.has(threadId)) {
+      localReadSet.current.add(threadId);
+      setReadTick((n) => n + 1);
+    }
+  }
+
+  /**
+   * Derived unread truth: server flag AND not locally read.
+   * Use this everywhere instead of `thread.isUnread` directly.
+   */
+  function effectiveIsUnread(thread: GmailThread): boolean {
+    return thread.isUnread && !localReadSet.current.has(thread.id);
+  }
+
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => setDebouncedQuery(searchQuery), 400);
@@ -786,6 +814,10 @@ export default function EmailInbox() {
     retry: false,
   });
   const trueUnreadCount = unreadCountQuery.data?.count ?? 0;
+  // Effective badge count: server total minus threads we've already opened locally
+  // (clamped to 0). Reconciles to server truth on next getUnreadCount refetch.
+  // `readTick` is referenced here so React re-renders when localReadSet changes.
+  const effectiveUnreadCount = Math.max(0, trueUnreadCount - (readTick >= 0 ? localReadSet.current.size : 0));
 
   // Build the Gmail search query by composing tab filter + user search
   const TAB_QUERIES: Record<string, string> = {
@@ -830,39 +862,11 @@ export default function EmailInbox() {
   );
 
   const markReadMutation = trpc.gmail.markRead.useMutation({
-    onMutate: ({ threadId }) => {
-      // Optimistically mark the thread as read across ALL cached thread list queries
-      // so it disappears from the Unread tab immediately and the unread dot clears
-      // on the Convos tab — without waiting for the API round-trip.
-      // Patch every cached variant of listThreads (different tab queries)
-      const patchThreads = (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          threads: old.threads.map((t: any) =>
-            t.id === threadId ? { ...t, isUnread: false } : t
-          ),
-        };
-      };
-      // Patch current tab's cache
-      utils.gmail.listThreads.setData({ maxResults: 100, query: composedQuery }, patchThreads);
-      // Also patch the other common tab queries so unread dot clears everywhere
-      const otherQueries = [
-        "-from:thumbtack.com",
-        "-from:thumbtack.com is:unread",
-        "from:thumbtack.com",
-        "",
-        undefined,
-      ];
-      for (const q of otherQueries) {
-        utils.gmail.listThreads.setData({ maxResults: 100, query: q }, patchThreads);
-      }
-    },
     onSuccess: (_data, { threadId }) => {
-      // Invalidate thread list and the specific thread to get fresh data
+      // Server confirmed read — invalidate to reconcile, but UI already updated
+      // via localReadSet (set in selectThread before this mutation fires).
       utils.gmail.listThreads.invalidate();
       utils.gmail.getThread.invalidate({ threadId });
-      // Decrement the unread count badge
       utils.gmail.getUnreadCount.invalidate();
     },
   });
@@ -982,7 +986,11 @@ export default function EmailInbox() {
     setReplyText("");
     setReplyMode("reply");
     const thread = threadsQuery.data?.threads.find((t) => t.id === threadId);
-    if (thread?.isUnread) markReadMutation.mutate({ threadId });
+    if (effectiveIsUnread(thread ?? { isUnread: false } as any)) {
+      // Mark locally read immediately — UI updates before API responds
+      markLocallyRead(threadId);
+      markReadMutation.mutate({ threadId });
+    }
   }
 
   function sendReply() {
@@ -1090,8 +1098,21 @@ export default function EmailInbox() {
       })
     : sortedThreads;
   const selectedThread = threadQuery.data ?? null;
-  // Local unread count (from loaded threads) — used only as fallback display
-  const _localUnreadCount = allThreads.filter((t) => t.isUnread).length;
+
+  // Reconcile localReadSet after every server refetch:
+  // once the server confirms a thread is no longer unread, remove it from the
+  // local set so it no longer inflates the optimistic decrement.
+  useEffect(() => {
+    let changed = false;
+    for (const t of allThreads) {
+      if (!t.isUnread && localReadSet.current.has(t.id)) {
+        localReadSet.current.delete(t.id);
+        changed = true;
+      }
+    }
+    if (changed) setReadTick((n) => n + 1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allThreads]);
   const mineCount = sortedThreads.filter((t) => {
     const meta = metaMap.get(t.id);
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
@@ -1147,7 +1168,7 @@ export default function EmailInbox() {
           <div className="flex items-center gap-1 flex-wrap">
             {([
               { key: "conversations", label: "Convos", badge: 0 },
-              { key: "unread", label: "Unread", badge: trueUnreadCount },
+              { key: "unread", label: "Unread", badge: effectiveUnreadCount },
               { key: "leads", label: "Leads", badge: 0 },
               { key: "all", label: "All", badge: 0 },
               { key: "mine", label: "Mine", badge: mineCount },
@@ -1197,12 +1218,20 @@ export default function EmailInbox() {
               <p className="text-xs text-red-500">{threadsQuery.error.message}</p>
             </div>
           )}
-          {threads.map((t) => {
+          {threads
+            // On the Unread tab, hide threads the user has already opened this session
+            // (effectiveIsUnread = false). On all other tabs, show everything.
+            .filter((t) => activeTab === "unread" ? effectiveIsUnread(t) : true)
+            .map((t) => {
             const meta = metaMap.get(t.id);
+            // Pass effective unread state so the UNREAD pill and bold text also clear instantly
+            const threadWithEffectiveUnread: GmailThread = effectiveIsUnread(t)
+              ? t
+              : { ...t, isUnread: false };
             return (
               <ThreadItem
                 key={t.id}
-                thread={t}
+                thread={threadWithEffectiveUnread}
                 active={t.id === selectedThreadId}
                 onClick={() => selectThread(t.id)}
                 isIssue={(meta?.isIssue ?? 0) === 1}
