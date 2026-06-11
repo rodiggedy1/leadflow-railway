@@ -1429,7 +1429,6 @@ export default function EmailInbox() {
                   const allThreadIdSet = new Set(allThreads.map((t) => t.id));
                   const visibleThreadIds = cat.threadIds.filter((id) => allThreadIdSet.has(id));
                   const visibleCount = visibleThreadIds.length;
-                  if (visibleCount === 0) return null;
                   return (
                   <div
                     key={cat.category}
