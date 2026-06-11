@@ -2473,7 +2473,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const { data: emailUnreadData } = trpc.gmail.getUnreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
     retry: false,
-    staleTime: 30_000,
+    staleTime: 0, // Always refetch when cache is invalidated (e.g. after marking email read in inbox)
   });
   const emailUnreadCount = emailUnreadData?.count ?? 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -4608,7 +4608,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 Inbox
                 {emailUnreadCount > 0 && (
                   <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
-                    {emailUnreadCount > 9 ? "9+" : emailUnreadCount}
+                    {emailUnreadCount}
                   </span>
                 )}
               </button>
