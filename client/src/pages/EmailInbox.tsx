@@ -745,7 +745,7 @@ export default function EmailInbox() {
   const [replyText, setReplyText] = useState("");
   const [replyMode, setReplyMode] = useState<"reply" | "note">("reply");
   const [showCompose, setShowCompose] = useState(false);
-  const [activeTab, setActiveTab] = useState<"conversations" | "leads" | "all" | "mine">("conversations");
+  const [activeTab, setActiveTab] = useState<"conversations" | "unread" | "leads" | "all" | "mine">("conversations");
   const [extraThreads, setExtraThreads] = useState<GmailThread[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<{
@@ -779,9 +779,18 @@ export default function EmailInbox() {
     setReplyMode("reply");
     setShowTemplates(false);
   };
+  // Accurate unread count from Gmail label API (not limited to the current page)
+  const unreadCountQuery = trpc.gmail.getUnreadCount.useQuery(undefined, {
+    enabled: statusQuery.data?.connected === true,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const trueUnreadCount = unreadCountQuery.data?.count ?? 0;
+
   // Build the Gmail search query by composing tab filter + user search
   const TAB_QUERIES: Record<string, string> = {
     conversations: "-from:thumbtack.com",
+    unread: "-from:thumbtack.com is:unread",
     leads: "from:thumbtack.com",
     all: "",
     mine: "-from:thumbtack.com", // same base as conversations, filtered client-side by assignedToId
@@ -1040,7 +1049,8 @@ export default function EmailInbox() {
       })
     : sortedThreads;
   const selectedThread = threadQuery.data ?? null;
-  const unreadCount = allThreads.filter((t) => t.isUnread).length;
+  // Local unread count (from loaded threads) — used only as fallback display
+  const _localUnreadCount = allThreads.filter((t) => t.isUnread).length;
   const mineCount = sortedThreads.filter((t) => {
     const meta = metaMap.get(t.id);
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
@@ -1095,7 +1105,8 @@ export default function EmailInbox() {
           {/* Tab filter */}
           <div className="flex items-center gap-1 flex-wrap">
             {([
-              { key: "conversations", label: "Convos", badge: activeTab === "conversations" ? unreadCount : 0 },
+              { key: "conversations", label: "Convos", badge: 0 },
+              { key: "unread", label: "Unread", badge: trueUnreadCount },
               { key: "leads", label: "Leads", badge: 0 },
               { key: "all", label: "All", badge: 0 },
               { key: "mine", label: "Mine", badge: mineCount },
@@ -1111,7 +1122,7 @@ export default function EmailInbox() {
                 className={cn(
                   "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
                   activeTab === key
-                    ? key === "mine" ? "bg-violet-600 text-white" : "bg-slate-900 text-white"
+                    ? key === "mine" ? "bg-violet-600 text-white" : key === "unread" ? "bg-blue-600 text-white" : "bg-slate-900 text-white"
                     : "text-slate-500 hover:bg-slate-100"
                 )}
               >
@@ -1162,7 +1173,7 @@ export default function EmailInbox() {
           })}
           {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
             <div className="text-center py-12 text-slate-400 text-xs">
-              {debouncedQuery ? "No results" : activeTab === "leads" ? "No new leads" : activeTab === "conversations" ? "No conversations" : activeTab === "mine" ? "No threads assigned to you" : "Inbox is empty"}
+              {debouncedQuery ? "No results" : activeTab === "leads" ? "No new leads" : activeTab === "conversations" ? "No conversations" : activeTab === "unread" ? "No unread messages" : activeTab === "mine" ? "No threads assigned to you" : "Inbox is empty"}
             </div>
           )}
           {threadsQuery.data?.nextPageToken && (
