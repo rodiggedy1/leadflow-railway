@@ -830,10 +830,49 @@ export default function EmailInbox() {
   );
 
   const markReadMutation = trpc.gmail.markRead.useMutation({
-    onSuccess: () => { utils.gmail.listThreads.invalidate(); if (selectedThreadId) utils.gmail.getThread.invalidate({ threadId: selectedThreadId }); },
+    onMutate: ({ threadId }) => {
+      // Optimistically mark the thread as read across ALL cached thread list queries
+      // so it disappears from the Unread tab immediately and the unread dot clears
+      // on the Convos tab — without waiting for the API round-trip.
+      // Patch every cached variant of listThreads (different tab queries)
+      const patchThreads = (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          threads: old.threads.map((t: any) =>
+            t.id === threadId ? { ...t, isUnread: false } : t
+          ),
+        };
+      };
+      // Patch current tab's cache
+      utils.gmail.listThreads.setData({ maxResults: 100, query: composedQuery }, patchThreads);
+      // Also patch the other common tab queries so unread dot clears everywhere
+      const otherQueries = [
+        "-from:thumbtack.com",
+        "-from:thumbtack.com is:unread",
+        "from:thumbtack.com",
+        "",
+        undefined,
+      ];
+      for (const q of otherQueries) {
+        utils.gmail.listThreads.setData({ maxResults: 100, query: q }, patchThreads);
+      }
+    },
+    onSuccess: (_data, { threadId }) => {
+      // Invalidate thread list and the specific thread to get fresh data
+      utils.gmail.listThreads.invalidate();
+      utils.gmail.getThread.invalidate({ threadId });
+      // Decrement the unread count badge
+      utils.gmail.getUnreadCount.invalidate();
+    },
   });
   const markUnreadMutation = trpc.gmail.markUnread.useMutation({
-    onSuccess: () => { utils.gmail.listThreads.invalidate(); if (selectedThreadId) utils.gmail.getThread.invalidate({ threadId: selectedThreadId }); },
+    onSuccess: () => {
+      utils.gmail.listThreads.invalidate();
+      if (selectedThreadId) utils.gmail.getThread.invalidate({ threadId: selectedThreadId });
+      // Re-fetch unread count since we just marked something unread
+      utils.gmail.getUnreadCount.invalidate();
+    },
   });
   const archiveMutation = trpc.gmail.archiveThread.useMutation({
     onSuccess: () => { toast.success("Thread archived"); setSelectedThreadId(null); utils.gmail.listThreads.invalidate(); },
@@ -931,6 +970,8 @@ export default function EmailInbox() {
       onGmailNewMessages: useCallback(() => {
         utils.gmail.listThreads.invalidate();
         if (selectedThreadId) utils.gmail.getThread.invalidate({ threadId: selectedThreadId });
+        // New messages may be unread — refresh the badge count
+        utils.gmail.getUnreadCount.invalidate();
       }, [utils, selectedThreadId]),
     },
     { enabled: statusQuery.data?.connected === true }
