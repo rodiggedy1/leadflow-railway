@@ -1249,14 +1249,24 @@ export default function EmailInbox() {
   const assignThreadMutation = trpc.gmail.assignThread.useMutation({
     onSuccess: (data) => {
       threadMetaQuery.refetch();
+      utils.gmail.getAgentAssignments.invalidate();
       toast.success(`Assigned to ${data.assignedToName}`);
       setAssignDropdownOpen(null);
     },
     onError: (err) => toast.error(err.message || "Failed to assign thread"),
   });
   const unassignThreadMutation = trpc.gmail.unassignThread.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, { threadId: unassignedId }) => {
       threadMetaQuery.refetch();
+      utils.gmail.getAgentAssignments.invalidate();
+      // If we're filtering by an agent and this was their last thread, clear the filter
+      if (activeAgentFilter !== null) {
+        const remaining = filteredThreadsRef.current.filter((t) => t.id !== unassignedId);
+        if (remaining.length === 0) {
+          setActiveAgentFilter(null);
+          setExtraThreads([]);
+        }
+      }
       toast.success("Assignment removed");
       setAssignDropdownOpen(null);
     },
