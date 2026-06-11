@@ -1118,9 +1118,17 @@ export default function EmailInbox() {
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
   }).length;
 
-  // Threads are only selected (and marked read) on explicit user click.
-  // No auto-select — auto-selecting would silently mark the first unread thread
-  // as read without the user intending to, corrupting the unread count.
+  // Auto-select the first thread when none is selected (e.g. on initial load or tab switch).
+  // Uses setSelectedThreadId directly — NOT selectThread — so it does NOT call markRead.
+  // The thread is displayed but stays unread until the user explicitly clicks it.
+  const lastAutoSelectedTab = useRef<string | null>(null);
+  useEffect(() => {
+    if (selectedThreadId) return;           // already have a selection
+    if (threads.length === 0) return;       // nothing loaded yet
+    if (lastAutoSelectedTab.current === activeTab) return; // already auto-selected for this tab
+    lastAutoSelectedTab.current = activeTab;
+    setSelectedThreadId(threads[0].id);
+  }, [threads, selectedThreadId, activeTab]);
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
