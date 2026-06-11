@@ -878,6 +878,8 @@ export default function EmailInbox() {
   // On the next server refetch the server truth reconciles naturally.
   // ---------------------------------------------------------------------------
   const localReadSet = useRef<Set<string>>(new Set());
+  // Ref so mutation callbacks can read the current filtered list without closure staleness
+  const filteredThreadsRef = useRef<GmailThread[]>([]);
   const [readTick, setReadTick] = useState(0); // increment to force re-render after set mutation
 
   /** Mark a thread as locally read and trigger a re-render. */
@@ -940,8 +942,8 @@ export default function EmailInbox() {
   const resolveGlanceMutation = trpc.gmail.resolveGlanceItem.useMutation({
     onSuccess: (_data, { threadId: resolvedId }) => {
       // Advance to the next thread in the current list before the glance refreshes
-      const currentIndex = filteredThreads.findIndex((t) => t.id === resolvedId);
-      const nextThread = filteredThreads[currentIndex + 1] ?? filteredThreads[currentIndex - 1] ?? null;
+      const currentIndex = filteredThreadsRef.current.findIndex((t) => t.id === resolvedId);
+      const nextThread = filteredThreadsRef.current[currentIndex + 1] ?? filteredThreadsRef.current[currentIndex - 1] ?? null;
       if (nextThread && nextThread.id !== resolvedId) {
         setSelectedThreadId(nextThread.id);
       }
@@ -1240,6 +1242,7 @@ export default function EmailInbox() {
   });
   // Mine tab: client-side filter by assignedToId matching current agent
   // Also apply glance category filter if one is active
+  // Keep ref in sync so mutation callbacks can read the latest list
   const threads = (() => {
     let base = activeTab === "mine"
       ? sortedThreads.filter((t) => {
@@ -1254,6 +1257,7 @@ export default function EmailInbox() {
     }
     return base;
   })();
+  filteredThreadsRef.current = threads;
   const selectedThread = threadQuery.data ?? null;
 
   // Reconcile localReadSet after every server refetch:
