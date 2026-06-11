@@ -2814,6 +2814,19 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   assignedToPhotoUrl: varchar("assignedToPhotoUrl", { length: 1024 }),
   /** When the assignment was made */
   assignedAt: timestamp("assignedAt"),
+  // ── AI Glance columns ──────────────────────────────────────────────────────
+  /** AI-classified category for the glance panel */
+  aiCategory: varchar("aiCategory", { length: 50 }),
+  /** AI-generated summary stored as JSON string: string[] of bullet points */
+  aiSummary: text("aiSummary"),
+  /** AI-assessed urgency: 'high' | 'medium' | 'low' */
+  aiUrgency: varchar("aiUrgency", { length: 10 }),
+  /** Gmail historyId at the time AI last ran — used for cache invalidation */
+  aiHistoryId: varchar("aiHistoryId", { length: 64 }),
+  /** When AI last processed this thread */
+  aiProcessedAt: timestamp("aiProcessedAt"),
+  /** When this glance item was marked resolved by an agent */
+  aiResolvedAt: timestamp("aiResolvedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

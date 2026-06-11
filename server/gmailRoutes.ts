@@ -3,6 +3,7 @@
  */
 import type { Express } from "express";
 import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
+import { enqueueThread } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { getDb } from "./db";
@@ -109,6 +110,9 @@ export function registerGmailRoutes(app: Express) {
       if (newMessages.length > 0) {
         console.log(`[Gmail] ${newMessages.length} new message(s) received`);
         broadcastOpsUpdate("gmail_new_messages");
+        // Enqueue affected threads for AI re-processing (non-blocking)
+        const affectedThreadIds = Array.from(new Set(newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
+        for (const tid of affectedThreadIds) enqueueThread(tid);
       }
 
       res.status(200).send("ok");

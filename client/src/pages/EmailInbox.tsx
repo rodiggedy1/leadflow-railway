@@ -14,7 +14,7 @@ import DOMPurify from "dompurify";
 import {
   Mail, Search, Paperclip, Link2, Send, RefreshCw,
   Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag, X, FileText,
-  UserCheck, ChevronDown,
+  UserCheck, ChevronDown, CheckCircle2, ChevronRight,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -538,7 +538,39 @@ function ComposeModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail: string | null; threadFrom?: string | null }) {
+const GLANCE_CATEGORY_LABELS: Record<string, { label: string; emoji: string }> = {
+  refund_request:       { label: "Refund request",       emoji: "🔴" },
+  quote_request:        { label: "Quote request",        emoji: "🟠" },
+  booking_confirmation: { label: "Booking confirmation", emoji: "🟢" },
+  payroll_issue:        { label: "Payroll issue",        emoji: "⚠️" },
+  upset_customer:       { label: "Upset customer",       emoji: "☕" },
+  revenue_opportunity:  { label: "Revenue opportunity",  emoji: "📈" },
+  general:              { label: "General",              emoji: "📧" },
+};
+
+function CustomerContextPanel({
+  threadFromEmail,
+  threadFrom,
+  threadId,
+  aiCategory,
+  aiSummary,
+  aiUrgency,
+  aiProcessedAt,
+  onProcessThread,
+  isProcessing,
+  onResolveGlance,
+}: {
+  threadFromEmail: string | null;
+  threadFrom?: string | null;
+  threadId?: string | null;
+  aiCategory?: string | null;
+  aiSummary?: string | null;
+  aiUrgency?: string | null;
+  aiProcessedAt?: Date | null;
+  onProcessThread?: () => void;
+  isProcessing?: boolean;
+  onResolveGlance?: () => void;
+}) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const validEmail = threadFromEmail && emailRegex.test(threadFromEmail) ? threadFromEmail : null;
 
@@ -629,7 +661,87 @@ function CustomerContextPanel({ threadFromEmail, threadFrom }: { threadFromEmail
 
           <div className="p-4 space-y-5">
 
-          {/* ── Lifetime Value Stats ────────────────────────── */}
+          {/* ── AI Thread Summary ────────────────────────────────── */}
+          {threadId && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">AI Summary</p>
+                {!aiSummary && (
+                  <button
+                    onClick={onProcessThread}
+                    disabled={isProcessing}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors"
+                  >
+                    {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    {isProcessing ? "Analyzing…" : "Analyze"}
+                  </button>
+                )}
+              </div>
+              {aiSummary ? (
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  {aiCategory && GLANCE_CATEGORY_LABELS[aiCategory] && (
+                    <div className="flex items-center justify-between mb-2.5">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">
+                        <span>{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
+                        {GLANCE_CATEGORY_LABELS[aiCategory].label}
+                      </span>
+                      {aiUrgency === "high" && (
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">URGENT</span>
+                      )}
+                      {aiUrgency === "medium" && (
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">MEDIUM</span>
+                      )}
+                    </div>
+                  )}
+                  <ul className="space-y-1">
+                    {(() => {
+                      try {
+                        const bullets: string[] = JSON.parse(aiSummary);
+                        return bullets.map((b, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-700">
+                            <span className="text-slate-300 mt-0.5 shrink-0">•</span>
+                            <span>{b}</span>
+                          </li>
+                        ));
+                      } catch {
+                        return <li className="text-[11px] text-slate-500">{aiSummary}</li>;
+                      }
+                    })()}
+                  </ul>
+                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
+                    <p className="text-[9px] text-slate-300">
+                      {aiProcessedAt ? new Date(aiProcessedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={onProcessThread}
+                        disabled={isProcessing}
+                        className="text-[9px] font-semibold text-slate-400 hover:text-blue-600 disabled:opacity-50 transition-colors"
+                      >
+                        {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : "↻ refresh"}
+                      </button>
+                      {aiCategory && aiCategory !== "general" && (
+                        <button
+                          onClick={onResolveGlance}
+                          className="text-[9px] font-semibold text-slate-400 hover:text-green-600 transition-colors"
+                        >
+                          ✓ resolve
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
+                  <Sparkles className="w-4 h-4 text-slate-300 mx-auto mb-1" />
+                  <p className="text-[10px] text-slate-400">No AI summary yet</p>
+                  <p className="text-[9px] text-slate-300 mt-0.5">Will auto-process in background</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Lifetime Value Stats ────────────────── */}
           {stats && stats.jobCount > 0 && (
             <div>
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Lifetime Value</p>
@@ -796,6 +908,9 @@ export default function EmailInbox() {
   const agentsQuery = trpc.gmail.listAgentsForAssignment.useQuery(undefined, { staleTime: 120_000, retry: false, enabled: statusQuery.data?.connected === true });
   const [assignDropdownOpen, setAssignDropdownOpen] = useState<string | null>(null); // threadId of open dropdown
   const [showTemplates, setShowTemplates] = useState(false);
+  // Glance panel state: which category is active as a filter
+  const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
+  const [glancePanelOpen, setGlancePanelOpen] = useState(true);
 
   // Insert a canned template into the reply box, substituting {{first_name}} with the contact's first name
   const insertTemplate = (template: typeof CANNED_TEMPLATES[number]) => {
@@ -807,6 +922,25 @@ export default function EmailInbox() {
     setReplyMode("reply");
     setShowTemplates(false);
   };
+  // Today at a Glance — pure DB read, no LLM, stale after 60s
+  const glanceQuery = trpc.gmail.getGlance.useQuery(undefined, {
+    enabled: statusQuery.data?.connected === true,
+    staleTime: 60_000,
+    retry: false,
+  });
+  // Per-thread AI summary for the right panel
+  const threadAiQuery = trpc.gmail.getThreadAiData.useQuery(
+    { threadId: selectedThreadId! },
+    { enabled: Boolean(selectedThreadId) && statusQuery.data?.connected === true, staleTime: 120_000, retry: false }
+  );
+  const processThreadMutation = trpc.gmail.processThread.useMutation({
+    onSuccess: () => { utils.gmail.getThreadAiData.invalidate({ threadId: selectedThreadId! }); utils.gmail.getGlance.invalidate(); },
+  });
+  const resolveGlanceMutation = trpc.gmail.resolveGlanceItem.useMutation({
+    onSuccess: () => { utils.gmail.getGlance.invalidate(); toast.success("Marked resolved"); },
+    onError: (err) => toast.error(err.message || "Failed to resolve"),
+  });
+
   // Accurate unread count from Gmail label API (not limited to the current page)
   const unreadCountQuery = trpc.gmail.getUnreadCount.useQuery(undefined, {
     enabled: statusQuery.data?.connected === true,
@@ -976,6 +1110,9 @@ export default function EmailInbox() {
         if (selectedThreadId) utils.gmail.getThread.invalidate({ threadId: selectedThreadId });
         // New messages may be unread — refresh the badge count
         utils.gmail.getUnreadCount.invalidate();
+        // Refresh glance counts (worker will have re-processed affected threads)
+        utils.gmail.getGlance.invalidate();
+        if (selectedThreadId) utils.gmail.getThreadAiData.invalidate({ threadId: selectedThreadId });
       }, [utils, selectedThreadId]),
     },
     { enabled: statusQuery.data?.connected === true }
@@ -1091,12 +1228,21 @@ export default function EmailInbox() {
     return b.date - a.date;
   });
   // Mine tab: client-side filter by assignedToId matching current agent
-  const threads = activeTab === "mine"
-    ? sortedThreads.filter((t) => {
-        const meta = metaMap.get(t.id);
-        return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
-      })
-    : sortedThreads;
+  // Also apply glance category filter if one is active
+  const threads = (() => {
+    let base = activeTab === "mine"
+      ? sortedThreads.filter((t) => {
+          const meta = metaMap.get(t.id);
+          return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
+        })
+      : sortedThreads;
+    if (activeCategoryFilter) {
+      const cat = glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter);
+      const catThreadIds = new Set(cat?.threadIds ?? []);
+      base = base.filter((t) => catThreadIds.has(t.id));
+    }
+    return base;
+  })();
   const selectedThread = threadQuery.data ?? null;
 
   // Reconcile localReadSet after every server refetch:
@@ -1171,10 +1317,10 @@ export default function EmailInbox() {
           {/* Tab filter — Row 1: primary tabs */}
           <div className="flex items-center gap-0.5">
             {([
-              { key: "conversations", label: "Inbox" },
-              { key: "unread", label: "Unread", badge: effectiveUnreadCount },
-              { key: "leads", label: "Leads" },
-            ] as const).map(({ key, label, badge }) => (
+              { key: "conversations" as const, label: "Inbox", badge: undefined as number | undefined },
+              { key: "unread" as const, label: "Unread", badge: effectiveUnreadCount as number | undefined },
+              { key: "leads" as const, label: "Leads", badge: undefined as number | undefined },
+            ]).map(({ key, label, badge }) => (
               <button
                 key={key}
                 onClick={() => {
@@ -1207,9 +1353,9 @@ export default function EmailInbox() {
           {/* Tab filter — Row 2: sub-filters */}
           <div className="flex items-center gap-0.5 mt-0.5">
             {([
-              { key: "all", label: "All" },
-              { key: "mine", label: "Mine", badge: mineCount },
-            ] as const).map(({ key, label, badge }) => (
+              { key: "all" as const, label: "All", badge: undefined as number | undefined },
+              { key: "mine" as const, label: "Mine", badge: mineCount as number | undefined },
+            ]).map(({ key, label, badge }) => (
               <button
                 key={key}
                 onClick={() => {
@@ -1240,6 +1386,83 @@ export default function EmailInbox() {
             ))}
           </div>
         </div>
+
+        {/* Today at a Glance panel — only on Inbox/Unread/All/Mine tabs, not Leads */}
+        {activeTab !== "leads" && glanceQuery.data && glanceQuery.data.categories.length > 0 && (
+          <div className="border-b border-slate-100">
+            {/* Glance header */}
+            <button
+              onClick={() => setGlancePanelOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
+            >
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today at a Glance</span>
+              <ChevronRight className={cn("w-3 h-3 text-slate-300 transition-transform", glancePanelOpen && "rotate-90")} />
+            </button>
+            {glancePanelOpen && (
+              <div className="px-3 pb-3 space-y-1">
+                {/* Clear filter row */}
+                {activeCategoryFilter && (
+                  <button
+                    onClick={() => setActiveCategoryFilter(null)}
+                    className="w-full flex items-center gap-1.5 text-[10px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                  >
+                    <X className="w-3 h-3" /> Clear filter
+                  </button>
+                )}
+                {glanceQuery.data.categories.map((cat) => (
+                  <div
+                    key={cat.category}
+                    className={cn(
+                      "group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-150",
+                      activeCategoryFilter === cat.category
+                        ? "bg-slate-900 text-white"
+                        : "hover:bg-slate-50"
+                    )}
+                    onClick={() => {
+                      setActiveCategoryFilter((prev) => prev === cat.category ? null : cat.category);
+                      // Switch to conversations tab so filter applies
+                      if (activeTab === "unread" || activeTab === "all" || activeTab === "mine") {
+                        setActiveTab("conversations");
+                        setExtraThreads([]);
+                        setSelectedThreadId(null);
+                      }
+                    }}
+                  >
+                    <span className="text-base leading-none shrink-0">{cat.emoji}</span>
+                    <span className={cn(
+                      "flex-1 text-[11px] font-semibold truncate",
+                      activeCategoryFilter === cat.category ? "text-white" : "text-slate-700"
+                    )}>
+                      {cat.label}
+                    </span>
+                    <span className={cn(
+                      "text-[11px] font-black shrink-0",
+                      activeCategoryFilter === cat.category ? "text-white" : cat.urgentCount > 0 ? "text-red-500" : "text-slate-400"
+                    )}>
+                      {cat.count}
+                    </span>
+                    {/* Resolve button — only shown on hover */}
+                    <button
+                      className={cn(
+                        "shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded",
+                        activeCategoryFilter === cat.category ? "text-white/70 hover:text-white" : "text-slate-400 hover:text-green-600"
+                      )}
+                      title="Mark all resolved"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Resolve all threads in this category
+                        cat.threadIds.forEach((tid) => resolveGlanceMutation.mutate({ threadId: tid }));
+                        if (activeCategoryFilter === cat.category) setActiveCategoryFilter(null);
+                      }}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Thread list */}
         <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1653,7 +1876,18 @@ export default function EmailInbox() {
       </main>
 
       {/* Customer context panel */}
-      <CustomerContextPanel threadFromEmail={selectedThread?.fromEmail ?? null} threadFrom={selectedThread?.from ?? null} />
+      <CustomerContextPanel
+        threadFromEmail={selectedThread?.fromEmail ?? null}
+        threadFrom={selectedThread?.from ?? null}
+        threadId={selectedThreadId}
+        aiCategory={threadAiQuery.data?.aiCategory ?? null}
+        aiSummary={threadAiQuery.data?.aiSummary ?? null}
+        aiUrgency={threadAiQuery.data?.aiUrgency ?? null}
+        aiProcessedAt={threadAiQuery.data?.aiProcessedAt ?? null}
+        onProcessThread={() => selectedThreadId && processThreadMutation.mutate({ threadId: selectedThreadId })}
+        isProcessing={processThreadMutation.isPending}
+        onResolveGlance={() => selectedThreadId && resolveGlanceMutation.mutate({ threadId: selectedThreadId })}
+      />
 
       {showCompose && <ComposeModal onClose={() => setShowCompose(false)} />}
     </div>
