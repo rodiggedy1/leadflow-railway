@@ -1526,33 +1526,36 @@ export default function EmailInbox() {
                           !hasWork && "opacity-40"
                         )}
                       >
-                        {/* Avatar circle */}
-                        <div className={cn(
-                          "relative w-9 h-9 rounded-full overflow-hidden ring-2 transition-all duration-150",
-                          isActive
-                            ? "ring-violet-500 ring-offset-1"
-                            : hasWork
-                            ? "ring-slate-200 group-hover:ring-violet-300"
-                            : "ring-slate-100"
-                        )}>
-                          {agent.agentPhotoUrl ? (
-                            <img
-                              src={agent.agentPhotoUrl}
-                              alt={agent.agentName}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className={cn(
-                              "w-full h-full flex items-center justify-center font-black text-[11px]",
-                              isActive ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"
-                            )}>
-                              {getInitials(agent.agentName)}
-                            </div>
-                          )}
-                          {/* Count badge */}
+                        {/* Avatar circle + badge wrapper (relative, NOT overflow-hidden) */}
+                        <div className="relative w-9 h-9">
+                          {/* The image circle is overflow-hidden but the badge sits outside it */}
+                          <div className={cn(
+                            "w-9 h-9 rounded-full overflow-hidden ring-2 transition-all duration-150",
+                            isActive
+                              ? "ring-violet-500 ring-offset-1"
+                              : hasWork
+                              ? "ring-slate-200 group-hover:ring-violet-300"
+                              : "ring-slate-100"
+                          )}>
+                            {agent.agentPhotoUrl ? (
+                              <img
+                                src={agent.agentPhotoUrl}
+                                alt={agent.agentName}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className={cn(
+                                "w-full h-full flex items-center justify-center font-black text-[11px]",
+                                isActive ? "bg-violet-600 text-white" : "bg-slate-100 text-slate-600"
+                              )}>
+                                {getInitials(agent.agentName)}
+                              </div>
+                            )}
+                          </div>
+                          {/* Count badge — outside overflow-hidden so it's never clipped */}
                           {hasWork && (
                             <span className={cn(
-                              "absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full text-[9px] font-black leading-none flex items-center justify-center border border-white",
+                              "absolute -top-1 -right-1 min-w-[17px] h-[17px] px-0.5 rounded-full text-[9px] font-black leading-none flex items-center justify-center border-2 border-white shadow-sm",
                               isActive ? "bg-violet-600 text-white" : "bg-slate-700 text-white"
                             )}>
                               {agent.count}
