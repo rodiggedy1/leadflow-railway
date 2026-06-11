@@ -1118,18 +1118,21 @@ export default function EmailInbox() {
     return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
   }).length;
 
-  // Auto-select the first thread on initial load (when no thread is selected yet).
+  // Auto-select the first thread whenever the selected thread is null and threads are loaded.
   // Uses setSelectedThreadId directly — NOT selectThread — so it does NOT trigger
   // markRead. The thread is displayed but stays unread until the user explicitly clicks it.
-  const hasAutoSelected = useRef(false);
+  // We track the last tab we auto-selected for so that switching tabs always triggers a new auto-select.
+  const lastAutoSelectedTab = useRef<string | null>(null);
   useEffect(() => {
-    if (hasAutoSelected.current) return;
-    if (selectedThreadId) { hasAutoSelected.current = true; return; }
-    if (threads.length > 0) {
-      hasAutoSelected.current = true;
-      setSelectedThreadId(threads[0].id);
-    }
-  }, [threads, selectedThreadId]);
+    // If a thread is already selected, nothing to do.
+    if (selectedThreadId) return;
+    // If threads haven't loaded yet, wait.
+    if (threads.length === 0) return;
+    // Auto-select the first thread for this tab (fires again whenever activeTab changes).
+    if (lastAutoSelectedTab.current === activeTab) return;
+    lastAutoSelectedTab.current = activeTab;
+    setSelectedThreadId(threads[0].id);
+  }, [threads, selectedThreadId, activeTab]);
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
@@ -1360,12 +1363,12 @@ export default function EmailInbox() {
                   size="sm"
                   className="text-xs font-semibold gap-1.5 h-8"
                   onClick={() => {
-                    if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId });
+                    if (effectiveIsUnread(selectedThread!)) markReadMutation.mutate({ threadId: selectedThreadId });
                     else markUnreadMutation.mutate({ threadId: selectedThreadId });
                   }}
                   disabled={markReadMutation.isPending || markUnreadMutation.isPending}
                 >
-                  {selectedThread?.isUnread
+                  {effectiveIsUnread(selectedThread!)
                     ? <><MailCheck className="w-3.5 h-3.5" /> Mark read</>
                     : <><MailOpen className="w-3.5 h-3.5" /> Mark unread</>}
                 </Button>
