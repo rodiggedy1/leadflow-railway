@@ -32,6 +32,7 @@ export type GlanceCategory =
   | "refund_request"
   | "quote_request"
   | "booking_confirmation"
+  | "recurring_cancellation"
   | "payroll_issue"
   | "upset_customer"
   | "revenue_opportunity"
@@ -41,6 +42,7 @@ export const GLANCE_CATEGORY_META: Record<GlanceCategory, { label: string; emoji
   refund_request:        { label: "Waiting for refund",      emoji: "🔴", color: "text-red-600" },
   quote_request:         { label: "Quote requests",          emoji: "🟠", color: "text-orange-500" },
   booking_confirmation:  { label: "Booking confirmations",   emoji: "🟢", color: "text-green-600" },
+  recurring_cancellation: { label: "Recurring cancellations", emoji: "🚫", color: "text-rose-600" },
   payroll_issue:         { label: "Payroll issue",           emoji: "⚠️",  color: "text-yellow-600" },
   upset_customer:        { label: "Upset customers",         emoji: "☕", color: "text-amber-700" },
   revenue_opportunity:   { label: "Revenue opportunity",     emoji: "📈", color: "text-blue-600" },
@@ -131,6 +133,7 @@ Categories (pick exactly one):
 - refund_request: customer asking for refund, credit, or compensation
 - quote_request: customer asking for a price quote or estimate
 - booking_confirmation: confirming, scheduling, or rescheduling a cleaning appointment
+- recurring_cancellation: customer cancelling or pausing their recurring/subscription cleaning plan
 - payroll_issue: cleaner or staff pay, hours, or compensation issue
 - upset_customer: complaint, dissatisfied customer, negative feedback
 - revenue_opportunity: upsell, add-on service, referral, or new revenue potential
@@ -153,7 +156,7 @@ Return ONLY valid JSON. No markdown, no explanation.`,
             properties: {
               category: {
                 type: "string",
-                enum: ["refund_request", "quote_request", "booking_confirmation", "payroll_issue", "upset_customer", "revenue_opportunity", "general"],
+                enum: ["refund_request", "quote_request", "booking_confirmation", "recurring_cancellation", "payroll_issue", "upset_customer", "revenue_opportunity", "general"],
               },
               summary: {
                 type: "array",
