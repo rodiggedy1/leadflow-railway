@@ -709,6 +709,39 @@ Write the reply now:`;
       };
     }),
 
+  /**
+   * Manually override the AI category for a thread.
+   * Clears aiResolvedAt so the thread re-appears in the glance panel under the new category.
+   */
+  recategorizeThread: agentProcedure
+    .input(z.object({
+      threadId: z.string(),
+      category: z.enum([
+        "refund_request", "quote_request", "booking_confirmation",
+        "recurring_cancellation", "payroll_issue", "upset_customer",
+        "revenue_opportunity", "general",
+      ]),
+    }))
+    .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
+      await db
+        .insert(gmailThreadMeta)
+        .values({
+          threadId: input.threadId,
+          aiCategory: input.category,
+          aiResolvedAt: null,
+          isIssue: 0,
+        })
+        .onDuplicateKeyUpdate({
+          set: {
+            aiCategory: input.category,
+            aiResolvedAt: null,
+            updatedAt: new Date(),
+          },
+        });
+      return { success: true };
+    }),
+
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {
     const topicName = ENV.gmailPubsubTopic;

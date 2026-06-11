@@ -17,6 +17,13 @@ import {
   UserCheck, ChevronDown, CheckCircle2, ChevronRight,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // ---------------------------------------------------------------------------
 // Canned reply templates
@@ -291,7 +298,7 @@ function NotConnectedBanner() {
   );
 }
 
-function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedToName, assignedToPhotoUrl }: { thread: GmailThread; active: boolean; onClick: () => void; isIssue?: boolean; issueSummary?: string | null; assignedToName?: string | null; assignedToPhotoUrl?: string | null }) {
+function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedToName, assignedToPhotoUrl, aiCategory }: { thread: GmailThread; active: boolean; onClick: () => void; isIssue?: boolean; issueSummary?: string | null; assignedToName?: string | null; assignedToPhotoUrl?: string | null; aiCategory?: string | null }) {
   const senderName = thread.from || thread.fromEmail || "?";
   const accentColor = isIssue ? "#dc2626" : senderHex(senderName);
   return (
@@ -357,6 +364,12 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
             {thread.isUnread && (
               <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
                 UNREAD
+              </span>
+            )}
+            {aiCategory && aiCategory !== "general" && GLANCE_CATEGORY_LABELS[aiCategory] && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                <span className="text-[10px] leading-none">{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
+                {GLANCE_CATEGORY_LABELS[aiCategory].label}
               </span>
             )}
             {assignedToName && (
@@ -544,8 +557,9 @@ const GLANCE_CATEGORY_LABELS: Record<string, { label: string; emoji: string }> =
   booking_confirmation: { label: "Booking confirmation", emoji: "🟢" },
   payroll_issue:        { label: "Payroll issue",        emoji: "⚠️" },
   upset_customer:       { label: "Upset customer",       emoji: "☕" },
-  revenue_opportunity:  { label: "Revenue opportunity",  emoji: "📈" },
-  general:              { label: "General",              emoji: "📧" },
+  revenue_opportunity:       { label: "Revenue opportunity",  emoji: "📈" },
+  recurring_cancellation:    { label: "Recurring cancellation", emoji: "🚫" },
+  general:                   { label: "General",              emoji: "📧" },
 };
 
 function CustomerContextPanel({
@@ -939,6 +953,16 @@ export default function EmailInbox() {
     onSuccess: () => { utils.gmail.getThreadAiData.invalidate({ threadId: selectedThreadId! }); utils.gmail.getGlance.invalidate(); },
     onError: (err) => toast.error(err.message || "AI analysis failed"),
   });
+  const recategorizeThreadMutation = trpc.gmail.recategorizeThread.useMutation({
+    onSuccess: (_data, { threadId }) => {
+      threadMetaQuery.refetch();
+      utils.gmail.getThreadAiData.invalidate({ threadId });
+      utils.gmail.getGlance.invalidate();
+      toast.success("Category updated");
+    },
+    onError: (err) => toast.error(err.message || "Failed to update category"),
+  });
+
   const resolveGlanceMutation = trpc.gmail.resolveGlanceItem.useMutation({
     onSuccess: (_data, { threadId: resolvedId }) => {
       // Advance to the next thread in the current list before the glance refreshes
@@ -1537,6 +1561,7 @@ export default function EmailInbox() {
                 issueSummary={meta?.issueSummary ?? null}
                 assignedToName={meta?.assignedToName ?? null}
                 assignedToPhotoUrl={meta?.assignedToPhotoUrl ?? null}
+                aiCategory={meta?.aiCategory ?? null}
               />
             );
           })}
@@ -1662,6 +1687,67 @@ export default function EmailInbox() {
                       : <CheckCircle2 className="w-3.5 h-3.5" />}
                     Resolve
                   </Button>
+                )}
+                {/* Categorize dropdown */}
+                {selectedThreadId && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={cn(
+                          "text-xs font-semibold gap-1.5 h-8 transition-colors",
+                          threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general"
+                            ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                            : "hover:border-slate-300 text-slate-500"
+                        )}
+                        disabled={recategorizeThreadMutation.isPending}
+                        title="Set or change AI category"
+                      >
+                        {threadAiQuery.data?.aiCategory && GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory]
+                          ? <><span>{GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory].emoji}</span> {GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory].label}</>
+                          : <>Categorize</>}
+                        <ChevronDown className="w-3 h-3 opacity-60" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="min-w-[200px]">
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Set category</p>
+                      </div>
+                      {Object.entries(GLANCE_CATEGORY_LABELS)
+                        .filter(([key]) => key !== "general")
+                        .map(([key, meta]) => (
+                          <DropdownMenuItem
+                            key={key}
+                            className={cn(
+                              "text-xs gap-2 cursor-pointer",
+                              threadAiQuery.data?.aiCategory === key && "bg-slate-50 font-semibold"
+                            )}
+                            onClick={() => recategorizeThreadMutation.mutate({
+                              threadId: selectedThreadId,
+                              category: key as any,
+                            })}
+                          >
+                            <span>{meta.emoji}</span>
+                            {meta.label}
+                            {threadAiQuery.data?.aiCategory === key && (
+                              <span className="ml-auto text-[9px] text-slate-400">current</span>
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-xs gap-2 cursor-pointer text-slate-400"
+                        onClick={() => recategorizeThreadMutation.mutate({
+                          threadId: selectedThreadId,
+                          category: "general",
+                        })}
+                      >
+                        <span>📧</span>
+                        General (remove from glance)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
                 {/* Assign button with dropdown */}
                 <div className="relative">
