@@ -1601,9 +1601,17 @@ export default function EmailInbox() {
                       "text-xs font-semibold gap-1.5 h-8 transition-colors",
                       "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
                     )}
-                    onClick={() => selectedThreadId && resolveGlanceMutation.mutate({ threadId: selectedThreadId })}
+                    onClick={() => {
+                      if (!selectedThreadId) return;
+                      resolveGlanceMutation.mutate({ threadId: selectedThreadId });
+                      // Also mark as read if currently unread
+                      if (effectiveIsUnread(selectedThread ?? { isUnread: false } as any)) {
+                        markLocallyRead(selectedThreadId);
+                        markReadMutation.mutate({ threadId: selectedThreadId });
+                      }
+                    }}
                     disabled={resolveGlanceMutation.isPending}
-                    title="Remove from Today at a Glance"
+                    title="Resolve and mark as read"
                   >
                     {resolveGlanceMutation.isPending
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
