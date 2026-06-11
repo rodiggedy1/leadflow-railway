@@ -981,13 +981,27 @@ export default function EmailInbox() {
   // Accurate unread count from Gmail label API (not limited to the current page)
   const unreadCountQuery = trpc.gmail.getUnreadCount.useQuery(undefined, {
     enabled: statusQuery.data?.connected === true,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
     retry: false,
   });
   const trueUnreadCount = unreadCountQuery.data?.count ?? 0;
-  // Effective badge count: server total minus threads we've already opened locally
-  // (clamped to 0). Reconciles to server truth on next getUnreadCount refetch.
-  // `readTick` is referenced here so React re-renders when localReadSet changes.
+
+  // Track the last server count we saw so we can reset localReadSet when it syncs
+  const lastServerUnreadCount = useRef<number | null>(null);
+  useEffect(() => {
+    if (unreadCountQuery.data !== undefined) {
+      // Server just gave us a fresh count — reset local optimistic adjustments
+      // so we don't permanently over-subtract from the badge
+      localReadSet.current = new Set();
+      setReadTick((n) => n + 1);
+      lastServerUnreadCount.current = unreadCountQuery.data.count;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unreadCountQuery.dataUpdatedAt]);
+
+  // Effective badge count: server total minus threads opened since last server sync.
+  // Resets to server truth every 30s. `readTick` forces re-render after local reads.
   const effectiveUnreadCount = Math.max(0, trueUnreadCount - (readTick >= 0 ? localReadSet.current.size : 0));
 
   // Build the Gmail search query by composing tab filter + user search
