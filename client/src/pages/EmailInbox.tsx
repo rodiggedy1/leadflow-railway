@@ -1160,13 +1160,46 @@ export default function EmailInbox() {
               className="pl-8 bg-slate-50 border-slate-200 rounded-lg text-xs h-8"
             />
           </div>
-          {/* Tab filter */}
-          <div className="flex items-center gap-1 flex-wrap">
+          {/* Tab filter — Row 1: primary tabs */}
+          <div className="flex items-center gap-0.5">
             {([
-              { key: "conversations", label: "Convos", badge: 0 },
+              { key: "conversations", label: "Inbox" },
               { key: "unread", label: "Unread", badge: effectiveUnreadCount },
-              { key: "leads", label: "Leads", badge: 0 },
-              { key: "all", label: "All", badge: 0 },
+              { key: "leads", label: "Leads" },
+            ] as const).map(({ key, label, badge }) => (
+              <button
+                key={key}
+                onClick={() => {
+                  if (activeTab === key) return;
+                  setActiveTab(key);
+                  setExtraThreads([]);
+                  setSelectedThreadId(null);
+                }}
+                className={cn(
+                  "relative flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
+                  activeTab === key
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                )}
+              >
+                {label}
+                {badge != null && badge > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold leading-none",
+                    activeTab === key
+                      ? "bg-white/20 text-white"
+                      : "bg-blue-100 text-blue-700"
+                  )}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          {/* Tab filter — Row 2: sub-filters */}
+          <div className="flex items-center gap-0.5 mt-0.5">
+            {([
+              { key: "all", label: "All" },
               { key: "mine", label: "Mine", badge: mineCount },
             ] as const).map(({ key, label, badge }) => (
               <button
@@ -1178,13 +1211,23 @@ export default function EmailInbox() {
                   setSelectedThreadId(null);
                 }}
                 className={cn(
-                  "text-[11px] font-semibold px-3 py-1 rounded-full transition-colors",
+                  "flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-md transition-all duration-150",
                   activeTab === key
-                    ? key === "mine" ? "bg-violet-600 text-white" : key === "unread" ? "bg-blue-600 text-white" : "bg-slate-900 text-white"
-                    : "text-slate-500 hover:bg-slate-100"
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                 )}
               >
-                {label}{badge > 0 ? ` (${badge})` : ""}
+                {label}
+                {badge != null && badge > 0 && (
+                  <span className={cn(
+                    "inline-flex items-center justify-center min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] font-bold leading-none",
+                    activeTab === key
+                      ? "bg-white/20 text-white"
+                      : "bg-violet-100 text-violet-700"
+                  )}>
+                    {badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
