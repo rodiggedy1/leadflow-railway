@@ -935,6 +935,7 @@ export default function EmailInbox() {
   );
   const processThreadMutation = trpc.gmail.processThread.useMutation({
     onSuccess: () => { utils.gmail.getThreadAiData.invalidate({ threadId: selectedThreadId! }); utils.gmail.getGlance.invalidate(); },
+    onError: (err) => toast.error(err.message || "AI analysis failed"),
   });
   const resolveGlanceMutation = trpc.gmail.resolveGlanceItem.useMutation({
     onSuccess: () => { utils.gmail.getGlance.invalidate(); toast.success("Marked resolved"); },

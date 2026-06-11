@@ -10,7 +10,8 @@ import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents } from "../drizzle/schema";
-import { eq, or, inArray, desc } from "drizzle-orm";
+import { eq, or, inArray, desc, isNotNull, isNull } from "drizzle-orm";
+import { processThread, enqueueThread, GLANCE_CATEGORY_META, type GlanceCategory } from "./gmailGlanceWorker";
 import {
   listInboxThreads,
   getThreadDetail,
@@ -535,6 +536,121 @@ Write the reply now:`;
     const avgResponseMs = firstReplyByThread.size > 0 ? null : null; // placeholder — extend later
     return { unread, flagged, assigned, avgResponseMs, repliedThreadCount: firstReplyByThread.size };
   }),
+
+  // ── AI Glance procedures ─────────────────────────────────────────────────────
+
+  /**
+   * Get the "Today at a Glance" summary: counts per category, from DB only.
+   * Pure DB read — no Gmail API, no LLM. Returns in <10ms.
+   * staleTime on client: 60s.
+   */
+  getGlance: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { categories: [], totalProcessed: 0, totalPending: 0 };
+
+    const rows = await db
+      .select({
+        threadId: gmailThreadMeta.threadId,
+        aiCategory: gmailThreadMeta.aiCategory,
+        aiUrgency: gmailThreadMeta.aiUrgency,
+        aiSummary: gmailThreadMeta.aiSummary,
+        aiResolvedAt: gmailThreadMeta.aiResolvedAt,
+        aiProcessedAt: gmailThreadMeta.aiProcessedAt,
+      })
+      .from(gmailThreadMeta)
+      .where(isNotNull(gmailThreadMeta.aiCategory));
+
+    // Count by category, excluding resolved and 'general'
+    const counts: Record<string, { count: number; threadIds: string[]; urgentCount: number }> = {};
+    let totalProcessed = 0;
+
+    for (const row of rows) {
+      if (!row.aiCategory || row.aiCategory === "general") continue;
+      if (row.aiResolvedAt) continue; // resolved — hidden from glance
+      totalProcessed++;
+      if (!counts[row.aiCategory]) counts[row.aiCategory] = { count: 0, threadIds: [], urgentCount: 0 };
+      counts[row.aiCategory].count++;
+      counts[row.aiCategory].threadIds.push(row.threadId);
+      if (row.aiUrgency === "high") counts[row.aiCategory].urgentCount++;
+    }
+
+    const categories = Object.entries(counts)
+      .filter(([, v]) => v.count > 0)
+      .map(([category, data]) => ({
+        category: category as GlanceCategory,
+        ...GLANCE_CATEGORY_META[category as GlanceCategory],
+        count: data.count,
+        urgentCount: data.urgentCount,
+        threadIds: data.threadIds,
+      }))
+      // Sort by urgentCount desc, then count desc
+      .sort((a, b) => b.urgentCount - a.urgentCount || b.count - a.count);
+
+    return { categories, totalProcessed };
+  }),
+
+  /**
+   * On-demand: process a single thread immediately (used when user opens an unprocessed thread).
+   * Returns the stored aiSummary and aiCategory after processing.
+   */
+  processThread: agentProcedure
+    .input(z.object({ threadId: z.string() }))
+    .mutation(async ({ input }) => {
+      await requireGmailConnected();
+      await processThread(input.threadId);
+      const db = await getDb();
+      if (!db) return { aiCategory: null, aiSummary: null, aiUrgency: null };
+      const [row] = await db
+        .select({ aiCategory: gmailThreadMeta.aiCategory, aiSummary: gmailThreadMeta.aiSummary, aiUrgency: gmailThreadMeta.aiUrgency })
+        .from(gmailThreadMeta)
+        .where(eq(gmailThreadMeta.threadId, input.threadId));
+      return {
+        aiCategory: row?.aiCategory ?? null,
+        aiSummary: row?.aiSummary ?? null,
+        aiUrgency: row?.aiUrgency ?? null,
+      };
+    }),
+
+  /**
+   * Mark a glance item as resolved — removes it from the glance panel.
+   * Does NOT archive or modify the Gmail thread.
+   */
+  resolveGlanceItem: agentProcedure
+    .input(z.object({ threadId: z.string() }))
+    .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
+      await db
+        .insert(gmailThreadMeta)
+        .values({ threadId: input.threadId, isIssue: 0, aiResolvedAt: new Date() })
+        .onDuplicateKeyUpdate({ set: { aiResolvedAt: new Date(), updatedAt: new Date() } });
+      return { success: true };
+    }),
+
+  /**
+   * Get the stored AI summary + category for a single thread.
+   * Used to hydrate the right panel when a thread is selected.
+   */
+  getThreadAiData: agentProcedure
+    .input(z.object({ threadId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { aiCategory: null, aiSummary: null, aiUrgency: null, aiProcessedAt: null };
+      const [row] = await db
+        .select({
+          aiCategory: gmailThreadMeta.aiCategory,
+          aiSummary: gmailThreadMeta.aiSummary,
+          aiUrgency: gmailThreadMeta.aiUrgency,
+          aiProcessedAt: gmailThreadMeta.aiProcessedAt,
+        })
+        .from(gmailThreadMeta)
+        .where(eq(gmailThreadMeta.threadId, input.threadId));
+      return {
+        aiCategory: row?.aiCategory ?? null,
+        aiSummary: row?.aiSummary ?? null,
+        aiUrgency: row?.aiUrgency ?? null,
+        aiProcessedAt: row?.aiProcessedAt ?? null,
+      };
+    }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {

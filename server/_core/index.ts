@@ -29,6 +29,7 @@ import { registerAgentLoginRoute } from "../agentLoginRoute";
 import { registerGmailRoutes } from "../gmailRoutes";
 import { registerGmailWatchRenewCron } from "../gmailWatchRenewCron";
 import { backfillTeamGeocodesOnStartup } from "../schedulingUtils";
+import { startGlanceWorker, backfillGlanceQueue } from "../gmailGlanceWorker";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
@@ -245,6 +246,10 @@ async function startServer() {
       // Backfill homeLat/homeLng for any teams that have a homeAddress but missing geocode.
       // Runs once at startup, takes <1s per team, uses the geocode cache.
       setTimeout(() => { backfillTeamGeocodesOnStartup().catch(console.error); }, 5_000);
+      // Start the AI glance worker (600ms interval) and backfill last 100 inbox threads.
+      // Purely additive — never touches existing inbox/SMS/webhook flows.
+      startGlanceWorker();
+      setTimeout(() => { backfillGlanceQueue().catch(console.error); }, 15_000);
       startInternalCron();
       // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
       // Always use the production domain so Vapi tool calls reach the live server.
