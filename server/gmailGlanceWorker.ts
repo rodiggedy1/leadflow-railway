@@ -129,11 +129,14 @@ export async function processThread(threadId: string): Promise<void> {
           content: `You are a customer service manager for a residential cleaning business (Maid in Black).
 Classify this email thread and summarize it.
 
+OVERRIDE RULE (highest priority, check this first):
+If the email body contains the exact text "Cancellation Type: This Booking and all Future Bookings" — you MUST classify it as "recurring_cancellation" regardless of anything else in the email. This is a system notification that a recurring cleaning subscription has been cancelled.
+
 Categories (pick exactly one):
+- recurring_cancellation: PRIORITY — use this if the email contains "Cancellation Type: This Booking and all Future Bookings" OR if a customer is cancelling their recurring/subscription cleaning plan
 - refund_request: customer asking for refund, credit, or compensation
 - quote_request: customer asking for a price quote or estimate
-- booking_confirmation: confirming, scheduling, or rescheduling a cleaning appointment
-- recurring_cancellation: any cancellation of a recurring/subscription cleaning plan — including system-generated notifications from booking software that say "This Booking and all Future Bookings" or "Cancellation Type: This Booking and all Future Bookings". If the cancellation type mentions future bookings, always use this category.
+- booking_confirmation: confirming, scheduling, or rescheduling a SINGLE appointment (only use this if there is NO cancellation of future bookings)
 - payroll_issue: cleaner or staff pay, hours, or compensation issue
 - upset_customer: complaint, dissatisfied customer, negative feedback
 - revenue_opportunity: upsell, add-on service, referral, or new revenue potential
