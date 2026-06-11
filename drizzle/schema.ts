@@ -2827,6 +2827,8 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   aiProcessedAt: timestamp("aiProcessedAt"),
   /** When this glance item was marked resolved by an agent */
   aiResolvedAt: timestamp("aiResolvedAt"),
+  /** Whether this thread is currently in the INBOX label (not archived). Updated by listThreads. */
+  isInInbox: int("isInInbox").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

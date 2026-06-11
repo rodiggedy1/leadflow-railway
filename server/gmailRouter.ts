@@ -63,12 +63,26 @@ export const gmailRouter = router({
       })
     )
     .query(async ({ input }) => {
-      await requireGmailConnected();
-      return listInboxThreads({
+      const { db } = await requireGmailConnected();
+      const result = await listInboxThreads({
         pageToken: input.pageToken,
         maxResults: input.maxResults,
         query: input.query,
       });
+      // Mark all returned threads as isInInbox=1 (they came from in:inbox query)
+      // This keeps glance counts accurate — only inbox threads count
+      if (result.threads.length > 0 && db) {
+        const threadIds = result.threads.map((t) => t.id);
+        await Promise.all(
+          threadIds.map((tid) =>
+            db.insert(gmailThreadMeta)
+              .values({ threadId: tid, isInInbox: 1 })
+              .onDuplicateKeyUpdate({ set: { isInInbox: 1 } })
+              .catch(() => {}) // non-fatal
+          )
+        );
+      }
+      return result;
     }),
 
   /** Get full thread detail including all messages, with agent sentBy info */
@@ -197,7 +211,15 @@ export const gmailRouter = router({
   archiveThread: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
       await archiveThread(input.threadId);
+      // Mark as no longer in inbox so glance counts update immediately
+      if (db) {
+        await db.insert(gmailThreadMeta)
+          .values({ threadId: input.threadId, isInInbox: 0 })
+          .onDuplicateKeyUpdate({ set: { isInInbox: 0 } })
+          .catch(() => {});
+      }
       return { success: true };
     }),
 
@@ -556,17 +578,25 @@ Write the reply now:`;
         aiSummary: gmailThreadMeta.aiSummary,
         aiResolvedAt: gmailThreadMeta.aiResolvedAt,
         aiProcessedAt: gmailThreadMeta.aiProcessedAt,
+        isInInbox: gmailThreadMeta.isInInbox,
       })
       .from(gmailThreadMeta)
       .where(isNotNull(gmailThreadMeta.aiCategory));
 
-    // Count by category, excluding resolved and 'general'
+    // Count by category, excluding resolved, 'general', and threads not in inbox
     const counts: Record<string, { count: number; threadIds: string[]; urgentCount: number }> = {};
     let totalProcessed = 0;
+
+    // Initialize all non-general categories with zero so they always appear
+    const allCategories = Object.keys(GLANCE_CATEGORY_META).filter((c) => c !== "general") as GlanceCategory[];
+    for (const cat of allCategories) {
+      counts[cat] = { count: 0, threadIds: [], urgentCount: 0 };
+    }
 
     for (const row of rows) {
       if (!row.aiCategory || row.aiCategory === "general") continue;
       if (row.aiResolvedAt) continue; // resolved — hidden from glance
+      if (!row.isInInbox) continue; // not in inbox (archived) — exclude from counts
       totalProcessed++;
       if (!counts[row.aiCategory]) counts[row.aiCategory] = { count: 0, threadIds: [], urgentCount: 0 };
       counts[row.aiCategory].count++;
@@ -575,7 +605,8 @@ Write the reply now:`;
     }
 
     const categories = Object.entries(counts)
-      .filter(([, v]) => v.count > 0)
+      // Always return all categories (including zeros) — client shows 0 for empty ones
+      .filter(([cat]) => cat !== "general")
       .map(([category, data]) => ({
         category: category as GlanceCategory,
         ...GLANCE_CATEGORY_META[category as GlanceCategory],

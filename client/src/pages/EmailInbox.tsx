@@ -1425,10 +1425,6 @@ export default function EmailInbox() {
                   </button>
                 )}
                 {glanceQuery.data.categories.map((cat) => {
-                  // Only count threads that are actually visible in the current inbox list
-                  const allThreadIdSet = new Set(allThreads.map((t) => t.id));
-                  const visibleThreadIds = cat.threadIds.filter((id) => allThreadIdSet.has(id));
-                  const visibleCount = visibleThreadIds.length;
                   return (
                   <div
                     key={cat.category}
