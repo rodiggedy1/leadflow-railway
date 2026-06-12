@@ -1731,15 +1731,28 @@ export const schedulingRouter = router({
       for (const a of existingAssignments) {
         const job = jobById.get(a.cleanerJobId);
         if (!job) continue;
-        const defaultTeam = job.teamName ? teamByName.get(job.teamName) : null;
+        const l27TeamName = job.teamName;
+        const defaultTeam = l27TeamName && l27TeamName !== 'Unassigned' ? teamByName.get(l27TeamName) : null;
         const defaultTeamId = defaultTeam?.id ?? null;
+
+        // If the job has no real L27 team (Unassigned or unknown), delete the assignment row
+        // so it doesn't show as assigned to a stale optimizer-assigned team after reset.
+        if (!defaultTeam) {
+          await db.delete(scheduleAssignments)
+            .where(and(
+              eq(scheduleAssignments.jobDate, input.date),
+              eq(scheduleAssignments.cleanerJobId, a.cleanerJobId),
+            ));
+          continue;
+        }
+
         const svcMs = job.serviceDateTime ? new Date(job.serviceDateTime).getTime() : null;
         // Keep drive time only if this job is staying on the same team
-        const teamUnchanged = defaultTeamId != null && Number(a.teamId) === defaultTeamId;
+        const teamUnchanged = Number(a.teamId) === defaultTeamId;
         await db.update(scheduleAssignments)
           .set({
-            teamId: defaultTeamId ?? Number(a.teamId), // revert to Launch27 team, or keep current if no default
-            teamName: defaultTeam?.name ?? a.teamName,
+            teamId: defaultTeamId,
+            teamName: defaultTeam.name,
             routeOrder: 0,
             isManual: 0,
             rationale: null,
