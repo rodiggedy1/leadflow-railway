@@ -1516,6 +1516,8 @@ export default function EmailInbox() {
                             lastAutoSelectedKey.current = null;
                           } else {
                             setActiveAgentFilter(agent.agentId);
+                            // Clear category filter — agent filter takes over
+                            setActiveCategoryFilter(null);
                             setSelectedThreadId(null);
                             lastAutoSelectedKey.current = null;
                             // Inject this agent's threads into extraThreads so they appear
@@ -1636,6 +1638,8 @@ export default function EmailInbox() {
                     onClick={() => {
                       const newFilter = activeCategoryFilter === cat.category ? null : cat.category;
                       setActiveCategoryFilter(newFilter);
+                      // Clear agent filter — category filter takes over
+                      setActiveAgentFilter(null);
                       // Always reset selection and force auto-select to re-fire for the new filter
                       setSelectedThreadId(null);
                       lastAutoSelectedKey.current = null;
