@@ -30,8 +30,8 @@ const en = {
     "earnings.done": "done",
 
     // Tabs
-    "tabs.today": "Today",
-    "tabs.thisWeek": "This Week",
+    "tabs.today": "Day View",
+    "tabs.thisWeek": "Week View",
 
     // Date nav
     "date.today": "Today",
