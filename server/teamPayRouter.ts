@@ -53,10 +53,12 @@ function getTodayET(): string {
 }
 
 /**
- * Calculate the effective pay for a single job, matching Jobs Board / Cleaning Portal logic.
- * - If photoAdjustment is set in DB → use it directly
- * - Otherwise: if job date is past and photoSubmitted=0 → apply -noPhotoPenalty
- * - Sum all components
+ * Calculate the effective pay for a single job — exact copy of Cleaning Portal calcJobPay logic.
+ * - If photoAdjustment is set in DB → use it directly (manual overrides respected)
+ * - If job is completed OR job date is past:
+ *     hasPhotos (photoSubmitted=1 OR actualPhotoCount>0) → +photoBonus
+ *     no photos → -noPhotoPenalty
+ * - Future jobs: $0 photo adj
  */
 function calcEffectivePay(
   j: {
@@ -68,25 +70,30 @@ function calcEffectivePay(
     recleanPenalty: string | null;
     photoSubmitted: number | null;
     jobDate: string;
+    bookingStatus: string | null;
+    actualPhotoCount?: number;
   },
   today: string,
-  noPhotoPenalty: number
+  rules: { noPhotoPenalty: number; photoBonus: number }
 ): { finalPay: number; photoAdj: number } {
-  const basePay = parseFloat(j.basePay ?? "0");
-  const ratingAdj = parseFloat(j.ratingAdjustment ?? "0");
-  const streakBonus = parseFloat(j.streakBonus ?? "0");
-  const manualAdj = parseFloat(j.manualAdjustment ?? "0");
-  const reclean = parseFloat(j.recleanPenalty ?? "0");
+  const basePay = parseFloat(j.basePay ?? "0") || 0;
+  const ratingAdj = parseFloat(j.ratingAdjustment ?? "0") || 0;
+  const streakBonus = parseFloat(j.streakBonus ?? "0") || 0;
+  const manualAdj = parseFloat(j.manualAdjustment ?? "0") || 0;
+  const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
 
   let photoAdj: number;
   if (j.photoAdjustment !== null) {
-    // DB value is authoritative (set by markComplete or uploadPhoto)
     photoAdj = parseFloat(j.photoAdjustment);
   } else {
-    // Live calculation: past job with no photos → penalty
+    const isCompleted = j.bookingStatus === "completed";
     const isPast = j.jobDate < today;
-    const hasPhotos = j.photoSubmitted === 1;
-    photoAdj = isPast && !hasPhotos ? -noPhotoPenalty : 0;
+    const hasPhotos = j.photoSubmitted === 1 || (j.actualPhotoCount ?? 0) > 0;
+    if (isCompleted || isPast) {
+      photoAdj = hasPhotos ? rules.photoBonus : -rules.noPhotoPenalty;
+    } else {
+      photoAdj = 0;
+    }
   }
 
   const finalPay = Math.round((basePay + ratingAdj + photoAdj + streakBonus + manualAdj + reclean) * 100) / 100;
@@ -115,7 +122,7 @@ export const teamPayRouter = router({
 
       const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
 
-      // Fetch all non-cancelled jobs for the week
+            // Fetch all non-cancelled jobs for the week
       const jobs = await db
         .select()
         .from(cleanerJobs)
@@ -128,7 +135,20 @@ export const teamPayRouter = router({
           )
         )
         .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
-
+      // Fetch actual photo counts for all jobs (needed for hasPhotos check)
+      const photoCounts = new Map<number, number>();
+      if (jobs.length > 0) {
+        const jobIds = jobs.map(j => j.id);
+        // Use raw SQL for GROUP BY count
+        const placeholders = jobIds.map(() => "?").join(",");
+        const [photoRows] = await (db as any).execute(
+          `SELECT cleanerJobId, COUNT(*) as cnt FROM job_photos WHERE cleanerJobId IN (${placeholders}) GROUP BY cleanerJobId`,
+          jobIds
+        );
+        for (const row of photoRows as Array<{ cleanerJobId: number; cnt: number }>) {
+          photoCounts.set(row.cleanerJobId, Number(row.cnt));
+        }
+      }
       // Get pay rules for photo penalty amount
       const rules = await getPayRules();
       const today = getTodayET();
@@ -202,7 +222,7 @@ export const teamPayRouter = router({
         for (const j of teamJobs) {
           const base = parseFloat(j.basePay ?? "0");
           totalBasePay += base;
-          const { finalPay } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { finalPay } = calcEffectivePay({ ...j, actualPhotoCount: photoCounts.get(j.id) ?? 0 }, today, rules);
           totalFinalPay += finalPay;
         }
         totalBasePay = Math.round(totalBasePay * 100) / 100;
@@ -245,7 +265,7 @@ export const teamPayRouter = router({
           const streakBonus = parseFloat(j.streakBonus ?? "0");
           const manualAdj = parseFloat(j.manualAdjustment ?? "0");
           const reclean = parseFloat(j.recleanPenalty ?? "0");
-          const { finalPay, photoAdj } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { finalPay, photoAdj } = calcEffectivePay({ ...j, actualPhotoCount: photoCounts.get(j.id) ?? 0 }, today, rules);
           const instantImpact = Math.round((finalPay - basePay) * 100) / 100;
 
           const items: Array<{ label: string; amount: number }> = [];
@@ -363,11 +383,22 @@ export const teamPayRouter = router({
             isNotNull(cleanerJobs.teamName)
           )
         )
-        .orderBy(cleanerJobs.jobDate);
-
+                .orderBy(cleanerJobs.jobDate);
+      // Fetch actual photo counts for all jobs (needed for hasPhotos check)
+      const photoCounts = new Map<number, number>();
+      if (jobs.length > 0) {
+        const jobIds = jobs.map(j => j.id);
+        const placeholders = jobIds.map(() => "?").join(",");
+        const [photoRows] = await (db as any).execute(
+          `SELECT cleanerJobId, COUNT(*) as cnt FROM job_photos WHERE cleanerJobId IN (${placeholders}) GROUP BY cleanerJobId`,
+          jobIds
+        );
+        for (const row of photoRows as Array<{ cleanerJobId: number; cnt: number }>) {
+          photoCounts.set(row.cleanerJobId, Number(row.cnt));
+        }
+      }
       const rules = await getPayRules();
       const today = getTodayET();
-
       // Group by teamName
       const byTeam = new Map<string, { teamName: string; payPercent: string | null; jobs: typeof jobs }>();
       for (const job of jobs) {
@@ -402,13 +433,13 @@ export const teamPayRouter = router({
 
         // Photo adj — live calc per job
         const totalPhotoAdj = tj.reduce((s, j) => {
-          const { photoAdj } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { photoAdj } = calcEffectivePay({ ...j, actualPhotoCount: photoCounts.get(j.id) ?? 0 }, today, rules);
           return s + photoAdj;
         }, 0);
 
         // Final pay — live calc per job
         const totalFinalPay = tj.reduce((s, j) => {
-          const { finalPay } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { finalPay } = calcEffectivePay({ ...j, actualPhotoCount: photoCounts.get(j.id) ?? 0 }, today, rules);
           return s + finalPay;
         }, 0);
 
