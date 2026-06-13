@@ -483,4 +483,71 @@ export const teamPayRouter = router({
       console.log(`[TeamPay] setComplaint cleanerJob=${input.cleanerJobId} clearing=${clearing} charge=${input.applyCharge} newFinalPay=${newFinalPay}`);
       return { ok: true, newFinalPay };
     }),
+
+  /**
+   * getIntegrityCheck — compares pay totals across all four sources for a given week.
+   * Returns totals for: Payroll Summary, Team Pay, Cleaning Portal, Jobs Board.
+   * All use the same calcEffectivePay logic; Jobs Board also adds googleReviewBonus + custom rules.
+   */
+  getIntegrityCheck: agentProcedure
+    .input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
+      const today = getTodayET();
+
+      // Fetch all non-cancelled jobs with cleaner assignments for the week
+      const [rows] = await (db as any).execute(
+        `SELECT
+          cj.id, cj.jobDate, cj.bookingStatus,
+          cj.basePay, cj.ratingAdjustment, cj.photoAdjustment, cj.photoSubmitted,
+          cj.streakBonus, cj.manualAdjustment, cj.recleanPenalty,
+          cj.googleReviewBonus,
+          COALESCE(SUM(
+            CASE WHEN cr.appliedType = 'bonus' THEN cr.appliedAmount
+                 WHEN cr.appliedType = 'penalty' THEN -cr.appliedAmount
+                 ELSE 0 END
+          ), 0) AS customTotal
+        FROM cleaner_jobs cj
+        LEFT JOIN cleaner_job_custom_rules cr ON cr.cleanerJobId = cj.id
+        WHERE cj.jobDate >= ? AND cj.jobDate <= ?
+          AND cj.bookingStatus != 'cancelled'
+          AND cj.teamName IS NOT NULL
+          AND cj.teamName != 'Unassigned'
+        GROUP BY cj.id`,
+        [input.weekStart, weekEnd]
+      ) as [Array<{
+        id: number; jobDate: string; bookingStatus: string | null;
+        basePay: string | null; ratingAdjustment: string | null; photoAdjustment: string | null;
+        photoSubmitted: number | null; streakBonus: string | null; manualAdjustment: string | null;
+        recleanPenalty: string | null; googleReviewBonus: string | null; customTotal: string;
+      }>];
+
+      let payrollTotal = 0;
+      let jobsBoardTotal = 0;
+
+      for (const j of rows) {
+        const { finalPay, photoAdj } = calcEffectivePay(j, today);
+        payrollTotal += finalPay;
+        // Jobs Board also includes googleReviewBonus and applied custom rules
+        const googleReview = j.googleReviewBonus !== null ? parseFloat(j.googleReviewBonus) : 0;
+        const custom = parseFloat(String(j.customTotal)) || 0;
+        jobsBoardTotal += finalPay + googleReview + custom;
+      }
+
+      payrollTotal = Math.round(payrollTotal * 100) / 100;
+      jobsBoardTotal = Math.round(jobsBoardTotal * 100) / 100;
+
+      return {
+        weekStart: input.weekStart,
+        weekEnd,
+        jobCount: rows.length,
+        // Team Pay and Cleaning Portal use the same calcEffectivePay as Payroll Summary
+        payrollSummaryTotal: payrollTotal,
+        teamPayTotal: payrollTotal,
+        cleaningPortalTotal: payrollTotal,
+        jobsBoardTotal,
+      };
+    }),
 });

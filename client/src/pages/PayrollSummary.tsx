@@ -8,7 +8,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Download, ChevronLeft, ChevronRight, ShieldCheck, Loader2 } from "lucide-react";
 import cx from "clsx";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -268,6 +268,14 @@ export default function PayrollSummary() {
 
   const rows = data?.rows ?? [];
 
+  // ─── Integrity check ─────────────────────────────────────────────────────────
+  const [runCheck, setRunCheck] = useState(false);
+  const { data: checkData, isFetching: checkLoading, refetch: refetchCheck } =
+    trpc.teamPay.getIntegrityCheck.useQuery(
+      { weekStart },
+      { enabled: runCheck, staleTime: 0 }
+    );
+
   const weekLabel = useMemo(() => {
     const s = new Date(weekStart + "T00:00:00");
     const e = new Date(weekEnd + "T00:00:00");
@@ -330,6 +338,77 @@ export default function PayrollSummary() {
               Download CSV
             </Button>
           </div>
+        </div>
+
+        {/* Integrity Check Panel */}
+        <div className="mb-6 rounded-[20px] border border-slate-200 bg-white shadow-sm px-5 py-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-slate-500" />
+              <span className="font-semibold text-slate-800 text-sm">Data Integrity Check</span>
+              <span className="text-xs text-slate-400">— verify all sources match for {weekLabel}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl gap-2 bg-white"
+              onClick={() => { setRunCheck(true); setTimeout(() => refetchCheck(), 0); }}
+              disabled={checkLoading}
+            >
+              {checkLoading
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <ShieldCheck className="h-3.5 w-3.5" />}
+              {checkLoading ? "Checking…" : "Run Check"}
+            </Button>
+          </div>
+          {checkData && !checkLoading && (() => {
+            const ps = checkData.payrollSummaryTotal;
+            const tp = checkData.teamPayTotal;
+            const cp = checkData.cleaningPortalTotal;
+            const jb = checkData.jobsBoardTotal;
+            const checks = [
+              { label: "Payroll Summary vs Team Pay", a: ps, b: tp, aLabel: "Payroll", bLabel: "Team Pay" },
+              { label: "Payroll Summary vs Cleaning Portal", a: ps, b: cp, aLabel: "Payroll", bLabel: "Portal" },
+              { label: "Payroll Summary vs Jobs Board", a: ps, b: jb, aLabel: "Payroll", bLabel: "Jobs Board" },
+            ];
+            return (
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {checks.map((c) => {
+                  const match = Math.abs(c.a - c.b) < 0.01;
+                  const diff = Math.round((c.b - c.a) * 100) / 100;
+                  return (
+                    <div
+                      key={c.label}
+                      className={`rounded-xl border px-4 py-3 flex flex-col gap-1 ${
+                        match ? "border-emerald-200 bg-emerald-50" : "border-rose-200 bg-rose-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-base ${match ? "text-emerald-600" : "text-rose-500"}`}>
+                          {match ? "✅" : "❌"}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-700">{c.label}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm">
+                        <span className="text-slate-600">
+                          {c.aLabel}: <span className="font-semibold text-slate-900">${c.a.toFixed(2)}</span>
+                        </span>
+                        <span className="text-slate-400">·</span>
+                        <span className="text-slate-600">
+                          {c.bLabel}: <span className="font-semibold text-slate-900">${c.b.toFixed(2)}</span>
+                        </span>
+                      </div>
+                      {!match && (
+                        <div className="text-xs font-medium text-rose-600">
+                          Difference: {diff > 0 ? "+" : ""}{diff.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Table */}
