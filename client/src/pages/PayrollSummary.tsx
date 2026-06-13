@@ -64,9 +64,7 @@ type SummaryRow = {
   manualAdj: number;
   lateCount: number;
   missedCheckins: number;
-  score: number;
   payoutPct: number;
-  nextWeekPayout: number;
   finalPay: number;
 };
 
@@ -191,28 +189,8 @@ const COLUMNS: Array<{
     },
   },
   {
-    key: "score",
-    label: "Score",
-    align: "right",
-    render: (r) => (
-      <Badge
-        className={cx(
-          "rounded-full text-xs font-semibold px-2 py-0.5",
-          r.score >= 100 ? "bg-emerald-100 text-emerald-800" :
-          r.score >= 90 ? "bg-blue-100 text-blue-800" :
-          r.score >= 80 ? "bg-amber-100 text-amber-800" :
-          "bg-rose-100 text-rose-800"
-        )}
-      >
-        {r.score}%
-      </Badge>
-    ),
-    total: () => null,
-  },
-  {
     key: "payoutPct",
-    label: "Payout %",
-    sub: "current",
+    label: "Pay Rate",
     align: "right",
     render: (r) => <span className="font-semibold text-slate-900">{r.payoutPct}%</span>,
     total: () => null,
@@ -236,12 +214,12 @@ function exportCsv(rows: SummaryRow[], weekStart: string, weekEnd: string) {
   const headers = [
     "Team", "Jobs", "Base Pay", "Rating Adj", "Photo Adj", "Streak Bonus",
     "Google Review Bonus", "Reclean Penalty", "Complaint Charge", "Manual Adj",
-    "Late Check-ins", "Score", "Payout %", "Next Week %", "Final Pay",
+    "Late Check-ins", "Pay Rate %", "Final Pay",
   ];
   const dataRows = rows.map((r) => [
     r.teamName, r.jobs, r.basePay, r.ratingAdj, r.photoAdj, r.streakBonus,
     r.googleBonus, r.recleanPenalty, r.complaintCharge, r.manualAdj,
-    r.lateCount, `${r.score}%`, `${r.payoutPct}%`, `${r.nextWeekPayout}%`, r.finalPay,
+    r.lateCount, `${r.payoutPct}%`, r.finalPay,
   ]);
   // Totals row
   dataRows.push([
@@ -256,7 +234,7 @@ function exportCsv(rows: SummaryRow[], weekStart: string, weekEnd: string) {
     rows.reduce((s, r) => s + r.complaintCharge, 0).toFixed(2),
     rows.reduce((s, r) => s + r.manualAdj, 0).toFixed(2),
     rows.reduce((s, r) => s + r.lateCount, 0),
-    "", "", "",
+    "",
     rows.reduce((s, r) => s + r.finalPay, 0).toFixed(2),
   ]);
 

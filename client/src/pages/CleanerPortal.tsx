@@ -1566,7 +1566,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
 function WeekJobRow({
   j, fp, isFinalized, photos
 }: {
-  j: { id: number; customerName: string | null; serviceDateTime: string | null; serviceType: string | null; basePay: string | null; customerRating: number | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null };
+  j: { id: number; customerName: string | null; serviceDateTime: string | null; serviceType: string | null; basePay: string | null; customerRating: number | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null; jobDate?: string | null };
   fp: number;
   isFinalized: boolean;
   photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
