@@ -80,7 +80,7 @@ const en = {
     "job.photoUploaded": "Photo uploaded",
     "job.photoError": "Failed to upload photo",
     "job.noPhotos": "No photos yet",
-    "job.uploadTip": "Upload a photo to earn +${{amount}}",
+    "job.uploadTip": "Upload 10+ photos to earn +${{amount}}",
 
     // Job card details
     "job.basePay": "Base Pay",
@@ -136,7 +136,7 @@ const en = {
     "postComplete.great": "Great work,",
     "postComplete.nextJob": "Set On the Way for Next Job",
     "postComplete.done": "Done",
-    "postComplete.photoReminder": "Don't forget to upload a photo to earn +${{amount}}!",
+    "postComplete.photoReminder": "Don't forget to upload 10+ photos to earn +${{amount}}!",
     "postComplete.askReview": "Ask for a Google Review",
     "postComplete.reviewBonus": "+${{amount}} bonus if they leave one!",
 
@@ -147,8 +147,8 @@ const en = {
     "payRules.title": "How Your Pay Works",
     "payRules.close": "Close",
     "payRules.tipsTitle": "Tips to maximize your pay",
-    "payRules.tip1Title": "Upload photos before leaving",
-    "payRules.tip1Desc": "Takes 30 seconds and earns you +${{amount}}. Open the job card, tap the camera icon, and snap a few after-photos.",
+    "payRules.tip1Title": "Upload 10+ photos before leaving",
+    "payRules.tip1Desc": "Upload at least 10 clear photos (kitchen, bathrooms, bedrooms, living areas, sinks, toilets, problem areas) to earn +${{amount}}. Open the job card, tap the camera icon, and snap them before you leave.",
     "payRules.tip2Title": "Ask the customer if everything looks good",
     "payRules.tip2Desc": "A quick check-in before you leave gives the customer a chance to flag anything small — so it doesn't turn into a complaint or reclean.",
     "payRules.tip3Title": "Protect your streak",
@@ -270,7 +270,7 @@ const en = {
     "eta.setButton": "Set",
     // Complete modal
     "complete.noPhotos": "No photos uploaded",
-    "complete.noPhotoWarning": "No photo upload will cost you $20 and miss out on making $10 extra. We strongly recommend uploading photos.",
+    "complete.noPhotoWarning": "No photos will cost you a -${{penalty}} penalty. Upload at least 10 photos to earn +${{bonus}}. Uploading 1-9 photos avoids the penalty but does not earn the bonus.",
     "complete.youAreCompleting": "You are completing:",
     "complete.clientNotified": "Your client will receive a completion text message.",
     "complete.wrongJob": "Wrong job?",

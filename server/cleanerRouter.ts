@@ -7,7 +7,7 @@
  */
 import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
-import { and, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
 import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts, teamAvailabilityCheckins } from "../drizzle/schema";
 import { randomBytes } from "crypto";
@@ -345,36 +345,47 @@ export const cleanerRouter = router({
         filename: input.filename,
       });
 
-      // Mark photoSubmitted on the job
-      await db
-        .update(cleanerJobs)
-        .set({ photoSubmitted: 1 })
-        .where(eq(cleanerJobs.id, input.cleanerJobId));
+      // Count total photos now uploaded for this job (including the one just inserted)
+      const MIN_PHOTOS_FOR_BONUS = 10;
+      const [{ value: totalPhotoCount }] = await db
+        .select({ value: count() })
+        .from(jobPhotos)
+        .where(eq(jobPhotos.cleanerJobId, input.cleanerJobId));
+      const bonusUnlocked = totalPhotoCount >= MIN_PHOTOS_FOR_BONUS;
 
-      // If the rating is already set, recalculate pay to apply the photo bonus
+      // Only flip photoSubmitted and apply bonus once the 10-photo threshold is reached.
+      // This is forward-looking only — existing jobs with photoSubmitted=1 are unaffected.
       const job = jobRows[0]!;
-      if (job.customerRating !== null && job.basePay && job.payPercent) {
-        const { calculatePayAdjustments } = await import("./qualityRouter");
-        const rules = await getPayRules();
-        const adj = calculatePayAdjustments({
-          jobRevenue: parseFloat(job.jobRevenue ?? "0"),
-          payPercent: parseFloat(job.payPercent ?? "0"),
-          customerRating: job.customerRating,
-          missedSomething: job.missedSomething === 1,
-          currentStreakAfterJob: 0, // streak already applied at rating time; don't re-apply
-          photoSubmitted: true,
-          rules,
-        });
+      if (bonusUnlocked && job.photoSubmitted !== 1) {
         await db
           .update(cleanerJobs)
-          .set({
-            photoAdjustment: String(adj.photoAdjustment),
-            finalPay: String(adj.finalPay),
-          })
+          .set({ photoSubmitted: 1 })
           .where(eq(cleanerJobs.id, input.cleanerJobId));
+
+        // If the rating is already set, recalculate pay to apply the photo bonus
+        if (job.customerRating !== null && job.basePay && job.payPercent) {
+          const { calculatePayAdjustments } = await import("./qualityRouter");
+          const rules = await getPayRules();
+          const adj = calculatePayAdjustments({
+            jobRevenue: parseFloat(job.jobRevenue ?? "0"),
+            payPercent: parseFloat(job.payPercent ?? "0"),
+            customerRating: job.customerRating,
+            missedSomething: job.missedSomething === 1,
+            currentStreakAfterJob: 0, // streak already applied at rating time; don't re-apply
+            photoSubmitted: true,
+            rules,
+          });
+          await db
+            .update(cleanerJobs)
+            .set({
+              photoAdjustment: String(adj.photoAdjustment),
+              finalPay: String(adj.finalPay),
+            })
+            .where(eq(cleanerJobs.id, input.cleanerJobId));
+        }
       }
 
-      return { success: true, url };
+      return { success: true, url, photoCount: totalPhotoCount, bonusUnlocked };
     }),
 
   /**
@@ -408,8 +419,9 @@ export const cleanerRouter = router({
       const photoAlreadySubmitted = job.photoSubmitted === 1;
 
       // Apply photo adjustment immediately on completion.
-      // If photo is already uploaded: +photoBonus. If not: -noPhotoPenalty.
-      // This will be corrected if a photo is uploaded later in the same pay period.
+      // photoSubmitted=1 means 10+ photos uploaded → +photoBonus
+      // photoSubmitted=0 AND zero photos uploaded → -noPhotoPenalty
+      // photoSubmitted=0 AND 1-9 photos uploaded → $0 (no bonus, no penalty)
       let payUpdate: Record<string, string | null> = {
         bookingStatus: "completed",
         jobStatus: "completed",
@@ -419,7 +431,17 @@ export const cleanerRouter = router({
       // Always apply it on completion so finalPay is accurate even for $0-revenue jobs.
       try {
         const rules = await getPayRules();
-        const photoAdj = photoAlreadySubmitted ? rules.photoBonus : -rules.noPhotoPenalty;
+        let photoAdj: number;
+        if (photoAlreadySubmitted) {
+          photoAdj = rules.photoBonus;
+        } else {
+          // Check if any photos were uploaded (1-9 = no bonus, no penalty; 0 = penalty)
+          const [{ value: uploadedCount }] = await db
+            .select({ value: count() })
+            .from(jobPhotos)
+            .where(eq(jobPhotos.cleanerJobId, input.cleanerJobId));
+          photoAdj = uploadedCount === 0 ? -rules.noPhotoPenalty : 0;
+        }
         payUpdate.photoAdjustment = String(photoAdj);
         // Only set finalPay here if no rating yet; rating webhook will overwrite with full calc
         if (job.customerRating === null) {

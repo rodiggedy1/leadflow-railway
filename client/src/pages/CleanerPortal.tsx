@@ -207,8 +207,8 @@ function PayoutRulesModal({ open, onClose, payRules, activeCustomRules, cleanerN
       title: "Photo Bonus / Penalty",
       color: "blue",
       items: [
-        { label: `+$${payRules?.photoBonus ?? 5} — Photos uploaded`, desc: "Upload at least one after-photo before marking the job complete. Takes 30 seconds and earns you extra.", positive: true },
-        { label: `-$${payRules?.noPhotoPenalty ?? 10} — No photos`, desc: "If you mark complete without uploading photos, this deduction applies automatically.", positive: false },
+        { label: `+$${payRules?.photoBonus ?? 5} — 10+ photos uploaded`, desc: "Upload at least 10 clear photos covering all major areas (kitchen, bathrooms, bedrooms, living areas, sinks, toilets, problem areas) before marking complete.", positive: true },
+        { label: `-$${payRules?.noPhotoPenalty ?? 10} — No photos at all`, desc: "If you mark complete without uploading any photos, this deduction applies automatically. Uploading 1-9 photos avoids the penalty but does not earn the bonus.", positive: false },
       ],
     },
     {
@@ -660,12 +660,27 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
         )}
 
         {/* Amber warning: no photo uploaded and job is active */}
-        {!isComplete && !hasPhoto && (
-          <div className="bg-amber-900/20 border border-amber-600/40 rounded-lg px-3 py-2 flex items-center gap-2">
-            <span className="text-amber-400 text-sm">⚠</span>
-            <p className="text-amber-300 text-xs">
-              Upload photos to earn <span style={{color: '#34d399'}}>+${payRules?.photoBonus ?? 5}</span> and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span> penalty
-            </p>
+        {!isComplete && (
+          <div className="bg-amber-900/20 border border-amber-600/40 rounded-lg px-3 py-2 flex flex-col gap-1.5">
+            <div className="flex items-start gap-2">
+              <span className="text-amber-400 text-sm mt-0.5">⚠</span>
+              <p className="text-amber-300 text-xs">
+                {hasPhoto
+                  ? `${job.photos?.length ?? 0}/10 photos uploaded${(job.photos?.length ?? 0) >= 10 ? " — Bonus unlocked! ✓" : " — Upload more to earn the bonus"}`
+                  : <>Upload at least <strong>10 clear photos</strong> (kitchen, bathrooms, bedrooms, living areas, sinks, toilets, problem areas) to earn <span style={{color: '#34d399'}}>+${payRules?.photoBonus ?? 5}</span> and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span> penalty</>}
+              </p>
+            </div>
+            {hasPhoto && (job.photos?.length ?? 0) < 10 && (
+              <div className="ml-5">
+                <div className="w-full bg-slate-700 rounded-full h-1.5">
+                  <div
+                    className="bg-amber-400 h-1.5 rounded-full transition-all"
+                    style={{ width: `${Math.min(((job.photos?.length ?? 0) / 10) * 100, 100)}%` }}
+                  />
+                </div>
+                <p className="text-amber-500 text-[10px] mt-0.5">{10 - (job.photos?.length ?? 0)} more photo{10 - (job.photos?.length ?? 0) !== 1 ? 's' : ''} needed for +${payRules?.photoBonus ?? 5} bonus</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -860,7 +875,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
               <div className="flex justify-between items-start px-4 py-3">
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">{badge}<p className="text-slate-100 text-sm font-semibold">{hasPhoto ? "Photo Bonus" : "Photo Bonus"}</p></div>
-                  <p className="text-slate-500 text-xs mt-0.5">+${payRules?.photoBonus ?? 5} when after photos are uploaded · -${payRules?.noPhotoPenalty ?? 10} if missing</p>
+                  <p className="text-slate-500 text-xs mt-0.5">+${payRules?.photoBonus ?? 5} when 10+ photos uploaded · -${payRules?.noPhotoPenalty ?? 10} if no photos at all</p>
                   <p className="text-slate-600 text-xs">{t("pay.uploadBeforeComplete")}</p>
                 </div>
                 <div className="text-right shrink-0 ml-3">
