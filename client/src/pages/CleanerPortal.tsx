@@ -1566,14 +1566,34 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
 function WeekJobRow({
   j, fp, isFinalized, photos
 }: {
-  j: { id: number; customerName: string | null; serviceDateTime: string | null; serviceType: string | null; basePay: string | null; customerRating: number | null };
+  j: { id: number; customerName: string | null; serviceDateTime: string | null; serviceType: string | null; basePay: string | null; customerRating: number | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null };
   fp: number;
   isFinalized: boolean;
   photos: Array<{ id: number; photoUrl: string; filename: string | null }>;
 }) {
   const { t } = useTranslation();
   const [lightboxIdx, setLightboxIdx] = useState<number | null>(null);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const currentPhoto = lightboxIdx !== null ? photos[lightboxIdx] : null;
+
+  // Pay breakdown values
+  const base = parseFloat(j.basePay ?? "0") || 0;
+  const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
+  const photoFromDB = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : null;
+  const hasPhoto = j.photoSubmitted === 1 || photos.length > 0;
+  const photo = photoFromDB ?? (hasPhoto ? 5 : 0);
+  const streak = parseFloat(j.streakBonus ?? "0") || 0;
+  const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
+  const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
+
+  const breakdownRows: { label: string; value: number; show: boolean }[] = [
+    { label: "Base Pay", value: base, show: true },
+    { label: rating >= 0 ? "Star Bonus" : "Low Rating", value: rating, show: rating !== 0 },
+    { label: photo >= 0 ? "Photo Bonus" : "No Photo Penalty", value: photo, show: photo !== 0 },
+    { label: "Streak Bonus", value: streak, show: streak !== 0 },
+    { label: "Reclean Deduction", value: reclean, show: reclean !== 0 },
+    { label: "Manual Adjustment", value: manual, show: manual !== 0 },
+  ];
 
   return (
     <div className="px-4 py-2.5 space-y-2">
@@ -1589,8 +1609,15 @@ function WeekJobRow({
           <p className={`text-sm font-semibold ${fp >= parseFloat(j.basePay ?? "0") ? "text-emerald-400" : "text-red-400"}`}>
             ${fp.toFixed(2)}
           </p>
-          {!isFinalized && <p className="text-slate-600 text-xs">{t("week.preview")}</p>}
-          {j.customerRating && (
+          {!isFinalized && (
+            <button
+              onClick={() => setShowBreakdown(v => !v)}
+              className="text-slate-400 text-xs hover:text-slate-200 transition-colors underline underline-offset-2"
+            >
+              {showBreakdown ? "Hide" : t("week.preview")}
+            </button>
+          )}
+          {isFinalized && j.customerRating && (
             <div className="flex items-center gap-0.5 justify-end mt-0.5">
               {[1,2,3,4,5].map(i => (
                 <Star key={i} className={`w-3 h-3 ${i <= (j.customerRating ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-600"}`} />
@@ -1599,6 +1626,25 @@ function WeekJobRow({
           )}
         </div>
       </div>
+
+      {/* Inline pay breakdown */}
+      {showBreakdown && (
+        <div className="bg-slate-900/60 rounded-lg border border-slate-700/50 px-3 py-2 space-y-1.5">
+          {breakdownRows.filter(r => r.show).map(r => (
+            <div key={r.label} className="flex justify-between items-center">
+              <span className="text-slate-400 text-xs">{r.label}</span>
+              <span className={`text-xs font-semibold ${r.value > 0 ? "text-emerald-400" : r.value < 0 ? "text-red-400" : "text-slate-400"}`}>
+                {r.value > 0 ? "+" : ""}{r.value.toFixed(2)}
+              </span>
+            </div>
+          ))}
+          <div className="border-t border-slate-700/50 pt-1.5 flex justify-between items-center">
+            <span className="text-slate-300 text-xs font-semibold">Total</span>
+            <span className={`text-xs font-bold ${fp >= base ? "text-emerald-400" : "text-red-400"}`}>${fp.toFixed(2)}</span>
+          </div>
+          {!isFinalized && <p className="text-slate-600 text-[10px] pt-0.5">Preview — final pay calculated after job completion</p>}
+        </div>
+      )}
 
       {/* Photo thumbnails */}
       {photos.length > 0 && (
