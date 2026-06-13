@@ -2164,7 +2164,7 @@ const MessageList = memo(function MessageList({
                         "w-full group transition-colors duration-300",
                         highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
                         isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : "",
-                        msg.threadParentId ? "border-l-2 border-violet-300 pl-2" : ""
+                        msg.threadParentId ? "border-l-2 border-violet-300" : ""
                       )}
                     >
                       {/* Bubble + hover actions */}
