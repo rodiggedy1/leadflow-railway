@@ -670,17 +670,7 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                   : <>Upload at least <strong>10 clear photos</strong> (kitchen, bathrooms, bedrooms, living areas, sinks, toilets, problem areas) to earn <span style={{color: '#34d399'}}>+${payRules?.photoBonus ?? 5}</span> and avoid <span style={{color: '#f87171'}}>-${payRules?.noPhotoPenalty ?? 10}</span> penalty</>}
               </p>
             </div>
-            {hasPhoto && (job.photos?.length ?? 0) < 10 && (
-              <div className="ml-5">
-                <div className="w-full bg-slate-700 rounded-full h-1.5">
-                  <div
-                    className="bg-amber-400 h-1.5 rounded-full transition-all"
-                    style={{ width: `${Math.min(((job.photos?.length ?? 0) / 10) * 100, 100)}%` }}
-                  />
-                </div>
-                <p className="text-amber-500 text-[10px] mt-0.5">{10 - (job.photos?.length ?? 0)} more photo{10 - (job.photos?.length ?? 0) !== 1 ? 's' : ''} needed for +${payRules?.photoBonus ?? 5} bonus</p>
-              </div>
-            )}
+
           </div>
         )}
 
@@ -1044,6 +1034,18 @@ function JobCard({ job, allJobs, onPhotoUploaded, onMarkedComplete, onStatusUpda
                     />
                   </a>
                 ))}
+              </div>
+            )}
+            {/* Progress bar — shown when photos uploaded but threshold not yet met */}
+            {!isComplete && job.photos.length < 10 && (
+              <div className="mt-2">
+                <div className="w-full bg-slate-700 rounded-full h-1.5">
+                  <div
+                    className="bg-amber-400 h-1.5 rounded-full transition-all"
+                    style={{ width: `${Math.min((job.photos.length / 10) * 100, 100)}%` }}
+                  />
+                </div>
+                <p className="text-amber-500 text-[10px] mt-0.5">{job.photos.length}/10 — {10 - job.photos.length} more photo{10 - job.photos.length !== 1 ? 's' : ''} needed for +${payRules?.photoBonus ?? 5} bonus</p>
               </div>
             )}
           </div>
