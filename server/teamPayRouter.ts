@@ -11,11 +11,11 @@
  */
 
 import { z } from "zod";
-import { and, eq, gte, lte, ne, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, ne, isNotNull, inArray, sql } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { cleanerJobs } from "../drizzle/schema";
+import { cleanerJobs, cleanerJobCustomRules } from "../drizzle/schema";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -492,47 +492,47 @@ export const teamPayRouter = router({
   getIntegrityCheck: agentProcedure
     .input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .mutation(async ({ input }) => {
-      const db = await getDb();
+            const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
       const today = getTodayET();
 
-      // Fetch all non-cancelled jobs with cleaner assignments for the week
-      const [rows] = await (db as any).execute(
-        `SELECT
-          cj.id, cj.jobDate, cj.bookingStatus,
-          cj.basePay, cj.ratingAdjustment, cj.photoAdjustment, cj.photoSubmitted,
-          cj.streakBonus, cj.manualAdjustment, cj.recleanPenalty,
-          cj.googleReviewBonus,
-          COALESCE(SUM(
-            CASE WHEN cr.appliedType = 'bonus' THEN cr.appliedAmount
-                 WHEN cr.appliedType = 'penalty' THEN -cr.appliedAmount
-                 ELSE 0 END
-          ), 0) AS customTotal
-        FROM cleaner_jobs cj
-        LEFT JOIN cleaner_job_custom_rules cr ON cr.cleanerJobId = cj.id
-        WHERE cj.jobDate >= ? AND cj.jobDate <= ?
-          AND cj.bookingStatus != 'cancelled'
-          AND cj.teamName IS NOT NULL
-          AND cj.teamName != 'Unassigned'
-        GROUP BY cj.id`,
-        [input.weekStart, weekEnd]
-      ) as [Array<{
-        id: number; jobDate: string; bookingStatus: string | null;
-        basePay: string | null; ratingAdjustment: string | null; photoAdjustment: string | null;
-        photoSubmitted: number | null; streakBonus: string | null; manualAdjustment: string | null;
-        recleanPenalty: string | null; googleReviewBonus: string | null; customTotal: string;
-      }>];
+      // Fetch all non-cancelled jobs with cleaner assignments for the week using Drizzle
+      const jobs = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          and(
+            gte(cleanerJobs.jobDate, input.weekStart),
+            lte(cleanerJobs.jobDate, weekEnd),
+            ne(cleanerJobs.bookingStatus, "cancelled"),
+            isNotNull(cleanerJobs.teamName),
+            ne(cleanerJobs.teamName as any, "Unassigned")
+          )
+        );
+
+      // Fetch custom rules for these jobs
+      const jobIds = jobs.map(j => j.id);
+      const customRules = jobIds.length > 0
+        ? await db.select().from(cleanerJobCustomRules).where(inArray(cleanerJobCustomRules.cleanerJobId, jobIds))
+        : [];
+
+      // Build a map of jobId -> customTotal
+      const customTotals = new Map<number, number>();
+      for (const rule of customRules) {
+        const prev = customTotals.get(rule.cleanerJobId) ?? 0;
+        const amt = parseFloat(String(rule.appliedAmount)) || 0;
+        customTotals.set(rule.cleanerJobId, prev + (rule.appliedType === "bonus" ? amt : -amt));
+      }
 
       let payrollTotal = 0;
       let jobsBoardTotal = 0;
-
-      for (const j of rows) {
-        const { finalPay, photoAdj } = calcEffectivePay(j, today);
+      for (const j of jobs) {
+        const { finalPay } = calcEffectivePay(j, today);
         payrollTotal += finalPay;
         // Jobs Board also includes googleReviewBonus and applied custom rules
         const googleReview = j.googleReviewBonus !== null ? parseFloat(j.googleReviewBonus) : 0;
-        const custom = parseFloat(String(j.customTotal)) || 0;
+        const custom = customTotals.get(j.id) ?? 0;
         jobsBoardTotal += finalPay + googleReview + custom;
       }
 
@@ -542,7 +542,7 @@ export const teamPayRouter = router({
       return {
         weekStart: input.weekStart,
         weekEnd,
-        jobCount: rows.length,
+        jobCount: jobs.length,
         // Team Pay and Cleaning Portal use the same calcEffectivePay as Payroll Summary
         payrollSummaryTotal: payrollTotal,
         teamPayTotal: payrollTotal,
