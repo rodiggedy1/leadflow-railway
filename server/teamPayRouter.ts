@@ -491,7 +491,7 @@ export const teamPayRouter = router({
    */
   getIntegrityCheck: agentProcedure
     .input(z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
-    .query(async ({ input }) => {
+    .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
       const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));

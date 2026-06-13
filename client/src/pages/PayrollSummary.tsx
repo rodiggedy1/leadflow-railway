@@ -269,11 +269,8 @@ export default function PayrollSummary() {
   const rows = data?.rows ?? [];
 
   // ─── Integrity check ─────────────────────────────────────────────────────────
-  const { data: checkData, isFetching: checkLoading, refetch: refetchCheck } =
-    trpc.teamPay.getIntegrityCheck.useQuery(
-      { weekStart },
-      { enabled: false, staleTime: 0 }
-    );
+  const { mutate: runIntegrityCheck, data: checkData, isPending: checkLoading } =
+    trpc.teamPay.getIntegrityCheck.useMutation();
 
   const weekLabel = useMemo(() => {
     const s = new Date(weekStart + "T00:00:00");
@@ -351,7 +348,7 @@ export default function PayrollSummary() {
               size="sm"
               variant="outline"
               className="rounded-xl gap-2 bg-white"
-              onClick={() => { refetchCheck(); }}
+              onClick={() => { runIntegrityCheck({ weekStart }); }}
               disabled={checkLoading}
             >
               {checkLoading
