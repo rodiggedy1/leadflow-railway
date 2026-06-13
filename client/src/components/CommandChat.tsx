@@ -63,6 +63,8 @@ interface CommandChatProps {
     replyToAuthor?: string | null;
     cleanerJobId?: number | null;
     threadParentId?: number | null;
+    threadParentBody?: string | null;
+    threadParentFrom?: string | null;
     replyCount?: number;
     createdAt: Date;
   }>;
@@ -416,6 +418,8 @@ type LeadMsg = {
   replyToAuthor?: string | null;
   cleanerJobId?: number | null;
   threadParentId?: number | null;
+  threadParentBody?: string | null;
+  threadParentFrom?: string | null;
   replyCount?: number;
   createdAt: Date;
 };
@@ -2159,7 +2163,8 @@ const MessageList = memo(function MessageList({
                       className={cn(
                         "w-full group transition-colors duration-300",
                         highlightedCmdMsgId === msg.id ? "bg-amber-50 rounded-2xl" : "",
-                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : ""
+                        isTaggedMsg ? "border-l-4 border-amber-400 pl-2 -ml-2 rounded-r-2xl" : "",
+                        msg.threadParentId ? "border-l-2 border-violet-300 pl-2" : ""
                       )}
                     >
                       {/* Bubble + hover actions */}
@@ -2202,6 +2207,40 @@ const MessageList = memo(function MessageList({
                               </span>
                             </div>
                           </div>
+                          {/* Thread reply context pill — shown when this message is a thread reply surfaced in main feed */}
+                          {msg.threadParentId && (
+                            <button
+                              type="button"
+                              onClick={() => setOpenThreadId(msg.threadParentId!)}
+                              className={cn(
+                                "mb-2.5 w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors group/thread",
+                                isMine ? "bg-violet-900/40 border border-violet-700/50 hover:bg-violet-900/60" : "bg-violet-50 border border-violet-200 hover:bg-violet-100"
+                              )}
+                            >
+                              <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", isMine ? "text-violet-400" : "text-violet-500")} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={cn("text-[10px] font-bold uppercase tracking-wider", isMine ? "text-violet-400" : "text-violet-600")}>
+                                    Thread reply
+                                  </span>
+                                  {msg.threadParentFrom && (
+                                    <span className={cn("text-[10px]", isMine ? "text-violet-500" : "text-violet-500")}>· {msg.threadParentFrom}</span>
+                                  )}
+                                </div>
+                                {msg.threadParentBody && (
+                                  <p className={cn("text-xs truncate mt-0.5 leading-snug", isMine ? "text-violet-300" : "text-violet-700")}>
+                                    {msg.threadParentBody.length > 80 ? msg.threadParentBody.slice(0, 80) + "…" : msg.threadParentBody}
+                                  </p>
+                                )}
+                              </div>
+                              <span className={cn(
+                                "text-[10px] shrink-0 transition-colors whitespace-nowrap",
+                                isMine ? "text-violet-500 group-hover/thread:text-violet-300" : "text-violet-400 group-hover/thread:text-violet-600"
+                              )}>
+                                Open thread →
+                              </span>
+                            </button>
+                          )}
                           {/* WhatsApp-style quoted block with vivid sender accent */}
                           {msg.replyToId && msg.replyToBody && (
                             <button
@@ -2339,7 +2378,7 @@ const MessageList = memo(function MessageList({
                               <span>Reply</span>
                             </button>
                           )}
-                          {/* Slack-style: Reply in Thread */}
+                          {/* Slack-style: Reply in Thread (root messages only) */}
                           {!isAlert && !msg.threadParentId && (
                             <button
                               onClick={() => setOpenThreadId(msg.id)}
@@ -2347,6 +2386,16 @@ const MessageList = memo(function MessageList({
                             >
                               <MessageSquare className="h-3 w-3" />
                               <span>Thread</span>
+                            </button>
+                          )}
+                          {/* Open thread (thread reply messages) */}
+                          {!isAlert && msg.threadParentId && (
+                            <button
+                              onClick={() => setOpenThreadId(msg.threadParentId!)}
+                              className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200"
+                            >
+                              <MessageSquare className="h-3 w-3" />
+                              <span>Open thread</span>
                             </button>
                           )}
                           <button

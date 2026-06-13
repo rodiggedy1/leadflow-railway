@@ -596,6 +596,19 @@ export const opsChatRouter = router({
         }
       }
 
+      // Fetch parent message body/author for thread replies so the main feed
+      // can show a "replied to X" context pill without a second round-trip.
+      const threadReplyMsgs = msgs.filter(m => m.threadParentId);
+      const parentIds = Array.from(new Set(threadReplyMsgs.map(m => m.threadParentId!).filter(Boolean)));
+      const parentMap = new Map<number, { body: string; authorName: string }>();
+      if (parentIds.length > 0) {
+        const parents = await db
+          .select({ id: opsChatMessages.id, body: opsChatMessages.body, authorName: opsChatMessages.authorName })
+          .from(opsChatMessages)
+          .where(inArray(opsChatMessages.id, parentIds));
+        for (const p of parents) parentMap.set(p.id, { body: p.body, authorName: p.authorName });
+      }
+
       return msgs.reverse().map((m) => ({
         id: m.id,
         ts: m.createdAt.getTime(),
@@ -610,6 +623,8 @@ export const opsChatRouter = router({
         replyToAuthor: m.replyToAuthor ?? null,
         cleanerJobId: m.cleanerJobId ?? null,
         threadParentId: m.threadParentId ?? null,
+        threadParentBody: m.threadParentId ? (parentMap.get(m.threadParentId)?.body ?? null) : null,
+        threadParentFrom: m.threadParentId ? (parentMap.get(m.threadParentId)?.authorName ?? null) : null,
         replyCount: m.threadParentId ? 0 : (replyCounts[m.id] ?? 0),
       }));
     }),
