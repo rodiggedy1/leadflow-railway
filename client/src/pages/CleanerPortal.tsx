@@ -1580,7 +1580,14 @@ function WeekJobRow({
   const base = parseFloat(j.basePay ?? "0") || 0;
   const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
   const photoFromDB = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : null;
-  const photo = photoFromDB ?? (j.photoSubmitted === 1 ? 5 : -10);
+  const isCompleted = j.bookingStatus === "completed";
+  const hasPhotos = j.photoSubmitted === 1 || photos.length > 0;
+  let photo = 0;
+  if (photoFromDB != null) {
+    photo = photoFromDB;
+  } else if (isCompleted) {
+    photo = hasPhotos ? 5 : -10;
+  }
   const streak = parseFloat(j.streakBonus ?? "0") || 0;
   const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
   const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
@@ -2405,9 +2412,18 @@ export default function CleanerPortal() {
   const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null }) => {
     const base = parseFloat(j.basePay ?? "0") || 0;
     const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
-    // Match jobs board logic: if photoAdjustment is in DB use it; otherwise photoSubmitted=1 → +bonus, 0 → -penalty
+    // If photoAdjustment is in DB, use it directly (manual overrides respected).
+    // Otherwise: only apply bonus/penalty for completed jobs.
+    // Future/in-progress jobs show $0 for photo line until job is marked complete.
     const photoFromDB = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : null;
-    const photo = photoFromDB ?? (j.photoSubmitted === 1 ? photoBonusAmt : -noPhotoPenaltyAmt);
+    const isCompleted = j.bookingStatus === "completed";
+    const hasPhotos = j.photoSubmitted === 1 || ((j.photos as unknown[])?.length ?? 0) > 0;
+    let photo = 0;
+    if (photoFromDB != null) {
+      photo = photoFromDB;
+    } else if (isCompleted) {
+      photo = hasPhotos ? photoBonusAmt : -noPhotoPenaltyAmt;
+    }
     const streak = parseFloat(j.streakBonus ?? "0") || 0;
     const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
     const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
