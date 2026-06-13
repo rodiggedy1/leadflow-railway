@@ -16,7 +16,6 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cleanerJobs } from "../drizzle/schema";
-import { getPayRules } from "./settingsRouter";
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -53,10 +52,9 @@ function getTodayET(): string {
 }
 
 /**
- * Calculate the effective pay for a single job, matching Jobs Board / Cleaning Portal logic.
- * - If photoAdjustment is set in DB → use it directly
- * - Otherwise: if job date is past and photoSubmitted=0 → apply -noPhotoPenalty
- * - Sum all components
+ * Calculate the effective pay for a single job.
+ * Reads photoAdjustment directly from DB — same value the Jobs Board and Cleaning Portal use.
+ * No extra logic needed: the value is already written by uploadPhoto / markComplete.
  */
 function calcEffectivePay(
   j: {
@@ -66,29 +64,14 @@ function calcEffectivePay(
     streakBonus: string | null;
     manualAdjustment: string | null;
     recleanPenalty: string | null;
-    photoSubmitted: number | null;
-    jobDate: string;
-  },
-  today: string,
-  noPhotoPenalty: number
-): { finalPay: number; photoAdj: number } {
-  const basePay = parseFloat(j.basePay ?? "0");
-  const ratingAdj = parseFloat(j.ratingAdjustment ?? "0");
-  const streakBonus = parseFloat(j.streakBonus ?? "0");
-  const manualAdj = parseFloat(j.manualAdjustment ?? "0");
-  const reclean = parseFloat(j.recleanPenalty ?? "0");
-
-  let photoAdj: number;
-  if (j.photoAdjustment !== null) {
-    // DB value is authoritative (set by markComplete or uploadPhoto)
-    photoAdj = parseFloat(j.photoAdjustment);
-  } else {
-    // Live calculation: past job with no photos → penalty
-    const isPast = j.jobDate < today;
-    const hasPhotos = j.photoSubmitted === 1;
-    photoAdj = isPast && !hasPhotos ? -noPhotoPenalty : 0;
   }
-
+): { finalPay: number; photoAdj: number } {
+  const basePay = parseFloat(j.basePay ?? "0") || 0;
+  const ratingAdj = parseFloat(j.ratingAdjustment ?? "0") || 0;
+  const photoAdj = j.photoAdjustment !== null ? parseFloat(j.photoAdjustment) : 0;
+  const streakBonus = parseFloat(j.streakBonus ?? "0") || 0;
+  const manualAdj = parseFloat(j.manualAdjustment ?? "0") || 0;
+  const reclean = j.recleanPenalty !== null ? parseFloat(j.recleanPenalty) : 0;
   const finalPay = Math.round((basePay + ratingAdj + photoAdj + streakBonus + manualAdj + reclean) * 100) / 100;
   return { finalPay, photoAdj };
 }
@@ -130,7 +113,6 @@ export const teamPayRouter = router({
         .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
 
       // Get pay rules for photo penalty amount
-      const rules = await getPayRules();
       const today = getTodayET();
 
       // Group by teamName
@@ -202,7 +184,7 @@ export const teamPayRouter = router({
         for (const j of teamJobs) {
           const base = parseFloat(j.basePay ?? "0");
           totalBasePay += base;
-          const { finalPay } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { finalPay } = calcEffectivePay(j);
           totalFinalPay += finalPay;
         }
         totalBasePay = Math.round(totalBasePay * 100) / 100;
@@ -245,7 +227,7 @@ export const teamPayRouter = router({
           const streakBonus = parseFloat(j.streakBonus ?? "0");
           const manualAdj = parseFloat(j.manualAdjustment ?? "0");
           const reclean = parseFloat(j.recleanPenalty ?? "0");
-          const { finalPay, photoAdj } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { finalPay, photoAdj } = calcEffectivePay(j);
           const instantImpact = Math.round((finalPay - basePay) * 100) / 100;
 
           const items: Array<{ label: string; amount: number }> = [];
@@ -365,7 +347,6 @@ export const teamPayRouter = router({
         )
         .orderBy(cleanerJobs.jobDate);
 
-      const rules = await getPayRules();
       const today = getTodayET();
 
       // Group by teamName
@@ -402,13 +383,13 @@ export const teamPayRouter = router({
 
         // Photo adj — live calc per job
         const totalPhotoAdj = tj.reduce((s, j) => {
-          const { photoAdj } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { photoAdj } = calcEffectivePay(j);
           return s + photoAdj;
         }, 0);
 
         // Final pay — live calc per job
         const totalFinalPay = tj.reduce((s, j) => {
-          const { finalPay } = calcEffectivePay(j, today, rules.noPhotoPenalty);
+          const { finalPay } = calcEffectivePay(j);
           return s + finalPay;
         }, 0);
 
