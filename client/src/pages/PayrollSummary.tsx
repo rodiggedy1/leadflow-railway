@@ -269,11 +269,10 @@ export default function PayrollSummary() {
   const rows = data?.rows ?? [];
 
   // ─── Integrity check ─────────────────────────────────────────────────────────
-  const [runCheck, setRunCheck] = useState(false);
   const { data: checkData, isFetching: checkLoading, refetch: refetchCheck } =
     trpc.teamPay.getIntegrityCheck.useQuery(
       { weekStart },
-      { enabled: runCheck, staleTime: 0 }
+      { enabled: false, staleTime: 0 }
     );
 
   const weekLabel = useMemo(() => {
@@ -352,7 +351,7 @@ export default function PayrollSummary() {
               size="sm"
               variant="outline"
               className="rounded-xl gap-2 bg-white"
-              onClick={() => { setRunCheck(true); setTimeout(() => refetchCheck(), 0); }}
+              onClick={() => { refetchCheck(); }}
               disabled={checkLoading}
             >
               {checkLoading
