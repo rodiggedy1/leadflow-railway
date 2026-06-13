@@ -485,6 +485,88 @@ export const teamPayRouter = router({
     }),
 
   /**
+   * getTeamDetail — per-job detail for a single team in a pay week.
+   * Used by Payroll Summary to generate a detailed per-team CSV download.
+   */
+  getTeamDetail: agentProcedure
+    .input(z.object({
+      weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      teamName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const weekEnd = fmt(addDays(new Date(input.weekStart + "T00:00:00"), 6));
+      const today = getTodayET();
+
+      const jobs = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          and(
+            eq(cleanerJobs.teamName, input.teamName),
+            gte(cleanerJobs.jobDate, input.weekStart),
+            lte(cleanerJobs.jobDate, weekEnd),
+            ne(cleanerJobs.bookingStatus, "cancelled"),
+          )
+        )
+        .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
+
+      const jobRows = jobs.map((j) => {
+        const basePay = parseFloat(j.basePay ?? "0") || 0;
+        const ratingAdj = parseFloat(j.ratingAdjustment ?? "0") || 0;
+        const streakBonus = parseFloat(j.streakBonus ?? "0") || 0;
+        const manualAdj = parseFloat(j.manualAdjustment ?? "0") || 0;
+        const reclean = parseFloat(j.recleanPenalty ?? "0") || 0;
+        const complaint = j.complaintChargeApplied === 1 ? -20 : 0;
+        const { finalPay, photoAdj } = calcEffectivePay(j, today);
+
+        const serviceLabel = [j.serviceType, j.bedrooms ? `${j.bedrooms} bed` : null, j.bathrooms ? `${j.bathrooms} bath` : null]
+          .filter(Boolean).join(" / ");
+
+        let status = "Completed";
+        if (j.flagged) status = "Flagged";
+        else if (j.customerRating !== null && j.customerRating <= 3) status = `${j.customerRating}-star (low)`;
+        else if (j.customerRating === 5) status = "5-star";
+        else if (j.delayMinutes !== null && j.delayMinutes > 0) status = `Late (${j.delayMinutes} min)`;
+        else if (j.bookingStatus === "assigned") status = "Assigned";
+
+        return {
+          jobDate: j.jobDate,
+          time: j.serviceDateTime
+            ? new Date(j.serviceDateTime).toLocaleString("en-US", {
+                month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                timeZone: "America/New_York",
+              })
+            : j.jobDate,
+          customer: j.customerName ?? "",
+          address: j.jobAddress ?? "",
+          service: serviceLabel,
+          status,
+          basePay: Math.round(basePay * 100) / 100,
+          photoAdj: Math.round(photoAdj * 100) / 100,
+          ratingAdj: Math.round(ratingAdj * 100) / 100,
+          streakBonus: Math.round(streakBonus * 100) / 100,
+          manualAdj: Math.round(manualAdj * 100) / 100,
+          reclean: Math.round(reclean * 100) / 100,
+          complaint: Math.round(complaint * 100) / 100,
+          finalPay: Math.round(finalPay * 100) / 100,
+        };
+      });
+
+      const totalFinalPay = Math.round(jobRows.reduce((s, r) => s + r.finalPay, 0) * 100) / 100;
+
+      return {
+        teamName: input.teamName,
+        weekStart: input.weekStart,
+        weekEnd,
+        jobs: jobRows,
+        totalFinalPay,
+      };
+    }),
+
+  /**
    * getIntegrityCheck — compares pay totals across all four sources for a given week.
    * Returns totals for: Payroll Summary, Team Pay, Cleaning Portal, Jobs Board.
    * All use the same calcEffectivePay logic; Jobs Board also adds googleReviewBonus + custom rules.
