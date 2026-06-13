@@ -1576,12 +1576,11 @@ function WeekJobRow({
   const [showBreakdown, setShowBreakdown] = useState(false);
   const currentPhoto = lightboxIdx !== null ? photos[lightboxIdx] : null;
 
-  // Pay breakdown values
+  // Pay breakdown values — match jobs board logic exactly
   const base = parseFloat(j.basePay ?? "0") || 0;
   const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
   const photoFromDB = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : null;
-  const hasPhoto = j.photoSubmitted === 1 || photos.length > 0;
-  const photo = photoFromDB ?? (hasPhoto ? 5 : 0);
+  const photo = photoFromDB ?? (j.photoSubmitted === 1 ? 5 : -10);
   const streak = parseFloat(j.streakBonus ?? "0") || 0;
   const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
   const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
@@ -2400,18 +2399,18 @@ export default function CleanerPortal() {
 
   // Earnings summary — only count active (non-removed) jobs
   // Always sum components directly so photoAdjustment is always included
+  const photoBonusAmt = payRules?.photoBonus ?? 5;
+  const noPhotoPenaltyAmt = payRules?.noPhotoPenalty ?? 10;
+
   const calcJobPay = (j: { basePay?: string | null; ratingAdjustment?: string | null; photoAdjustment?: string | null; photoSubmitted?: number | null; photos?: unknown[]; streakBonus?: string | null; manualAdjustment?: string | null; recleanPenalty?: string | null; bookingStatus?: string | null }) => {
     const base = parseFloat(j.basePay ?? "0") || 0;
     const rating = parseFloat(j.ratingAdjustment ?? "0") || 0;
-    const hasPhoto = j.photoSubmitted === 1 || ((j.photos as unknown[])?.length ?? 0) > 0;
-    const isComplete = j.bookingStatus === "completed";
-    // Only apply photo penalty if job is completed (photoAdjustment set in DB) or photo already uploaded
+    // Match jobs board logic: if photoAdjustment is in DB use it; otherwise photoSubmitted=1 → +bonus, 0 → -penalty
     const photoFromDB = j.photoAdjustment != null ? parseFloat(j.photoAdjustment) : null;
-    const photo = photoFromDB ?? (hasPhoto ? 5 : 0);
+    const photo = photoFromDB ?? (j.photoSubmitted === 1 ? photoBonusAmt : -noPhotoPenaltyAmt);
     const streak = parseFloat(j.streakBonus ?? "0") || 0;
     const manual = parseFloat(j.manualAdjustment ?? "0") || 0;
     const reclean = j.recleanPenalty != null ? parseFloat(j.recleanPenalty) : 0;
-    void isComplete; // used for display logic in JobCard; calcJobPay uses DB values directly
     return base + rating + photo + streak + manual + reclean;
   };
   const todayEarnings = jobs.reduce((sum, j) => sum + calcJobPay(j), 0);
