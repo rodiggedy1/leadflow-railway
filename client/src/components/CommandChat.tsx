@@ -2369,7 +2369,8 @@ const MessageList = memo(function MessageList({
                             isMine ? "order-first mr-1.5" : "ml-1.5"
                           )}
                         >
-                          {!isAlert && (
+                          {/* Reply only shown when no thread exists on this message */}
+                          {!isAlert && !(msg.replyCount && msg.replyCount > 0) && !msg.threadParentId && (
                             <button
                               onClick={() => setReplyTo({ id: msg.id, body: msg.body, author: msg.from })}
                               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -2378,24 +2379,24 @@ const MessageList = memo(function MessageList({
                               <span>Reply</span>
                             </button>
                           )}
-                          {/* Slack-style: Reply in Thread (root messages only) */}
+                          {/* Slack-style: Thread button — root messages only */}
                           {!isAlert && !msg.threadParentId && (
                             <button
                               onClick={() => setOpenThreadId(msg.id)}
                               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200"
                             >
                               <MessageSquare className="h-3 w-3" />
-                              <span>Thread</span>
+                              <span>{(msg.replyCount ?? 0) > 0 ? "Reply in thread" : "Thread"}</span>
                             </button>
                           )}
-                          {/* Open thread (thread reply messages) */}
+                          {/* Reply in thread — for thread reply messages surfaced in main feed */}
                           {!isAlert && msg.threadParentId && (
                             <button
                               onClick={() => setOpenThreadId(msg.threadParentId!)}
                               className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition bg-violet-50 text-violet-600 hover:bg-violet-100 border border-violet-200"
                             >
                               <MessageSquare className="h-3 w-3" />
-                              <span>Open thread</span>
+                              <span>Reply in thread</span>
                             </button>
                           )}
                           <button
