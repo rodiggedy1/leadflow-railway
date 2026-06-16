@@ -135,8 +135,8 @@ function AiChips({ cc }: { cc: ConfirmationCall }) {
   const flex = cc.aiFlexibility;
   if (flex === "exact") {
     chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 font-medium border border-orange-200">⏰ Exact Time</span>);
-  } else if (flex === "one_hour") {
-    chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-medium border border-blue-200">🕐 ~1hr Window</span>);
+  } else if (flex === "two_hour") {
+    chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-medium border border-blue-200">🕐 ~2hr Window</span>);
   } else if (flex === "anytime") {
     chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium border border-emerald-200">🟢 Flexible</span>);
   }

@@ -59,11 +59,15 @@ const FIRST_MESSAGE =
 
 const SYSTEM_PROMPT =
   "You are Ava, a friendly and professional customer service representative for Maids in Black, a premium cleaning company. " +
-  "Your goal is to confirm the client's cleaning appointment for tomorrow and ask about arrival flexibility. " +
-  "If the client confirms: say 'Perfect! I have one quick question that helps us schedule our teams. If needed, how flexible are you with your arrival time? " +
-  "For example, do you need us at the scheduled time exactly, are you okay with about an hour of flexibility, or are you flexible anytime that day?' " +
-  "Listen carefully and note their answer. " +
-  "If the client wants to cancel or reschedule: be understanding, note the details, and let them know the office will follow up. " +
+  "Your goal is to confirm the client's cleaning appointment for tomorrow, ask about arrival flexibility, and collect any service notes. " +
+  "Follow this exact flow:\n" +
+  "1. After the client confirms, ask: 'Perfect! I have one quick question that helps us schedule our teams. If needed, how flexible are you with your arrival time? " +
+  "For example, do you need us at the scheduled time exactly, are you okay with about a 2-hour window of flexibility, or are you flexible anytime that day?'\n" +
+  "2. Listen and note their flexibility answer.\n" +
+  "3. Then ask: 'Great, I'll make a note of that. One last thing — are there any notes for the service? For example, if you'll be home, any pets we should know about, or any special requests?'\n" +
+  "4. Listen and note any details they share.\n" +
+  "5. Close with: 'Perfect, I\'ve got all of that noted. We\'ll see you tomorrow — have a great day!'\n" +
+  "If the client wants to cancel or reschedule: be understanding, say 'Of course, I completely understand. I\'ll make a note of that and have someone from our office follow up with you to get that sorted. Is there anything else I can help you with before I let you go?' then end the call.\n" +
   "Keep the call brief, warm, and professional. Do not discuss pricing or other services.";
 
 export const confirmationCallsRouter = router({
@@ -213,7 +217,7 @@ export const confirmationCallsRouter = router({
             },
             voice: {
               provider: "11labs",
-              voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — same as all other outbound calls
+              voiceId: "6adn1kb0hjpdcocrukmq", // Madison
               stability: 0.5,
               similarityBoost: 0.75,
               style: 0.3,
@@ -381,7 +385,7 @@ export const confirmationCallsRouter = router({
                   messages: [
                     {
                       role: "system",
-                      content: `You are analyzing a phone call transcript between an AI agent (Ava) from Maids in Black and a client, where Ava called to confirm a cleaning appointment for tomorrow.\n\nExtract the following fields and return ONLY valid JSON:\n- outcome: one of "confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"\n- flexibility: one of "exact", "one_hour", "anytime", "unknown"\n- notes: array of short strings for special circumstances (e.g. "Dog home", "Lockbox", "WFH", "Baby sleeping"). Empty array if none.\n- outcomeLabel: short human-readable label max 4 words e.g. "Confirmed ✓", "Wants to Reschedule"`,
+                      content: `You are analyzing a phone call transcript between an AI agent (Ava) from Maids in Black and a client, where Ava called to confirm a cleaning appointment for tomorrow.\n\nExtract the following fields and return ONLY valid JSON:\n- outcome: one of "confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"\n- flexibility: one of "exact", "two_hour", "anytime", "unknown"\n- notes: array of short strings for special circumstances (e.g. "Dog home", "Lockbox", "WFH", "Baby sleeping"). Empty array if none.\n- outcomeLabel: short human-readable label max 4 words e.g. "Confirmed ✓", "Wants to Reschedule"`,
                     },
                     { role: "user", content: `Transcript:\n${textToAnalyze.slice(0, 4000)}` },
                   ],
