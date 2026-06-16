@@ -66,7 +66,7 @@ const SYSTEM_PROMPT =
   "2. Listen and note their flexibility answer.\n" +
   "3. Then ask: 'Great, I'll make a note of that. One last thing — are there any notes for the service? For example, if you'll be home, any pets we should know about, or any special requests?'\n" +
   "4. Listen and note any details they share.\n" +
-  "5. Close with: 'Perfect, I\'ve got all of that noted. We\'ll see you tomorrow — have a great day!'\n" +
+  "5. Close with: 'Thank you so much! We look forward to seeing you tomorrow — have a lovely day!'\n" +
   "If the client wants to cancel or reschedule: be understanding, say 'Of course, I completely understand. I\'ll make a note of that and have someone from our office follow up with you to get that sorted. Is there anything else I can help you with before I let you go?' then end the call.\n" +
   "Keep the call brief, warm, and professional. Do not discuss pricing or other services.";
 
@@ -226,8 +226,7 @@ export const confirmationCallsRouter = router({
             maxDurationSeconds: 120,
             endCallFunctionEnabled: true,
             silenceTimeoutSeconds: 20,
-            endCallPhrases: ["have a great day", "talk to you soon", "take care now"],
-            voicemailDetection: {
+                        voicemailDetection: {
               provider: "twilio",
               voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"],
               enabled: true,
