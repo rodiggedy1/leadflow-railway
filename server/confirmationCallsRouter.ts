@@ -12,7 +12,7 @@
  *   5. Insert confirmationCalls row for this page's tracking
  */
 import { z } from "zod";
-import { router, opsChatProcedure } from "./_core/trpc";
+import { router, opsChatProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
@@ -296,7 +296,7 @@ export const confirmationCallsRouter = router({
    * Called by the frontend every 5s so results appear immediately without
    * waiting for VAPI's end-of-call webhook (which can take 30-90s).
    */
-  pollFiredCalls: opsChatProcedure
+  pollFiredCalls: publicProcedure
     .input(z.object({ jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
     .mutation(async ({ input }) => {
       const db = await getDb();
