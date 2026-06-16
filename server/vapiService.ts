@@ -1048,7 +1048,7 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
 
 Extract the following fields from the transcript and return ONLY valid JSON:
 - outcome: one of "confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"
-- flexibility: one of "exact" (needs exact arrival time), "one_hour" (ok with ~1hr window), "anytime" (flexible all day), "unknown"
+- flexibility: Based on what the client said, classify how flexible they are with arrival time. Use "exact" if they need the exact scheduled time with no wiggle room. Use "flexible" if they mentioned any window, range, or some flexibility (e.g. an hour, 2 hours, morning, afternoon, around that time). Use "anytime" if they said anytime or all day is fine. Use "unknown" if arrival flexibility was not discussed at all.
 - notes: array of short strings for any special circumstances mentioned (e.g. "Dog home", "Lockbox", "WFH", "Baby sleeping", "Wants text first", "Gate code needed"). Empty array if none.
 - outcomeLabel: a short human-readable label (max 4 words) like "Confirmed ✓", "Wants to Reschedule", "Needs to Cancel", "Left Voicemail", "No Answer"
 
