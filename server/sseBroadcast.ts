@@ -36,7 +36,8 @@ export type OpsEventType =
   | "super_alert"
   | "ping"
   | "gmail_new_messages"
-  | "missed_call";
+  | "missed_call"
+  | "missed_call_resolved";
 
 export interface OpsEvent {
   type: OpsEventType;

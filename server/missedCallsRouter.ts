@@ -12,7 +12,7 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { missedCalls } from "../drizzle/schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, gte, sql } from "drizzle-orm";
 
 export const missedCallsRouter = router({
   listMissedCalls: agentProcedure
@@ -39,13 +39,23 @@ export const missedCallsRouter = router({
     }),
 
   getPendingCount: agentProcedure
-    .query(async () => {
+    .input(z.object({ todayOnly: z.boolean().default(false) }).optional())
+    .query(async ({ input }) => {
       const db = await getDb();
       if (!db) return { count: 0 };
+      const conditions: any[] = [eq(missedCalls.calledBack, 0)];
+      if (input?.todayOnly) {
+        // Start of today in business timezone (reuses the same pattern as internalCron.ts)
+        const { ENV } = await import("./_core/env");
+        const todayStart = new Date(
+          new Date().toLocaleDateString("en-US", { timeZone: ENV.businessTimezone })
+        );
+        conditions.push(gte(missedCalls.calledAt, todayStart));
+      }
       const [row] = await db
         .select({ count: sql<number>`COUNT(*)` })
         .from(missedCalls)
-        .where(eq(missedCalls.calledBack, 0));
+        .where(and(...conditions));
       return { count: Number(row?.count ?? 0) };
     }),
 
@@ -64,6 +74,9 @@ export const missedCallsRouter = router({
         .update(missedCalls)
         .set({ calledBack: 1, calledBackAt: new Date(), calledBackByAgentName: input.agentName, notes: input.notes ?? null })
         .where(eq(missedCalls.id, input.id));
+      // Broadcast so CommandChat pill decrements in real time for all agents
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("missed_call_resolved" as any);
       return { success: true };
     }),
 
@@ -76,6 +89,9 @@ export const missedCallsRouter = router({
         .update(missedCalls)
         .set({ calledBack: 0, calledBackAt: null, calledBackByAgentName: null })
         .where(eq(missedCalls.id, input.id));
+      // Broadcast so CommandChat pill increments back in real time
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("missed_call_resolved" as any);
       return { success: true };
     }),
 });

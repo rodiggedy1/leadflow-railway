@@ -422,7 +422,7 @@ function VoicePendingBadge() {
   );
 
   // Bump missed count in real time when a new missed call arrives
-  useOpsStream({ onMissedCall: () => refetchMissed() });
+  useOpsStream({ onMissedCall: () => refetchMissed(), onMissedCallResolved: () => refetchMissed() });
 
   const callbackCount = callbacksData?.length ?? 0;
   const missedCount = missedData?.count ?? 0;

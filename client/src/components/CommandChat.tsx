@@ -2547,6 +2547,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     staleTime: 0, // Always refetch when cache is invalidated (e.g. after marking email read in inbox)
   });
   const emailUnreadCount = emailUnreadData?.count ?? 0;
+  // ── Missed Calls today count (pending only) ─────────────────────────────────
+  const { data: missedCallsTodayData, refetch: refetchMissedCallsToday } = trpc.missedCalls.getPendingCount.useQuery(
+    { todayOnly: true },
+    { staleTime: 30_000, refetchInterval: 60_000, retry: false }
+  );
+  const missedCallsTodayCount = missedCallsTodayData?.count ?? 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -2607,6 +2613,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.opsChat.getSuperAlertMessageIds.invalidate();
       utils.opsChat.getCommandChatData.invalidate();
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
+    onMissedCall: () => {
+      // Bump the today count immediately when a new missed call comes in
+      refetchMissedCallsToday();
+    },
+    onMissedCallResolved: () => {
+      // Decrement the today count immediately when an agent marks a call as called back (or undoes it)
+      refetchMissedCallsToday();
     },
   });
 
@@ -4682,6 +4696,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     {emailUnreadCount}
                   </span>
                 )}
+              </button>
+              {/* Missed Calls pill — always visible, today's pending count */}
+              <span className="text-slate-300 text-xs">|</span>
+              <button
+                onClick={() => { window.location.href = "/admin/missed-calls"; }}
+                className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-red-100 text-red-700 hover:bg-red-200"
+              >
+                <PhoneMissed className="h-3 w-3" />
+                Missed Call
+                <span className={`ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none ${missedCallsTodayCount > 0 ? "bg-red-500 text-white animate-pulse" : "bg-red-200 text-red-600"}`}>
+                  {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
+                </span>
               </button>
             </div>
           )}
