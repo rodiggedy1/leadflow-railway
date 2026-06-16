@@ -23,7 +23,6 @@ import {
   PhoneMissed,
   ChevronDown,
   ChevronUp,
-  FlaskConical,
   ClipboardList,
   Send,
 } from "lucide-react";
@@ -241,15 +240,11 @@ function ResultCard({ job }: { job: Job }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_TEST_NUMBER = "3029816191";
-
 export default function ConfirmationCalls() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
   const [date, setDate] = useState(todayLocal);
   const [activeTab, setActiveTab] = useState<"dispatch" | "results">("dispatch");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [testMode, setTestMode] = useState(false);
-  const [testPhone, setTestPhone] = useState(DEFAULT_TEST_NUMBER);
   const [pollingActive, setPollingActive] = useState(false);
   const [isFiringBatch, setIsFiringBatch] = useState(false);
 
@@ -297,9 +292,7 @@ export default function ConfirmationCalls() {
     setSelectedIds(new Set());
 
     for (const job of toCall) {
-      const phone = testMode
-        ? testPhone.replace(/\D/g, "")
-        : (job.customerPhone ?? "");
+      const phone = job.customerPhone ?? "";
       if (!phone) continue;
       try {
         await placeCall.mutateAsync({
@@ -314,7 +307,7 @@ export default function ConfirmationCalls() {
       await new Promise(r => setTimeout(r, 800));
     }
     refetch();
-  }, [jobs, selectedIds, testMode, testPhone, date, placeCall, refetch]);
+  }, [jobs, selectedIds, date, placeCall, refetch]);
 
   const calledJobs = (jobs ?? []).filter(j => j.confirmationCall && j.confirmationCall.status !== "pending");
   const totalJobs = jobs?.length ?? 0;
@@ -393,29 +386,7 @@ export default function ConfirmationCalls() {
           {/* ── DISPATCH TAB ── */}
           {activeTab === "dispatch" && (
             <div className="space-y-4">
-              {/* Test mode */}
-              <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <FlaskConical className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                <label className="flex items-center gap-2 cursor-pointer flex-1">
-                  <input
-                    type="checkbox"
-                    checked={testMode}
-                    onChange={e => setTestMode(e.target.checked)}
-                    className="w-4 h-4 rounded accent-amber-500"
-                  />
-                  <span className="text-sm font-medium text-amber-800">Test mode — redirect all calls to:</span>
-                </label>
-                <input
-                  type="tel"
-                  value={testPhone}
-                  onChange={e => setTestPhone(e.target.value)}
-                  disabled={!testMode}
-                  placeholder="3029816191"
-                  className="w-36 text-sm border border-amber-300 rounded-lg px-2 py-1 bg-white disabled:opacity-40 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                />
-              </div>
-
-              {/* Stats + select all */}
+              {/* Stats + select all */
               {totalJobs > 0 && (
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm text-gray-500">
@@ -442,7 +413,7 @@ export default function ConfirmationCalls() {
                     {isFiringBatch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
                     {isFiringBatch
                       ? "Placing calls…"
-                      : `Call ${selectedIds.size} selected${testMode ? " (TEST)" : ""}`}
+                      : `Call ${selectedIds.size} selected`}
                   </Button>
                 </div>
               )}
