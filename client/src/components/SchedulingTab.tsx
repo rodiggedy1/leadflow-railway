@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
+import { useOpsStream } from "@/hooks/useOpsStream";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1523,6 +1524,8 @@ export default function SchedulingTab() {
     { date },
     { staleTime: 30_000, refetchOnWindowFocus: false }
   );
+  // Instantly reflect confirmation call outcomes (and any other job updates) without a manual refresh
+  useOpsStream({ onJobUpdate: () => utils.scheduling.getSchedule.invalidate({ date }) });
 
   const optimize = trpc.scheduling.optimizeDay.useMutation({
     onMutate: () => {

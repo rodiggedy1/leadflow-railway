@@ -502,6 +502,12 @@ export const confirmationCallsRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Fetch the cleanerJobId so we can broadcast a targeted job_update
+      const [row] = await db
+        .select({ cleanerJobId: confirmationCalls.cleanerJobId })
+        .from(confirmationCalls)
+        .where(eq(confirmationCalls.id, input.id))
+        .limit(1);
       await db
         .update(confirmationCalls)
         .set({
@@ -511,6 +517,9 @@ export const confirmationCallsRouter = router({
           manualOverrideAt: input.outcome ? Date.now() : null,
         })
         .where(eq(confirmationCalls.id, input.id));
+      // Broadcast so SchedulingTab updates instantly on all connected clients
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("job_update", { jobId: row?.cleanerJobId ?? undefined });
       return { ok: true };
     }),
 });
