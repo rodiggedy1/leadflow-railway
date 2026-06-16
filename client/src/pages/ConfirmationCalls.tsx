@@ -24,7 +24,17 @@ import {
   ClipboardList,
   Send,
   Mic,
+  Pencil,
+  X,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,6 +83,10 @@ type ConfirmationCall = {
   aiFlexibility: string | null;
   aiNotes: string | null;
   aiOutcomeLabel: string | null;
+  manualOutcome: string | null;
+  manualOutcomeLabel: string | null;
+  manualOverrideBy: string | null;
+  manualOverrideAt: number | null;
 };
 
 type Job = {
@@ -117,6 +131,8 @@ function OutcomeBadge({ outcome, label }: { outcome: string | null; label: strin
     no_answer:  { bg: "bg-gray-50",     text: "text-gray-600",    border: "border-gray-200" },
     voicemail:  { bg: "bg-purple-50",   text: "text-purple-800",  border: "border-purple-200" },
     unknown:    { bg: "bg-gray-50",     text: "text-gray-500",    border: "border-gray-200" },
+    busy:       { bg: "bg-slate-50",    text: "text-slate-600",   border: "border-slate-200" },
+    failed:     { bg: "bg-red-50",      text: "text-red-700",     border: "border-red-200" },
   };
   const style = cfg[outcome] ?? cfg.unknown;
   return (
@@ -206,16 +222,39 @@ function DispatchCard({ job, selected, onToggle }: { job: Job; selected: boolean
 
 // ── Results card (world-class) ────────────────────────────────────────────────
 
-function ResultCard({ job }: { job: Job }) {
+function ResultCard({ job, agentName, onOverrideSuccess }: { job: Job; agentName: string; onOverrideSuccess: () => void }) {
   const cc = job.confirmationCall!;
   const status: CallStatus = cc.status;
 
-  // Outcome color accent for left border
+  const overrideMutation = trpc.confirmationCalls.overrideOutcome.useMutation({
+    onSuccess: () => {
+      toast.success("Outcome updated");
+      onOverrideSuccess();
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const OVERRIDE_OPTIONS = [
+    { outcome: "confirmed" as const,  label: "Confirmed ✓",         cls: "text-emerald-700" },
+    { outcome: "reschedule" as const, label: "Wants to Reschedule",  cls: "text-amber-700" },
+    { outcome: "cancel" as const,     label: "Cancel",               cls: "text-red-700" },
+    { outcome: "voicemail" as const,  label: "Left Voicemail",       cls: "text-purple-700" },
+    { outcome: "no_answer" as const,  label: "No Answer",            cls: "text-gray-600" },
+    { outcome: "unknown" as const,    label: "Unknown",              cls: "text-gray-500" },
+  ];
+
+  // Effective outcome: manual override wins over AI
+  const effectiveOutcome = cc.manualOutcome || cc.aiOutcome;
+  const effectiveLabel   = cc.manualOutcomeLabel || cc.aiOutcomeLabel;
+
+  // Outcome color accent for left border — manual override wins
   const accentColor =
-    cc.aiOutcome === "confirmed" ? "#10b981" :
-    cc.aiOutcome === "reschedule" ? "#f59e0b" :
-    cc.aiOutcome === "cancel" ? "#ef4444" :
-    cc.aiOutcome === "voicemail" ? "#8b5cf6" :
+    effectiveOutcome === "confirmed" ? "#10b981" :
+    effectiveOutcome === "reschedule" ? "#f59e0b" :
+    effectiveOutcome === "cancel" ? "#ef4444" :
+    effectiveOutcome === "voicemail" ? "#8b5cf6" :
+    cc.endedReason === "customer-busy" ? "#6b7280" :
+    cc.endedReason === "pipeline-error-eleven-labs-voice-not-found" ? "#ef4444" :
     status === "no_answer" ? "#9ca3af" :
     status === "failed" ? "#ef4444" :
     "#10b981";
@@ -238,12 +277,54 @@ function ResultCard({ job }: { job: Job }) {
               <div className="font-semibold text-gray-900 text-sm leading-tight">{job.customerName ?? "Unknown"}</div>
               <div className="text-xs text-gray-500 mt-0.5 truncate">{job.jobAddress ?? "—"}</div>
             </div>
-            {/* AI outcome label takes priority over generic status badge */}
-            {cc.aiOutcomeLabel ? (
-              <OutcomeBadge outcome={cc.aiOutcome} label={cc.aiOutcomeLabel} />
-            ) : (
-              <StatusBadge status={status} />
-            )}
+            {/* Badge area: manual override → AI outcome → endedReason special cases → generic status */}
+            <div className="flex items-center gap-1.5">
+              {cc.manualOutcomeLabel ? (
+                <OutcomeBadge outcome={cc.manualOutcome} label={`✏️ ${cc.manualOutcomeLabel}`} />
+              ) : cc.aiOutcomeLabel ? (
+                <OutcomeBadge outcome={cc.aiOutcome} label={cc.aiOutcomeLabel} />
+              ) : cc.endedReason === "customer-busy" ? (
+                <OutcomeBadge outcome="busy" label="Line Busy" />
+              ) : cc.endedReason === "pipeline-error-eleven-labs-voice-not-found" ? (
+                <OutcomeBadge outcome="failed" label="Voice Error" />
+              ) : (
+                <StatusBadge status={status} />
+              )}
+              {/* Manual override button */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Override outcome"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <div className="px-2 py-1 text-[10px] text-gray-400 font-medium uppercase tracking-wide">Set Outcome</div>
+                  {OVERRIDE_OPTIONS.map(opt => (
+                    <DropdownMenuItem
+                      key={opt.outcome}
+                      className={`text-sm cursor-pointer ${opt.cls}`}
+                      onClick={() => overrideMutation.mutate({ id: cc.id, outcome: opt.outcome, label: opt.label, agentName })}
+                    >
+                      {opt.label}
+                    </DropdownMenuItem>
+                  ))}
+                  {cc.manualOutcome && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-sm cursor-pointer text-gray-400"
+                        onClick={() => overrideMutation.mutate({ id: cc.id, outcome: null, label: null, agentName })}
+                      >
+                        <X className="w-3 h-3 mr-1" /> Clear override
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </div>
       </div>
@@ -292,9 +373,11 @@ function ResultCard({ job }: { job: Job }) {
 // ── Results summary bar ───────────────────────────────────────────────────────
 
 function ResultsSummaryBar({ jobs }: { jobs: Job[] }) {
-  const confirmed  = jobs.filter(j => j.confirmationCall?.aiOutcome === "confirmed" || (j.confirmationCall?.status === "completed" && !j.confirmationCall?.aiOutcome)).length;
-  const reschedule = jobs.filter(j => j.confirmationCall?.aiOutcome === "reschedule").length;
-  const cancel     = jobs.filter(j => j.confirmationCall?.aiOutcome === "cancel").length;
+  // Manual override wins over AI outcome for summary counts
+  const effectiveOutcome = (j: Job) => j.confirmationCall?.manualOutcome || j.confirmationCall?.aiOutcome;
+  const confirmed  = jobs.filter(j => effectiveOutcome(j) === "confirmed" || (j.confirmationCall?.status === "completed" && !effectiveOutcome(j))).length;
+  const reschedule = jobs.filter(j => effectiveOutcome(j) === "reschedule").length;
+  const cancel     = jobs.filter(j => effectiveOutcome(j) === "cancel").length;
   const noAnswer   = jobs.filter(j => j.confirmationCall?.status === "no_answer").length;
   const inFlight   = jobs.filter(j => j.confirmationCall?.status === "fired").length;
   const failed     = jobs.filter(j => j.confirmationCall?.status === "failed").length;
@@ -346,7 +429,7 @@ function ResultsSummaryBar({ jobs }: { jobs: Job[] }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ConfirmationCalls() {
-  const { pagePermissions, isAdmin } = useAgentPermissions();
+  const { pagePermissions, isAdmin, agentName } = useAgentPermissions();
   const [date, setDate] = useState(todayLocal);
   const [activeTab, setActiveTab] = useState<"dispatch" | "results">("dispatch");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -587,7 +670,12 @@ export default function ConfirmationCalls() {
                   {/* Result cards */}
                   <div className="space-y-3">
                     {calledJobs.map(job => (
-                      <ResultCard key={job.id} job={job as Job} />
+                      <ResultCard
+                        key={job.id}
+                        job={job as Job}
+                        agentName={agentName ?? "Agent"}
+                        onOverrideSuccess={() => refetch()}
+                      />
                     ))}
                   </div>
                 </>

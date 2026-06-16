@@ -27,6 +27,7 @@ import {
   teamDayConfig,
   teamWorkSchedule,
   teamDayOverride,
+  confirmationCalls,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -992,7 +993,39 @@ export const schedulingRouter = router({
           },
         };
       });
-      return { jobs: enriched, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
+      // Attach the most recent confirmation call outcome to each job
+      const confCalls = jobIds.length > 0
+        ? await db
+            .select({
+              cleanerJobId: confirmationCalls.cleanerJobId,
+              id: confirmationCalls.id,
+              status: confirmationCalls.status,
+              endedReason: confirmationCalls.endedReason,
+              aiOutcome: confirmationCalls.aiOutcome,
+              aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+              aiFlexibility: confirmationCalls.aiFlexibility,
+              manualOutcome: confirmationCalls.manualOutcome,
+              manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+            })
+            .from(confirmationCalls)
+            .where(
+              and(
+                inArray(confirmationCalls.cleanerJobId, jobIds),
+                eq(confirmationCalls.jobDate, input.date),
+              )
+            )
+            .orderBy(confirmationCalls.firedAt)
+        : [];
+      // Most recent call per job (last in firedAt-asc order)
+      const confCallMap = new Map<number, typeof confCalls[number]>();
+      for (const c of confCalls) {
+        confCallMap.set(c.cleanerJobId, c); // later entries overwrite earlier ones
+      }
+      const enrichedWithConf = enriched.map(j => ({
+        ...j,
+        confirmationCall: confCallMap.get(j.id) ?? null,
+      }));
+      return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
     }),
 
   // ── Run optimizer ───────────────────────────────────────────────────────────
