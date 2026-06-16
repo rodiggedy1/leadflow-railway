@@ -2845,10 +2845,16 @@ async function handleCallCompleted(event: any): Promise<void> {
   // ── Missed call detection ──────────────────────────────────────────────────
   // A missed inbound call has direction=incoming and answeredAt=null.
   // OpenPhone also sets status to "missed", "no-answer", or "abandoned".
+  // A missed inbound call: direction=incoming AND answeredAt=null.
+  // We accept "missed", "no-answer", "abandoned" as explicit missed statuses.
+  // We also accept null/undefined status (some older webhook versions omit it).
+  // We deliberately exclude "completed" — a completed call with answeredAt=null
+  // can be a voicemail or IVR-answered call, not a true missed call.
+  const MISSED_STATUSES = new Set(["missed", "no-answer", "abandoned"]);
   const isMissed =
     direction === "incoming" &&
     !call.answeredAt &&
-    (!call.status || ["missed", "no-answer", "abandoned", "completed"].includes(call.status));
+    (!call.status || MISSED_STATUSES.has(call.status));
 
   if (isMissed) {
     await handleMissedCall({ call, callId, db });
