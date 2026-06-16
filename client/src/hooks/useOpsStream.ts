@@ -37,6 +37,8 @@ export type OpsStreamCallbacks = {
   onLeadAssignment?: (assignmentId: number, targetAgentId: number) => void;
   /** Called when a super-alert (double-tag) is posted in Command Chat */
   onSuperAlert?: (targetAgentNames: string[]) => void;
+  /** Called when a missed inbound call is detected */
+  onMissedCall?: (callerPhone: string, phoneNumberLabel: string) => void;
   /** Called when new Gmail messages arrive via Pub/Sub push */
   onGmailNewMessages?: () => void;
 };
@@ -122,6 +124,9 @@ export function useOpsStream(
               break;
             case "gmail_new_messages":
               cbRef.current.onGmailNewMessages?.();
+              break;
+            case "missed_call":
+              cbRef.current.onMissedCall?.(event.callerPhone ?? "", event.phoneNumberLabel ?? "");
               break;
             case "ping":
               // keepalive — no action needed

@@ -12,6 +12,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { Button } from "@/components/ui/button";
 import NotificationBell from "@/components/NotificationBell";
 import { toast } from "sonner";
@@ -26,6 +27,7 @@ import {
   Users,
   Trophy,
   PhoneIncoming,
+  PhoneMissed,
   Send,
   Star,
   Zap,
@@ -280,7 +282,8 @@ export type AdminTab =
   | "performance"
   | "metrics"
   | "lead-nurturing"
-  | "confirmation-calls";
+  | "confirmation-calls"
+  | "missed-calls";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -331,8 +334,9 @@ const NAV_ENTRIES: NavEntry[] = [
     label: "Voice",
     icon: <Mic className="w-3.5 h-3.5" />,
     children: [
-      { id: "callbacks", label: "Callbacks", href: "/admin/leads?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
-      { id: "calls",     label: "All Calls", href: "/admin/calls",          icon: <Mic className="w-3.5 h-3.5" /> },
+      { id: "callbacks",    label: "Callbacks",    href: "/admin/leads?tab=callbacks", icon: <PhoneIncoming className="w-3.5 h-3.5" /> },
+      { id: "calls",        label: "All Calls",    href: "/admin/calls",               icon: <Mic className="w-3.5 h-3.5" /> },
+      { id: "missed-calls", label: "Missed Calls", href: "/admin/missed-calls",        icon: <PhoneMissed className="w-3.5 h-3.5" /> },
     ],
   },
   {
@@ -406,17 +410,27 @@ const NAV_ENTRIES: NavEntry[] = [
   },
 ];
 
-// ── Voice pending callbacks badge ───────────────────────────────────────
+// ── Voice nav badge — callbacks + missed calls ──────────────────────────
 function VoicePendingBadge() {
-  const { data } = trpc.voice.listCallbacks.useQuery(
+  const { data: callbacksData } = trpc.voice.listCallbacks.useQuery(
     { includeCompleted: false },
     { refetchInterval: 60_000, staleTime: 55_000, retry: false, throwOnError: false }
   );
-  const count = data?.length ?? 0;
-  if (count === 0) return null;
+  const { data: missedData, refetch: refetchMissed } = trpc.missedCalls.getPendingCount.useQuery(
+    undefined,
+    { refetchInterval: 60_000, staleTime: 55_000, retry: false, throwOnError: false }
+  );
+
+  // Bump missed count in real time when a new missed call arrives
+  useOpsStream({ onMissedCall: () => refetchMissed() });
+
+  const callbackCount = callbacksData?.length ?? 0;
+  const missedCount = missedData?.count ?? 0;
+  const total = callbackCount + missedCount;
+  if (total === 0) return null;
   return (
-    <span className="ml-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
-      {count}
+    <span className="ml-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+      {total > 99 ? "99+" : total}
     </span>
   );
 }
