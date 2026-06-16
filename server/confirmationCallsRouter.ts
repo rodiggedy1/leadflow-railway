@@ -226,7 +226,7 @@ export const confirmationCallsRouter = router({
             maxDurationSeconds: 120,
             endCallFunctionEnabled: true,
             silenceTimeoutSeconds: 20,
-            endCallPhrases: ["goodbye", "bye", "take care", "have a great day", "thank you, bye"],
+            endCallPhrases: ["have a great day", "talk to you soon", "take care now"],
             voicemailDetection: {
               provider: "twilio",
               voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"],
