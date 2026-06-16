@@ -117,6 +117,8 @@ function OutcomeBadge({ outcome, label }: { outcome: string | null; label: strin
     no_answer:  { bg: "bg-gray-50",     text: "text-gray-600",    border: "border-gray-200" },
     voicemail:  { bg: "bg-purple-50",   text: "text-purple-800",  border: "border-purple-200" },
     unknown:    { bg: "bg-gray-50",     text: "text-gray-500",    border: "border-gray-200" },
+    busy:       { bg: "bg-slate-50",    text: "text-slate-600",   border: "border-slate-200" },
+    failed:     { bg: "bg-red-50",      text: "text-red-700",     border: "border-red-200" },
   };
   const style = cfg[outcome] ?? cfg.unknown;
   return (
@@ -216,6 +218,8 @@ function ResultCard({ job }: { job: Job }) {
     cc.aiOutcome === "reschedule" ? "#f59e0b" :
     cc.aiOutcome === "cancel" ? "#ef4444" :
     cc.aiOutcome === "voicemail" ? "#8b5cf6" :
+    cc.endedReason === "customer-busy" ? "#6b7280" :
+    cc.endedReason === "pipeline-error-eleven-labs-voice-not-found" ? "#ef4444" :
     status === "no_answer" ? "#9ca3af" :
     status === "failed" ? "#ef4444" :
     "#10b981";
@@ -238,9 +242,13 @@ function ResultCard({ job }: { job: Job }) {
               <div className="font-semibold text-gray-900 text-sm leading-tight">{job.customerName ?? "Unknown"}</div>
               <div className="text-xs text-gray-500 mt-0.5 truncate">{job.jobAddress ?? "—"}</div>
             </div>
-            {/* AI outcome label takes priority over generic status badge */}
+            {/* AI outcome label takes priority; endedReason overrides generic status for special cases */}
             {cc.aiOutcomeLabel ? (
               <OutcomeBadge outcome={cc.aiOutcome} label={cc.aiOutcomeLabel} />
+            ) : cc.endedReason === "customer-busy" ? (
+              <OutcomeBadge outcome="busy" label="Line Busy" />
+            ) : cc.endedReason === "pipeline-error-eleven-labs-voice-not-found" ? (
+              <OutcomeBadge outcome="failed" label="Voice Error" />
             ) : (
               <StatusBadge status={status} />
             )}
