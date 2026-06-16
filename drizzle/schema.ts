@@ -2833,3 +2833,52 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type GmailThreadMeta = typeof gmailThreadMeta.$inferSelect;
+
+// ── Confirmation Calls ────────────────────────────────────────────────────────
+/**
+ * confirmation_calls — one row per AI confirmation call placed from the
+ * Confirmation Calls page. Tracks the full lifecycle and links back to the
+ * VAPI call via vapiCallId (which also gates the fieldMgmtCalls guard row).
+ */
+export const confirmationCallStatuses = ["pending", "fired", "completed", "failed", "no_answer"] as const;
+export type ConfirmationCallStatus = (typeof confirmationCallStatuses)[number];
+
+export const confirmationCalls = mysqlTable("confirmation_calls", {
+  id: int("id").autoincrement().primaryKey(),
+  /** The job this call is about (cleanerJobs.id) */
+  cleanerJobId: int("cleanerJobId").notNull(),
+  /** Job date (YYYY-MM-DD) */
+  jobDate: varchar("jobDate", { length: 20 }).notNull(),
+  /** Client name (denormalized for display) */
+  clientName: varchar("clientName", { length: 255 }),
+  /** Phone number called (E.164) */
+  calledPhone: varchar("calledPhone", { length: 30 }).notNull(),
+  /** Current lifecycle status */
+  status: mysqlEnum("status", confirmationCallStatuses as unknown as [string, ...string[]]).default("pending").notNull(),
+  /** VAPI call ID returned from the VAPI API */
+  vapiCallId: varchar("vapiCallId", { length: 128 }).unique(),
+  /** URL to the call recording (populated from VAPI end-of-call webhook) */
+  recordingUrl: varchar("recordingUrl", { length: 1024 }),
+  /** Full call transcript (populated from VAPI end-of-call webhook) */
+  transcript: longtext("transcript"),
+  /** AI-generated summary of call outcome */
+  summary: text("summary"),
+  /** Why the call ended (from VAPI webhook) */
+  endedReason: varchar("endedReason", { length: 100 }),
+  /** Call duration in seconds (from VAPI webhook) */
+  durationSeconds: int("durationSeconds"),
+  /** Who fired the call */
+  firedBy: varchar("firedBy", { length: 64 }),
+  /** When the call was placed */
+  firedAt: bigint("firedAt", { mode: "number" }),
+  /** When the call ended (from VAPI webhook) */
+  completedAt: bigint("completedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  idxJobDate: index("idx_cc_job_date").on(t.jobDate),
+  idxJobId: index("idx_cc_job_id").on(t.cleanerJobId),
+  idxVapi: index("idx_cc_vapi").on(t.vapiCallId),
+}));
+export type ConfirmationCall = typeof confirmationCalls.$inferSelect;
+export type InsertConfirmationCall = typeof confirmationCalls.$inferInsert;

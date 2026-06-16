@@ -44,6 +44,7 @@ import { teamPayRouter } from "./teamPayRouter";
 import { nurtureRouter } from "./nurtureRouter";
 import { endEnrollment } from "./nurtureSequence";
 import { callsRouter } from "./callsRouter";
+import { confirmationCallsRouter } from "./confirmationCallsRouter";
 import { gmailRouter } from "./gmailRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
@@ -6260,8 +6261,8 @@ Return JSON with exactly these fields:
   opsChat: opsChatRouter,
   followUps: followUpsRouter,
   teamPay: teamPayRouter,
-  calls: callsRouter,
-
+    calls: callsRouter,
+  confirmationCalls: confirmationCallsRouter,
   tools: router({
     generateFirstMessage: agentProcedure
       .input(
