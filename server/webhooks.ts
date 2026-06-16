@@ -2851,10 +2851,17 @@ async function handleCallCompleted(event: any): Promise<void> {
   // We deliberately exclude "completed" — a completed call with answeredAt=null
   // can be a voicemail or IVR-answered call, not a true missed call.
   const MISSED_STATUSES = new Set(["missed", "no-answer", "abandoned"]);
+  // Blocklist: internal/Twilio/VAPI numbers that appear as inbound to OpenPhone
+  // but are actually outbound automated calls from our own infrastructure.
+  // These must never be treated as missed calls from real customers.
+  const INTERNAL_CALLER_NUMBERS = new Set([
+    "+12028519290", // Twilio/VAPI outbound number
+  ]);
   const isMissed =
     direction === "incoming" &&
     !call.answeredAt &&
-    (!call.status || MISSED_STATUSES.has(call.status));
+    (!call.status || MISSED_STATUSES.has(call.status)) &&
+    !INTERNAL_CALLER_NUMBERS.has(call.from ?? ""); // skip our own infrastructure numbers
 
   if (isMissed) {
     await handleMissedCall({ call, callId, db });
