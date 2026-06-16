@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -2823,22 +2823,38 @@ async function handleCallCompleted(event: any): Promise<void> {
   if (!call?.id) return;
   const db = await getDb();
   if (!db) return;
-  // Clear on-call status (best-effort)
-  await db
-    .update(agents)
-    .set({ onCallSince: null, onCallCallId: null } as any)
-    .where(eq(agents.onCallCallId, call.id));
-  console.log(`[CallStatus] call.completed for callId=${call.id}`);
-  // Post a call details card — always, using data directly from the call payload
+
+  const callId: string = call.id;
+  const direction: string = call.direction ?? "incoming";
   const durationSec: number | null = call.duration ?? null;
   const durationLabel = durationSec
     ? durationSec >= 60
       ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s`
       : `${durationSec}s`
     : null;
-  const direction = call.direction ?? "incoming";
   const dirLabel = direction === "outgoing" ? "Outbound" : "Inbound";
   const otherParty = direction === "outgoing" ? (call.to ?? "") : (call.from ?? "");
+
+  // Clear on-call status (best-effort)
+  await db
+    .update(agents)
+    .set({ onCallSince: null, onCallCallId: null } as any)
+    .where(eq(agents.onCallCallId, callId));
+  console.log(`[CallStatus] call.completed for callId=${callId}`);
+
+  // ── Missed call detection ──────────────────────────────────────────────────
+  // A missed inbound call has direction=incoming and answeredAt=null.
+  // OpenPhone also sets status to "missed", "no-answer", or "abandoned".
+  const isMissed =
+    direction === "incoming" &&
+    !call.answeredAt &&
+    (!call.status || ["missed", "no-answer", "abandoned", "completed"].includes(call.status));
+
+  if (isMissed) {
+    await handleMissedCall({ call, callId, db });
+  }
+
+  // ── Post call_ended card to CommandChat ────────────────────────────────────
   try {
     await db.insert(opsChatMessages).values({
       cleanerJobId: null,
@@ -2848,7 +2864,7 @@ async function handleCallCompleted(event: any): Promise<void> {
       body: `${dirLabel} call · ${otherParty}${durationLabel ? ` · ${durationLabel}` : ""}`,
       quickAction: "call_ended",
       metadata: JSON.stringify({
-        callId: call.id,
+        callId,
         direction,
         otherParty,
         durationSec,
@@ -2858,9 +2874,155 @@ async function handleCallCompleted(event: any): Promise<void> {
   } catch (e) {
     console.error("[CallStatus] Failed to post call_ended card:", e);
   }
+
   const { broadcastOpsUpdate } = await import("./sseBroadcast");
   broadcastOpsUpdate("agent_status");
   broadcastOpsUpdate("new_message", { channel: "command" });
+}
+
+/**
+ * handleMissedCall
+ * Called from handleCallCompleted when an inbound call was not answered.
+ *
+ * Steps:
+ *   1. Inserts a row into missed_calls (deduped by openphoneCallId)
+ *   2. Sends an auto-SMS to the caller (with 24h dedup + opt-out check)
+ *   3. Posts a missed_call card to CommandChat
+ *   4. Broadcasts missed_call SSE event so the header badge updates in real time
+ */
+async function handleMissedCall({ call, callId, db }: { call: any; callId: string; db: any }): Promise<void> {
+  const callerPhone: string = call.from ?? "";
+  if (!callerPhone) {
+    console.warn("[MissedCall] No caller phone — skipping");
+    return;
+  }
+
+  const phoneNumberId: string = call.phoneNumberId ?? "";
+  // Map phone number ID → human label
+  const phoneNumberLabel =
+    phoneNumberId === ENV.openPhoneNumberId ? "Main" :
+    phoneNumberId === ENV.openPhoneCsNumberId ? "CS" :
+    phoneNumberId === ENV.openPhoneBarkNumberId ? "Bark" :
+    "Unknown";
+
+  const calledAt = call.createdAt ? new Date(call.createdAt) : new Date();
+
+  // ── 1. Insert into missed_calls (UNIQUE on openphoneCallId — safe to retry) ──
+  let missedCallId: number | null = null;
+  try {
+    // Check for existing row first (dedup)
+    const [existing] = await db
+      .select({ id: missedCalls.id })
+      .from(missedCalls)
+      .where(eq(missedCalls.openphoneCallId, callId))
+      .limit(1);
+
+    if (existing) {
+      console.log(`[MissedCall] Already recorded callId=${callId} — skipping insert`);
+      missedCallId = existing.id;
+    } else {
+      const [inserted] = await db
+        .insert(missedCalls)
+        .values({
+          openphoneCallId: callId,
+          callerPhone,
+          phoneNumberId,
+          phoneNumberLabel,
+          calledAt,
+          smsSent: 0,
+          calledBack: 0,
+        })
+        .$returningId();
+      missedCallId = inserted?.id ?? null;
+      console.log(`[MissedCall] Inserted missed_calls row id=${missedCallId}`);
+    }
+  } catch (e) {
+    console.error(`[MissedCall] Failed to insert missed_calls row:`, e);
+  }
+
+  // ── 2. Auto-SMS (with opt-out + 24h dedup) ────────────────────────────────
+  const AUTO_SMS_MSG =
+    "Hi this is Ava from Maids in Black, sorry we missed your call. We'll give you a call back in a few moments. Feel free to shoot us a quick text as well!";
+
+  try {
+    // Check opt-out
+    const [optOut] = await db
+      .select({ id: smsOptOuts.id })
+      .from(smsOptOuts)
+      .where(eq(smsOptOuts.phone, callerPhone))
+      .limit(1);
+
+    if (optOut) {
+      console.log(`[MissedCall] ${callerPhone} opted out — skipping auto-SMS`);
+    } else {
+      // 24h dedup — don't spam the same caller
+      const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [recentSms] = await db
+        .select({ id: missedCalls.id })
+        .from(missedCalls)
+        .where(
+          and(
+            eq(missedCalls.callerPhone, callerPhone),
+            eq(missedCalls.smsSent, 1),
+            gte(missedCalls.smsSentAt, cutoff24h)
+          )
+        )
+        .limit(1);
+
+      if (recentSms) {
+        console.log(`[MissedCall] Auto-SMS already sent to ${callerPhone} in last 24h — skipping`);
+      } else {
+        // Send from the same number they called
+        const smsResult = await sendSms({
+          to: callerPhone,
+          content: AUTO_SMS_MSG,
+          fromNumberId: phoneNumberId || undefined,
+        });
+
+        if (smsResult.success && missedCallId) {
+          await db
+            .update(missedCalls)
+            .set({ smsSent: 1, smsSentAt: new Date() })
+            .where(eq(missedCalls.id, missedCallId));
+          console.log(`[MissedCall] Auto-SMS sent to ${callerPhone}`);
+        } else {
+          console.error(`[MissedCall] Auto-SMS failed for ${callerPhone}:`, smsResult.error);
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`[MissedCall] Auto-SMS error for ${callerPhone}:`, e);
+  }
+
+  // ── 3. Post missed_call card to CommandChat ────────────────────────────────
+  try {
+    await db.insert(opsChatMessages).values({
+      cleanerJobId: null,
+      channel: "command",
+      authorName: "☎️ Missed Call",
+      authorRole: "system",
+      body: `Missed inbound call · ${callerPhone} · ${phoneNumberLabel} line`,
+      quickAction: "missed_call",
+      metadata: JSON.stringify({
+        missedCallId,
+        callId,
+        callerPhone,
+        phoneNumberLabel,
+        calledAt: calledAt.toISOString(),
+      }),
+    });
+  } catch (e) {
+    console.error("[MissedCall] Failed to post missed_call card:", e);
+  }
+
+  // ── 4. SSE broadcast — updates header badge in real time ──────────────────
+  try {
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("missed_call", { callerPhone, phoneNumberLabel });
+    broadcastOpsUpdate("new_message", { channel: "command" });
+  } catch (e) {
+    console.error("[MissedCall] SSE broadcast error:", e);
+  }
 }
 
 async function handleCallSummaryCompleted(event: any): Promise<void> {

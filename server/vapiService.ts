@@ -1016,9 +1016,11 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
           console.log(`[Vapi] Updated fieldMgmtCalls record for vapiCallId=${vapiCallId}`);
           // Also update confirmationCalls row if one exists for this vapiCallId
           try {
-            const ccStatus = endedReason === "customer-ended-call" ? "completed"
-              : (endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence") ? "no_answer"
-              : "no_answer";
+            const ccStatus =
+              (endedReason === "customer-ended-call" || endedReason === "assistant-ended-call" || endedReason === "pipeline-error-openai-voice-failed" || endedReason === "exceeded-max-duration") ? "completed"
+              : (endedReason === "no-answer" || endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence" || endedReason === "silence-timed-out") ? "no_answer"
+              : (endedReason === "customer-did-not-give-microphone-permission" || endedReason === "twilio-failed-to-connect-call") ? "failed"
+              : "completed"; // default: treat any other ended reason as completed (call happened)
             await dbFm.update(confirmationCalls)
               .set({
                 status: ccStatus,
@@ -1031,6 +1033,69 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
               })
               .where(eq(confirmationCalls.vapiCallId, vapiCallId));
             console.log(`[Vapi] Updated confirmationCalls record for vapiCallId=${vapiCallId}`);
+
+            // ── AI structured parsing: extract outcome, flexibility, and notes ──
+            // Run async so it doesn't block the webhook response
+            if (transcript || summary) {
+              (async () => {
+                try {
+                  const textToAnalyze = transcript ?? summary ?? "";
+                  const aiResult = await invokeLLM({
+                    messages: [
+                      {
+                        role: "system",
+                        content: `You are analyzing a phone call transcript between an AI agent (Ava) from Maids in Black and a client, where Ava called to confirm a cleaning appointment for tomorrow.
+
+Extract the following fields from the transcript and return ONLY valid JSON:
+- outcome: one of "confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"
+- flexibility: Based on what the client said, classify how flexible they are with arrival time. Use "exact" if they need the exact scheduled time with no wiggle room. Use "flexible" if they mentioned any window, range, or some flexibility (e.g. an hour, 2 hours, morning, afternoon, around that time). Use "anytime" if they said anytime or all day is fine. Use "unknown" if arrival flexibility was not discussed at all.
+- notes: array of short strings for any special circumstances mentioned (e.g. "Dog home", "Lockbox", "WFH", "Baby sleeping", "Wants text first", "Gate code needed"). Empty array if none.
+- outcomeLabel: a short human-readable label (max 4 words) like "Confirmed ✓", "Wants to Reschedule", "Needs to Cancel", "Left Voicemail", "No Answer"
+
+Return ONLY a JSON object with these 4 keys. No markdown, no explanation.`,
+                      },
+                      {
+                        role: "user",
+                        content: `Transcript:\n${textToAnalyze.slice(0, 4000)}`,
+                      },
+                    ],
+                    response_format: {
+                      type: "json_schema",
+                      json_schema: {
+                        name: "confirmation_call_analysis",
+                        strict: true,
+                        schema: {
+                          type: "object",
+                          properties: {
+                            outcome: { type: "string" },
+                            flexibility: { type: "string" },
+                            notes: { type: "array", items: { type: "string" } },
+                            outcomeLabel: { type: "string" },
+                          },
+                          required: ["outcome", "flexibility", "notes", "outcomeLabel"],
+                          additionalProperties: false,
+                        },
+                      },
+                    },
+                  });
+                  const raw = aiResult?.choices?.[0]?.message?.content;
+                  if (raw) {
+                    const parsed = JSON.parse(raw);
+                    await dbFm.update(confirmationCalls)
+                      .set({
+                        aiOutcome: parsed.outcome ?? null,
+                        aiFlexibility: parsed.flexibility ?? null,
+                        aiNotes: parsed.notes?.length ? JSON.stringify(parsed.notes) : null,
+                        aiOutcomeLabel: parsed.outcomeLabel ?? null,
+                      })
+                      .where(eq(confirmationCalls.vapiCallId, vapiCallId));
+                    console.log(`[Vapi] AI parsed confirmationCall vapiCallId=${vapiCallId}: outcome=${parsed.outcome}, flexibility=${parsed.flexibility}`);
+                  }
+                } catch (aiErr) {
+                  console.error("[Vapi] AI parsing failed for confirmationCall:", aiErr);
+                }
+              })();
+            }
           } catch (ccErr) {
             console.error("[Vapi] Failed to update confirmationCalls for outbound call:", ccErr);
           }

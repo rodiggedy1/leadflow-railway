@@ -2873,6 +2873,15 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   firedAt: bigint("firedAt", { mode: "number" }),
   /** When the call ended (from VAPI webhook) */
   completedAt: bigint("completedAt", { mode: "number" }),
+  // ── AI-structured fields (populated by LLM parsing of transcript on end-of-call) ──
+  /** AI-determined outcome: confirmed | reschedule | cancel | no_answer | voicemail | unknown */
+  aiOutcome: varchar("aiOutcome", { length: 32 }),
+  /** AI-determined flexibility: exact | one_hour | anytime | unknown */
+  aiFlexibility: varchar("aiFlexibility", { length: 32 }),
+  /** AI-extracted special notes (dog home, lockbox, WFH, baby sleeping, etc.) as JSON array */
+  aiNotes: text("aiNotes"),
+  /** Short human-readable outcome label from AI (e.g. "Confirmed ✓", "Wants to Reschedule") */
+  aiOutcomeLabel: varchar("aiOutcomeLabel", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
@@ -2882,3 +2891,42 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
 }));
 export type ConfirmationCall = typeof confirmationCalls.$inferSelect;
 export type InsertConfirmationCall = typeof confirmationCalls.$inferInsert;
+
+// ── Missed Calls ──────────────────────────────────────────────────────────────
+/**
+ * missed_calls — one row per missed inbound OpenPhone call.
+ * Inserted by the call.completed webhook handler when direction=incoming
+ * and answeredAt is null (call was never answered).
+ */
+export const missedCalls = mysqlTable("missed_calls", {
+  id: int("id").autoincrement().primaryKey(),
+  /** OpenPhone's call ID — UNIQUE to prevent duplicate inserts on webhook retry */
+  openphoneCallId: varchar("openphoneCallId", { length: 255 }).notNull().unique(),
+  /** Caller's phone number in E.164 format */
+  callerPhone: varchar("callerPhone", { length: 20 }).notNull(),
+  /** OpenPhone phone number ID that was called (main / CS / Bark) */
+  phoneNumberId: varchar("phoneNumberId", { length: 64 }).notNull(),
+  /** Human-readable label: "Main" | "CS" | "Bark" | "Unknown" */
+  phoneNumberLabel: varchar("phoneNumberLabel", { length: 32 }).notNull().default("Unknown"),
+  /** When the call was placed (from call.createdAt in the webhook payload) */
+  calledAt: timestamp("calledAt").notNull(),
+  /** Whether the auto-SMS was sent to the caller */
+  smsSent: tinyint("smsSent").default(0).notNull(),
+  /** When the auto-SMS was sent */
+  smsSentAt: timestamp("smsSentAt"),
+  /** Whether an agent has marked this call as called back / resolved */
+  calledBack: tinyint("calledBack").default(0).notNull(),
+  /** When the call-back was marked complete */
+  calledBackAt: timestamp("calledBackAt"),
+  /** Agent who marked the call-back complete */
+  calledBackByAgentName: varchar("calledBackByAgentName", { length: 128 }),
+  /** Optional agent note added when marking as called back */
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxCallerPhone: index("idx_mc_caller_phone").on(t.callerPhone),
+  idxCalledAt: index("idx_mc_called_at").on(t.calledAt),
+  idxCalledBack: index("idx_mc_called_back").on(t.calledBack),
+}));
+export type MissedCall = typeof missedCalls.$inferSelect;
+export type InsertMissedCall = typeof missedCalls.$inferInsert;

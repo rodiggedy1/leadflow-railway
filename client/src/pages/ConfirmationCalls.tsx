@@ -2,8 +2,8 @@
  * ConfirmationCalls — /admin/confirmation-calls
  *
  * Two tabs:
- *  • Dispatch — select jobs, fire bulk calls, test mode override
- *  • Results  — all completed calls for the day with chips, summary, recording
+ *  • Dispatch — select jobs, fire bulk calls
+ *  • Results  — AI-structured outcome cards with always-visible summary + inline audio
  */
 import { useState, useEffect, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
@@ -21,10 +21,9 @@ import {
   CheckCircle2,
   XCircle,
   PhoneMissed,
-  ChevronDown,
-  ChevronUp,
   ClipboardList,
   Send,
+  Mic,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -70,6 +69,10 @@ type ConfirmationCall = {
   durationSeconds: number | null;
   endedReason: string | null;
   firedAt: number | null;
+  aiOutcome: string | null;
+  aiFlexibility: string | null;
+  aiNotes: string | null;
+  aiOutcomeLabel: string | null;
 };
 
 type Job = {
@@ -103,38 +106,72 @@ function StatusBadge({ status }: { status: CallStatus }) {
   );
 }
 
-// ── Flexibility chips ─────────────────────────────────────────────────────────
+// ── AI Outcome badge ──────────────────────────────────────────────────────────
 
-function FlexibilityChips({ summary, status }: { summary: string | null | undefined; status: CallStatus }) {
-  if (!summary || status === "pending" || status === "fired") return null;
-  const s = summary.toLowerCase();
+function OutcomeBadge({ outcome, label }: { outcome: string | null; label: string | null }) {
+  if (!outcome || !label) return null;
+  const cfg: Record<string, { bg: string; text: string; border: string }> = {
+    confirmed:  { bg: "bg-emerald-50",  text: "text-emerald-800", border: "border-emerald-200" },
+    reschedule: { bg: "bg-amber-50",    text: "text-amber-800",   border: "border-amber-200" },
+    cancel:     { bg: "bg-red-50",      text: "text-red-800",     border: "border-red-200" },
+    no_answer:  { bg: "bg-gray-50",     text: "text-gray-600",    border: "border-gray-200" },
+    voicemail:  { bg: "bg-purple-50",   text: "text-purple-800",  border: "border-purple-200" },
+    unknown:    { bg: "bg-gray-50",     text: "text-gray-500",    border: "border-gray-200" },
+  };
+  const style = cfg[outcome] ?? cfg.unknown;
+  return (
+    <span className={`inline-flex items-center text-sm font-semibold px-3 py-1 rounded-full border ${style.bg} ${style.text} ${style.border}`}>
+      {label}
+    </span>
+  );
+}
 
-  if (s.includes("cancel") || s.includes("reschedul")) {
-    return (
-      <div className="flex flex-wrap gap-1 mt-1.5">
-        <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">❌ Cancel/Reschedule</span>
-      </div>
+// ── AI Chips ──────────────────────────────────────────────────────────────────
+
+function AiChips({ cc }: { cc: ConfirmationCall }) {
+  const chips: React.ReactNode[] = [];
+
+  // Flexibility chip — from AI field first, fallback to regex
+  const flex = cc.aiFlexibility;
+  if (flex === "exact") {
+    chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 font-medium border border-orange-200">⏰ Exact Time</span>);
+  } else if (flex === "flexible") {
+    chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-800 font-medium border border-blue-200">🕐 Flexible Window</span>);
+  } else if (flex === "anytime") {
+    chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium border border-emerald-200">🟢 Flexible</span>);
+  }
+
+  // Notes chips — from AI field
+  let notes: string[] = [];
+  if (cc.aiNotes) {
+    try { notes = JSON.parse(cc.aiNotes); } catch { /* ignore */ }
+  }
+
+  const noteIconMap: Record<string, string> = {
+    "dog": "🐶", "pet": "🐾", "cat": "🐱",
+    "lockbox": "🔑", "lock box": "🔑",
+    "wfh": "🏠", "work from home": "🏠", "will be home": "🏠",
+    "baby": "👶", "infant": "👶", "nap": "👶",
+    "text first": "📱", "wants text": "📱", "text before": "📱",
+    "gate": "🚪", "gate code": "🚪",
+    "alarm": "🔔",
+  };
+
+  for (const note of notes) {
+    const lower = note.toLowerCase();
+    let icon = "📌";
+    for (const [key, val] of Object.entries(noteIconMap)) {
+      if (lower.includes(key)) { icon = val; break; }
+    }
+    chips.push(
+      <span key={note} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium border border-slate-200">
+        {icon} {note}
+      </span>
     );
   }
 
-  const chips: React.ReactNode[] = [];
-  if (s.includes("exact time") || s.includes("exact arrival") || s.includes("specific time")) {
-    chips.push(<span key="exact" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-medium">⏰ Exact Time</span>);
-  } else if (s.includes("anytime") || s.includes("any time") || s.includes("flexible anytime") || s.includes("very flexible")) {
-    chips.push(<span key="flex" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">🟢 Flexible</span>);
-  } else if (s.includes("hour") && (s.includes("flexible") || s.includes("ok") || s.includes("fine"))) {
-    chips.push(<span key="hour" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">🕐 ~1hr Flex</span>);
-  } else if (s.includes("flexible")) {
-    chips.push(<span key="flex2" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">🟢 Flexible</span>);
-  }
-  if (s.includes("lockbox") || s.includes("lock box")) chips.push(<span key="lb" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">🔑 Lockbox</span>);
-  if (s.includes("wfh") || s.includes("work from home") || s.includes("will be home")) chips.push(<span key="wfh" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">🏠 WFH</span>);
-  if (s.includes("baby") || s.includes("infant") || s.includes("nap")) chips.push(<span key="baby" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-pink-100 text-pink-700 font-medium">👶 Baby Sleeping</span>);
-  if (s.includes("dog") || s.includes("pet") || s.includes("cat")) chips.push(<span key="pet" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium">🐶 Pet Home</span>);
-  if (s.includes("text") || s.includes("sms") || s.includes("message first")) chips.push(<span key="txt" className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 font-medium">📞 Text First</span>);
-
   if (chips.length === 0) return null;
-  return <div className="flex flex-wrap gap-1 mt-1.5">{chips}</div>;
+  return <div className="flex flex-wrap gap-1.5">{chips}</div>;
 }
 
 // ── Dispatch job card ─────────────────────────────────────────────────────────
@@ -167,72 +204,140 @@ function DispatchCard({ job, selected, onToggle }: { job: Job; selected: boolean
   );
 }
 
-// ── Results card ──────────────────────────────────────────────────────────────
+// ── Results card (world-class) ────────────────────────────────────────────────
 
 function ResultCard({ job }: { job: Job }) {
-  const [expanded, setExpanded] = useState(false);
   const cc = job.confirmationCall!;
   const status: CallStatus = cc.status;
 
+  // Outcome color accent for left border
+  const accentColor =
+    cc.aiOutcome === "confirmed" ? "#10b981" :
+    cc.aiOutcome === "reschedule" ? "#f59e0b" :
+    cc.aiOutcome === "cancel" ? "#ef4444" :
+    cc.aiOutcome === "voicemail" ? "#8b5cf6" :
+    status === "no_answer" ? "#9ca3af" :
+    status === "failed" ? "#ef4444" :
+    "#10b981";
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="flex items-start gap-3 p-4">
-        {/* Time + team */}
+    <div
+      className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+      style={{ borderLeft: `4px solid ${accentColor}` }}
+    >
+      {/* ── Top row: time/team + name/address + outcome badge ── */}
+      <div className="flex items-start gap-3 px-4 pt-4 pb-3">
         <div className="flex-shrink-0 w-14 text-center">
           <div className="text-sm font-bold text-gray-900">{formatTime(job.serviceDateTime)}</div>
-          <div className="text-[10px] text-gray-400 leading-tight">{job.teamName ?? "—"}</div>
+          <div className="text-[10px] text-gray-400 leading-tight mt-0.5">{job.teamName ?? "—"}</div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start justify-between gap-2 flex-wrap">
             <div>
-              <div className="font-semibold text-gray-900 text-sm">{job.customerName ?? "Unknown"}</div>
-              <div className="text-xs text-gray-500 truncate">{job.jobAddress ?? "—"}</div>
+              <div className="font-semibold text-gray-900 text-sm leading-tight">{job.customerName ?? "Unknown"}</div>
+              <div className="text-xs text-gray-500 mt-0.5 truncate">{job.jobAddress ?? "—"}</div>
             </div>
-            <StatusBadge status={status} />
+            {/* AI outcome label takes priority over generic status badge */}
+            {cc.aiOutcomeLabel ? (
+              <OutcomeBadge outcome={cc.aiOutcome} label={cc.aiOutcomeLabel} />
+            ) : (
+              <StatusBadge status={status} />
+            )}
           </div>
-
-          {/* Chips */}
-          <FlexibilityChips summary={cc.summary} status={status} />
-
-          {/* Duration */}
-          {cc.durationSeconds ? (
-            <div className="flex items-center gap-1 mt-1.5 text-xs text-gray-400">
-              <Clock className="w-3 h-3" />{formatDuration(cc.durationSeconds)}
-              {cc.endedReason && <span className="ml-1">· {cc.endedReason}</span>}
-            </div>
-          ) : null}
-
-          {/* Expand toggle */}
-          {(cc.summary || cc.recordingUrl) && (
-            <button
-              onClick={() => setExpanded(v => !v)}
-              className="mt-1.5 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            >
-              {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              {expanded ? "Hide details" : "Show details"}
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Expanded */}
-      {expanded && (
-        <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 space-y-3">
-          {cc.summary && (
-            <div>
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Summary</div>
-              <p className="text-sm text-gray-700 leading-relaxed">{cc.summary}</p>
-            </div>
-          )}
-          {cc.recordingUrl && (
-            <div>
-              <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Recording</div>
-              <audio controls src={cc.recordingUrl} className="w-full h-8" />
-            </div>
-          )}
+      {/* ── AI chips row ── */}
+      {(cc.aiFlexibility || cc.aiNotes) && (
+        <div className="px-4 pb-3">
+          <AiChips cc={cc} />
         </div>
+      )}
+
+      {/* ── Summary (always visible) ── */}
+      {cc.summary && (
+        <div className="px-4 pb-3">
+          <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-lg px-3 py-2.5 border border-gray-100">
+            {cc.summary}
+          </p>
+        </div>
+      )}
+
+      {/* ── Audio player (always visible if recording exists) ── */}
+      {cc.recordingUrl && (
+        <div className="px-4 pb-4">
+          <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+            <Mic className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <audio controls src={cc.recordingUrl} className="flex-1 h-7" style={{ minWidth: 0 }} />
+            {cc.durationSeconds ? (
+              <span className="text-xs text-slate-400 flex-shrink-0 flex items-center gap-1">
+                <Clock className="w-3 h-3" />{formatDuration(cc.durationSeconds)}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer: duration only (no recording) ── */}
+      {!cc.recordingUrl && cc.durationSeconds ? (
+        <div className="px-4 pb-3 flex items-center gap-1 text-xs text-gray-400">
+          <Clock className="w-3 h-3" />{formatDuration(cc.durationSeconds)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Results summary bar ───────────────────────────────────────────────────────
+
+function ResultsSummaryBar({ jobs }: { jobs: Job[] }) {
+  const confirmed  = jobs.filter(j => j.confirmationCall?.aiOutcome === "confirmed" || (j.confirmationCall?.status === "completed" && !j.confirmationCall?.aiOutcome)).length;
+  const reschedule = jobs.filter(j => j.confirmationCall?.aiOutcome === "reschedule").length;
+  const cancel     = jobs.filter(j => j.confirmationCall?.aiOutcome === "cancel").length;
+  const noAnswer   = jobs.filter(j => j.confirmationCall?.status === "no_answer").length;
+  const inFlight   = jobs.filter(j => j.confirmationCall?.status === "fired").length;
+  const failed     = jobs.filter(j => j.confirmationCall?.status === "failed").length;
+
+  const parts: string[] = [];
+  if (confirmed)  parts.push(`${confirmed} confirmed`);
+  if (reschedule) parts.push(`${reschedule} reschedule`);
+  if (cancel)     parts.push(`${cancel} cancel`);
+  if (noAnswer)   parts.push(`${noAnswer} no answer`);
+  if (failed)     parts.push(`${failed} failed`);
+  if (inFlight)   parts.push(`${inFlight} in progress`);
+
+  return (
+    <div className="flex gap-2 flex-wrap">
+      {confirmed > 0 && (
+        <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-sm font-medium border border-emerald-200">
+          ✅ {confirmed} Confirmed
+        </span>
+      )}
+      {reschedule > 0 && (
+        <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-sm font-medium border border-amber-200">
+          🔄 {reschedule} Reschedule
+        </span>
+      )}
+      {cancel > 0 && (
+        <span className="px-3 py-1 rounded-full bg-red-100 text-red-800 text-sm font-medium border border-red-200">
+          ❌ {cancel} Cancel
+        </span>
+      )}
+      {noAnswer > 0 && (
+        <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-sm font-medium border border-gray-200">
+          📵 {noAnswer} No Answer
+        </span>
+      )}
+      {failed > 0 && (
+        <span className="px-3 py-1 rounded-full bg-red-50 text-red-700 text-sm font-medium border border-red-200">
+          ✗ {failed} Failed
+        </span>
+      )}
+      {inFlight > 0 && (
+        <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-sm font-medium border border-blue-200 animate-pulse">
+          📞 {inFlight} In Progress
+        </span>
       )}
     </div>
   );
@@ -250,8 +355,26 @@ export default function ConfirmationCalls() {
 
   const { data: jobs, isLoading, refetch, isFetching } = trpc.confirmationCalls.getJobsForDay.useQuery(
     { date },
-    { staleTime: 20_000, refetchInterval: pollingActive ? 6_000 : false }
+    { staleTime: 0, refetchInterval: 5_000 }
   );
+
+  const pollFiredCalls = trpc.confirmationCalls.pollFiredCalls.useMutation();
+
+  // Poll VAPI directly every 5s while calls are in-flight — don't wait for webhook
+  useEffect(() => {
+    if (!pollingActive) return;
+    const interval = setInterval(async () => {
+      try {
+        const result = await pollFiredCalls.mutateAsync({ jobDate: date });
+        if (result.updated > 0) {
+          refetch();
+        }
+      } catch (e) {
+        console.error("[ConfirmationCalls] pollFiredCalls error:", e);
+      }
+    }, 5_000);
+    return () => clearInterval(interval);
+  }, [pollingActive, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stop polling once all in-flight calls settle
   useEffect(() => {
@@ -458,27 +581,15 @@ export default function ConfirmationCalls() {
                 </div>
               ) : (
                 <>
-                  {/* Summary row */}
-                  <div className="flex gap-3 flex-wrap text-sm">
-                    <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 font-medium">
-                      ✅ {calledJobs.filter(j => j.confirmationCall?.status === "completed").length} Completed
-                    </span>
-                    <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
-                      📵 {calledJobs.filter(j => j.confirmationCall?.status === "no_answer").length} No Answer
-                    </span>
-                    <span className="px-3 py-1 rounded-full bg-red-100 text-red-700 font-medium">
-                      ❌ {calledJobs.filter(j => j.confirmationCall?.status === "failed").length} Failed
-                    </span>
-                    {calledJobs.filter(j => j.confirmationCall?.status === "fired").length > 0 && (
-                      <span className="px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-medium animate-pulse">
-                        📞 {calledJobs.filter(j => j.confirmationCall?.status === "fired").length} In Progress
-                      </span>
-                    )}
-                  </div>
+                  {/* AI-aware summary bar */}
+                  <ResultsSummaryBar jobs={calledJobs} />
 
-                  {calledJobs.map(job => (
-                    <ResultCard key={job.id} job={job as Job} />
-                  ))}
+                  {/* Result cards */}
+                  <div className="space-y-3">
+                    {calledJobs.map(job => (
+                      <ResultCard key={job.id} job={job as Job} />
+                    ))}
+                  </div>
                 </>
               )}
             </div>
