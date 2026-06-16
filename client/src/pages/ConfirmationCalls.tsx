@@ -386,7 +386,7 @@ export default function ConfirmationCalls() {
           {/* ── DISPATCH TAB ── */}
           {activeTab === "dispatch" && (
             <div className="space-y-4">
-              {/* Stats + select all */
+              {/* Stats + select all */}
               {totalJobs > 0 && (
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm text-gray-500">
