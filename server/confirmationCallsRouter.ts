@@ -430,6 +430,27 @@ export const confirmationCallsRouter = router({
       return { updated };
     }),
 
+  /**
+   * Get all completed/no_answer/failed calls for a given date.
+   * Used by the Results tab — always fresh, no cache dependency.
+   */
+  getCompletedCalls: publicProcedure
+    .input(z.object({ jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      return db
+        .select()
+        .from(confirmationCalls)
+        .where(
+          and(
+            eq(confirmationCalls.jobDate, input.jobDate),
+            ne(confirmationCalls.status, "fired"),
+          )
+        )
+        .orderBy(desc(confirmationCalls.firedAt));
+    }),
+
   getCallStatus: opsChatProcedure
     .input(
       z.object({

@@ -355,7 +355,7 @@ export default function ConfirmationCalls() {
 
   const { data: jobs, isLoading, refetch, isFetching } = trpc.confirmationCalls.getJobsForDay.useQuery(
     { date },
-    { staleTime: 20_000, refetchInterval: pollingActive ? 5_000 : false }
+    { staleTime: 0, refetchInterval: 5_000 }
   );
 
   const pollFiredCalls = trpc.confirmationCalls.pollFiredCalls.useMutation();
