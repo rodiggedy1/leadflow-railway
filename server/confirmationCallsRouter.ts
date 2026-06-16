@@ -12,7 +12,7 @@
  *   5. Insert confirmationCalls row for this page's tracking
  */
 import { z } from "zod";
-import { router, opsChatProcedure, publicProcedure } from "./_core/trpc";
+import { router, opsChatProcedure, publicProcedure, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
@@ -122,6 +122,10 @@ export const confirmationCallsRouter = router({
           aiFlexibility: confirmationCalls.aiFlexibility,
           aiNotes: confirmationCalls.aiNotes,
           aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+          manualOutcome: confirmationCalls.manualOutcome,
+          manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+          manualOverrideBy: confirmationCalls.manualOverrideBy,
+          manualOverrideAt: confirmationCalls.manualOverrideAt,
         })
         .from(confirmationCalls)
         .where(
@@ -478,5 +482,44 @@ export const confirmationCallsRouter = router({
         .limit(1);
 
       return rows[0] ?? null;
+    }),
+
+  /**
+   * Manually override the outcome of a confirmation call.
+   * Used when the AI got it wrong or the call was busy/voicemail and an agent
+   * has since spoken to the customer directly.
+   * Pass outcome: null to clear the override and revert to AI outcome.
+   */
+  overrideOutcome: agentProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        outcome: z.enum(["confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"]).nullable(),
+        label: z.string().max(128).nullable(),
+        agentName: z.string().max(64),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Fetch the cleanerJobId so we can broadcast a targeted job_update
+      const [row] = await db
+        .select({ cleanerJobId: confirmationCalls.cleanerJobId })
+        .from(confirmationCalls)
+        .where(eq(confirmationCalls.id, input.id))
+        .limit(1);
+      await db
+        .update(confirmationCalls)
+        .set({
+          manualOutcome: input.outcome,
+          manualOutcomeLabel: input.label,
+          manualOverrideBy: input.outcome ? input.agentName : null,
+          manualOverrideAt: input.outcome ? Date.now() : null,
+        })
+        .where(eq(confirmationCalls.id, input.id));
+      // Broadcast so SchedulingTab updates instantly on all connected clients
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("job_update", { jobId: row?.cleanerJobId ?? undefined });
+      return { ok: true };
     }),
 });

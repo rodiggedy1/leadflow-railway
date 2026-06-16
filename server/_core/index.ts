@@ -34,7 +34,8 @@ import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
-import { getAgentByEmail } from "../db";
+import { getAgentByEmail, getDb } from "../db";
+import { sql } from "drizzle-orm";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -76,7 +77,31 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
   throw new Error(`No available port found starting from ${startPort}`);
 }
 
+async function runStartupMigrations() {
+  const db = await getDb();
+  if (!db) {
+    console.log('[Migration] No DB available — skipping startup migrations');
+    return;
+  }
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE confirmation_calls
+        ADD COLUMN IF NOT EXISTS manual_outcome VARCHAR(32) NULL,
+        ADD COLUMN IF NOT EXISTS manual_outcome_label VARCHAR(128) NULL,
+        ADD COLUMN IF NOT EXISTS manual_override_by VARCHAR(64) NULL,
+        ADD COLUMN IF NOT EXISTS manual_override_at BIGINT NULL
+    `));
+    console.log('[Migration] confirmation_calls manual override columns: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to apply confirmation_calls migration:', err);
+    // Non-fatal: server continues — columns may already exist or DB may be read-only
+  }
+}
+
 async function startServer() {
+  // Run startup migrations before anything else touches the DB
+  await runStartupMigrations();
+
   const app = express();
   const server = createServer(app);
 

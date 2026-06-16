@@ -2882,6 +2882,14 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   aiNotes: text("aiNotes"),
   /** Short human-readable outcome label from AI (e.g. "Confirmed ✓", "Wants to Reschedule") */
   aiOutcomeLabel: varchar("aiOutcomeLabel", { length: 128 }),
+  /** Manual override outcome set by an agent — overrides AI outcome in all displays */
+  manualOutcome: varchar("manualOutcome", { length: 32 }),
+  /** Human-readable label for the manual override (e.g. "Manually Confirmed ✓") */
+  manualOutcomeLabel: varchar("manualOutcomeLabel", { length: 128 }),
+  /** Agent name who set the manual override */
+  manualOverrideBy: varchar("manualOverrideBy", { length: 64 }),
+  /** Timestamp (ms) when the manual override was set */
+  manualOverrideAt: bigint("manualOverrideAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
+import { useOpsStream } from "@/hooks/useOpsStream";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,16 @@ interface Job {
   isNewClient?: boolean;
   isMoveInOut?: boolean;
   isRecurring?: boolean;
+  confirmationCall?: {
+    id: number;
+    status: string | null;
+    endedReason: string | null;
+    aiOutcome: string | null;
+    aiOutcomeLabel: string | null;
+    aiFlexibility: string | null;
+    manualOutcome: string | null;
+    manualOutcomeLabel: string | null;
+  } | null;
   assignment: {
     teamId: number;
     teamName: string | null;
@@ -297,6 +308,46 @@ function JobCard({
                 {job.isMoveInOut && (
                   <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-purple-300 text-purple-600 bg-purple-50">Move In/Out</Badge>
                 )}
+                {(() => {
+                  const cc = job.confirmationCall;
+                  if (!cc) return null;
+                  // Priority: manual override → AI outcome → endedReason special cases
+                  const label = cc.manualOutcomeLabel || cc.aiOutcomeLabel ||
+                    (cc.endedReason === 'customer-busy' ? 'Line Busy' :
+                     cc.endedReason === 'no-answer' ? 'No Answer' :
+                     cc.endedReason?.startsWith('pipeline-error') ? 'Voice Error' : null);
+                  if (!label) return null;
+                  const outcome = cc.manualOutcome || cc.aiOutcome || cc.endedReason || '';
+                  const colorClass =
+                    /confirm/i.test(outcome) ? 'border-emerald-400 text-emerald-700 bg-emerald-50' :
+                    /reschedule|flexible/i.test(outcome) ? 'border-amber-400 text-amber-700 bg-amber-50' :
+                    /cancel/i.test(outcome) ? 'border-red-400 text-red-700 bg-red-50' :
+                    /voicemail/i.test(outcome) ? 'border-purple-400 text-purple-700 bg-purple-50' :
+                    'border-gray-300 text-gray-600 bg-gray-50';
+                  const flex = cc.aiFlexibility;
+                  return (
+                    <>
+                      <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${colorClass}`}>
+                        {label}
+                      </Badge>
+                      {flex === 'exact' && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-300 text-orange-700 bg-orange-50">
+                          ⏰ Exact Time
+                        </Badge>
+                      )}
+                      {flex === 'flexible' && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50">
+                          🕐 Flexible Window
+                        </Badge>
+                      )}
+                      {flex === 'anytime' && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-emerald-300 text-emerald-700 bg-emerald-50">
+                          🟢 Flexible
+                        </Badge>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <div className="flex items-start gap-1 text-xs text-gray-400">
                 <MapPin className="w-3 h-3 shrink-0 mt-0.5" />
@@ -1473,6 +1524,8 @@ export default function SchedulingTab() {
     { date },
     { staleTime: 30_000, refetchOnWindowFocus: false }
   );
+  // Instantly reflect confirmation call outcomes (and any other job updates) without a manual refresh
+  useOpsStream({ onJobUpdate: () => utils.scheduling.getSchedule.invalidate({ date }) });
 
   const optimize = trpc.scheduling.optimizeDay.useMutation({
     onMutate: () => {
