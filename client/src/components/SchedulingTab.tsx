@@ -317,17 +317,34 @@ function JobCard({
                      cc.endedReason?.startsWith('pipeline-error') ? 'Voice Error' : null);
                   if (!label) return null;
                   const outcome = cc.manualOutcome || cc.aiOutcome || cc.endedReason || '';
-                  const isFlexible = cc.aiFlexibility && /flexible/i.test(cc.aiFlexibility);
                   const colorClass =
                     /confirm/i.test(outcome) ? 'border-emerald-400 text-emerald-700 bg-emerald-50' :
                     /reschedule|flexible/i.test(outcome) ? 'border-amber-400 text-amber-700 bg-amber-50' :
                     /cancel/i.test(outcome) ? 'border-red-400 text-red-700 bg-red-50' :
                     /voicemail/i.test(outcome) ? 'border-purple-400 text-purple-700 bg-purple-50' :
                     'border-gray-300 text-gray-600 bg-gray-50';
+                  const flex = cc.aiFlexibility;
                   return (
-                    <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${colorClass}`}>
-                      {label}{isFlexible ? ' · Flexible' : ''}
-                    </Badge>
+                    <>
+                      <Badge variant="outline" className={`text-[10px] px-1 py-0 h-4 ${colorClass}`}>
+                        {label}
+                      </Badge>
+                      {flex === 'exact' && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-orange-300 text-orange-700 bg-orange-50">
+                          ⏰ Exact Time
+                        </Badge>
+                      )}
+                      {flex === 'flexible' && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-blue-300 text-blue-700 bg-blue-50">
+                          🕐 Flexible Window
+                        </Badge>
+                      )}
+                      {flex === 'anytime' && (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 border-emerald-300 text-emerald-700 bg-emerald-50">
+                          🟢 Flexible
+                        </Badge>
+                      )}
+                    </>
                   );
                 })()}
               </div>
