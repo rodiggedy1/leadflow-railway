@@ -29,6 +29,7 @@ export const ADMIN_PAGES = [
   { id: "settings",          label: "Settings",      group: "Admin" },
   { id: "hiring",            label: "Hiring",        group: "Operations" },
   { id: "team-pay",           label: "Team Pay",      group: "Operations" },
+  { id: "confirmation-calls", label: "Confirm Calls", group: "Operations" },
 ] as const;
 
 export type AdminPageId = typeof ADMIN_PAGES[number]["id"];

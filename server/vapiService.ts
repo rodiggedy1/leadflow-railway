@@ -19,7 +19,7 @@ import { MAIDS_IN_BLACK_KNOWLEDGE_BASE } from "./knowledgeBase";
 import { calculatePrice, SERVICE_MULTIPLIERS } from "./engine/pricing";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
-import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages, fieldMgmtCalls } from "../drizzle/schema";
+import { voiceCalls, conversationSessions, quoteLeads, callbackTasks, opsChatMessages, fieldMgmtCalls, confirmationCalls } from "../drizzle/schema";
 import { eq, desc, and, ne, or } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
 import { invokeLLM } from "./_core/llm";
@@ -1014,6 +1014,26 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
             })
             .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId));
           console.log(`[Vapi] Updated fieldMgmtCalls record for vapiCallId=${vapiCallId}`);
+          // Also update confirmationCalls row if one exists for this vapiCallId
+          try {
+            const ccStatus = endedReason === "customer-ended-call" ? "completed"
+              : (endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence") ? "no_answer"
+              : "no_answer";
+            await dbFm.update(confirmationCalls)
+              .set({
+                status: ccStatus,
+                durationSeconds,
+                transcript,
+                summary,
+                endedReason,
+                recordingUrl: artifact?.recordingUrl ?? null,
+                completedAt: Date.now(),
+              })
+              .where(eq(confirmationCalls.vapiCallId, vapiCallId));
+            console.log(`[Vapi] Updated confirmationCalls record for vapiCallId=${vapiCallId}`);
+          } catch (ccErr) {
+            console.error("[Vapi] Failed to update confirmationCalls for outbound call:", ccErr);
+          }
         }
       } catch (fmErr) {
         console.error("[Vapi] Failed to update fieldMgmtCalls for outbound call:", fmErr);
