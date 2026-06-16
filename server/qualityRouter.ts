@@ -34,6 +34,7 @@ import {
   conversationSessions,
   cleanerJobCustomRules,
   customPayRules,
+  confirmationCalls,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { storagePut, generateThumbnail } from "./storage";
@@ -762,19 +763,51 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
   }
   // ── Stale cleanup: delete any DB row not in L27's response ──
   // If L27 has 5 bookings, LeadFlow must have 5 bookings. Any row not in L27 is deleted.
+  // IMPORTANT: If a stale row has confirmation_calls history, we must NOT delete it — instead
+  // find the new L27 booking for the same customer+date and re-point the confirmation_calls
+  // to the new job row, then delete the stale row safely.
   let staleMarked = 0;
   try {
     const freshBookingIds = bookings.map((b) => b.id);
     const staleRows = freshBookingIds.length > 0
       ? await db
-          .select({ id: cleanerJobs.id })
+          .select({ id: cleanerJobs.id, customerName: cleanerJobs.customerName })
           .from(cleanerJobs)
           .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds)))
       : await db
-          .select({ id: cleanerJobs.id })
+          .select({ id: cleanerJobs.id, customerName: cleanerJobs.customerName })
           .from(cleanerJobs)
           .where(eq(cleanerJobs.jobDate, dateStr));
     for (const row of staleRows) {
+      // Check if this stale row has any confirmation_calls history
+      const hasConfCalls = (await db
+        .select({ id: confirmationCalls.id })
+        .from(confirmationCalls)
+        .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)))
+        .limit(1)).length > 0;
+      if (hasConfCalls) {
+        // Find the new job row for the same customer on the same date
+        const [newJob] = row.customerName ? await db
+          .select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(and(
+            eq(cleanerJobs.jobDate, dateStr),
+            sql`${cleanerJobs.customerName} = ${row.customerName}`,
+            ne(cleanerJobs.id, row.id),
+          ))
+          .limit(1) : [];
+        if (newJob) {
+          // Re-point all confirmation_calls from the stale job to the new job
+          await db.update(confirmationCalls)
+            .set({ cleanerJobId: newJob.id })
+            .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)));
+          console.log(`[StaleCleanup] Re-pointed confirmation_calls from stale job ${row.id} (${row.customerName}) to new job ${newJob.id}`);
+        } else {
+          // No matching new job found — skip deletion to preserve history
+          console.warn(`[StaleCleanup] Stale job ${row.id} (${row.customerName}) has confirmation_calls but no matching new job found — skipping deletion`);
+          continue;
+        }
+      }
       await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
       staleMarked++;
     }
@@ -1775,19 +1808,45 @@ export const qualityRouter = router({
 
       // ── Stale cleanup: delete any DB row not in L27's response ──
       // If L27 has 5 bookings, LeadFlow must have 5 bookings. Any row not in L27 is deleted.
+      // IMPORTANT: If a stale row has confirmation_calls history, re-point before deleting.
       let staleMarked = 0;
       try {
         const freshBookingIds = bookings.map((b) => b.id);
         const staleRows = freshBookingIds.length > 0
           ? await db
-              .select({ id: cleanerJobs.id })
+              .select({ id: cleanerJobs.id, customerName: cleanerJobs.customerName })
               .from(cleanerJobs)
               .where(and(eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.bookingId, freshBookingIds)))
           : await db
-              .select({ id: cleanerJobs.id })
+              .select({ id: cleanerJobs.id, customerName: cleanerJobs.customerName })
               .from(cleanerJobs)
               .where(eq(cleanerJobs.jobDate, dateStr));
         for (const row of staleRows) {
+          const hasConfCalls = (await db
+            .select({ id: confirmationCalls.id })
+            .from(confirmationCalls)
+            .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)))
+            .limit(1)).length > 0;
+          if (hasConfCalls) {
+            const [newJob] = row.customerName ? await db
+              .select({ id: cleanerJobs.id })
+              .from(cleanerJobs)
+              .where(and(
+                eq(cleanerJobs.jobDate, dateStr),
+                sql`${cleanerJobs.customerName} = ${row.customerName}`,
+                ne(cleanerJobs.id, row.id),
+              ))
+              .limit(1) : [];
+            if (newJob) {
+              await db.update(confirmationCalls)
+                .set({ cleanerJobId: newJob.id })
+                .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)));
+              console.log(`[StaleCleanup] Re-pointed confirmation_calls from stale job ${row.id} (${row.customerName}) to new job ${newJob.id}`);
+            } else {
+              console.warn(`[StaleCleanup] Stale job ${row.id} (${row.customerName}) has confirmation_calls but no matching new job — skipping deletion`);
+              continue;
+            }
+          }
           await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
           staleMarked++;
         }
