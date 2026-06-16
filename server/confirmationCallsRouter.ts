@@ -217,7 +217,7 @@ export const confirmationCallsRouter = router({
             },
             voice: {
               provider: "11labs",
-              voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah — reverted (Madison voice ID invalid)
+              voiceId: "9FuMHon7Kyk1AGgnR8C2",
               stability: 0.5,
               similarityBoost: 0.75,
               style: 0.3,
