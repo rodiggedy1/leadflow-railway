@@ -1016,9 +1016,11 @@ export async function processEndOfCallReport(report: VapiEndOfCallReport): Promi
           console.log(`[Vapi] Updated fieldMgmtCalls record for vapiCallId=${vapiCallId}`);
           // Also update confirmationCalls row if one exists for this vapiCallId
           try {
-            const ccStatus = endedReason === "customer-ended-call" ? "completed"
-              : (endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence") ? "no_answer"
-              : "no_answer";
+            const ccStatus =
+              (endedReason === "customer-ended-call" || endedReason === "assistant-ended-call" || endedReason === "pipeline-error-openai-voice-failed" || endedReason === "exceeded-max-duration") ? "completed"
+              : (endedReason === "no-answer" || endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence" || endedReason === "silence-timed-out") ? "no_answer"
+              : (endedReason === "customer-did-not-give-microphone-permission" || endedReason === "twilio-failed-to-connect-call") ? "failed"
+              : "completed"; // default: treat any other ended reason as completed (call happened)
             await dbFm.update(confirmationCalls)
               .set({
                 status: ccStatus,
