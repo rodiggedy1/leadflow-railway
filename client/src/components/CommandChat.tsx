@@ -26,7 +26,7 @@ import {
   Pin, Bell, BellOff, TriangleAlert, PartyPopper, StickyNote, ChevronLeft, ChevronRight,
   ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
-  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, Search,
+  CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
   ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1713,6 +1713,27 @@ const MessageList = memo(function MessageList({
                         </span>
                         <span className="text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                       </div>
+                    </div>
+                  );
+                }
+                // ── Missed Call card ─────────────────────────────────────────────────────
+                if (msg.quickAction === "missed_call") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const callerPhone = (meta.callerPhone as string) ?? "";
+                  const phoneNumberLabel = (meta.phoneNumberLabel as string) ?? "";
+                  return (
+                    <div key={msg.id} className="flex justify-center my-1">
+                      <a
+                        href="/admin/missed-calls"
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-red-200 bg-red-50 shadow-sm hover:bg-red-100 transition-colors cursor-pointer"
+                      >
+                        <PhoneMissed className="h-3 w-3 text-red-500 shrink-0" />
+                        <span className="text-xs text-red-700 font-medium">
+                          Missed call · {callerPhone}{phoneNumberLabel ? <> &middot; {phoneNumberLabel}</> : ""}
+                        </span>
+                        <span className="text-[10px] text-red-400">{fmtMsgTime(msg.createdAt)}</span>
+                      </a>
                     </div>
                   );
                 }
