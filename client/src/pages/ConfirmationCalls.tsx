@@ -430,6 +430,7 @@ function ResultsSummaryBar({ jobs }: { jobs: Job[] }) {
 
 export default function ConfirmationCalls() {
   const { pagePermissions, isAdmin, agentName } = useAgentPermissions();
+  const utils = trpc.useUtils();
   const [date, setDate] = useState(todayLocal);
   const [activeTab, setActiveTab] = useState<"dispatch" | "results">("dispatch");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -674,7 +675,7 @@ export default function ConfirmationCalls() {
                         key={job.id}
                         job={job as Job}
                         agentName={agentName ?? "Agent"}
-                        onOverrideSuccess={() => refetch()}
+                        onOverrideSuccess={() => { refetch(); utils.scheduling.getSchedule.invalidate({ date }); }}
                       />
                     ))}
                   </div>
