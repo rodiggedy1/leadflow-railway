@@ -114,6 +114,10 @@ export const confirmationCallsRouter = router({
           durationSeconds: confirmationCalls.durationSeconds,
           endedReason: confirmationCalls.endedReason,
           firedAt: confirmationCalls.firedAt,
+          aiOutcome: confirmationCalls.aiOutcome,
+          aiFlexibility: confirmationCalls.aiFlexibility,
+          aiNotes: confirmationCalls.aiNotes,
+          aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
         })
         .from(confirmationCalls)
         .where(

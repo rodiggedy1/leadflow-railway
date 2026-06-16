@@ -2873,6 +2873,15 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   firedAt: bigint("firedAt", { mode: "number" }),
   /** When the call ended (from VAPI webhook) */
   completedAt: bigint("completedAt", { mode: "number" }),
+  // ── AI-structured fields (populated by LLM parsing of transcript on end-of-call) ──
+  /** AI-determined outcome: confirmed | reschedule | cancel | no_answer | voicemail | unknown */
+  aiOutcome: varchar("aiOutcome", { length: 32 }),
+  /** AI-determined flexibility: exact | one_hour | anytime | unknown */
+  aiFlexibility: varchar("aiFlexibility", { length: 32 }),
+  /** AI-extracted special notes (dog home, lockbox, WFH, baby sleeping, etc.) as JSON array */
+  aiNotes: text("aiNotes"),
+  /** Short human-readable outcome label from AI (e.g. "Confirmed ✓", "Wants to Reschedule") */
+  aiOutcomeLabel: varchar("aiOutcomeLabel", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({
