@@ -220,6 +220,9 @@ export const confirmationCallsRouter = router({
               useSpeakerBoost: true,
             },
             maxDurationSeconds: 120,
+            endCallFunctionEnabled: true,
+            silenceTimeoutSeconds: 20,
+            endCallPhrases: ["goodbye", "bye", "take care", "have a great day", "thank you, bye"],
             voicemailDetection: {
               provider: "twilio",
               voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"],
@@ -288,6 +291,145 @@ export const confirmationCallsRouter = router({
    * Get the latest call status for a specific job+date.
    * Polled by the frontend after placing a call to show live status updates.
    */
+  /**
+   * Poll VAPI directly for any calls still in "fired" state.
+   * Called by the frontend every 5s so results appear immediately without
+   * waiting for VAPI's end-of-call webhook (which can take 30-90s).
+   */
+  pollFiredCalls: opsChatProcedure
+    .input(z.object({ jobDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { updated: 0 };
+
+      // Find all calls still in "fired" state for this date
+      const firedCalls = await db
+        .select({
+          id: confirmationCalls.id,
+          vapiCallId: confirmationCalls.vapiCallId,
+        })
+        .from(confirmationCalls)
+        .where(
+          and(
+            eq(confirmationCalls.jobDate, input.jobDate),
+            eq(confirmationCalls.status, "fired"),
+          )
+        );
+
+      if (firedCalls.length === 0) return { updated: 0 };
+
+      let updated = 0;
+      for (const row of firedCalls) {
+        if (!row.vapiCallId) continue;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8_000);
+          let vapiCall: Record<string, unknown> | null = null;
+          try {
+            const res = await fetch(`${VAPI_API_BASE}/call/${row.vapiCallId}`, {
+              signal: controller.signal,
+              headers: { Authorization: `Bearer ${ENV.vapiPrivateKey}` },
+            });
+            if (res.ok) vapiCall = await res.json() as Record<string, unknown>;
+          } finally {
+            clearTimeout(timer);
+          }
+
+          if (!vapiCall) continue;
+
+          // Only process if VAPI says the call has ended
+          const vapiStatus = vapiCall.status as string | undefined;
+          if (vapiStatus !== "ended") continue;
+
+          const endedReason = (vapiCall.endedReason as string | undefined) ?? null;
+          const artifact = vapiCall.artifact as Record<string, unknown> | undefined;
+          const transcript = (artifact?.transcript as string | undefined) ?? (vapiCall.transcript as string | undefined) ?? null;
+          const summary = (artifact?.summary as string | undefined) ?? null;
+          const recordingUrl = (artifact?.recordingUrl as string | undefined) ?? null;
+          const durationSeconds = vapiCall.endedAt && vapiCall.startedAt
+            ? Math.round((new Date(vapiCall.endedAt as string).getTime() - new Date(vapiCall.startedAt as string).getTime()) / 1000)
+            : null;
+
+          const ccStatus =
+            (endedReason === "customer-ended-call" || endedReason === "assistant-ended-call" || endedReason === "exceeded-max-duration") ? "completed"
+            : (endedReason === "no-answer" || endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence" || endedReason === "silence-timed-out") ? "no_answer"
+            : (endedReason === "customer-did-not-give-microphone-permission" || endedReason === "twilio-failed-to-connect-call") ? "failed"
+            : "completed";
+
+          await db.update(confirmationCalls)
+            .set({
+              status: ccStatus,
+              durationSeconds,
+              transcript,
+              summary,
+              endedReason,
+              recordingUrl,
+              completedAt: Date.now(),
+            })
+            .where(eq(confirmationCalls.id, row.id));
+
+          console.log(`[ConfirmationCalls] Polled VAPI — updated call ${row.vapiCallId}: status=${ccStatus}, endedReason=${endedReason}`);
+          updated++;
+
+          // Fire AI parsing async (same as webhook path)
+          if (transcript || summary) {
+            const { invokeLLM } = await import("./_core/llm");
+            (async () => {
+              try {
+                const textToAnalyze = transcript ?? summary ?? "";
+                const aiResult = await invokeLLM({
+                  messages: [
+                    {
+                      role: "system",
+                      content: `You are analyzing a phone call transcript between an AI agent (Ava) from Maids in Black and a client, where Ava called to confirm a cleaning appointment for tomorrow.\n\nExtract the following fields and return ONLY valid JSON:\n- outcome: one of "confirmed", "reschedule", "cancel", "no_answer", "voicemail", "unknown"\n- flexibility: one of "exact", "one_hour", "anytime", "unknown"\n- notes: array of short strings for special circumstances (e.g. "Dog home", "Lockbox", "WFH", "Baby sleeping"). Empty array if none.\n- outcomeLabel: short human-readable label max 4 words e.g. "Confirmed ✓", "Wants to Reschedule"`,
+                    },
+                    { role: "user", content: `Transcript:\n${textToAnalyze.slice(0, 4000)}` },
+                  ],
+                  response_format: {
+                    type: "json_schema",
+                    json_schema: {
+                      name: "confirmation_call_analysis",
+                      strict: true,
+                      schema: {
+                        type: "object",
+                        properties: {
+                          outcome: { type: "string" },
+                          flexibility: { type: "string" },
+                          notes: { type: "array", items: { type: "string" } },
+                          outcomeLabel: { type: "string" },
+                        },
+                        required: ["outcome", "flexibility", "notes", "outcomeLabel"],
+                        additionalProperties: false,
+                      },
+                    },
+                  },
+                });
+                const raw = aiResult?.choices?.[0]?.message?.content;
+                if (raw) {
+                  const parsed = JSON.parse(raw);
+                  await db.update(confirmationCalls)
+                    .set({
+                      aiOutcome: parsed.outcome ?? null,
+                      aiFlexibility: parsed.flexibility ?? null,
+                      aiNotes: parsed.notes?.length ? JSON.stringify(parsed.notes) : null,
+                      aiOutcomeLabel: parsed.outcomeLabel ?? null,
+                    })
+                    .where(eq(confirmationCalls.id, row.id));
+                  console.log(`[ConfirmationCalls] AI parsed polled call ${row.vapiCallId}: outcome=${parsed.outcome}`);
+                }
+              } catch (aiErr) {
+                console.error("[ConfirmationCalls] AI parsing failed for polled call:", aiErr);
+              }
+            })();
+          }
+        } catch (err) {
+          console.error(`[ConfirmationCalls] Poll failed for vapiCallId=${row.vapiCallId}:`, err);
+        }
+      }
+
+      return { updated };
+    }),
+
   getCallStatus: opsChatProcedure
     .input(
       z.object({

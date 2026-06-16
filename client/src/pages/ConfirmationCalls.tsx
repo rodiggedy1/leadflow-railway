@@ -355,8 +355,26 @@ export default function ConfirmationCalls() {
 
   const { data: jobs, isLoading, refetch, isFetching } = trpc.confirmationCalls.getJobsForDay.useQuery(
     { date },
-    { staleTime: 20_000, refetchInterval: pollingActive ? 6_000 : false }
+    { staleTime: 20_000, refetchInterval: pollingActive ? 5_000 : false }
   );
+
+  const pollFiredCalls = trpc.confirmationCalls.pollFiredCalls.useMutation();
+
+  // Poll VAPI directly every 5s while calls are in-flight — don't wait for webhook
+  useEffect(() => {
+    if (!pollingActive) return;
+    const interval = setInterval(async () => {
+      try {
+        const result = await pollFiredCalls.mutateAsync({ jobDate: date });
+        if (result.updated > 0) {
+          refetch();
+        }
+      } catch (e) {
+        console.error("[ConfirmationCalls] pollFiredCalls error:", e);
+      }
+    }, 5_000);
+    return () => clearInterval(interval);
+  }, [pollingActive, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stop polling once all in-flight calls settle
   useEffect(() => {
