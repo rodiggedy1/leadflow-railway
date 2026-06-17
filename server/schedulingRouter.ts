@@ -1066,18 +1066,15 @@ export const schedulingRouter = router({
           })
           .from(fieldMgmtCalls)
           .where(inArray(fieldMgmtCalls.cleanerJobId, jobIds))
-          .orderBy(desc(fieldMgmtCalls.createdAt))
-          .limit(jobIds.length * 3);
+          .orderBy(desc(fieldMgmtCalls.createdAt));
         for (const row of fmcRows) {
           const existing = recentCallsMap.get(row.cleanerJobId) ?? [];
-          if (existing.length < 3) {
-            existing.push({ step: row.step, outcome: row.outcome, summary: row.summary, transcript: row.transcript, durationSeconds: row.durationSeconds, createdAt: row.createdAt });
-            recentCallsMap.set(row.cleanerJobId, existing);
-          }
+          existing.push({ step: row.step, outcome: row.outcome, summary: row.summary, transcript: row.transcript, durationSeconds: row.durationSeconds, createdAt: row.createdAt });
+          recentCallsMap.set(row.cleanerJobId, existing);
         }
       }
 
-      // Map: phone10 → OpenPhone call recordings (last 3 per phone, most recent first)
+      // Map: phone10 → OpenPhone call recordings (all calls, most recent first)
       // These are human-to-human calls made via the OpenPhone system.
       type OpenPhoneCall = { callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: Date; callDebrief: string | null; transcript: string | null };
       const openPhoneCallsMap = new Map<string, OpenPhoneCall[]>();
@@ -1095,22 +1092,19 @@ export const schedulingRouter = router({
           })
           .from(openphoneCallRecordings)
           .where(inArray(openphoneCallRecordings.callerPhone, e164ForOpenPhone))
-          .orderBy(desc(openphoneCallRecordings.callStartedAt))
-          .limit(phones10.length * 5);
+          .orderBy(desc(openphoneCallRecordings.callStartedAt));
         for (const row of opRows) {
           const phone10 = row.callerPhone.replace(/[^\d]/g, "").slice(-10);
           const existing = openPhoneCallsMap.get(phone10) ?? [];
-          if (existing.length < 3) {
-            existing.push({
-              callerPhone: row.callerPhone,
-              direction: row.direction,
-              durationSeconds: row.durationSeconds,
-              callStartedAt: row.callStartedAt,
-              callDebrief: row.callDebrief,
-              transcript: row.transcript,
-            });
-            openPhoneCallsMap.set(phone10, existing);
-          }
+          existing.push({
+            callerPhone: row.callerPhone,
+            direction: row.direction,
+            durationSeconds: row.durationSeconds,
+            callStartedAt: row.callStartedAt,
+            callDebrief: row.callDebrief,
+            transcript: row.transcript,
+          });
+          openPhoneCallsMap.set(phone10, existing);
         }
       }
 
