@@ -115,6 +115,7 @@ export const confirmationCallsRouter = router({
           vapiCallId: confirmationCalls.vapiCallId,
           recordingUrl: confirmationCalls.recordingUrl,
           summary: confirmationCalls.summary,
+          transcript: confirmationCalls.transcript,
           durationSeconds: confirmationCalls.durationSeconds,
           endedReason: confirmationCalls.endedReason,
           firedAt: confirmationCalls.firedAt,

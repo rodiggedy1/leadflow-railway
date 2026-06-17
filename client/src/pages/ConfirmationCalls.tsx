@@ -76,6 +76,7 @@ type ConfirmationCall = {
   vapiCallId: string | null;
   recordingUrl: string | null;
   summary: string | null;
+  transcript: string | null;
   durationSeconds: number | null;
   endedReason: string | null;
   firedAt: number | null;
@@ -220,6 +221,27 @@ function DispatchCard({ job, selected, onToggle }: { job: Job; selected: boolean
   );
 }
 
+// ── Transcript toggle ───────────────────────────────────────────────────────
+
+function TranscriptToggle({ transcript }: { transcript: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="px-4 pb-3">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors"
+      >
+        <span>{open ? "▲ Hide transcript" : "▼ Show transcript"}</span>
+      </button>
+      {open && (
+        <div className="mt-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 text-xs text-gray-600 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">
+          {transcript}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Results card (world-class) ────────────────────────────────────────────────
 
 function ResultCard({ job, agentName, onOverrideSuccess }: { job: Job; agentName: string; onOverrideSuccess: () => void }) {
@@ -343,6 +365,11 @@ function ResultCard({ job, agentName, onOverrideSuccess }: { job: Job; agentName
             {cc.summary}
           </p>
         </div>
+      )}
+
+      {/* ── Transcript (collapsible) ── */}
+      {cc.transcript && (
+        <TranscriptToggle transcript={cc.transcript} />
       )}
 
       {/* ── Audio player (always visible if recording exists) ── */}
