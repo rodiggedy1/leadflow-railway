@@ -1238,6 +1238,7 @@ export const schedulingRouter = router({
         try {
           const fmc = recentCallsMap.get(j.id) ?? [];
           const op = (j.customerPhone ? openPhoneCallsMap.get(digits10(j.customerPhone)) : null) ?? [];
+          console.log(`[callsSummary] job ${j.id} (${j.customerName}) fmc=${fmc.length} op=${op.length} fmcWithTranscript=${fmc.filter(c=>c.transcript).length} opWithTranscript=${op.filter(c=>c.transcript).length}`);
           const callBlocks: string[] = [];
           for (const c of fmc) {
             if (c.transcript) {
@@ -1258,6 +1259,7 @@ export const schedulingRouter = router({
               callBlocks.push(`[OpenPhone ${dir}]\n${txt}`);
             }
           }
+          console.log(`[callsSummary] job ${j.id} callBlocks=${callBlocks.length}`);
           if (callBlocks.length === 0) return;
           const prompt = `You are an operations assistant for a cleaning company. Below are transcripts from recent calls with a customer named ${j.customerName ?? "the customer"} for a cleaning job on ${j.jobDate ?? "an upcoming date"}.
 
@@ -1266,8 +1268,11 @@ Summarize in 2-3 sentences: (1) whether the appointment was confirmed, (2) any i
 ${callBlocks.join("\n\n")}`;
           const res = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
           const text = res?.choices?.[0]?.message?.content?.trim();
+          console.log(`[callsSummary] job ${j.id} llmResult=${text ? text.slice(0,80) : 'null'}`);
           if (text) callsSummaryMap.set(j.id, text);
-        } catch { /* skip on LLM error */ }
+        } catch (err) {
+          console.error(`[callsSummary] job ${j.id} ERROR:`, err);
+        }
       }));
 
       const enrichedWithConf = enriched.map(j => {
