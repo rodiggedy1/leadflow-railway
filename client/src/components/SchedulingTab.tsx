@@ -87,6 +87,7 @@ interface Job {
   checklistItems?: string | null;
   customerPhone?: string | null;
   clientHistory?: ClientHistory | null;
+  recentCalls?: Array<{ step: string; outcome: string; summary: string | null; durationSeconds: number; createdAt: string | Date }>;
   requestedTeam?: string | null;
   isNewClient?: boolean;
   isMoveInOut?: boolean;
@@ -2576,6 +2577,43 @@ function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => 
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section: Recent Calls */}
+          {job?.recentCalls && job.recentCalls.length > 0 && (
+            <div className="px-5 py-4 border-b">
+              <div className="flex items-center gap-1.5 mb-3">
+                <Phone className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Recent Calls</span>
+              </div>
+              <div className="space-y-2">
+                {job.recentCalls.map((call, i) => {
+                  const stepLabel = call.step === "confirmation_call" ? "Confirmation Call"
+                    : call.step === "schedule_escalation" ? "Schedule Escalation"
+                    : call.step === "exception_call" ? "Exception Call"
+                    : call.step === "noshow_call" ? "No-Show Call"
+                    : call.step.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                  const outcomeColor = call.outcome === "answered" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+                    : call.outcome === "voicemail" ? "text-amber-600 bg-amber-50 border-amber-100"
+                    : "text-red-500 bg-red-50 border-red-100";
+                  const ts = typeof call.createdAt === "string" ? new Date(call.createdAt).getTime() : call.createdAt.getTime();
+                  return (
+                    <div key={i} className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-gray-600">{stepLabel}</span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${outcomeColor}`}>{call.outcome.replace("_", " ")}</span>
+                        </div>
+                        <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
+                      </div>
+                      {call.summary && (
+                        <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{call.summary}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

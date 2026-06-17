@@ -30,6 +30,7 @@ import {
   confirmationCalls,
   completedJobs,
   conversationSessions,
+  fieldMgmtCalls,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -1047,6 +1048,32 @@ export const schedulingRouter = router({
       };
       const clientHistoryMap = new Map<string, ClientHistory>();
 
+      // Map: jobId → recent field mgmt calls (last 3 per job)
+      type RecentCall = { step: string; outcome: string; summary: string | null; durationSeconds: number; createdAt: Date };
+      const recentCallsMap = new Map<number, RecentCall[]>();
+      if (jobIds.length > 0) {
+        const fmcRows = await db
+          .select({
+            cleanerJobId: fieldMgmtCalls.cleanerJobId,
+            step: fieldMgmtCalls.step,
+            outcome: fieldMgmtCalls.outcome,
+            summary: fieldMgmtCalls.summary,
+            durationSeconds: fieldMgmtCalls.durationSeconds,
+            createdAt: fieldMgmtCalls.createdAt,
+          })
+          .from(fieldMgmtCalls)
+          .where(inArray(fieldMgmtCalls.cleanerJobId, jobIds))
+          .orderBy(desc(fieldMgmtCalls.createdAt))
+          .limit(jobIds.length * 3);
+        for (const row of fmcRows) {
+          const existing = recentCallsMap.get(row.cleanerJobId) ?? [];
+          if (existing.length < 3) {
+            existing.push({ step: row.step, outcome: row.outcome, summary: row.summary, durationSeconds: row.durationSeconds, createdAt: row.createdAt });
+            recentCallsMap.set(row.cleanerJobId, existing);
+          }
+        }
+      }
+
       if (phones10.length > 0) {
         // 1. Batch completedJobs lookup — all rows for these phones
         const e164List = phones10.map(p => `+1${p}`);
@@ -1161,6 +1188,7 @@ export const schedulingRouter = router({
           ...j,
           confirmationCall: confCallMap.get(j.id) ?? null,
           clientHistory,
+          recentCalls: recentCallsMap.get(j.id) ?? [],
         };
       });
       return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
