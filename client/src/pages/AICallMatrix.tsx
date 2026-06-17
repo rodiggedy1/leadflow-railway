@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { trpc } from "@/lib/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -8,49 +9,68 @@ interface Scenario {
   tag: string;
 }
 
-interface Person {
-  n: string;   // name
-  m: string;   // meta / job description
-  job: string; // job time
+type Audience = "customer" | "cleaner";
+type View = "matrix" | "queue" | "history" | "settings";
+
+// Real person shapes from the backend
+type CustomerRow = {
+  cleanerJobId: number;
+  name: string;
+  phone: string | null;
+  meta: string;
+  jobTime: string;
+  eta: string;
+  pay: string;
+  access: string;
+  risk: string;
+  assignedTeam: string;
+  jobAddress: string;
+  serviceType: string;
+  customerNotes: string;
+  staffNotes: string;
+  jobStatus: string | null;
+  scheduleConfirmed: number;
+};
+
+type CleanerRow = {
+  teamName: string;
+  phone: string | null;
+  meta: string;
+  jobCount: number;
+  risk: string;
+  hasNoCheckIn: boolean;
+  hasUnconfirmed: boolean;
+  hasPhotoMissing: boolean;
+};
+
+// Unified person shape used in the UI
+interface PersonItem {
+  id: string;
+  name: string;
+  phone: string | null;
+  meta: string;
+  jobTime: string;
   eta: string;
   pay: string;
   access: string;
   risk: string;
 }
 
-type Audience = "customer" | "cleaner";
-type View = "matrix" | "queue" | "history" | "settings";
-
-// ─── Static data (placeholder until backend is wired) ─────────────────────────
+// ─── Static data ──────────────────────────────────────────────────────────────
 
 const SCENARIOS: Record<Audience, Scenario[]> = {
   customer: [
-    { title: "Team running late",               description: "Apologize, give updated ETA, ask flexibility, offer status text.",                                    tag: "Urgent"  },
-    { title: "Team at address / access needed", description: "Ask how to access home, lockbox, gate, concierge, parking.",                                         tag: "Now"     },
-    { title: "Put card on file",                description: "Ask client to call Maids in Black or securely add a card before service.",                            tag: "Payment" },
-    { title: "Confirm address",                 description: "Verify address, unit, parking, and entry instructions.",                                              tag: "Prep"    },
-    { title: "Client ETA update",               description: "Tell client cleaner ETA and confirm window still works.",                                             tag: "Update"  },
+    { title: "Team running late",               description: "Apologize, give updated ETA, ask flexibility, offer status text.",                 tag: "Urgent"  },
+    { title: "Team at address / access needed", description: "Ask how to access home, lockbox, gate, concierge, parking.",                      tag: "Now"     },
+    { title: "Put card on file",                description: "Ask client to call Maids in Black or securely add a card before service.",         tag: "Payment" },
+    { title: "Confirm address",                 description: "Verify address, unit, parking, and entry instructions.",                          tag: "Prep"    },
+    { title: "Client ETA update",               description: "Tell client cleaner ETA and confirm window still works.",                         tag: "Update"  },
   ],
   cleaner: [
-    { title: "ETA request",             description: "Ask cleaner exact ETA, traffic issue, and whether client needs alert.",                          tag: "Urgent"   },
-    { title: "Schedule confirmation",   description: "Confirm cleaner is working tomorrow and number of jobs accepted.",                               tag: "Daily"    },
-    { title: "Job status reminder",     description: "Ask if they arrived, started, paused, or need office help.",                                    tag: "Ops"      },
-    { title: "Confirm job completion",  description: "Confirm job is finished, photos uploaded, and client walkthrough done.",                        tag: "Closeout" },
-  ],
-};
-
-const PEOPLE: Record<Audience, Person[]> = {
-  customer: [
-    { n: "Angela Morris",  m: "3 bed / 2 bath deep clean · 1321 R St NW",              job: "11:00 AM",       eta: "12:20 PM", pay: "Card on file",  access: "Lockbox unknown",    risk: "High impact"   },
-    { n: "Chris Patel",    m: "1 bed move-out · 1440 Meridian Pl",                     job: "1:00 PM",        eta: "1:00 PM",  pay: "Missing card",  access: "Vacant / lockbox",   risk: "Payment risk"  },
-    { n: "Madison Lee",    m: "2 bed / 1 bath standard · Silver Spring",               job: "Tomorrow 9:00 AM", eta: "On time", pay: "Missing card",  access: "Client home",        risk: "Prep needed"   },
-    { n: "Erica Johnson",  m: "5 bed / 4 bath post-construction · Arlington",          job: "2:00 PM",        eta: "3:05 PM",  pay: "Card on file",  access: "Gate code missing",  risk: "High impact"   },
-  ],
-  cleaner: [
-    { n: "Team Ana",    m: "Assigned: Angela + Erica · GPS stale 22 min",        job: "Today",        eta: "Unknown",  pay: "2 jobs",    access: "Needs ETA",            risk: "Urgent"        },
-    { n: "Team Brenda", m: "Assigned: Madison tomorrow · not confirmed",         job: "Tomorrow",     eta: "Pending",  pay: "1 job",     access: "Confirm availability", risk: "Schedule risk" },
-    { n: "Team Carla",  m: "Currently at 1440 Meridian · photos missing",        job: "In progress",  eta: "On site",  pay: "Closeout",  access: "Photos missing",       risk: "QA risk"       },
-    { n: "Team Diana",  m: "No check-in for 2:00 PM job",                        job: "2:00 PM",      eta: "Unknown",  pay: "1 job",     access: "No check-in",          risk: "Urgent"        },
+    { title: "ETA request",             description: "Ask cleaner exact ETA, traffic issue, and whether client needs alert.",       tag: "Urgent"   },
+    { title: "Schedule confirmation",   description: "Confirm cleaner is working tomorrow and number of jobs accepted.",            tag: "Daily"    },
+    { title: "Job status reminder",     description: "Ask if they arrived, started, paused, or need office help.",                 tag: "Ops"      },
+    { title: "Confirm job completion",  description: "Confirm job is finished, photos uploaded, and client walkthrough done.",     tag: "Closeout" },
   ],
 };
 
@@ -63,16 +83,15 @@ const QUEUE_ROWS = [
 
 // ─── Script generator ─────────────────────────────────────────────────────────
 
-function buildScript(person: Person, scenarioTitle: string, audience: Audience): string {
-  const first = person.n.split(" ")[0];
-  const address = person.m.split("·")[1]?.trim() ?? "your home";
+function buildScript(person: PersonItem, scenarioTitle: string, audience: Audience): string {
+  const first = person.name.split(" ")[0];
+  const address = person.meta.split("·")[1]?.trim() ?? "your home";
 
   if (audience === "cleaner") {
-    return `Hi ${person.n}, this is Maids in Black operations. I'm calling about your assigned cleaning schedule.\n\nReason for the call: ${scenarioTitle}.\n\nCan you tell me your exact status right now — are you on the way, at the job, inside the home, finished, or delayed?\n\nOnce I have that, I'll update the office dashboard and customer if needed. Please also confirm any issue with parking, access, supplies, job size, or photos before you move to the next job.`;
+    return `Hi ${person.name}, this is Maids in Black operations. I'm calling about your assigned cleaning schedule.\n\nReason for the call: ${scenarioTitle}.\n\nCan you tell me your exact status right now — are you on the way, at the job, inside the home, finished, or delayed?\n\nOnce I have that, I'll update the office dashboard and customer if needed. Please also confirm any issue with parking, access, supplies, job size, or photos before you move to the next job.`;
   }
-
   if (scenarioTitle.toLowerCase().includes("late")) {
-    return `Hi ${first}, this is Maids in Black calling about your cleaning today at ${address}.\n\nI'm sorry, but the team is running behind. Your original arrival was ${person.job}, and the latest ETA we have is ${person.eta}.\n\nDoes that still work for you, or do we need to look at another option? I can also send a text confirmation after this call with the updated arrival window.`;
+    return `Hi ${first}, this is Maids in Black calling about your cleaning today at ${address}.\n\nI'm sorry, but the team is running behind. Your original arrival was ${person.jobTime}, and the latest ETA we have is ${person.eta}.\n\nDoes that still work for you, or do we need to look at another option? I can also send a text confirmation after this call with the updated arrival window.`;
   }
   if (scenarioTitle.toLowerCase().includes("access")) {
     return `Hi ${first}, this is Maids in Black. Our team is at or near your address and we need help with access.\n\nCan you confirm the best way to get in — lockbox, front desk, gate code, parking instructions, or should we call when they are outside?\n\nI'll update the team right away so they can get started.`;
@@ -83,14 +102,26 @@ function buildScript(person: Person, scenarioTitle: string, audience: Audience):
   return `Hi ${first}, this is Maids in Black calling about your upcoming cleaning.\n\nI just need to confirm a few details: your service address, unit number if any, parking, entry instructions, and whether there are any special notes for the team.\n\nOnce confirmed, we'll update your job notes so the team has everything before arrival.`;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function todayET(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD
+}
+
+function customerToItem(c: CustomerRow): PersonItem {
+  return { id: `c-${c.cleanerJobId}`, name: c.name, phone: c.phone, meta: c.meta, jobTime: c.jobTime, eta: c.eta, pay: c.pay, access: c.access, risk: c.risk };
+}
+
+function cleanerToItem(cl: CleanerRow): PersonItem {
+  return { id: `t-${cl.teamName}`, name: cl.teamName, phone: cl.phone, meta: cl.meta, jobTime: "Today", eta: cl.hasNoCheckIn ? "Unknown" : "See jobs", pay: `${cl.jobCount} job${cl.jobCount !== 1 ? "s" : ""}`, access: cl.hasPhotoMissing ? "Photos missing" : cl.hasUnconfirmed ? "Confirm availability" : "OK", risk: cl.risk };
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function Initials({ name }: { name: string }) {
   const letters = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   return (
-    <div
-      style={{ width: 36, height: 36, borderRadius: 12, background: "#1f2430", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}
-    >
+    <div style={{ width: 36, height: 36, borderRadius: 12, background: "#1f2430", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0 }}>
       {letters}
     </div>
   );
@@ -98,22 +129,16 @@ function Initials({ name }: { name: string }) {
 
 function Tag({ label, hot }: { label: string; hot?: boolean }) {
   return (
-    <span style={{
-      fontSize: 11, background: hot ? "#f3c96b" : "#262b37", border: "1px solid #2a3040",
-      borderRadius: 999, padding: "4px 8px", color: hot ? "#111" : "#8f98aa", whiteSpace: "nowrap",
-    }}>
+    <span style={{ fontSize: 11, background: hot ? "#f3c96b" : "#262b37", border: "1px solid #2a3040", borderRadius: 999, padding: "4px 8px", color: hot ? "#111" : "#8f98aa", whiteSpace: "nowrap" }}>
       {label}
     </span>
   );
 }
 
 function StatusBadge({ risk }: { risk: string }) {
-  const isRed = risk.toLowerCase().includes("high") || risk.toLowerCase().includes("urgent");
+  const isRed = risk.toLowerCase().includes("high") || risk.toLowerCase().includes("urgent") || risk.toLowerCase().includes("no check");
   return (
-    <span style={{
-      fontSize: 11, borderRadius: 999, padding: "4px 8px", border: `1px solid ${isRed ? "#633" : "#365"}`,
-      color: isRed ? "#ffb4b4" : "#b9ffd4", whiteSpace: "nowrap",
-    }}>
+    <span style={{ fontSize: 11, borderRadius: 999, padding: "4px 8px", border: `1px solid ${isRed ? "#633" : "#365"}`, color: isRed ? "#ffb4b4" : "#b9ffd4", whiteSpace: "nowrap" }}>
       {risk}
     </span>
   );
@@ -122,13 +147,38 @@ function StatusBadge({ risk }: { risk: string }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AICallMatrix() {
+  const [date] = useState(() => todayET());
   const [view, setView] = useState<View>("matrix");
   const [audience, setAudience] = useState<Audience>("customer");
-  const [selectedPerson, setSelectedPerson] = useState<Person>(PEOPLE.customer[0]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<string>(SCENARIOS.customer[0].title);
   const [search, setSearch] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
-  const [script, setScript] = useState(() => buildScript(PEOPLE.customer[0], SCENARIOS.customer[0].title, "customer"));
+  const [script, setScript] = useState("");
+
+  // ── Fetch real people data ──
+  const { data, isLoading, error } = trpc.callMatrix.getPeople.useQuery({ date }, { staleTime: 60_000 });
+
+  // Build unified person lists
+  const customerItems: PersonItem[] = useMemo(() => (data?.customers ?? []).map(customerToItem), [data]);
+  const cleanerItems: PersonItem[]  = useMemo(() => (data?.cleaners  ?? []).map(cleanerToItem),  [data]);
+
+  const allItems = audience === "customer" ? customerItems : cleanerItems;
+
+  // Filtered list
+  const filteredItems = useMemo(() => {
+    const q = search.toLowerCase();
+    return allItems.filter(p => (p.name + p.meta + p.risk).toLowerCase().includes(q));
+  }, [allItems, search]);
+
+  // Resolve selected person (fall back to first in list)
+  const selectedPerson: PersonItem | null = useMemo(() => {
+    if (selectedId) {
+      const found = allItems.find(p => p.id === selectedId);
+      if (found) return found;
+    }
+    return allItems[0] ?? null;
+  }, [selectedId, allItems]);
 
   // ── helpers ──
   function showFlash(msg: string) {
@@ -136,126 +186,92 @@ export default function AICallMatrix() {
     setTimeout(() => setFlash(null), 3500);
   }
 
-  function selectPerson(person: Person) {
-    setSelectedPerson(person);
-    setScript(buildScript(person, selectedScenario, audience));
+  function selectPerson(item: PersonItem) {
+    setSelectedId(item.id);
+    setScript(buildScript(item, selectedScenario, audience));
   }
 
   function selectScenario(type: Audience, title: string) {
     setAudience(type);
-    const firstPerson = PEOPLE[type][0];
-    setSelectedPerson(firstPerson);
     setSelectedScenario(title);
-    setScript(buildScript(firstPerson, title, type));
+    const items = type === "customer" ? customerItems : cleanerItems;
+    const first = items[0] ?? null;
+    if (first) {
+      setSelectedId(first.id);
+      setScript(buildScript(first, title, type));
+    }
   }
 
   function switchAudience(type: Audience) {
     setAudience(type);
-    const firstPerson = PEOPLE[type][0];
     const firstScenario = SCENARIOS[type][0].title;
-    setSelectedPerson(firstPerson);
     setSelectedScenario(firstScenario);
-    setScript(buildScript(firstPerson, firstScenario, type));
+    const items = type === "customer" ? customerItems : cleanerItems;
+    const first = items[0] ?? null;
+    if (first) {
+      setSelectedId(first.id);
+      setScript(buildScript(first, firstScenario, type));
+    } else {
+      setSelectedId(null);
+      setScript("");
+    }
   }
 
-  function smartPick() {
-    const person = PEOPLE.customer[1]; // Chris Patel — missing card
-    setAudience("customer");
-    setSelectedPerson(person);
-    setSelectedScenario("Put card on file");
-    setScript(buildScript(person, "Put card on file", "customer"));
-    setView("matrix");
-    showFlash("Smart Pick selected highest risk: missing card before dispatch.");
-  }
+  // Ensure script is set once data loads
+  useMemo(() => {
+    if (!script && selectedPerson) {
+      setScript(buildScript(selectedPerson, selectedScenario, audience));
+    }
+  }, [selectedPerson]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function loadFromQueue(name: string, scenario: string) {
-    const aud: Audience = PEOPLE.customer.some(p => p.n === name) ? "customer" : "cleaner";
-    const person = PEOPLE[aud].find(p => p.n === name) ?? PEOPLE[aud][0];
-    setAudience(aud);
-    setSelectedPerson(person);
-    setSelectedScenario(scenario);
-    setScript(buildScript(person, scenario, aud));
-    setView("matrix");
-    showFlash("Loaded from smart queue.");
-  }
-
-  // ── filtered people list ──
-  const filteredPeople = useMemo(() => {
-    const q = search.toLowerCase();
-    return PEOPLE[audience].filter(p =>
-      (p.n + p.m + p.risk).toLowerCase().includes(q)
-    );
-  }, [audience, search]);
-
-  // ── view titles ──
-  const viewTitles: Record<View, string> = {
-    matrix: "AI Call Matrix",
-    queue: "Smart Queue",
-    history: "Call History",
-    settings: "Templates",
-  };
-
-  // ─── Styles (inline to match the mockup's CSS vars exactly) ──────────────────
+  // ── Styles ──
   const s = {
-    bg:      "#0f1115",
-    panel:   "#171a21",
-    panel2:  "#1f2430",
-    muted:   "#8f98aa",
-    text:    "#f4f6fb",
-    line:    "#2a3040",
-    accent:  "#f3c96b",
-    good:    "#63d297",
-    bad:     "#ff6b6b",
-    blue:    "#7bb7ff",
-    chip:    "#262b37",
-    dark:    "#121620",
+    bg: "#0f1115", panel: "#171a21", panel2: "#1f2430", muted: "#8f98aa",
+    text: "#f4f6fb", line: "#2a3040", accent: "#f3c96b", good: "#63d297",
+    blue: "#7bb7ff", dark: "#121620",
   };
+
+  // ── Sidebar metrics ──
+  const callsNeeded = (data?.customers.filter(c => c.risk !== "On track").length ?? 0) + (data?.cleaners.filter(cl => cl.risk !== "On track").length ?? 0);
+  const lateTeams = data?.cleaners.filter(cl => cl.risk === "Urgent" || cl.risk === "No check-in").length ?? 0;
+  const unconfirmed = data?.cleaners.filter(cl => cl.hasUnconfirmed).length ?? 0;
+  const photoMissing = data?.cleaners.filter(cl => cl.hasPhotoMissing).length ?? 0;
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "270px 1fr 390px", minHeight: "100vh", background: s.bg, color: s.text, fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" }}>
 
       {/* ── LEFT SIDEBAR ── */}
       <aside style={{ background: "#0b0d11", borderRight: `1px solid ${s.line}`, padding: 18, display: "flex", flexDirection: "column", gap: 0 }}>
-        {/* Brand */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 800, fontSize: 18, marginBottom: 22 }}>
           <div style={{ width: 34, height: 34, borderRadius: 10, background: "linear-gradient(135deg,#111,#333)", display: "grid", placeItems: "center", color: s.accent, border: "1px solid #3b3b3b", flexShrink: 0 }}>M</div>
-          <div>
-            Maids in Black<br />
-            <span style={{ color: s.muted, fontSize: 13, fontWeight: 400 }}>AI Call Matrix</span>
-          </div>
+          <div>Maids in Black<br /><span style={{ color: s.muted, fontSize: 13, fontWeight: 400 }}>AI Call Matrix</span></div>
         </div>
 
-        {/* Nav */}
         <nav style={{ display: "grid", gap: 2 }}>
           {(["matrix", "queue", "history", "settings"] as View[]).map((v, i) => {
             const labels = ["Call Matrix", "Smart Queue", "Call History", "Templates"];
             const active = view === v;
             return (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                style={{
-                  width: "100%", textAlign: "left", background: active ? s.panel : "transparent",
-                  color: active ? s.text : s.muted, border: 0, padding: "12px 10px", borderRadius: 12,
-                  fontWeight: 650, cursor: "pointer", fontSize: 14,
-                }}
-              >
+              <button key={v} onClick={() => setView(v)} style={{ width: "100%", textAlign: "left", background: active ? s.panel : "transparent", color: active ? s.text : s.muted, border: 0, padding: "12px 10px", borderRadius: 12, fontWeight: 650, cursor: "pointer", fontSize: 14 }}>
                 {labels[i]}
               </button>
             );
           })}
         </nav>
 
-        {/* Metrics card */}
         <div style={{ marginTop: 18, padding: 14, border: `1px solid ${s.line}`, borderRadius: 16, background: s.panel }}>
-          {[["Calls needed", "18"], ["Late team alerts", "5"], ["Card missing", "7"], ["Cleaner ETA needed", "6"]].map(([label, val], i, arr) => (
+          {[
+            ["Calls needed",       String(callsNeeded)],
+            ["Late team alerts",   String(lateTeams)],
+            ["Unconfirmed teams",  String(unconfirmed)],
+            ["Photos missing",     String(photoMissing)],
+          ].map(([label, val], i, arr) => (
             <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: i < arr.length - 1 ? `1px solid ${s.line}` : "none", fontSize: 13 }}>
-              <span>{label}</span><b>{val}</b>
+              <span>{label}</span><b>{isLoading ? "…" : val}</b>
             </div>
           ))}
         </div>
 
-        {/* Smart rules card */}
         <div style={{ marginTop: 14, padding: 14, border: `1px solid ${s.line}`, borderRadius: 16, background: s.panel }}>
           <b style={{ fontSize: 13 }}>Smart rules</b>
           <p style={{ color: s.muted, fontSize: 12, margin: "8px 0 0", lineHeight: 1.45 }}>
@@ -266,10 +282,11 @@ export default function AICallMatrix() {
 
       {/* ── MAIN CONTENT ── */}
       <main style={{ padding: "18px 22px", overflowY: "auto" }}>
-        {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 16 }}>
           <div>
-            <h1 style={{ fontSize: 24, margin: 0, fontWeight: 800 }}>{viewTitles[view]}</h1>
+            <h1 style={{ fontSize: 24, margin: 0, fontWeight: 800 }}>
+              {{ matrix: "AI Call Matrix", queue: "Smart Queue", history: "Call History", settings: "Templates" }[view]}
+            </h1>
             <div style={{ color: s.muted, fontSize: 13, marginTop: 4 }}>
               Pick a customer or cleaner, choose the reason, review the AI script, then start the call.
             </div>
@@ -282,7 +299,20 @@ export default function AICallMatrix() {
               style={{ background: "#11151d", border: `1px solid ${s.line}`, borderRadius: 12, color: s.text, padding: "11px 12px", outline: "none", width: 260, fontSize: 13 }}
             />
             <button
-              onClick={smartPick}
+              onClick={() => {
+                // Smart pick: first customer with non-"On track" risk
+                const urgent = customerItems.find(c => c.risk !== "On track");
+                if (urgent) {
+                  setAudience("customer");
+                  setSelectedId(urgent.id);
+                  setSelectedScenario("Put card on file");
+                  setScript(buildScript(urgent, "Put card on file", "customer"));
+                  setView("matrix");
+                  showFlash(`Smart Pick: ${urgent.name} — ${urgent.risk}`);
+                } else {
+                  showFlash("No urgent calls found for today.");
+                }
+              }}
               style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
             >
               Smart Pick
@@ -290,10 +320,17 @@ export default function AICallMatrix() {
           </div>
         </div>
 
+        {/* Loading / error states */}
+        {isLoading && (
+          <div style={{ color: s.muted, fontSize: 13, padding: "20px 0" }}>Loading today's jobs…</div>
+        )}
+        {error && (
+          <div style={{ color: "#ff6b6b", fontSize: 13, padding: "20px 0" }}>Error loading jobs: {error.message}</div>
+        )}
+
         {/* ── MATRIX VIEW ── */}
-        {view === "matrix" && (
+        {view === "matrix" && !isLoading && (
           <>
-            {/* Scenario grid */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
               {(["customer", "cleaner"] as Audience[]).map(type => (
                 <div key={type} style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
@@ -304,15 +341,7 @@ export default function AICallMatrix() {
                     {SCENARIOS[type].map(sc => {
                       const active = selectedScenario === sc.title;
                       return (
-                        <div
-                          key={sc.title}
-                          onClick={() => selectScenario(type, sc.title)}
-                          style={{
-                            padding: 13, border: `1px solid ${active ? s.accent : s.line}`,
-                            borderRadius: 15, background: active ? "#1d1b14" : s.dark,
-                            cursor: "pointer", transition: "border-color .15s, background .15s",
-                          }}
-                        >
+                        <div key={sc.title} onClick={() => selectScenario(type, sc.title)} style={{ padding: 13, border: `1px solid ${active ? s.accent : s.line}`, borderRadius: 15, background: active ? "#1d1b14" : s.dark, cursor: "pointer", transition: "border-color .15s, background .15s" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
                             <b style={{ fontSize: 14 }}>{sc.title}</b>
                             <Tag label={sc.tag} />
@@ -326,55 +355,36 @@ export default function AICallMatrix() {
               ))}
             </div>
 
-            {/* People list */}
             <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
               <h2 style={{ fontSize: 15, margin: "0 0 12px", fontWeight: 700 }}>People needing calls</h2>
-              {/* Audience tabs */}
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
                 {(["customer", "cleaner"] as Audience[]).map(type => {
                   const active = audience === type;
                   return (
-                    <button
-                      key={type}
-                      onClick={() => switchAudience(type)}
-                      style={{
-                        background: active ? s.accent : s.dark, color: active ? "#111" : s.muted,
-                        border: `1px solid ${active ? s.accent : s.line}`, padding: "9px 11px",
-                        borderRadius: 999, cursor: "pointer", fontWeight: 800, fontSize: 12,
-                      }}
-                    >
-                      {type === "customer" ? "Customers" : "Cleaners"}
+                    <button key={type} onClick={() => switchAudience(type)} style={{ background: active ? s.accent : s.dark, color: active ? "#111" : s.muted, border: `1px solid ${active ? s.accent : s.line}`, padding: "9px 11px", borderRadius: 999, cursor: "pointer", fontWeight: 800, fontSize: 12 }}>
+                      {type === "customer" ? `Customers (${customerItems.length})` : `Cleaners (${cleanerItems.length})`}
                     </button>
                   );
                 })}
               </div>
-              {/* People rows */}
               <div style={{ display: "grid", gap: 8, maxHeight: 390, overflowY: "auto", paddingRight: 3 }}>
-                {filteredPeople.map(p => {
-                  const active = selectedPerson.n === p.n;
+                {filteredItems.map(p => {
+                  const active = selectedPerson?.id === p.id;
                   return (
-                    <div
-                      key={p.n}
-                      onClick={() => selectPerson(p)}
-                      style={{
-                        display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10,
-                        alignItems: "center", padding: 11,
-                        border: `1px solid ${active ? s.blue : s.line}`,
-                        borderRadius: 15, background: active ? "#132033" : s.dark,
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Initials name={p.n} />
+                    <div key={p.id} onClick={() => selectPerson(p)} style={{ display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, alignItems: "center", padding: 11, border: `1px solid ${active ? s.blue : s.line}`, borderRadius: 15, background: active ? "#132033" : s.dark, cursor: "pointer" }}>
+                      <Initials name={p.name} />
                       <div>
-                        <div style={{ fontWeight: 800, fontSize: 13 }}>{p.n}</div>
-                        <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{p.m}</div>
+                        <div style={{ fontWeight: 800, fontSize: 13 }}>{p.name}</div>
+                        <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{p.meta}</div>
                       </div>
                       <StatusBadge risk={p.risk} />
                     </div>
                   );
                 })}
-                {filteredPeople.length === 0 && (
-                  <div style={{ color: s.muted, fontSize: 13, padding: "12px 0" }}>No results for "{search}"</div>
+                {filteredItems.length === 0 && !isLoading && (
+                  <div style={{ color: s.muted, fontSize: 13, padding: "12px 0" }}>
+                    {allItems.length === 0 ? "No jobs found for today." : `No results for "${search}"`}
+                  </div>
                 )}
               </div>
             </div>
@@ -386,18 +396,12 @@ export default function AICallMatrix() {
           <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
             <h2 style={{ fontSize: 15, margin: "0 0 12px", fontWeight: 700 }}>Smart Queue — prioritized by business impact</h2>
             {QUEUE_ROWS.map(row => (
-              <div
-                key={row.name}
-                style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", border: `1px solid ${s.line}`, background: s.dark, borderRadius: 14, padding: 10, marginBottom: 8 }}
-              >
+              <div key={row.name} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", border: `1px solid ${s.line}`, background: s.dark, borderRadius: 14, padding: 10, marginBottom: 8 }}>
                 <div>
                   <b style={{ fontSize: 14 }}>{row.name}</b>
                   <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{row.reason}</div>
                 </div>
-                <button
-                  onClick={() => loadFromQueue(row.name, row.scenario)}
-                  style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}
-                >
+                <button onClick={() => { setView("matrix"); showFlash(`Loaded ${row.name} from smart queue.`); }} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}>
                   Load
                 </button>
               </div>
@@ -432,24 +436,17 @@ export default function AICallMatrix() {
               Each template should merge job data, speak naturally, allow interruption, and end with a confirmation summary.
             </p>
             {[
-              { title: "Team running late",     desc: "Uses current ETA, apology, flexibility question, and updated window."                   },
-              { title: "Access problem",         desc: "Asks for lockbox, concierge, parking, gate code, or alternate entry."                   },
-              { title: "Card on file",           desc: "Explains card requirement without sounding like a debt collection call."                },
-              { title: "Cleaner ETA request",    desc: "Asks cleaner for exact ETA and blockers, then updates job status."                      },
+              { title: "Team running late",     desc: "Uses current ETA, apology, flexibility question, and updated window."   },
+              { title: "Access problem",         desc: "Asks for lockbox, concierge, parking, gate code, or alternate entry."   },
+              { title: "Card on file",           desc: "Explains card requirement without sounding like a debt collection call." },
+              { title: "Cleaner ETA request",    desc: "Asks cleaner for exact ETA and blockers, then updates job status."      },
             ].map(t => (
-              <div
-                key={t.title}
-                style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", border: `1px solid ${s.line}`, background: s.dark, borderRadius: 14, padding: 10, marginBottom: 8 }}
-              >
+              <div key={t.title} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", border: `1px solid ${s.line}`, background: s.dark, borderRadius: 14, padding: 10, marginBottom: 8 }}>
                 <div>
                   <b style={{ fontSize: 14 }}>{t.title}</b>
                   <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{t.desc}</div>
                 </div>
-                <button
-                  style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}
-                >
-                  Edit
-                </button>
+                <button style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}>Edit</button>
               </div>
             ))}
           </div>
@@ -458,92 +455,69 @@ export default function AICallMatrix() {
 
       {/* ── RIGHT PANEL ── */}
       <section style={{ background: "#11141b", borderLeft: `1px solid ${s.line}`, padding: 18, display: "flex", flexDirection: "column", gap: 14, overflowY: "auto" }}>
-
-        {/* Call box */}
         <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 20, padding: 16 }}>
-          {/* Selected person header */}
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 900 }}>{selectedPerson.n}</div>
-              <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{selectedPerson.m}</div>
-              <div style={{ marginTop: 8, color: s.accent, fontSize: 13, fontWeight: 800 }}>{selectedScenario}</div>
-            </div>
-            <Tag label={selectedPerson.risk} hot={selectedPerson.risk.toLowerCase().includes("high") || selectedPerson.risk.toLowerCase().includes("urgent")} />
-          </div>
-
-          {/* Job fields */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
-            {[
-              { label: "Job time", value: selectedPerson.job },
-              { label: "Current ETA", value: selectedPerson.eta },
-              { label: "Payment", value: selectedPerson.pay },
-              { label: "Access", value: selectedPerson.access },
-            ].map(f => (
-              <div key={f.label} style={{ background: s.dark, border: `1px solid ${s.line}`, borderRadius: 14, padding: 10 }}>
-                <span style={{ display: "block", color: s.muted, fontSize: 11, marginBottom: 5 }}>{f.label}</span>
-                <b style={{ fontSize: 13 }}>{f.value}</b>
+          {selectedPerson ? (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 900 }}>{selectedPerson.name}</div>
+                  <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{selectedPerson.meta}</div>
+                  <div style={{ marginTop: 8, color: s.accent, fontSize: 13, fontWeight: 800 }}>{selectedScenario}</div>
+                </div>
+                <Tag label={selectedPerson.risk} hot={selectedPerson.risk.toLowerCase().includes("high") || selectedPerson.risk.toLowerCase().includes("urgent")} />
               </div>
-            ))}
-          </div>
 
-          {/* Script textarea */}
-          <textarea
-            value={script}
-            onChange={e => setScript(e.target.value)}
-            style={{
-              width: "100%", minHeight: 150, resize: "vertical", lineHeight: 1.45,
-              marginTop: 10, background: "#11151d", border: `1px solid ${s.line}`,
-              borderRadius: 12, color: s.text, padding: "11px 12px", outline: "none",
-              fontSize: 13, fontFamily: "inherit",
-            }}
-          />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 14 }}>
+                {[
+                  { label: "Job time", value: selectedPerson.jobTime },
+                  { label: "Current ETA", value: selectedPerson.eta },
+                  { label: "Payment", value: selectedPerson.pay },
+                  { label: "Access", value: selectedPerson.access },
+                ].map(f => (
+                  <div key={f.label} style={{ background: s.dark, border: `1px solid ${s.line}`, borderRadius: 14, padding: 10 }}>
+                    <span style={{ display: "block", color: s.muted, fontSize: 11, marginBottom: 5 }}>{f.label}</span>
+                    <b style={{ fontSize: 13 }}>{f.value}</b>
+                  </div>
+                ))}
+              </div>
 
-          {/* Action buttons */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-            <button
-              onClick={() => showFlash("AI call started. Listening for outcome: confirmed, voicemail, angry client, reschedule, payment complete, or access received.")}
-              style={{ border: 0, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: "#111", background: s.good, fontSize: 13 }}
-            >
-              Start AI Call
-            </button>
-            <button
-              onClick={() => {
-                setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"));
-                showFlash("Script rewritten with a softer customer-service tone.");
-              }}
-              style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
-            >
-              Rewrite Softer
-            </button>
-            <button
-              onClick={() => showFlash("SMS version queued with secure link / ETA / access request based on this template.")}
-              style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
-            >
-              Send SMS Instead
-            </button>
-            <button
-              onClick={() => showFlash("Marked done. Summary added to job record and follow-up removed from queue.")}
-              style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
-            >
-              Mark Done
-            </button>
-            <button
-              onClick={() => { navigator.clipboard.writeText(script); showFlash("Script copied."); }}
-              style={{ gridColumn: "1 / -1", border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
-            >
-              Copy Script
-            </button>
-          </div>
+              <textarea
+                value={script}
+                onChange={e => setScript(e.target.value)}
+                style={{ width: "100%", minHeight: 150, resize: "vertical", lineHeight: 1.45, marginTop: 10, background: "#11151d", border: `1px solid ${s.line}`, borderRadius: 12, color: s.text, padding: "11px 12px", outline: "none", fontSize: 13, fontFamily: "inherit" }}
+              />
 
-          {/* Flash message */}
-          {flash && (
-            <div style={{ marginTop: 12, background: "#101e15", border: "1px solid #285b3a", color: "#b9ffd4", borderRadius: 14, padding: 12, fontSize: 13 }}>
-              {flash}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                <button onClick={() => showFlash("AI call started. Listening for outcome: confirmed, voicemail, angry client, reschedule, payment complete, or access received.")} style={{ border: 0, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: "#111", background: s.good, fontSize: 13 }}>
+                  Start AI Call
+                </button>
+                <button onClick={() => { setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need")); showFlash("Script rewritten with a softer tone."); }} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                  Rewrite Softer
+                </button>
+                <button onClick={() => showFlash("SMS version queued with secure link / ETA / access request based on this template.")} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                  Send SMS Instead
+                </button>
+                <button onClick={() => showFlash("Marked done. Summary added to job record and follow-up removed from queue.")} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                  Mark Done
+                </button>
+                <button onClick={() => { navigator.clipboard.writeText(script); showFlash("Script copied."); }} style={{ gridColumn: "1 / -1", border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                  Copy Script
+                </button>
+              </div>
+
+              {flash && (
+                <div style={{ marginTop: 12, background: "#101e15", border: "1px solid #285b3a", color: "#b9ffd4", borderRadius: 14, padding: 12, fontSize: 13 }}>
+                  {flash}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: s.muted, fontSize: 13, padding: "12px 0" }}>
+              {isLoading ? "Loading…" : "Select a person from the list to see their call script."}
             </div>
           )}
         </div>
 
-        {/* Live call guardrails */}
         <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 20, padding: 16 }}>
           <h2 style={{ fontSize: 15, margin: "0 0 12px", fontWeight: 700 }}>Live call guardrails</h2>
           <div style={{ display: "grid", gap: 10 }}>

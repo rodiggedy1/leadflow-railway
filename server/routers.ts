@@ -47,6 +47,7 @@ import { callsRouter } from "./callsRouter";
 import { confirmationCallsRouter } from "./confirmationCallsRouter";
 import { missedCallsRouter } from "./missedCallsRouter";
 import { gmailRouter } from "./gmailRouter";
+import { callMatrixRouter } from "./callMatrixRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -89,6 +90,7 @@ const quoteFormSchema = z.object({
 export const appRouter = router({
   system: systemRouter,
   gmail: gmailRouter,
+  callMatrix: callMatrixRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
