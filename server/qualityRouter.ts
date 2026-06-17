@@ -804,8 +804,11 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
             .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)));
           console.log(`[StaleCleanup] Re-pointed confirmation_calls from stale job ${row.id} (${row.customerName}) to new job ${newJob.id}`);
         } else {
-          // No matching new job found — skip deletion to preserve history
-          console.warn(`[StaleCleanup] Stale job ${row.id} (${row.customerName}) has confirmation_calls but no matching new job found — skipping deletion`);
+          // No matching new job on same date — job was rescheduled to a different date.
+          // Mark as 'rescheduled' so it disappears from schedule/jobs views (both filter out rescheduled)
+          // but keep the row so confirmation_calls history is preserved.
+          await db.update(cleanerJobs).set({ bookingStatus: 'rescheduled' }).where(eq(cleanerJobs.id, row.id));
+          console.log(`[StaleCleanup] Marked job ${row.id} (${row.customerName}) as rescheduled — no longer in L27 for ${dateStr}`);
           continue;
         }
       }
@@ -1845,7 +1848,10 @@ export const qualityRouter = router({
                 .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)));
               console.log(`[StaleCleanup] Re-pointed confirmation_calls from stale job ${row.id} (${row.customerName}) to new job ${newJob.id}`);
             } else {
-              console.warn(`[StaleCleanup] Stale job ${row.id} (${row.customerName}) has confirmation_calls but no matching new job — skipping deletion`);
+              // No matching new job on same date — job was rescheduled to a different date.
+              // Mark as 'rescheduled' so it disappears from schedule/jobs views.
+              await db.update(cleanerJobs).set({ bookingStatus: 'rescheduled' }).where(eq(cleanerJobs.id, row.id));
+              console.log(`[StaleCleanup] Marked job ${row.id} (${row.customerName}) as rescheduled — no longer in L27 for ${dateStr}`);
               continue;
             }
           }
