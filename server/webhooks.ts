@@ -1559,7 +1559,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
 
 Extract:
 1. confirmed: true if the customer is confirming their appointment (yes, sure, sounds good, we'll be there, etc.), false if cancelling or unclear
-2. flexibility: "flexible" if they indicate flexibility with arrival time, "not_flexible" if they need a specific time or have constraints, null if not mentioned
+2. flexibility: use exactly one of these values — "exact" if they need the team at a specific time, "two_hour" if they are okay with a 2-hour arrival window, "anytime" if they are fully flexible, "unknown" if not mentioned
 3. notes: any additional info they shared (special instructions, timing constraints, access notes, etc.), or null if nothing notable`,
             },
           ],
@@ -1572,7 +1572,7 @@ Extract:
                 type: "object",
                 properties: {
                   confirmed: { type: "boolean", description: "Whether the customer confirmed their appointment" },
-                  flexibility: { type: ["string", "null"], enum: ["flexible", "not_flexible", null], description: "Arrival window flexibility" },
+                  flexibility: { type: "string", enum: ["exact", "two_hour", "anytime", "unknown"], description: "Arrival window flexibility" },
                   notes: { type: ["string", "null"], description: "Any additional notes from the customer" },
                 },
                 required: ["confirmed", "flexibility", "notes"],
@@ -1583,7 +1583,7 @@ Extract:
         });
         const parsed = JSON.parse(llmResult.choices[0].message.content as string);
         isConfirmed = parsed.confirmed === true;
-        smsFlexibility = parsed.flexibility ?? null;
+        smsFlexibility = (parsed.flexibility && parsed.flexibility !== "unknown") ? parsed.flexibility : null;
         smsNotes = parsed.notes ?? null;
       } catch (llmErr) {
         console.error('[Webhook] LLM extraction failed for SMS reply, falling back to keyword match:', llmErr);
