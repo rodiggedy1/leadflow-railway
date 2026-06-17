@@ -87,7 +87,8 @@ interface Job {
   checklistItems?: string | null;
   customerPhone?: string | null;
   clientHistory?: ClientHistory | null;
-  recentCalls?: Array<{ step: string; outcome: string; summary: string | null; durationSeconds: number; createdAt: string | Date }>;
+  recentCalls?: Array<{ step: string; outcome: string; summary: string | null; transcript: string | null; durationSeconds: number; createdAt: string | Date }>;
+  callsSummary?: string | null;
   openPhoneCalls?: Array<{ callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: string | Date; callDebrief: string | null; transcript: string | null }>;
   requestedTeam?: string | null;
   isNewClient?: boolean;
@@ -2372,6 +2373,154 @@ function relativeTime(ts: number | null): string {
   return `${days}d ago`;
 }
 
+// ── Shared expand/collapse transcript hook ───────────────────────────────────
+function useExpandedSet() {
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const toggle = (key: string) => setExpanded(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+  return { expanded, toggle };
+}
+
+// ── Combined Recent Calls Section (AI summary + field_mgmt_calls + OpenPhone) ─
+type RecentCallItem = { step: string; outcome: string; summary: string | null; transcript: string | null; durationSeconds: number; createdAt: string | Date };
+type OpenPhoneCallItem2 = { callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: string | Date; callDebrief: string | null; transcript: string | null };
+
+const TRANSCRIPT_PREVIEW = 120;
+
+function RecentCallsSection({
+  recentCalls,
+  openPhoneCalls,
+  callsSummary,
+}: {
+  recentCalls: RecentCallItem[];
+  openPhoneCalls: OpenPhoneCallItem2[];
+  callsSummary: string | null;
+}) {
+  const { expanded, toggle } = useExpandedSet();
+  return (
+    <div className="px-5 py-4 border-b">
+      <div className="flex items-center gap-1.5 mb-3">
+        <Phone className="w-3.5 h-3.5 text-gray-400" />
+        <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Recent Calls</span>
+      </div>
+
+      {/* AI Summary Banner */}
+      {callsSummary && (
+        <div className="mb-3 rounded-xl bg-violet-50 border border-violet-200 px-3.5 py-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3 h-3 text-violet-500" />
+            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-500">AI Summary</span>
+          </div>
+          <p className="text-xs text-violet-900 leading-relaxed">{callsSummary}</p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {/* Field Mgmt Calls (Vapi AI calls) */}
+        {recentCalls.map((call, i) => {
+          const key = `fmc-${i}`;
+          const isExp = expanded.has(key);
+          const stepLabel = call.step === "confirmation_call" ? "Confirmation Call"
+            : call.step === "schedule_escalation" ? "Schedule Escalation"
+            : call.step === "exception_call" ? "Exception Call"
+            : call.step === "noshow_call" ? "No-Show Call"
+            : call.step.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+          const outcomeColor = call.outcome === "answered" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+            : call.outcome === "voicemail" ? "text-amber-600 bg-amber-50 border-amber-100"
+            : "text-red-500 bg-red-50 border-red-100";
+          const ts = typeof call.createdAt === "string" ? new Date(call.createdAt).getTime() : call.createdAt.getTime();
+          const isLong = call.transcript ? call.transcript.length > TRANSCRIPT_PREVIEW : false;
+          const displayTranscript = call.transcript
+            ? (isLong && !isExp ? call.transcript.slice(0, TRANSCRIPT_PREVIEW) + "\u2026" : call.transcript)
+            : null;
+          return (
+            <div key={key} className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-gray-600">{stepLabel}</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${outcomeColor}`}>{call.outcome.replace("_", " ")}</span>
+                </div>
+                <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
+              </div>
+              {/* Prefer transcript over summary */}
+              {displayTranscript ? (
+                <>
+                  <p className="text-xs text-gray-600 leading-relaxed italic">&ldquo;{displayTranscript}&rdquo;</p>
+                  {isLong && (
+                    <button onClick={() => toggle(key)} className="mt-1.5 text-[10px] font-semibold text-gray-400 hover:text-gray-600 transition-colors">
+                      {isExp ? "Show less" : "Show full transcript"}
+                    </button>
+                  )}
+                </>
+              ) : call.summary ? (
+                <p className="text-xs text-gray-600 leading-relaxed">{call.summary}</p>
+              ) : null}
+            </div>
+          );
+        })}
+
+        {/* OpenPhone Calls */}
+        {openPhoneCalls.map((call, i) => {
+          const key = `op-${i}`;
+          const isExp = expanded.has(key);
+          const ts = typeof call.callStartedAt === "string" ? new Date(call.callStartedAt).getTime() : call.callStartedAt.getTime();
+          const directionLabel = call.direction === "outgoing" ? "Outbound" : "Inbound";
+          const directionColor = call.direction === "outgoing"
+            ? "text-blue-600 bg-blue-50 border-blue-100"
+            : "text-purple-600 bg-purple-50 border-purple-100";
+          let debriefGrade: string | null = null;
+          if (call.callDebrief) {
+            try { const d = JSON.parse(call.callDebrief); debriefGrade = d.grade ?? null; } catch { /* skip */ }
+          }
+          let fullTranscript: string | null = null;
+          if (call.transcript) {
+            try {
+              const turns = JSON.parse(call.transcript);
+              if (Array.isArray(turns)) fullTranscript = turns.map((t: { content?: string }) => t.content ?? "").join(" ").trim() || null;
+            } catch { fullTranscript = call.transcript; }
+          }
+          const isLong = fullTranscript ? fullTranscript.length > TRANSCRIPT_PREVIEW : false;
+          const displayText = fullTranscript
+            ? (isLong && !isExp ? fullTranscript.slice(0, TRANSCRIPT_PREVIEW) + "\u2026" : fullTranscript)
+            : null;
+          const gradeColor = debriefGrade === "A" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+            : debriefGrade === "B" ? "text-blue-600 bg-blue-50 border-blue-100"
+            : debriefGrade === "C" ? "text-amber-600 bg-amber-50 border-amber-100"
+            : debriefGrade === "D" || debriefGrade === "F" ? "text-red-500 bg-red-50 border-red-100"
+            : "text-gray-500 bg-gray-50 border-gray-100";
+          return (
+            <div key={key} className="rounded-xl bg-indigo-50/40 border border-indigo-100 px-3.5 py-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">OpenPhone</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${directionColor}`}>{directionLabel}</span>
+                  {debriefGrade && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${gradeColor}`}>Grade: {debriefGrade}</span>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
+              </div>
+              {displayText && (
+                <>
+                  <p className="text-xs text-gray-600 leading-relaxed italic">&ldquo;{displayText}&rdquo;</p>
+                  {isLong && (
+                    <button onClick={() => toggle(key)} className="mt-1.5 text-[10px] font-semibold text-indigo-500 hover:text-indigo-700 transition-colors">
+                      {isExp ? "Show less" : "Show full transcript"}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── OpenPhone Calls Section (with per-call expand/collapse) ─────────────────
 type OpenPhoneCallItem = { callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: string | Date; callDebrief: string | null; transcript: string | null };
 
@@ -2658,45 +2807,17 @@ function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => 
             </div>
           )}
 
-          {/* Section: Recent Calls */}
-          {job?.recentCalls && job.recentCalls.length > 0 && (
-            <div className="px-5 py-4 border-b">
-              <div className="flex items-center gap-1.5 mb-3">
-                <Phone className="w-3.5 h-3.5 text-gray-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Recent Calls</span>
-              </div>
-              <div className="space-y-2">
-                {job.recentCalls.map((call, i) => {
-                  const stepLabel = call.step === "confirmation_call" ? "Confirmation Call"
-                    : call.step === "schedule_escalation" ? "Schedule Escalation"
-                    : call.step === "exception_call" ? "Exception Call"
-                    : call.step === "noshow_call" ? "No-Show Call"
-                    : call.step.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-                  const outcomeColor = call.outcome === "answered" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
-                    : call.outcome === "voicemail" ? "text-amber-600 bg-amber-50 border-amber-100"
-                    : "text-red-500 bg-red-50 border-red-100";
-                  const ts = typeof call.createdAt === "string" ? new Date(call.createdAt).getTime() : call.createdAt.getTime();
-                  return (
-                    <div key={i} className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-3">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-gray-600">{stepLabel}</span>
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border capitalize ${outcomeColor}`}>{call.outcome.replace("_", " ")}</span>
-                        </div>
-                        <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
-                      </div>
-                      {call.summary && (
-                        <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{call.summary}</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Section: Recent Calls + OpenPhone Calls + AI Summary */}
+          {((job?.recentCalls && job.recentCalls.length > 0) || (job?.openPhoneCalls && job.openPhoneCalls.length > 0)) && (
+            <RecentCallsSection
+              recentCalls={job?.recentCalls ?? []}
+              openPhoneCalls={job?.openPhoneCalls ?? []}
+              callsSummary={job?.callsSummary ?? null}
+            />
           )}
 
-          {/* Section: OpenPhone Calls */}
-          {job?.openPhoneCalls && job.openPhoneCalls.length > 0 && (
+          {/* Section: OpenPhone Calls (legacy slot — now handled inside RecentCallsSection) */}
+          {false && job?.openPhoneCalls && job.openPhoneCalls.length > 0 && (
             <OpenPhoneCallsSection calls={job.openPhoneCalls} />
           )}
 

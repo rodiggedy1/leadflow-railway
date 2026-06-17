@@ -34,6 +34,7 @@ import {
   openphoneCallRecordings,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
+import { invokeLLM } from "./_core/llm";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1050,7 +1051,7 @@ export const schedulingRouter = router({
       const clientHistoryMap = new Map<string, ClientHistory>();
 
       // Map: jobId → recent field mgmt calls (last 3 per job)
-      type RecentCall = { step: string; outcome: string; summary: string | null; durationSeconds: number; createdAt: Date };
+      type RecentCall = { step: string; outcome: string; summary: string | null; transcript: string | null; durationSeconds: number; createdAt: Date };
       const recentCallsMap = new Map<number, RecentCall[]>();
       if (jobIds.length > 0) {
         const fmcRows = await db
@@ -1059,6 +1060,7 @@ export const schedulingRouter = router({
             step: fieldMgmtCalls.step,
             outcome: fieldMgmtCalls.outcome,
             summary: fieldMgmtCalls.summary,
+            transcript: fieldMgmtCalls.transcript,
             durationSeconds: fieldMgmtCalls.durationSeconds,
             createdAt: fieldMgmtCalls.createdAt,
           })
@@ -1069,7 +1071,7 @@ export const schedulingRouter = router({
         for (const row of fmcRows) {
           const existing = recentCallsMap.get(row.cleanerJobId) ?? [];
           if (existing.length < 3) {
-            existing.push({ step: row.step, outcome: row.outcome, summary: row.summary, durationSeconds: row.durationSeconds, createdAt: row.createdAt });
+            existing.push({ step: row.step, outcome: row.outcome, summary: row.summary, transcript: row.transcript, durationSeconds: row.durationSeconds, createdAt: row.createdAt });
             recentCallsMap.set(row.cleanerJobId, existing);
           }
         }
@@ -1219,6 +1221,56 @@ export const schedulingRouter = router({
         }
       }
 
+      // ── Per-job AI call summary ─────────────────────────────────────────────
+      // For each job that has ≥1 call with a transcript, generate a 2-3 sentence
+      // summary covering: confirmation status, any issues raised, overall tone.
+      // We run these in parallel (Promise.all) but cap at 5 jobs to avoid latency.
+      const callsSummaryMap = new Map<number, string>();
+      const jobsNeedingSummary = enriched
+        .filter(j => {
+          const fmc = recentCallsMap.get(j.id) ?? [];
+          const op = (j.customerPhone ? openPhoneCallsMap.get(digits10(j.customerPhone)) : null) ?? [];
+          const hasTranscript = fmc.some(c => c.transcript) || op.some(c => c.transcript);
+          return hasTranscript;
+        })
+        .slice(0, 5);
+
+      await Promise.all(jobsNeedingSummary.map(async j => {
+        try {
+          const fmc = recentCallsMap.get(j.id) ?? [];
+          const op = (j.customerPhone ? openPhoneCallsMap.get(digits10(j.customerPhone)) : null) ?? [];
+          const callBlocks: string[] = [];
+          for (const c of fmc) {
+            if (c.transcript) {
+              const label = c.step === "confirmation_call" ? "Confirmation Call"
+                : c.step === "schedule_escalation" ? "Schedule Escalation"
+                : c.step.replace(/_/g, " ");
+              callBlocks.push(`[${label} — ${c.outcome}]\n${c.transcript}`);
+            }
+          }
+          for (const c of op) {
+            if (c.transcript) {
+              let txt = c.transcript;
+              try {
+                const turns = JSON.parse(c.transcript);
+                if (Array.isArray(turns)) txt = turns.map((t: { content?: string }) => t.content ?? "").join(" ").trim();
+              } catch { /* raw string */ }
+              const dir = c.direction === "outgoing" ? "Outbound" : "Inbound";
+              callBlocks.push(`[OpenPhone ${dir}]\n${txt}`);
+            }
+          }
+          if (callBlocks.length === 0) return;
+          const prompt = `You are an operations assistant for a cleaning company. Below are transcripts from recent calls with a customer named ${j.customerName ?? "the customer"} for a cleaning job on ${j.jobDate ?? "an upcoming date"}.
+
+Summarize in 2-3 sentences: (1) whether the appointment was confirmed, (2) any issues or concerns raised, (3) overall customer tone. Be concise and factual. Do not use bullet points.
+
+${callBlocks.join("\n\n")}`;
+          const res = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
+          const text = res?.choices?.[0]?.message?.content?.trim();
+          if (text) callsSummaryMap.set(j.id, text);
+        } catch { /* skip on LLM error */ }
+      }));
+
       const enrichedWithConf = enriched.map(j => {
         const phone10 = j.customerPhone ? digits10(j.customerPhone) : null;
         const clientHistory = phone10 ? clientHistoryMap.get(phone10) ?? null : null;
@@ -1229,6 +1281,7 @@ export const schedulingRouter = router({
           clientHistory,
           recentCalls: recentCallsMap.get(j.id) ?? [],
           openPhoneCalls,
+          callsSummary: callsSummaryMap.get(j.id) ?? null,
         };
       });
       return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
