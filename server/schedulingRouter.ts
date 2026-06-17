@@ -1259,7 +1259,7 @@ export const schedulingRouter = router({
               callBlocks.push(`[OpenPhone ${dir}]\n${txt}`);
             }
           }
-          console.log(`[callsSummary] job ${j.id} callBlocks=${callBlocks.length}`);
+          console.log(`[callsSummary] job ${j.id} callBlocks=${callBlocks.length} OPENAI_KEY_PRESENT=${!!process.env.OPENAI_API_KEY}`);
           if (callBlocks.length === 0) return;
           const prompt = `You are an operations assistant for a cleaning company. Below are transcripts from recent calls with a customer named ${j.customerName ?? "the customer"} for a cleaning job on ${j.jobDate ?? "an upcoming date"}.
 
