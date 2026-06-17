@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, sql, desc, ne } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -810,9 +810,9 @@ export const schedulingRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      // Get all jobs for the date
+      // Get all jobs for the date (exclude cancelled and rescheduled)
       const jobs = await db.select().from(cleanerJobs)
-        .where(eq(cleanerJobs.jobDate, input.date));
+        .where(and(eq(cleanerJobs.jobDate, input.date), ne(cleanerJobs.bookingStatus, "cancelled"), ne(cleanerJobs.bookingStatus, "rescheduled")));
 
       // Get existing assignments for the date
       const jobIds = jobs.map(j => j.id);
