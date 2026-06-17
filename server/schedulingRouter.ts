@@ -1011,6 +1011,10 @@ export const schedulingRouter = router({
               aiFlexibility: confirmationCalls.aiFlexibility,
               manualOutcome: confirmationCalls.manualOutcome,
               manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+              transcript: confirmationCalls.transcript,
+              summary: confirmationCalls.summary,
+              durationSeconds: confirmationCalls.durationSeconds,
+              firedAt: confirmationCalls.firedAt,
             })
             .from(confirmationCalls)
             .where(
@@ -1072,6 +1076,22 @@ export const schedulingRouter = router({
           existing.push({ step: row.step, outcome: row.outcome, summary: row.summary, transcript: row.transcript, durationSeconds: row.durationSeconds, createdAt: row.createdAt });
           recentCallsMap.set(row.cleanerJobId, existing);
         }
+      }
+      // Also merge confirmation_calls into recentCallsMap so every customer's
+      // Vapi confirmation call transcript shows in Recent Calls consistently.
+      for (const c of confCalls) {
+        if (!c.transcript && !c.summary) continue;
+        const outcome = c.manualOutcome ?? c.aiOutcome ?? c.status ?? "unknown";
+        const existing = recentCallsMap.get(c.cleanerJobId) ?? [];
+        existing.push({
+          step: "confirmation_call",
+          outcome,
+          summary: c.summary ?? null,
+          transcript: c.transcript ?? null,
+          durationSeconds: c.durationSeconds ?? 0,
+          createdAt: c.firedAt ? new Date(c.firedAt) : new Date(),
+        });
+        recentCallsMap.set(c.cleanerJobId, existing);
       }
 
       // Map: phone10 → OpenPhone call recordings (all calls, most recent first)
