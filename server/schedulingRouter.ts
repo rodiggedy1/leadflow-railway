@@ -1224,7 +1224,7 @@ export const schedulingRouter = router({
       // ── Per-job AI call summary ─────────────────────────────────────────────
       // For each job that has ≥1 call with a transcript, generate a 2-3 sentence
       // summary covering: confirmation status, any issues raised, overall tone.
-      // We run these in parallel (Promise.all) but cap at 5 jobs to avoid latency.
+      // Runs in parallel for all qualifying jobs — no cap.
       const callsSummaryMap = new Map<number, string>();
       const jobsNeedingSummary = enriched
         .filter(j => {
@@ -1232,8 +1232,7 @@ export const schedulingRouter = router({
           const op = (j.customerPhone ? openPhoneCallsMap.get(digits10(j.customerPhone)) : null) ?? [];
           const hasTranscript = fmc.some(c => c.transcript) || op.some(c => c.transcript);
           return hasTranscript;
-        })
-        .slice(0, 5);
+        });
 
       await Promise.all(jobsNeedingSummary.map(async j => {
         try {
