@@ -298,6 +298,38 @@ export const confirmationCallsRouter = router({
       });
       const confirmationCallId = (ccInsert as any).insertId as number;
 
+      // ── 6. Send simultaneous SMS alongside the call ───────────────────────────
+      // Fire-and-forget: don't block the response if SMS fails
+      ;(async () => {
+        try {
+          const firstName = input.clientName?.split(" ")[0] ?? "there";
+          const smsBody =
+            `Hi ${firstName}, this is Maids in Black! Just confirming your cleaning appointment tomorrow. ` +
+            `Reply YES to confirm and FLEXIBLE or NOT FLEXIBLE to give us an idea of how flexible you are for your arrival window. ` +
+            `We look forward to seeing you! Feel free to add any additional notes as well.`;
+          const csNumberId = ENV.openPhoneCsNumberId;
+          const smsResult = await sendSms({
+            to: normalizedPhone,
+            content: smsBody,
+            ...(csNumberId ? { fromNumberId: csNumberId } : {}),
+          });
+          if (smsResult.success) {
+            await db.update(confirmationCalls)
+              .set({
+                smsFollowupSent: 1,
+                smsFollowupAt: Date.now(),
+                smsFollowupBody: smsBody,
+              })
+              .where(eq(confirmationCalls.id, confirmationCallId));
+            console.log(`[ConfirmationCalls] Simultaneous SMS sent to ${normalizedPhone} for call ${confirmationCallId}`);
+          } else {
+            console.error(`[ConfirmationCalls] Simultaneous SMS failed for call ${confirmationCallId}: ${smsResult.error}`);
+          }
+        } catch (smsErr) {
+          console.error(`[ConfirmationCalls] Simultaneous SMS error for call ${confirmationCallId}:`, smsErr);
+        }
+      })();
+
       return { callLogId, vapiCallId, confirmationCallId };
     }),
 
@@ -387,43 +419,6 @@ export const confirmationCallsRouter = router({
 
           console.log(`[ConfirmationCalls] Polled VAPI — updated call ${row.vapiCallId}: status=${ccStatus}, endedReason=${endedReason}`);
           updated++;
-
-          // ── SMS fallback on no-answer (fire-and-forget) ──────────────────────
-          // Only send once (smsFollowupSent guard) and only for no_answer/voicemail
-          if (
-            (ccStatus === "no_answer") &&
-            !row.smsFollowupSent &&
-            row.calledPhone
-          ) {
-            (async () => {
-              try {
-                const firstName = row.clientName?.split(" ")[0] ?? "there";
-                const smsBody =
-                  `Hi ${firstName}, this is Maids in Black. We tried calling to confirm your cleaning appointment but couldn't reach you. ` +
-                  `Your appointment is still confirmed — please call or text us at 202-888-5362 if you need to make any changes. We look forward to seeing you!`;
-                const csNumberId = ENV.openPhoneCsNumberId;
-                const result = await sendSms({
-                  to: row.calledPhone,
-                  content: smsBody,
-                  ...(csNumberId ? { fromNumberId: csNumberId } : {}),
-                });
-                if (result.success) {
-                  await db.update(confirmationCalls)
-                    .set({
-                      smsFollowupSent: 1,
-                      smsFollowupAt: Date.now(),
-                      smsFollowupBody: smsBody,
-                    })
-                    .where(eq(confirmationCalls.id, row.id));
-                  console.log(`[ConfirmationCalls] SMS fallback sent to ${row.calledPhone} for call ${row.id}`);
-                } else {
-                  console.error(`[ConfirmationCalls] SMS fallback failed for call ${row.id}: ${result.error}`);
-                }
-              } catch (smsErr) {
-                console.error(`[ConfirmationCalls] SMS fallback error for call ${row.id}:`, smsErr);
-              }
-            })();
-          }
 
           // Fire AI parsing async (same as webhook path)
           if (transcript || summary) {
