@@ -61,10 +61,17 @@ interface PersonItem {
 const SCENARIOS: Record<Audience, Scenario[]> = {
   customer: [
     { title: "Team running late",               description: "Apologize, give updated ETA, ask flexibility, offer status text.",                 tag: "Urgent"  },
+    { title: "Running significantly late",      description: "Team is 2+ hrs behind — offer to keep or reschedule.",                           tag: "Urgent"  },
     { title: "Team at address / access needed", description: "Ask how to access home, lockbox, gate, concierge, parking.",                      tag: "Now"     },
+    { title: "Parking instructions",            description: "Team is heading over — need parking details before arrival.",                     tag: "Now"     },
     { title: "Put card on file",                description: "Ask client to call Maids in Black or securely add a card before service.",         tag: "Payment" },
+    { title: "Payment failed",                  description: "Card pre-auth declined — need new card or retry same card.",                       tag: "Payment" },
     { title: "Confirm address",                 description: "Verify address, unit, parking, and entry instructions.",                          tag: "Prep"    },
+    { title: "Scope clarification",             description: "Extra areas noted — confirm scope before team arrives.",                          tag: "Prep"    },
     { title: "Client ETA update",               description: "Tell client cleaner ETA and confirm window still works.",                         tag: "Update"  },
+    { title: "Earlier arrival available",       description: "Slot opened up earlier — offer customer the option to move up.",                  tag: "Update"  },
+    { title: "Home not ready / team turned away", description: "Team arrived but couldn't start — reschedule immediately.",                     tag: "Issue"   },
+    { title: "Job paused — issue on site",      description: "Team stopped mid-clean — inform customer and decide next step.",                  tag: "Issue"   },
   ],
   cleaner: [
     { title: "ETA request",             description: "Ask cleaner exact ETA, traffic issue, and whether client needs alert.",       tag: "Urgent"   },
@@ -293,15 +300,22 @@ function applyMergeFields(body: string, person: PersonItem, audience: Audience):
 // ─── Scenario → template slug mapping ────────────────────────────────────────
 
 const SCENARIO_SLUG: Record<string, string> = {
-  "Team running late":               "running_late",
-  "Team at address / access needed": "access_needed",
-  "Put card on file":                "card_on_file",
-  "Confirm address":                 "confirm_address",
-  "Client ETA update":               "client_eta_update",
-  "ETA request":                     "eta_request",
-  "Schedule confirmation":           "schedule_confirmation",
-  "Job status reminder":             "job_status_reminder",
-  "Confirm job completion":          "confirm_job_completion",
+  "Team running late":                  "running_late",
+  "Running significantly late":         "running_significantly_late",
+  "Team at address / access needed":    "access_needed",
+  "Parking instructions":               "parking_instructions",
+  "Put card on file":                   "card_on_file",
+  "Payment failed":                     "payment_failed",
+  "Confirm address":                    "confirm_address",
+  "Scope clarification":                "scope_clarification",
+  "Client ETA update":                  "client_eta_update",
+  "Earlier arrival available":          "earlier_arrival",
+  "Home not ready / team turned away":  "home_not_ready",
+  "Job paused — issue on site":         "job_paused",
+  "ETA request":                        "eta_request",
+  "Schedule confirmation":              "schedule_confirmation",
+  "Job status reminder":                "job_status_reminder",
+  "Confirm job completion":             "confirm_job_completion",
 };
 
 // ─── TemplatesView ────────────────────────────────────────────────────────────
@@ -524,6 +538,10 @@ export default function AICallMatrix() {
   const [selectedScenario, setSelectedScenario] = useState<string>(SCENARIOS.customer[0].title);
   const [search, setSearch] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
+
+  // Scenario AI search
+  const [scenarioQuery, setScenarioQuery] = useState("");
+  const [scenarioSearching, setScenarioSearching] = useState(false);
   const [script, setScript] = useState("");
 
   // Confirm dialog state
@@ -552,6 +570,39 @@ export default function AICallMatrix() {
   }
 
   // ── tRPC mutations ──
+  const matchScenarioMutation = trpc.callMatrix.matchScenario.useMutation();
+
+  async function handleScenarioSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!scenarioQuery.trim()) return;
+    setScenarioSearching(true);
+    try {
+      const result = await matchScenarioMutation.mutateAsync({ query: scenarioQuery });
+      if (result.slug) {
+        // Find the scenario title from slug
+        const SLUG_TO_TITLE: Record<string, string> = Object.fromEntries(
+          Object.entries(SCENARIO_SLUG).map(([title, slug]) => [slug, title])
+        );
+        const title = SLUG_TO_TITLE[result.slug];
+        if (title) {
+          // Determine audience from which list the title is in
+          const aud: Audience = SCENARIOS.customer.some(s => s.title === title) ? "customer" : "cleaner";
+          selectScenario(aud, title);
+          setScenarioQuery("");
+          showFlash(`Matched: ${title}`);
+        } else {
+          showFlash("No close match found — try rephrasing.");
+        }
+      } else {
+        showFlash("No close match found — try rephrasing.");
+      }
+    } catch {
+      showFlash("Search failed — try again.");
+    } finally {
+      setScenarioSearching(false);
+    }
+  }
+
   const startCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
       if (result.vapiCallId) {
@@ -800,13 +851,30 @@ export default function AICallMatrix() {
         {/* ── MATRIX VIEW ── */}
         {view === "matrix" && !isLoading && (
           <>
+            {/* AI Scenario Search */}
+            <form onSubmit={handleScenarioSearch} style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <input
+                value={scenarioQuery}
+                onChange={e => setScenarioQuery(e.target.value)}
+                placeholder="Describe the issue and AI will pick the right call reason..."
+                style={{ flex: 1, background: "#11151d", border: `1px solid ${s.line}`, borderRadius: 12, color: s.text, padding: "11px 14px", outline: "none", fontSize: 13 }}
+              />
+              <button
+                type="submit"
+                disabled={scenarioSearching || !scenarioQuery.trim()}
+                style={{ border: `1px solid ${s.accent}`, borderRadius: 12, padding: "11px 18px", fontWeight: 700, cursor: scenarioSearching ? "wait" : "pointer", color: s.accent, background: "transparent", fontSize: 13, opacity: scenarioSearching ? 0.6 : 1, whiteSpace: "nowrap" }}
+              >
+                {scenarioSearching ? "Searching…" : "AI Match"}
+              </button>
+            </form>
+
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
               {(["customer", "cleaner"] as Audience[]).map(type => (
                 <div key={type} style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
                   <h2 style={{ fontSize: 15, margin: "0 0 12px", fontWeight: 700 }}>
                     {type === "customer" ? "Customer call reasons" : "Cleaner call reasons"}
                   </h2>
-                  <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "grid", gap: 10, maxHeight: 420, overflowY: "auto", paddingRight: 4 }}>
                     {SCENARIOS[type].map(sc => {
                       const active = selectedScenario === sc.title && audience === type;
                       return (

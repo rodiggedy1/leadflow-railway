@@ -540,6 +540,33 @@ export const callMatrixRouter = router({
     }),
 
   /**
+   * matchScenario
+   * Uses LLM to match a free-text issue description to the closest scenario slug.
+   */
+  matchScenario: agentProcedure
+    .input(z.object({ query: z.string().min(1).max(500) }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const scenarioList = [
+        "running_late", "running_significantly_late", "access_needed", "parking_instructions",
+        "card_on_file", "payment_failed", "confirm_address", "scope_clarification",
+        "client_eta_update", "earlier_arrival", "home_not_ready", "job_paused",
+        "eta_request", "schedule_confirmation", "job_status_reminder", "confirm_job_completion",
+      ];
+      const response = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are a dispatcher assistant for a cleaning company. Given a free-text description of an issue, return ONLY the single best matching scenario slug from this list: ${scenarioList.join(", ")}. Return only the slug, nothing else.`,
+          },
+          { role: "user", content: input.query },
+        ],
+      });
+      const slug = (response.choices?.[0]?.message?.content ?? "").trim().toLowerCase().replace(/[^a-z_]/g, "");
+      return { slug: scenarioList.includes(slug) ? slug : null };
+    }),
+
+  /**
    * getCallHistory
    * Returns recent AI Matrix calls from field_mgmt_calls (step starts with 'ai_matrix').
    * Includes recording URL, transcript, outcome, and duration.
