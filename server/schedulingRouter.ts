@@ -1239,9 +1239,26 @@ export const schedulingRouter = router({
           const fmc = recentCallsMap.get(j.id) ?? [];
           const op = (j.customerPhone ? openPhoneCallsMap.get(digits10(j.customerPhone)) : null) ?? [];
           console.log(`[callsSummary] job ${j.id} (${j.customerName}) fmc=${fmc.length} op=${op.length} fmcWithTranscript=${fmc.filter(c=>c.transcript).length} opWithTranscript=${op.filter(c=>c.transcript).length}`);
+          // Patterns that indicate a useless transcript (voicemail systems, automated messages, etc.)
+          const isUselessTranscript = (txt: string) => {
+            const lower = txt.toLowerCase();
+            return (
+              lower.includes("thumbtack") ||
+              lower.includes("leave a message") ||
+              lower.includes("leave your message") ||
+              lower.includes("not available") ||
+              lower.includes("the person you have called") ||
+              lower.includes("voicemail") ||
+              lower.includes("please press") ||
+              lower.includes("automated message") ||
+              lower.includes("this is an automated") ||
+              txt.trim().length < 20
+            );
+          };
+
           const callBlocks: string[] = [];
           for (const c of fmc) {
-            if (c.transcript) {
+            if (c.transcript && !isUselessTranscript(c.transcript)) {
               const label = c.step === "confirmation_call" ? "Confirmation Call"
                 : c.step === "schedule_escalation" ? "Schedule Escalation"
                 : c.step.replace(/_/g, " ");
@@ -1255,8 +1272,10 @@ export const schedulingRouter = router({
                 const turns = JSON.parse(c.transcript);
                 if (Array.isArray(turns)) txt = turns.map((t: { content?: string }) => t.content ?? "").join(" ").trim();
               } catch { /* raw string */ }
-              const dir = c.direction === "outgoing" ? "Outbound" : "Inbound";
-              callBlocks.push(`[OpenPhone ${dir}]\n${txt}`);
+              if (!isUselessTranscript(txt)) {
+                const dir = c.direction === "outgoing" ? "Outbound" : "Inbound";
+                callBlocks.push(`[OpenPhone ${dir}]\n${txt}`);
+              }
             }
           }
           console.log(`[callsSummary] job ${j.id} callBlocks=${callBlocks.length} OPENAI_KEY_PRESENT=${!!process.env.OPENAI_API_KEY}`);
