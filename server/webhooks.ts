@@ -1535,7 +1535,6 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           and(
             eq(confirmationCalls.calledPhone, fromPhone),
             eq(confirmationCalls.smsFollowupSent, 1),
-            isNull(confirmationCalls.smsReply),
             sql`${confirmationCalls.smsFollowupAt} >= ${twoDaysAgo}`,
           )
         )
