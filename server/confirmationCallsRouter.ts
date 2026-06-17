@@ -95,13 +95,7 @@ export const confirmationCallsRouter = router({
           jobStatus: cleanerJobs.jobStatus,
         })
         .from(cleanerJobs)
-        .where(
-          and(
-            eq(cleanerJobs.jobDate, input.date),
-            ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
-          )
-        )
+        .where(eq(cleanerJobs.jobDate, input.date))
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.customerName);
 
       if (jobs.length === 0) return [];
