@@ -2633,22 +2633,20 @@ function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => 
                   const directionColor = call.direction === "outgoing"
                     ? "text-blue-600 bg-blue-50 border-blue-100"
                     : "text-purple-600 bg-purple-50 border-purple-100";
-                  let debriefSummary: string | null = null;
                   let debriefGrade: string | null = null;
                   if (call.callDebrief) {
                     try {
                       const d = JSON.parse(call.callDebrief);
-                      debriefSummary = d.wentWell ?? null;
                       debriefGrade = d.grade ?? null;
                     } catch { /* skip */ }
                   }
-                  // Fallback: extract plain text from transcript JSON
-                  let transcriptSnippet: string | null = null;
-                  if (!debriefSummary && call.transcript) {
+                  // Extract full transcript text from JSON array of turns
+                  let transcriptText: string | null = null;
+                  if (call.transcript) {
                     try {
                       const turns = JSON.parse(call.transcript);
-                      if (Array.isArray(turns) && turns[0]?.content) {
-                        transcriptSnippet = turns[0].content.slice(0, 120);
+                      if (Array.isArray(turns)) {
+                        transcriptText = turns.map((t: { content?: string }) => t.content ?? "").join(" ").trim().slice(0, 200) || null;
                       }
                     } catch { /* skip */ }
                   }
@@ -2669,8 +2667,8 @@ function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => 
                         </div>
                         <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
                       </div>
-                      {(debriefSummary || transcriptSnippet) && (
-                        <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{debriefSummary ?? transcriptSnippet}</p>
+                      {transcriptText && (
+                        <p className="text-xs text-gray-600 leading-relaxed line-clamp-3 italic">“{transcriptText}”</p>
                       )}
                     </div>
                   );
