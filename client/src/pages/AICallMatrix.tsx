@@ -181,6 +181,9 @@ export default function AICallMatrix() {
   const [flash, setFlash] = useState<string | null>(null);
   const [script, setScript] = useState("");
 
+  // Confirm dialog state
+  const [showConfirm, setShowConfirm] = useState(false);
+
   // Call state
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [activeVapiCallId, setActiveVapiCallId] = useState<string | null>(null);
@@ -315,7 +318,13 @@ export default function AICallMatrix() {
     if (callStatus === "firing" || callStatus === "queued" || callStatus === "ringing" || callStatus === "in_progress") {
       return showFlash("A call is already in progress.");
     }
+    // Show confirmation dialog instead of firing immediately
+    setShowConfirm(true);
+  }
 
+  function confirmAndFire() {
+    if (!selectedPerson) return;
+    setShowConfirm(false);
     setCallStatus("firing");
     setCallSummary(null);
     startCallMutation.mutate({
@@ -682,6 +691,38 @@ export default function AICallMatrix() {
 
         <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
       </section>
+
+      {/* ── CONFIRM CALL DIALOG ── */}
+      {showConfirm && selectedPerson && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+          <div style={{ background: "#171a21", border: "1px solid #2a3040", borderRadius: 20, padding: 28, width: 480, maxWidth: "92vw", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }}>
+            <h2 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 900 }}>Confirm AI call</h2>
+            <p style={{ margin: "0 0 16px", color: "#8f98aa", fontSize: 13 }}>
+              Calling <b style={{ color: "#f4f6fb" }}>{selectedPerson.name}</b> at <b style={{ color: "#f4f6fb" }}>{selectedPerson.phone}</b> for <b style={{ color: "#f3c96b" }}>{selectedScenario}</b>
+            </p>
+
+            <div style={{ background: "#0f1115", border: "1px solid #2a3040", borderRadius: 14, padding: 14, marginBottom: 20 }}>
+              <div style={{ fontSize: 11, color: "#8f98aa", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>Script Ava will read</div>
+              <div style={{ fontSize: 13, color: "#f4f6fb", lineHeight: 1.5, whiteSpace: "pre-wrap", maxHeight: 200, overflowY: "auto" }}>{script}</div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={confirmAndFire}
+                style={{ flex: 1, border: 0, borderRadius: 12, padding: "12px 14px", fontWeight: 800, cursor: "pointer", color: "#111", background: "#63d297", fontSize: 14 }}
+              >
+                Yes, start call
+              </button>
+              <button
+                onClick={() => setShowConfirm(false)}
+                style={{ flex: 1, border: "1px solid #2a3040", borderRadius: 12, padding: "12px 14px", fontWeight: 800, cursor: "pointer", color: "#f4f6fb", background: "#1f2430", fontSize: 14 }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
