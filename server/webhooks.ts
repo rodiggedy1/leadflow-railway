@@ -1545,34 +1545,73 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       const row = rows[0];
       if (!row) return; // Not a confirmation SMS reply
 
-      // Detect confirmation keywords
-      const lower = inboundText.trim().toLowerCase();
-      const isConfirmed =
-        /\b(yes|confirmed|confirm|see you|sounds good|perfect|great|ok|okay|all set|we'll be there|we will be there|looking forward)\b/.test(lower);
-
-      // Detect flexibility from SMS reply — "FLEXIBLE" or "NOT FLEXIBLE"
+      // Use LLM to extract confirmation, flexibility, and notes from the reply
+      let isConfirmed = false;
       let smsFlexibility: string | null = null;
-      if (/\bnot flexible\b/.test(lower)) {
-        smsFlexibility = "not_flexible";
-      } else if (/\bflexible\b/.test(lower)) {
-        smsFlexibility = "flexible";
+      let smsNotes: string | null = null;
+      try {
+        const { invokeLLM } = await import("./_core/llm");
+        const llmResult = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are extracting structured data from a customer SMS reply to a cleaning appointment confirmation text. Return JSON only.`,
+            },
+            {
+              role: "user",
+              content: `Customer SMS reply: "${inboundText}"
+
+Extract:
+1. confirmed: true if the customer is confirming their appointment (yes, sure, sounds good, we'll be there, etc.), false if cancelling or unclear
+2. flexibility: "flexible" if they indicate flexibility with arrival time, "not_flexible" if they need a specific time or have constraints, null if not mentioned
+3. notes: any additional info they shared (special instructions, timing constraints, access notes, etc.), or null if nothing notable`,
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "sms_reply_extraction",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: {
+                  confirmed: { type: "boolean", description: "Whether the customer confirmed their appointment" },
+                  flexibility: { type: ["string", "null"], enum: ["flexible", "not_flexible", null], description: "Arrival window flexibility" },
+                  notes: { type: ["string", "null"], description: "Any additional notes from the customer" },
+                },
+                required: ["confirmed", "flexibility", "notes"],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const parsed = JSON.parse(llmResult.choices[0].message.content as string);
+        isConfirmed = parsed.confirmed === true;
+        smsFlexibility = parsed.flexibility ?? null;
+        smsNotes = parsed.notes ?? null;
+      } catch (llmErr) {
+        console.error('[Webhook] LLM extraction failed for SMS reply, falling back to keyword match:', llmErr);
+        // Fallback to simple keyword match
+        const lower = inboundText.trim().toLowerCase();
+        isConfirmed = /\b(yes|confirmed|confirm|see you|sounds good|perfect|great|ok|okay|all set)\b/.test(lower);
+        if (/\bnot flexible\b/.test(lower)) smsFlexibility = "not_flexible";
+        else if (/\bflexible\b/.test(lower)) smsFlexibility = "flexible";
       }
 
       await db.update(confirmationCalls)
         .set({
           smsReply: inboundText,
           smsConfirmedAt: isConfirmed ? Date.now() : null,
-          // If confirmed via SMS, update AI outcome so the badge flips green
           ...(isConfirmed ? {
             aiOutcome: "confirmed",
             aiOutcomeLabel: "Confirmed via SMS ✓",
           } : {}),
-          // Update flexibility if detected in the reply
           ...(smsFlexibility ? { aiFlexibility: smsFlexibility } : {}),
+          ...(smsNotes ? { aiNotes: smsNotes } : {}),
         })
         .where(eq(confirmationCalls.id, row.id));
 
-      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — confirmed=${isConfirmed}, flexibility=${smsFlexibility}, text="${inboundText.slice(0, 80)}"`);
+      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — confirmed=${isConfirmed}, flexibility=${smsFlexibility}, notes=${smsNotes}, text="${inboundText.slice(0, 80)}"`);
     } catch (err) {
       console.error('[Webhook] tryHandleConfirmationSmsReply error:', err);
     }
