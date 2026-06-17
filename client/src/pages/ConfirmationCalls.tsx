@@ -26,6 +26,8 @@ import {
   Mic,
   Pencil,
   X,
+  MessageSquare,
+  CheckCheck,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -88,6 +90,11 @@ type ConfirmationCall = {
   manualOutcomeLabel: string | null;
   manualOverrideBy: string | null;
   manualOverrideAt: number | null;
+  smsFollowupSent: number | null;
+  smsFollowupAt: number | null;
+  smsFollowupBody: string | null;
+  smsReply: string | null;
+  smsConfirmedAt: number | null;
 };
 
 type Job = {
@@ -371,6 +378,48 @@ function ResultCard({ job, agentName, onOverrideSuccess }: { job: Job; agentName
       {cc.transcript && (
         <TranscriptToggle transcript={cc.transcript} />
       )}
+
+      {/* ── SMS fallback thread ── */}
+      {cc.smsFollowupSent ? (
+        <div className="px-4 pb-3">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden">
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-amber-200">
+              <MessageSquare className="w-3.5 h-3.5 text-amber-600" />
+              <span className="text-xs font-semibold text-amber-700">SMS Fallback Sent</span>
+              {cc.smsFollowupAt && (
+                <span className="ml-auto text-[10px] text-amber-500">
+                  {new Date(cc.smsFollowupAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                </span>
+              )}
+            </div>
+            {/* Outbound SMS */}
+            <div className="px-3 py-2">
+              <div className="flex justify-end">
+                <div className="max-w-[85%] bg-amber-600 text-white text-xs rounded-xl rounded-br-sm px-3 py-2 leading-relaxed">
+                  {cc.smsFollowupBody ?? "SMS sent"}
+                </div>
+              </div>
+            </div>
+            {/* Inbound reply */}
+            {cc.smsReply ? (
+              <div className="px-3 pb-2">
+                <div className="flex items-start gap-1.5">
+                  <div className="max-w-[85%] bg-white border border-amber-200 text-gray-800 text-xs rounded-xl rounded-bl-sm px-3 py-2 leading-relaxed">
+                    {cc.smsReply}
+                  </div>
+                  {cc.smsConfirmedAt && (
+                    <CheckCheck className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-1" title="Confirmed via SMS" />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="px-3 pb-2">
+                <span className="text-[10px] text-amber-500 italic">Awaiting reply…</span>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Audio player (always visible if recording exists) ── */}
       {cc.recordingUrl && (

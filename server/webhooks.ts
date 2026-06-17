@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -218,6 +218,11 @@ export function registerWebhookRoutes(app: Express) {
       // If this inbound SMS is from a cleaner's phone (matched via cleaner_rating_sms_log),
       // post a system card to both the job thread and the command channel.
       tryHandleCleanerRatingReply({ fromPhone, inboundText }).catch(() => {});
+
+      // ── Confirmation call SMS fallback reply detection ───────────────────────
+      // If this inbound SMS is a reply to our no-answer fallback SMS, update the
+      // confirmation_calls row with the reply and mark as confirmed if appropriate.
+      tryHandleConfirmationSmsReply({ fromPhone, inboundText }).catch(() => {});
 
       // ── STOP / UNSUBSCRIBE detection ─────────────────────────────────────────
       // Only exact single-word matches (case-insensitive, trimmed) to avoid
@@ -1498,6 +1503,62 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       console.log(`[Webhook] Cleaner rating reply from ${fromPhone} posted to job ${logRow.cleanerJobId} thread + command chat`);
     } catch (err) {
       console.error('[Webhook] tryHandleCleanerRatingReply error:', err);
+    }
+  }
+
+  async function tryHandleConfirmationSmsReply(params: {
+    fromPhone: string;
+    inboundText: string;
+  }): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+
+      const { fromPhone, inboundText } = params;
+
+      // Look for the most recent confirmation call row where we sent an SMS fallback
+      // to this phone number (within the last 2 days) and haven't yet recorded a reply.
+      const twoDaysAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+      const rows = await db
+        .select({
+          id: confirmationCalls.id,
+          smsReply: confirmationCalls.smsReply,
+        })
+        .from(confirmationCalls)
+        .where(
+          and(
+            eq(confirmationCalls.calledPhone, fromPhone),
+            eq(confirmationCalls.smsFollowupSent, 1),
+            isNull(confirmationCalls.smsReply),
+            sql`${confirmationCalls.smsFollowupAt} >= ${twoDaysAgo}`,
+          )
+        )
+        .orderBy(desc(confirmationCalls.smsFollowupAt))
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return; // Not a confirmation SMS reply
+
+      // Detect confirmation keywords
+      const lower = inboundText.trim().toLowerCase();
+      const isConfirmed =
+        /\b(yes|confirmed|confirm|see you|sounds good|perfect|great|ok|okay|all set|we'll be there|we will be there|looking forward)\b/.test(lower);
+
+      await db.update(confirmationCalls)
+        .set({
+          smsReply: inboundText,
+          smsConfirmedAt: isConfirmed ? Date.now() : null,
+          // If confirmed via SMS, update AI outcome so the badge flips green
+          ...(isConfirmed ? {
+            aiOutcome: "confirmed",
+            aiOutcomeLabel: "Confirmed via SMS ✓",
+          } : {}),
+        })
+        .where(eq(confirmationCalls.id, row.id));
+
+      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — confirmed=${isConfirmed}, text="${inboundText.slice(0, 80)}"`);
+    } catch (err) {
+      console.error('[Webhook] tryHandleConfirmationSmsReply error:', err);
     }
   }
 }

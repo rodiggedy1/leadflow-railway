@@ -1574,6 +1574,16 @@ export const fieldMgmtCalls = mysqlTable("field_mgmt_calls", {
   endedReason: varchar("endedReason", { length: 100 }),
   /** Recording URL */
   recordingUrl: varchar("recordingUrl", { length: 512 }),
+  /** Whether an SMS fallback was sent after a no-answer call */
+  smsFollowupSent: tinyint("smsFollowupSent").default(0).notNull(),
+  /** When the SMS fallback was sent */
+  smsFollowupAt: timestamp("smsFollowupAt"),
+  /** Body of the SMS fallback message */
+  smsFollowupBody: text("smsFollowupBody"),
+  /** Customer's reply to the SMS fallback */
+  smsReply: text("smsReply"),
+  /** Whether the customer confirmed via SMS reply */
+  smsConfirmed: tinyint("smsConfirmed").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxCleanerJobId: index("idx_fmc_cleaner_job_id").on(table.cleanerJobId),
@@ -2892,6 +2902,16 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   manualOverrideBy: varchar("manualOverrideBy", { length: 64 }),
   /** Timestamp (ms) when the manual override was set */
   manualOverrideAt: bigint("manualOverrideAt", { mode: "number" }),
+  /** Whether an SMS fallback was sent after a no-answer call */
+  smsFollowupSent: tinyint("smsFollowupSent").default(0).notNull(),
+  /** When the SMS fallback was sent (ms epoch) */
+  smsFollowupAt: bigint("smsFollowupAt", { mode: "number" }),
+  /** Body of the SMS fallback message */
+  smsFollowupBody: text("smsFollowupBody"),
+  /** Customer's reply to the SMS fallback */
+  smsReply: text("smsReply"),
+  /** When the customer confirmed via SMS reply (ms epoch) */
+  smsConfirmedAt: bigint("smsConfirmedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => ({

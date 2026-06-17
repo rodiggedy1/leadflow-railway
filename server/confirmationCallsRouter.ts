@@ -24,6 +24,7 @@ import {
 } from "../drizzle/schema";
 import { eq, and, ne, desc, inArray } from "drizzle-orm";
 import { ENV } from "./_core/env";
+import { sendSms } from "./openphone";
 
 // ── VAPI constants — mirrors callsRouter.ts exactly ──────────────────────────
 const VAPI_API_BASE = "https://api.vapi.ai";
@@ -127,6 +128,11 @@ export const confirmationCallsRouter = router({
           manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
           manualOverrideBy: confirmationCalls.manualOverrideBy,
           manualOverrideAt: confirmationCalls.manualOverrideAt,
+          smsFollowupSent: confirmationCalls.smsFollowupSent,
+          smsFollowupAt: confirmationCalls.smsFollowupAt,
+          smsFollowupBody: confirmationCalls.smsFollowupBody,
+          smsReply: confirmationCalls.smsReply,
+          smsConfirmedAt: confirmationCalls.smsConfirmedAt,
         })
         .from(confirmationCalls)
         .where(
@@ -315,6 +321,9 @@ export const confirmationCallsRouter = router({
         .select({
           id: confirmationCalls.id,
           vapiCallId: confirmationCalls.vapiCallId,
+          calledPhone: confirmationCalls.calledPhone,
+          clientName: confirmationCalls.clientName,
+          smsFollowupSent: confirmationCalls.smsFollowupSent,
         })
         .from(confirmationCalls)
         .where(
@@ -378,6 +387,43 @@ export const confirmationCallsRouter = router({
 
           console.log(`[ConfirmationCalls] Polled VAPI — updated call ${row.vapiCallId}: status=${ccStatus}, endedReason=${endedReason}`);
           updated++;
+
+          // ── SMS fallback on no-answer (fire-and-forget) ──────────────────────
+          // Only send once (smsFollowupSent guard) and only for no_answer/voicemail
+          if (
+            (ccStatus === "no_answer") &&
+            !row.smsFollowupSent &&
+            row.calledPhone
+          ) {
+            (async () => {
+              try {
+                const firstName = row.clientName?.split(" ")[0] ?? "there";
+                const smsBody =
+                  `Hi ${firstName}, this is Maids in Black. We tried calling to confirm your cleaning appointment but couldn't reach you. ` +
+                  `Your appointment is still confirmed — please call or text us at 202-888-5362 if you need to make any changes. We look forward to seeing you!`;
+                const csNumberId = ENV.openPhoneCsNumberId;
+                const result = await sendSms({
+                  to: row.calledPhone,
+                  content: smsBody,
+                  ...(csNumberId ? { fromNumberId: csNumberId } : {}),
+                });
+                if (result.success) {
+                  await db.update(confirmationCalls)
+                    .set({
+                      smsFollowupSent: 1,
+                      smsFollowupAt: Date.now(),
+                      smsFollowupBody: smsBody,
+                    })
+                    .where(eq(confirmationCalls.id, row.id));
+                  console.log(`[ConfirmationCalls] SMS fallback sent to ${row.calledPhone} for call ${row.id}`);
+                } else {
+                  console.error(`[ConfirmationCalls] SMS fallback failed for call ${row.id}: ${result.error}`);
+                }
+              } catch (smsErr) {
+                console.error(`[ConfirmationCalls] SMS fallback error for call ${row.id}:`, smsErr);
+              }
+            })();
+          }
 
           // Fire AI parsing async (same as webhook path)
           if (transcript || summary) {
