@@ -99,7 +99,6 @@ export const confirmationCallsRouter = router({
           and(
             eq(cleanerJobs.jobDate, input.date),
             ne(cleanerJobs.bookingStatus, "cancelled"),
-            ne(cleanerJobs.bookingStatus, "rescheduled"),
           )
         )
         .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.customerName);
