@@ -1239,35 +1239,20 @@ export const schedulingRouter = router({
           const fmc = recentCallsMap.get(j.id) ?? [];
           const op = (j.customerPhone ? openPhoneCallsMap.get(digits10(j.customerPhone)) : null) ?? [];
           console.log(`[callsSummary] job ${j.id} (${j.customerName}) fmc=${fmc.length} op=${op.length} fmcWithTranscript=${fmc.filter(c=>c.transcript).length} opWithTranscript=${op.filter(c=>c.transcript).length}`);
-          // Filter out transcripts that are purely voicemail/automated with no real conversation.
-          // A transcript is useless if it's short AND contains only system/voicemail content.
-          // Do NOT filter Thumbtack-routed calls that contain real human conversation.
+          // Patterns that indicate a useless transcript (voicemail systems, automated messages, etc.)
           const isUselessTranscript = (txt: string) => {
             const lower = txt.toLowerCase();
-            if (txt.trim().length < 20) return true;
-            // Pure voicemail/system messages (no real human conversation)
-            const hasRealConversation = (
-              lower.includes(" hi") ||
-              lower.includes(" hello") ||
-              lower.includes(" yes") ||
-              lower.includes(" okay") ||
-              lower.includes(" thank") ||
-              lower.includes(" confirm") ||
-              lower.includes(" appointment") ||
-              lower.includes(" cleaning") ||
-              lower.includes(" schedule")
-            );
-            if (hasRealConversation) return false;
             return (
+              lower.includes("thumbtack") ||
               lower.includes("leave a message") ||
               lower.includes("leave your message") ||
+              lower.includes("not available") ||
               lower.includes("the person you have called") ||
-              lower.includes("the person you're trying to reach is not available") ||
               lower.includes("voicemail") ||
               lower.includes("please press") ||
+              lower.includes("automated message") ||
               lower.includes("this is an automated") ||
-              lower.includes("enter your company's 7-digit") ||
-              lower.includes("thumbtack access code")
+              txt.trim().length < 20
             );
           };
 
