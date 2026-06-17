@@ -1096,15 +1096,17 @@ export const schedulingRouter = router({
         for (const row of opRows) {
           const phone10 = row.callerPhone.replace(/[^\d]/g, "").slice(-10);
           const existing = openPhoneCallsMap.get(phone10) ?? [];
-          existing.push({
-            callerPhone: row.callerPhone,
-            direction: row.direction,
-            durationSeconds: row.durationSeconds,
-            callStartedAt: row.callStartedAt,
-            callDebrief: row.callDebrief,
-            transcript: row.transcript,
-          });
-          openPhoneCallsMap.set(phone10, existing);
+          if (existing.length < 5) {
+            existing.push({
+              callerPhone: row.callerPhone,
+              direction: row.direction,
+              durationSeconds: row.durationSeconds,
+              callStartedAt: row.callStartedAt,
+              callDebrief: row.callDebrief,
+              transcript: row.transcript,
+            });
+            openPhoneCallsMap.set(phone10, existing);
+          }
         }
       }
 
