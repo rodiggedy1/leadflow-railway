@@ -2372,6 +2372,82 @@ function relativeTime(ts: number | null): string {
   return `${days}d ago`;
 }
 
+// ── OpenPhone Calls Section (with per-call expand/collapse) ─────────────────
+type OpenPhoneCallItem = { callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: string | Date; callDebrief: string | null; transcript: string | null };
+
+function OpenPhoneCallsSection({ calls }: { calls: OpenPhoneCallItem[] }) {
+  const [expandedIdx, setExpandedIdx] = React.useState<number | null>(null);
+  return (
+    <div className="px-5 py-4 border-b">
+      <div className="flex items-center gap-1.5 mb-3">
+        <Phone className="w-3.5 h-3.5 text-indigo-400" />
+        <span className="text-xs font-bold uppercase tracking-wider text-gray-400">OpenPhone Calls</span>
+      </div>
+      <div className="space-y-2">
+        {calls.map((call, i) => {
+          const ts = typeof call.callStartedAt === "string" ? new Date(call.callStartedAt).getTime() : call.callStartedAt.getTime();
+          const directionLabel = call.direction === "outgoing" ? "Outbound" : "Inbound";
+          const directionColor = call.direction === "outgoing"
+            ? "text-blue-600 bg-blue-50 border-blue-100"
+            : "text-purple-600 bg-purple-50 border-purple-100";
+          let debriefGrade: string | null = null;
+          if (call.callDebrief) {
+            try { const d = JSON.parse(call.callDebrief); debriefGrade = d.grade ?? null; } catch { /* skip */ }
+          }
+          // Extract full transcript text
+          let fullTranscript: string | null = null;
+          if (call.transcript) {
+            try {
+              const turns = JSON.parse(call.transcript);
+              if (Array.isArray(turns)) {
+                fullTranscript = turns.map((t: { content?: string }) => t.content ?? "").join(" ").trim() || null;
+              }
+            } catch { /* skip */ }
+          }
+          const PREVIEW_LEN = 120;
+          const isLong = fullTranscript ? fullTranscript.length > PREVIEW_LEN : false;
+          const isExpanded = expandedIdx === i;
+          const displayText = fullTranscript
+            ? (isLong && !isExpanded ? fullTranscript.slice(0, PREVIEW_LEN) + "…" : fullTranscript)
+            : null;
+          const gradeColor = debriefGrade === "A" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+            : debriefGrade === "B" ? "text-blue-600 bg-blue-50 border-blue-100"
+            : debriefGrade === "C" ? "text-amber-600 bg-amber-50 border-amber-100"
+            : debriefGrade === "D" || debriefGrade === "F" ? "text-red-500 bg-red-50 border-red-100"
+            : "text-gray-500 bg-gray-50 border-gray-100";
+          return (
+            <div key={i} className="rounded-xl bg-indigo-50/40 border border-indigo-100 px-3.5 py-3">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">OpenPhone</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${directionColor}`}>{directionLabel}</span>
+                  {debriefGrade && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${gradeColor}`}>Grade: {debriefGrade}</span>
+                  )}
+                </div>
+                <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
+              </div>
+              {displayText && (
+                <>
+                  <p className="text-xs text-gray-600 leading-relaxed italic">"{displayText}"</p>
+                  {isLong && (
+                    <button
+                      onClick={() => setExpandedIdx(isExpanded ? null : i)}
+                      className="mt-1.5 text-[10px] font-semibold text-indigo-500 hover:text-indigo-700 transition-colors"
+                    >
+                      {isExpanded ? "Show less" : "Show full transcript"}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const open = !!job;
   const ch = job?.clientHistory;
@@ -2621,60 +2697,7 @@ function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => 
 
           {/* Section: OpenPhone Calls */}
           {job?.openPhoneCalls && job.openPhoneCalls.length > 0 && (
-            <div className="px-5 py-4 border-b">
-              <div className="flex items-center gap-1.5 mb-3">
-                <Phone className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">OpenPhone Calls</span>
-              </div>
-              <div className="space-y-2">
-                {job.openPhoneCalls.map((call, i) => {
-                  const ts = typeof call.callStartedAt === "string" ? new Date(call.callStartedAt).getTime() : call.callStartedAt.getTime();
-                  const directionLabel = call.direction === "outgoing" ? "Outbound" : "Inbound";
-                  const directionColor = call.direction === "outgoing"
-                    ? "text-blue-600 bg-blue-50 border-blue-100"
-                    : "text-purple-600 bg-purple-50 border-purple-100";
-                  let debriefGrade: string | null = null;
-                  if (call.callDebrief) {
-                    try {
-                      const d = JSON.parse(call.callDebrief);
-                      debriefGrade = d.grade ?? null;
-                    } catch { /* skip */ }
-                  }
-                  // Extract full transcript text from JSON array of turns
-                  let transcriptText: string | null = null;
-                  if (call.transcript) {
-                    try {
-                      const turns = JSON.parse(call.transcript);
-                      if (Array.isArray(turns)) {
-                        transcriptText = turns.map((t: { content?: string }) => t.content ?? "").join(" ").trim().slice(0, 200) || null;
-                      }
-                    } catch { /* skip */ }
-                  }
-                  const gradeColor = debriefGrade === "A" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
-                    : debriefGrade === "B" ? "text-blue-600 bg-blue-50 border-blue-100"
-                    : debriefGrade === "C" ? "text-amber-600 bg-amber-50 border-amber-100"
-                    : debriefGrade === "D" || debriefGrade === "F" ? "text-red-500 bg-red-50 border-red-100"
-                    : "text-gray-500 bg-gray-50 border-gray-100";
-                  return (
-                    <div key={i} className="rounded-xl bg-indigo-50/40 border border-indigo-100 px-3.5 py-3">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">OpenPhone</span>
-                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${directionColor}`}>{directionLabel}</span>
-                          {debriefGrade && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${gradeColor}`}>Grade: {debriefGrade}</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
-                      </div>
-                      {transcriptText && (
-                        <p className="text-xs text-gray-600 leading-relaxed line-clamp-3 italic">“{transcriptText}”</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            <OpenPhoneCallsSection calls={job.openPhoneCalls} />
           )}
 
           {/* Section: Recent Messages */}
