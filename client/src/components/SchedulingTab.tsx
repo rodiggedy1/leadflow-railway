@@ -481,13 +481,15 @@ function JobCard({
                   <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
                 </button>
               )}
-              {/* Client persona button */}
+              {/* Client persona button — initials avatar */}
               <button
                 onClick={e => { e.stopPropagation(); onPersonaClick?.(); }}
-                className="p-1 rounded hover:bg-indigo-50 transition-all"
+                className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-100 hover:bg-indigo-200 hover:ring-2 hover:ring-indigo-400 transition-all shrink-0"
                 title="View client profile"
               >
-                <Info className="w-3.5 h-3.5 text-gray-400 hover:text-indigo-500 transition-colors" />
+                <span className="text-[9px] font-bold text-indigo-700 leading-none select-none">
+                  {(job.customerName ?? "??").split(" ").map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()}
+                </span>
               </button>
             </div>
           </div>
