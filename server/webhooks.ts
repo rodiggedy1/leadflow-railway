@@ -1550,6 +1550,14 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       const isConfirmed =
         /\b(yes|confirmed|confirm|see you|sounds good|perfect|great|ok|okay|all set|we'll be there|we will be there|looking forward)\b/.test(lower);
 
+      // Detect flexibility from SMS reply — "FLEXIBLE" or "NOT FLEXIBLE"
+      let smsFlexibility: string | null = null;
+      if (/\bnot flexible\b/.test(lower)) {
+        smsFlexibility = "not_flexible";
+      } else if (/\bflexible\b/.test(lower)) {
+        smsFlexibility = "flexible";
+      }
+
       await db.update(confirmationCalls)
         .set({
           smsReply: inboundText,
@@ -1559,10 +1567,12 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
             aiOutcome: "confirmed",
             aiOutcomeLabel: "Confirmed via SMS ✓",
           } : {}),
+          // Update flexibility if detected in the reply
+          ...(smsFlexibility ? { aiFlexibility: smsFlexibility } : {}),
         })
         .where(eq(confirmationCalls.id, row.id));
 
-      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — confirmed=${isConfirmed}, text="${inboundText.slice(0, 80)}"`);
+      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — confirmed=${isConfirmed}, flexibility=${smsFlexibility}, text="${inboundText.slice(0, 80)}"`);
     } catch (err) {
       console.error('[Webhook] tryHandleConfirmationSmsReply error:', err);
     }
