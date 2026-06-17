@@ -25,6 +25,8 @@ import {
   Clock, Users, Plus, Pencil, Trash2, Home, Loader2, AlertCircle,
   GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
   SlidersHorizontal, Power, AlertTriangle, Phone, Calendar,
+  ChevronDown, Star, MessageSquare, Crown, DollarSign, History,
+  FileText, ClipboardList, Info,
 } from "lucide-react";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -56,6 +58,15 @@ interface Team {
   schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null;
 }
 
+interface ClientHistory {
+  totalBookings: number;
+  lifetimeValue: number;
+  avgPrice: number;
+  lastJobs: Array<{ jobDate: string | null; serviceType: string | null; price: number | null; rating: number | null; teamName: string | null }>;
+  lastMessages: Array<{ content: string; ts: number | null }>;
+  usualTeam: string | null;
+}
+
 interface Job {
   id: number;
   jobDate: string;
@@ -66,6 +77,15 @@ interface Job {
   teamName: string | null;
   bookingStatus: string | null;
   frequency?: string | null;
+  bedrooms?: number | null;
+  bathrooms?: number | null;
+  jobRevenue?: string | null;
+  customerNotes?: string | null;
+  staffNotes?: string | null;
+  adminNotes?: string | null;
+  checklistItems?: string | null;
+  customerPhone?: string | null;
+  clientHistory?: ClientHistory | null;
   isNewClient?: boolean;
   isMoveInOut?: boolean;
   isRecurring?: boolean;
@@ -281,6 +301,26 @@ function JobCard({
     ? a.rationale.homeReturnBonus
     : null;
   const [showRationale, setShowRationale] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Derived client persona values
+  const ch = job.clientHistory;
+  const isVip = ch ? (ch.totalBookings >= 10 || ch.lifetimeValue >= 2000) : false;
+  const checklistParsed: Array<{ text: string; checked: boolean }> = (() => {
+    if (!job.checklistItems) return [];
+    try { return JSON.parse(job.checklistItems); } catch { return []; }
+  })();
+
+  function relativeTime(ts: number | null): string {
+    if (!ts) return "";
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
+  }
 
   return (
     <>
@@ -451,9 +491,159 @@ function JobCard({
                   <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
                 </button>
               )}
+              {/* Expand persona button */}
+              <button
+                onClick={e => { e.stopPropagation(); setIsExpanded(v => !v); }}
+                className="p-1 rounded hover:bg-indigo-50 transition-all"
+                title={isExpanded ? "Hide client details" : "Show client details"}
+              >
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+              </button>
             </div>
           </div>
         </div>
+
+        {/* ── Client Persona Expand Panel ─────────────────────────────────── */}
+        {isExpanded && (
+          <div
+            className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-3"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Section 1: Client Identity */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {isVip && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
+                  <Crown className="w-3 h-3" /> VIP
+                </span>
+              )}
+              {ch && (
+                <>
+                  <span className="text-[11px] text-gray-500">{ch.totalBookings} cleanings</span>
+                  <span className="text-gray-200 text-xs">·</span>
+                  <span className="text-[11px] text-gray-500">${ch.lifetimeValue.toLocaleString()} lifetime</span>
+                  <span className="text-gray-200 text-xs">·</span>
+                  <span className="text-[11px] text-gray-500">avg ${ch.avgPrice}/visit</span>
+                </>
+              )}
+              {(job.bedrooms || job.bathrooms) && (
+                <span className="text-[11px] text-gray-400">
+                  {[job.bedrooms && `${job.bedrooms}bd`, job.bathrooms && `${job.bathrooms}ba`].filter(Boolean).join(" · ")}
+                </span>
+              )}
+              {job.jobRevenue && (
+                <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700">
+                  <DollarSign className="w-3 h-3" />{job.jobRevenue}
+                </span>
+              )}
+            </div>
+
+            {/* Section 2: This Job Notes */}
+            {(job.customerNotes || job.staffNotes || job.adminNotes || checklistParsed.length > 0) && (
+              <div className="space-y-1.5">
+                {job.customerNotes && (
+                  <div className="rounded-lg bg-blue-50 border border-blue-100 px-2.5 py-2">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <MessageSquare className="w-3 h-3 text-blue-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Customer Notes</span>
+                    </div>
+                    <p className="text-xs text-blue-900 leading-snug">{job.customerNotes}</p>
+                  </div>
+                )}
+                {job.staffNotes && (
+                  <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-2">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <FileText className="w-3 h-3 text-gray-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Staff Notes</span>
+                    </div>
+                    <p className="text-xs text-gray-700 leading-snug">{job.staffNotes}</p>
+                  </div>
+                )}
+                {job.adminNotes && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <Info className="w-3 h-3 text-amber-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Admin Notes</span>
+                    </div>
+                    <p className="text-xs text-amber-900 leading-snug">{job.adminNotes}</p>
+                  </div>
+                )}
+                {checklistParsed.length > 0 && (
+                  <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-2.5 py-2">
+                    <div className="flex items-center gap-1 mb-1">
+                      <ClipboardList className="w-3 h-3 text-indigo-400" />
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Checklist</span>
+                    </div>
+                    <ul className="space-y-0.5">
+                      {checklistParsed.map((item, i) => (
+                        <li key={i} className="flex items-start gap-1.5 text-xs text-indigo-900">
+                          <span className={`mt-0.5 w-3 h-3 rounded-sm border flex-shrink-0 flex items-center justify-center text-[9px] ${
+                            item.checked ? "bg-indigo-500 border-indigo-500 text-white" : "border-indigo-300"
+                          }`}>{item.checked ? "✓" : ""}</span>
+                          {item.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Section 3: Job History */}
+            {ch && ch.lastJobs.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1 mb-1.5">
+                  <History className="w-3 h-3 text-gray-400" />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Last {ch.lastJobs.length} Jobs</span>
+                  {ch.usualTeam && (
+                    <span className="ml-auto text-[10px] text-gray-400">Usually: <span className="font-medium text-gray-600">{ch.usualTeam}</span></span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {ch.lastJobs.map((j, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-gray-400 w-16 shrink-0">{j.jobDate ? new Date(j.jobDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</span>
+                      <span className="text-gray-600 flex-1 truncate">{j.serviceType ?? "—"}</span>
+                      {j.price && <span className="text-emerald-600 font-medium shrink-0">${j.price}</span>}
+                      {j.rating != null && (
+                        <span className={`flex items-center gap-0.5 shrink-0 font-medium ${
+                          j.rating >= 4 ? "text-amber-500" : j.rating >= 3 ? "text-yellow-500" : "text-red-500"
+                        }`}>
+                          <Star className="w-2.5 h-2.5 fill-current" />{j.rating}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Section 4: Last 3 Customer Messages */}
+            {ch && ch.lastMessages.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1 mb-1.5">
+                  <MessageSquare className="w-3 h-3 text-gray-400" />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Recent Messages</span>
+                </div>
+                <div className="space-y-1.5">
+                  {ch.lastMessages.map((m, i) => (
+                    <div key={i} className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-[10px] font-semibold text-gray-500">Customer</span>
+                        {m.ts && <span className="text-[10px] text-gray-400">{relativeTime(m.ts)}</span>}
+                      </div>
+                      <p className="text-xs text-gray-700 leading-snug line-clamp-2">{m.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state if no extra data */}
+            {!ch && !job.customerNotes && !job.staffNotes && !job.adminNotes && checklistParsed.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-1">No additional client data available</p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Rationale popup */}

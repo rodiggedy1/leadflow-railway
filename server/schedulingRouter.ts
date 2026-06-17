@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -28,6 +28,8 @@ import {
   teamWorkSchedule,
   teamDayOverride,
   confirmationCalls,
+  completedJobs,
+  conversationSessions,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -1021,10 +1023,134 @@ export const schedulingRouter = router({
       for (const c of confCalls) {
         confCallMap.set(c.cleanerJobId, c); // later entries overwrite earlier ones
       }
-      const enrichedWithConf = enriched.map(j => ({
-        ...j,
-        confirmationCall: confCallMap.get(j.id) ?? null,
-      }));
+      // ── Batch client history lookup by customerPhone ─────────────────────────
+      // Normalize phone to 10 digits for matching
+      const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+      const phoneSet = new Set<string>();
+      for (const j of enriched) {
+        if (j.customerPhone) {
+          const d = digits10(j.customerPhone);
+          if (d.length === 10) phoneSet.add(d);
+        }
+      }
+      const phones10 = Array.from(phoneSet);
+
+      // Map: phone10 → client history
+      type ClientHistory = {
+        totalBookings: number;
+        lifetimeValue: number;
+        avgPrice: number;
+        lastJobs: Array<{ jobDate: string | null; serviceType: string | null; price: number | null; rating: number | null; teamName: string | null }>;
+        lastMessages: Array<{ content: string; ts: number | null }>;
+        usualTeam: string | null;
+      };
+      const clientHistoryMap = new Map<string, ClientHistory>();
+
+      if (phones10.length > 0) {
+        // 1. Batch completedJobs lookup — all rows for these phones
+        const e164List = phones10.map(p => `+1${p}`);
+        const historyRows = await db
+          .select({
+            phone: completedJobs.phone,
+            jobDate: completedJobs.jobDate,
+            serviceType: completedJobs.serviceType,
+            lastBookingPrice: completedJobs.lastBookingPrice,
+            frequency: completedJobs.frequency,
+          })
+          .from(completedJobs)
+          .where(inArray(completedJobs.phone, e164List))
+          .orderBy(desc(completedJobs.jobDate))
+          .limit(phones10.length * 20);
+
+        // 2. Batch cleanerJobs lookup for past ratings by phone
+        const ratingHistoryRows = await db
+          .select({
+            customerPhone: cleanerJobs.customerPhone,
+            jobDate: cleanerJobs.jobDate,
+            serviceType: cleanerJobs.serviceType,
+            jobRevenue: cleanerJobs.jobRevenue,
+            customerRating: cleanerJobs.customerRating,
+            teamName: cleanerJobs.teamName,
+          })
+          .from(cleanerJobs)
+          .where(
+            sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.join(phones10.map(p => sql`${p}`), sql`, `)})
+              AND ${cleanerJobs.jobDate} < ${input.date}
+              AND ${cleanerJobs.customerPhone} IS NOT NULL`
+          )
+          .orderBy(desc(cleanerJobs.jobDate))
+          .limit(phones10.length * 10);
+
+        // 3. Batch conversationSessions lookup for last 3 customer SMS messages
+        const sessionRows = await db
+          .select({
+            leadPhone: conversationSessions.leadPhone,
+            messageHistory: conversationSessions.messageHistory,
+            updatedAt: conversationSessions.updatedAt,
+          })
+          .from(conversationSessions)
+          .where(
+            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') IN (${sql.join(phones10.map(p => sql`${p}`), sql`, `)})`
+          )
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(phones10.length * 3);
+
+        // Build history per phone
+        for (const phone10 of phones10) {
+          const e164 = `+1${phone10}`;
+          const myHistory = historyRows.filter(r => r.phone === e164);
+          const myRatings = ratingHistoryRows.filter(r => digits10(r.customerPhone ?? "") === phone10);
+
+          const totalBookings = myHistory.length;
+          const lifetimeValue = myHistory.reduce((s, r) => s + (r.lastBookingPrice ?? 0), 0);
+          const avgPrice = totalBookings > 0 ? Math.round(lifetimeValue / totalBookings) : 0;
+
+          // Last 3 jobs: merge completedJobs + cleanerJobs ratings, sorted by date desc
+          const last3 = myRatings.slice(0, 5).map(r => ({
+            jobDate: r.jobDate,
+            serviceType: r.serviceType,
+            price: r.jobRevenue ? Math.round(parseFloat(r.jobRevenue)) : null,
+            rating: r.customerRating ?? null,
+            teamName: r.teamName ?? null,
+          })).slice(0, 3);
+
+          // Usual team: most frequent teamName in past jobs
+          const teamCounts = new Map<string, number>();
+          for (const r of myRatings) {
+            if (r.teamName) teamCounts.set(r.teamName, (teamCounts.get(r.teamName) ?? 0) + 1);
+          }
+          const usualTeam = teamCounts.size > 0
+            ? Array.from(teamCounts.entries()).sort((a, b) => b[1] - a[1])[0][0]
+            : null;
+
+          // Last 3 customer SMS messages from most recent session
+          const mySessions = sessionRows.filter(r => digits10(r.leadPhone ?? "") === phone10);
+          const lastMessages: Array<{ content: string; ts: number | null }> = [];
+          for (const sess of mySessions) {
+            if (lastMessages.length >= 3) break;
+            try {
+              const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(sess.messageHistory ?? "[]");
+              const userMsgs = history.filter(m => m.role === "user").slice(-3).reverse();
+              for (const m of userMsgs) {
+                if (lastMessages.length >= 3) break;
+                lastMessages.push({ content: m.content, ts: m.ts ?? null });
+              }
+            } catch { /* skip */ }
+          }
+
+          clientHistoryMap.set(phone10, { totalBookings, lifetimeValue, avgPrice, lastJobs: last3, lastMessages, usualTeam });
+        }
+      }
+
+      const enrichedWithConf = enriched.map(j => {
+        const phone10 = j.customerPhone ? digits10(j.customerPhone) : null;
+        const clientHistory = phone10 ? clientHistoryMap.get(phone10) ?? null : null;
+        return {
+          ...j,
+          confirmationCall: confCallMap.get(j.id) ?? null,
+          clientHistory,
+        };
+      });
       return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
     }),
 
@@ -1784,14 +1910,14 @@ export const schedulingRouter = router({
         const teamUnchanged = Number(a.teamId) === defaultTeamId;
         await db.update(scheduleAssignments)
           .set({
-            teamId: defaultTeamId,
+            teamId: defaultTeamId ?? undefined,
             teamName: defaultTeam.name,
             routeOrder: 0,
             isManual: 0,
             rationale: null,
             estimatedArrivalMs: svcMs,
             estimatedDepartureMs: svcMs ? svcMs + 2 * 3600 * 1000 : null,
-            driveTimeSecs: teamUnchanged ? a.driveTimeSecs : null,
+            driveTimeSecs: teamUnchanged ? (a.driveTimeSecs ?? null) : null,
             updatedAt: new Date(),
           })
           .where(and(
