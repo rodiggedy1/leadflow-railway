@@ -4709,6 +4709,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
                 </span>
               </button>
+              {/* AI Call pill — links to AI Call Matrix */}
+              <span className="text-slate-300 text-xs">|</span>
+              <button
+                onClick={() => { window.location.href = "/admin/ai-calls"; }}
+                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-violet-100 text-violet-700 hover:bg-violet-200"
+              >
+                <Phone className="h-3 w-3" />
+                AI Call
+              </button>
             </div>
           )}
 
