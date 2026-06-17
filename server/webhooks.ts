@@ -1527,6 +1527,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
         .select({
           id: confirmationCalls.id,
           smsReply: confirmationCalls.smsReply,
+          smsReplies: confirmationCalls.smsReplies,
         })
         .from(confirmationCalls)
         .where(
@@ -1594,9 +1595,14 @@ Extract:
         else if (/\bflexible\b/.test(lower)) smsFlexibility = "flexible";
       }
 
+      // Append to replies array so all messages are preserved
+      const existingReplies = Array.isArray(row.smsReplies) ? row.smsReplies : [];
+      const updatedReplies = [...existingReplies, { text: inboundText, receivedAt: Date.now() }];
+
       await db.update(confirmationCalls)
         .set({
-          smsReply: inboundText,
+          smsReply: inboundText, // keep latest for backwards compat
+          smsReplies: updatedReplies,
           smsConfirmedAt: isConfirmed ? Date.now() : null,
           ...(isConfirmed ? {
             aiOutcome: "confirmed",

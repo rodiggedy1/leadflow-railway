@@ -132,6 +132,7 @@ export const confirmationCallsRouter = router({
           smsFollowupAt: confirmationCalls.smsFollowupAt,
           smsFollowupBody: confirmationCalls.smsFollowupBody,
           smsReply: confirmationCalls.smsReply,
+          smsReplies: confirmationCalls.smsReplies,
           smsConfirmedAt: confirmationCalls.smsConfirmedAt,
         })
         .from(confirmationCalls)

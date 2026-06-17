@@ -2908,8 +2908,10 @@ export const confirmationCalls = mysqlTable("confirmation_calls", {
   smsFollowupAt: bigint("smsFollowupAt", { mode: "number" }),
   /** Body of the SMS fallback message */
   smsFollowupBody: text("smsFollowupBody"),
-  /** Customer's reply to the SMS fallback */
+  /** Customer's most recent reply to the SMS fallback (kept for backwards compat) */
   smsReply: text("smsReply"),
+  /** All customer replies as a JSON array [{text, receivedAt}] */
+  smsReplies: json("sms_replies").$type<Array<{text: string; receivedAt: number}>>(),
   /** When the customer confirmed via SMS reply (ms epoch) */
   smsConfirmedAt: bigint("smsConfirmedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

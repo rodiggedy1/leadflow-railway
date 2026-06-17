@@ -94,6 +94,7 @@ type ConfirmationCall = {
   smsFollowupAt: number | null;
   smsFollowupBody: string | null;
   smsReply: string | null;
+  smsReplies: Array<{text: string; receivedAt: number}> | null;
   smsConfirmedAt: number | null;
 };
 
@@ -400,8 +401,25 @@ function ResultCard({ job, agentName, onOverrideSuccess }: { job: Job; agentName
                 </div>
               </div>
             </div>
-            {/* Inbound reply */}
-            {cc.smsReply ? (
+            {/* Inbound replies — show all, newest last */}
+            {(cc.smsReplies && cc.smsReplies.length > 0) ? (
+              <div className="px-3 pb-2 flex flex-col gap-1.5">
+                {cc.smsReplies.map((reply, i) => (
+                  <div key={i} className="flex items-start gap-1.5">
+                    <div className="max-w-[85%] bg-white border border-amber-200 text-gray-800 text-xs rounded-xl rounded-bl-sm px-3 py-2 leading-relaxed">
+                      <span className="text-[9px] text-gray-400 block mb-0.5">
+                        {new Date(reply.receivedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}
+                      </span>
+                      {reply.text}
+                    </div>
+                    {i === cc.smsReplies!.length - 1 && cc.smsConfirmedAt && (
+                      <CheckCheck className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-1" title="Confirmed via SMS" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : cc.smsReply ? (
+              // Fallback for older rows that only have smsReply (not smsReplies)
               <div className="px-3 pb-2">
                 <div className="flex items-start gap-1.5">
                   <div className="max-w-[85%] bg-white border border-amber-200 text-gray-800 text-xs rounded-xl rounded-bl-sm px-3 py-2 leading-relaxed">
