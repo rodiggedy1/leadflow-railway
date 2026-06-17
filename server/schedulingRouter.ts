@@ -1043,6 +1043,7 @@ export const schedulingRouter = router({
         lastJobs: Array<{ jobDate: string | null; serviceType: string | null; price: number | null; rating: number | null; teamName: string | null }>;
         lastMessages: Array<{ content: string; ts: number | null }>;
         usualTeam: string | null;
+        aiMemoryBullets: string[];
       };
       const clientHistoryMap = new Map<string, ClientHistory>();
 
@@ -1081,11 +1082,12 @@ export const schedulingRouter = router({
           .orderBy(desc(cleanerJobs.jobDate))
           .limit(phones10.length * 10);
 
-        // 3. Batch conversationSessions lookup for last 3 customer SMS messages
+        // 3. Batch conversationSessions lookup for last 3 customer SMS messages + AI memory
         const sessionRows = await db
           .select({
             leadPhone: conversationSessions.leadPhone,
             messageHistory: conversationSessions.messageHistory,
+            csMemoryCache: conversationSessions.csMemoryCache,
             updatedAt: conversationSessions.updatedAt,
           })
           .from(conversationSessions)
@@ -1138,7 +1140,17 @@ export const schedulingRouter = router({
             } catch { /* skip */ }
           }
 
-          clientHistoryMap.set(phone10, { totalBookings, lifetimeValue, avgPrice, lastJobs: last3, lastMessages, usualTeam });
+          // AI memory bullets from csMemoryCache
+          let aiMemoryBullets: string[] = [];
+          const bestSession = mySessions[0]; // most recent session
+          if (bestSession?.csMemoryCache) {
+            try {
+              const parsed = JSON.parse(bestSession.csMemoryCache);
+              if (Array.isArray(parsed)) aiMemoryBullets = parsed.filter((b: unknown) => typeof b === "string");
+            } catch { /* skip */ }
+          }
+
+          clientHistoryMap.set(phone10, { totalBookings, lifetimeValue, avgPrice, lastJobs: last3, lastMessages, usualTeam, aiMemoryBullets });
         }
       }
 

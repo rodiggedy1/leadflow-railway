@@ -37,6 +37,7 @@ export interface Launch27Booking {
   bathrooms: number | null;  // summed from pricing_parameters entries with name containing "Bathroom"
   customerNotes: string;
   staffNotes: string;
+  requestedTeam: string | null;
 }
 
 export interface Launch27SyncResult {
@@ -164,6 +165,7 @@ export async function getCompletedBookingsForDate(
         })(),
         customerNotes: b.customer_notes ?? "",
         staffNotes: b.staff_notes ?? "",
+        requestedTeam: b.preferred_cleaner?.name ?? null,
       });
     }
 
@@ -238,4 +240,5 @@ interface RawBooking {
   }>;
   customer_notes?: string;
   staff_notes?: string;
+  preferred_cleaner?: { id: number; name: string } | null;
 }

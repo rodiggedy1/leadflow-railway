@@ -65,6 +65,7 @@ interface ClientHistory {
   lastJobs: Array<{ jobDate: string | null; serviceType: string | null; price: number | null; rating: number | null; teamName: string | null }>;
   lastMessages: Array<{ content: string; ts: number | null }>;
   usualTeam: string | null;
+  aiMemoryBullets?: string[];
 }
 
 interface Job {
@@ -86,6 +87,7 @@ interface Job {
   checklistItems?: string | null;
   customerPhone?: string | null;
   clientHistory?: ClientHistory | null;
+  requestedTeam?: string | null;
   isNewClient?: boolean;
   isMoveInOut?: boolean;
   isRecurring?: boolean;
@@ -230,7 +232,7 @@ function TeamForm({ team, onClose }: { team?: Team; onClose: () => void }) {
 
 function JobCard({
   job, teams, date, isSelected, onSelect, isLocked, onLockToggle, homeDriveTimeSecs,
-  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, hasConflict, isLastJob, jobIndex,
+  onReassignStart, onReassignDone, onUnassignStart, onUnassignDone, onIssueClick, onPersonaClick, hasConflict, isLastJob, jobIndex,
 }: {
   job: Job;
   teams: Team[];
@@ -245,6 +247,7 @@ function JobCard({
   onUnassignStart?: (srcTeamId: number | null) => void;
   onUnassignDone?: (srcTeamId: number | null) => void;
   onIssueClick?: () => void;
+  onPersonaClick?: () => void;
   hasConflict?: boolean;
   isLastJob?: boolean;
   jobIndex?: number;
@@ -301,26 +304,10 @@ function JobCard({
     ? a.rationale.homeReturnBonus
     : null;
   const [showRationale, setShowRationale] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
 
-  // Derived client persona values
+  // VIP indicator for inline badge only
   const ch = job.clientHistory;
   const isVip = ch ? (ch.totalBookings >= 10 || ch.lifetimeValue >= 2000) : false;
-  const checklistParsed: Array<{ text: string; checked: boolean }> = (() => {
-    if (!job.checklistItems) return [];
-    try { return JSON.parse(job.checklistItems); } catch { return []; }
-  })();
-
-  function relativeTime(ts: number | null): string {
-    if (!ts) return "";
-    const diff = Date.now() - ts;
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
-  }
 
   return (
     <>
@@ -491,159 +478,17 @@ function JobCard({
                   <X className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
                 </button>
               )}
-              {/* Expand persona button */}
+              {/* Client persona button */}
               <button
-                onClick={e => { e.stopPropagation(); setIsExpanded(v => !v); }}
+                onClick={e => { e.stopPropagation(); onPersonaClick?.(); }}
                 className="p-1 rounded hover:bg-indigo-50 transition-all"
-                title={isExpanded ? "Hide client details" : "Show client details"}
+                title="View client profile"
               >
-                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                <Info className="w-3.5 h-3.5 text-gray-400 hover:text-indigo-500 transition-colors" />
               </button>
             </div>
           </div>
         </div>
-
-        {/* ── Client Persona Expand Panel ─────────────────────────────────── */}
-        {isExpanded && (
-          <div
-            className="border-t border-gray-100 px-3 pb-3 pt-2 space-y-3"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Section 1: Client Identity */}
-            <div className="flex items-center gap-2 flex-wrap">
-              {isVip && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
-                  <Crown className="w-3 h-3" /> VIP
-                </span>
-              )}
-              {ch && (
-                <>
-                  <span className="text-[11px] text-gray-500">{ch.totalBookings} cleanings</span>
-                  <span className="text-gray-200 text-xs">·</span>
-                  <span className="text-[11px] text-gray-500">${ch.lifetimeValue.toLocaleString()} lifetime</span>
-                  <span className="text-gray-200 text-xs">·</span>
-                  <span className="text-[11px] text-gray-500">avg ${ch.avgPrice}/visit</span>
-                </>
-              )}
-              {(job.bedrooms || job.bathrooms) && (
-                <span className="text-[11px] text-gray-400">
-                  {[job.bedrooms && `${job.bedrooms}bd`, job.bathrooms && `${job.bathrooms}ba`].filter(Boolean).join(" · ")}
-                </span>
-              )}
-              {job.jobRevenue && (
-                <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-700">
-                  <DollarSign className="w-3 h-3" />{job.jobRevenue}
-                </span>
-              )}
-            </div>
-
-            {/* Section 2: This Job Notes */}
-            {(job.customerNotes || job.staffNotes || job.adminNotes || checklistParsed.length > 0) && (
-              <div className="space-y-1.5">
-                {job.customerNotes && (
-                  <div className="rounded-lg bg-blue-50 border border-blue-100 px-2.5 py-2">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <MessageSquare className="w-3 h-3 text-blue-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-blue-500">Customer Notes</span>
-                    </div>
-                    <p className="text-xs text-blue-900 leading-snug">{job.customerNotes}</p>
-                  </div>
-                )}
-                {job.staffNotes && (
-                  <div className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-2">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <FileText className="w-3 h-3 text-gray-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Staff Notes</span>
-                    </div>
-                    <p className="text-xs text-gray-700 leading-snug">{job.staffNotes}</p>
-                  </div>
-                )}
-                {job.adminNotes && (
-                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <Info className="w-3 h-3 text-amber-500" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-amber-600">Admin Notes</span>
-                    </div>
-                    <p className="text-xs text-amber-900 leading-snug">{job.adminNotes}</p>
-                  </div>
-                )}
-                {checklistParsed.length > 0 && (
-                  <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-2.5 py-2">
-                    <div className="flex items-center gap-1 mb-1">
-                      <ClipboardList className="w-3 h-3 text-indigo-400" />
-                      <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-500">Checklist</span>
-                    </div>
-                    <ul className="space-y-0.5">
-                      {checklistParsed.map((item, i) => (
-                        <li key={i} className="flex items-start gap-1.5 text-xs text-indigo-900">
-                          <span className={`mt-0.5 w-3 h-3 rounded-sm border flex-shrink-0 flex items-center justify-center text-[9px] ${
-                            item.checked ? "bg-indigo-500 border-indigo-500 text-white" : "border-indigo-300"
-                          }`}>{item.checked ? "✓" : ""}</span>
-                          {item.text}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Section 3: Job History */}
-            {ch && ch.lastJobs.length > 0 && (
-              <div>
-                <div className="flex items-center gap-1 mb-1.5">
-                  <History className="w-3 h-3 text-gray-400" />
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Last {ch.lastJobs.length} Jobs</span>
-                  {ch.usualTeam && (
-                    <span className="ml-auto text-[10px] text-gray-400">Usually: <span className="font-medium text-gray-600">{ch.usualTeam}</span></span>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  {ch.lastJobs.map((j, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="text-gray-400 w-16 shrink-0">{j.jobDate ? new Date(j.jobDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}</span>
-                      <span className="text-gray-600 flex-1 truncate">{j.serviceType ?? "—"}</span>
-                      {j.price && <span className="text-emerald-600 font-medium shrink-0">${j.price}</span>}
-                      {j.rating != null && (
-                        <span className={`flex items-center gap-0.5 shrink-0 font-medium ${
-                          j.rating >= 4 ? "text-amber-500" : j.rating >= 3 ? "text-yellow-500" : "text-red-500"
-                        }`}>
-                          <Star className="w-2.5 h-2.5 fill-current" />{j.rating}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Section 4: Last 3 Customer Messages */}
-            {ch && ch.lastMessages.length > 0 && (
-              <div>
-                <div className="flex items-center gap-1 mb-1.5">
-                  <MessageSquare className="w-3 h-3 text-gray-400" />
-                  <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Recent Messages</span>
-                </div>
-                <div className="space-y-1.5">
-                  {ch.lastMessages.map((m, i) => (
-                    <div key={i} className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5">
-                      <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[10px] font-semibold text-gray-500">Customer</span>
-                        {m.ts && <span className="text-[10px] text-gray-400">{relativeTime(m.ts)}</span>}
-                      </div>
-                      <p className="text-xs text-gray-700 leading-snug line-clamp-2">{m.content}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Empty state if no extra data */}
-            {!ch && !job.customerNotes && !job.staffNotes && !job.adminNotes && checklistParsed.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-1">No additional client data available</p>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Rationale popup */}
@@ -1672,6 +1517,8 @@ export default function SchedulingTab() {
   // Call Command Center state
   const [issueDialogJob, setIssueDialogJob] = useState<{ id: number; date: string } | null>(null);
   const [callLogOpen, setCallLogOpen] = useState(false);
+  // Client persona slide-over
+  const [personaJob, setPersonaJob] = useState<Job | null>(null);
   const { data: dayIssues = [] } = trpc.calls.getDayIssues.useQuery({ jobDate: date }, { refetchInterval: 30_000 });
 
   // Check-ins for the selected date — cleaners submitted these the day before
@@ -2432,6 +2279,7 @@ export default function SchedulingTab() {
                           }}
                           onUnassignStart={(srcId) => { if (srcId) markRecalculating([srcId]); }}
                           onUnassignDone={(srcId) => { if (srcId) clearRecalculating([srcId]); }}
+                          onPersonaClick={() => setPersonaJob(job)}
                         />
                       ))
                     )}
@@ -2456,6 +2304,7 @@ export default function SchedulingTab() {
                       date={date}
                       isSelected={selectedJobId === job.id}
                       onSelect={() => setSelectedJobId(job.id === selectedJobId ? null : job.id)}
+                      onPersonaClick={() => setPersonaJob(job)}
                     />
                   ))}
                 </div>
@@ -2501,7 +2350,270 @@ export default function SchedulingTab() {
         onClose={() => setCallLogOpen(false)}
         jobDate={date}
       />
+
+      {/* Client Persona Slide-Over */}
+      <ClientPersonaPanel job={personaJob} onClose={() => setPersonaJob(null)} />
     </div>
+  );
+}
+
+// ── Client Persona Panel ─────────────────────────────────────────────────────
+
+function relativeTime(ts: number | null): string {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => void }) {
+  const open = !!job;
+  const ch = job?.clientHistory;
+  const isVip = ch ? (ch.totalBookings >= 10 || ch.lifetimeValue >= 2000) : false;
+  const checklistParsed: Array<{ text: string; checked: boolean }> = (() => {
+    if (!job?.checklistItems) return [];
+    try { return JSON.parse(job.checklistItems); } catch { return []; }
+  })();
+
+  return (
+    <Sheet open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent side="right" className="w-full sm:max-w-[480px] flex flex-col p-0 overflow-hidden">
+        {/* Header */}
+        <SheetHeader className="px-5 pt-5 pb-4 border-b shrink-0 bg-white">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <SheetTitle className="text-base font-semibold text-gray-900 leading-tight">
+                  {job?.customerName ?? "Client Profile"}
+                </SheetTitle>
+                {isVip && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                    <Crown className="w-3 h-3" /> VIP
+                  </span>
+                )}
+                {job?.isNewClient && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">New</span>
+                )}
+              </div>
+              {job?.jobAddress && (
+                <p className="text-xs text-gray-500 mt-0.5 truncate">{job.jobAddress}</p>
+              )}
+            </div>
+          </div>
+          {/* Stats row */}
+          {ch && (
+            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+              <div className="text-center">
+                <div className="text-lg font-bold text-gray-900">{ch.totalBookings}</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide">Cleanings</div>
+              </div>
+              <div className="w-px h-8 bg-gray-100" />
+              <div className="text-center">
+                <div className="text-lg font-bold text-emerald-600">${ch.lifetimeValue.toLocaleString()}</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide">Lifetime</div>
+              </div>
+              <div className="w-px h-8 bg-gray-100" />
+              <div className="text-center">
+                <div className="text-lg font-bold text-gray-900">${ch.avgPrice}</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide">Avg/Visit</div>
+              </div>
+              {ch.usualTeam && (
+                <>
+                  <div className="w-px h-8 bg-gray-100" />
+                  <div className="text-center min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 truncate max-w-[80px]">{ch.usualTeam}</div>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-wide">Usual Team</div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </SheetHeader>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* Section: This Job */}
+          <div className="px-5 py-4 border-b">
+            <div className="flex items-center gap-1.5 mb-3">
+              <Calendar className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-400">This Job</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {job?.serviceType && (
+                <div className="col-span-2 rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Service</div>
+                  <div className="text-sm font-medium text-gray-900">{job.serviceType}</div>
+                </div>
+              )}
+              {(job?.bedrooms || job?.bathrooms) && (
+                <div className="rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Size</div>
+                  <div className="text-sm font-medium text-gray-900">
+                    {[job.bedrooms && `${job.bedrooms} bed`, job.bathrooms && `${job.bathrooms} bath`].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              )}
+              {job?.jobRevenue && (
+                <div className="rounded-lg bg-emerald-50 px-3 py-2">
+                  <div className="text-[10px] text-emerald-600 uppercase tracking-wide mb-0.5">Revenue</div>
+                  <div className="text-sm font-bold text-emerald-700">${job.jobRevenue}</div>
+                </div>
+              )}
+              {job?.requestedTeam && (
+                <div className="col-span-2 rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2">
+                  <div className="text-[10px] text-indigo-500 uppercase tracking-wide mb-0.5">Requested Team</div>
+                  <div className="text-sm font-semibold text-indigo-800">{job.requestedTeam}</div>
+                </div>
+              )}
+              {job?.confirmationCall && (
+                <div className="col-span-2 rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Confirmation Call</div>
+                  <div className="text-sm font-medium text-gray-900 capitalize">
+                    {job.confirmationCall.manualOutcomeLabel ?? job.confirmationCall.aiOutcomeLabel ?? job.confirmationCall.aiOutcome ?? "—"}
+                    {job.confirmationCall.aiFlexibility && (
+                      <span className="ml-2 text-xs text-gray-500">· {job.confirmationCall.aiFlexibility}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section: Notes & Checklist */}
+          {(job?.customerNotes || job?.staffNotes || job?.adminNotes || checklistParsed.length > 0) && (
+            <div className="px-5 py-4 border-b">
+              <div className="flex items-center gap-1.5 mb-3">
+                <FileText className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Notes</span>
+              </div>
+              <div className="space-y-2">
+                {job?.customerNotes && (
+                  <div className="rounded-xl bg-blue-50 border border-blue-100 px-3.5 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500 mb-1">Customer Notes</div>
+                    <p className="text-sm text-blue-900 leading-relaxed">{job.customerNotes}</p>
+                  </div>
+                )}
+                {job?.staffNotes && (
+                  <div className="rounded-xl bg-gray-50 border border-gray-200 px-3.5 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1">Staff Notes</div>
+                    <p className="text-sm text-gray-700 leading-relaxed">{job.staffNotes}</p>
+                  </div>
+                )}
+                {job?.adminNotes && (
+                  <div className="rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-amber-600 mb-1">Admin Notes</div>
+                    <p className="text-sm text-amber-900 leading-relaxed">{job.adminNotes}</p>
+                  </div>
+                )}
+                {checklistParsed.length > 0 && (
+                  <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-3.5 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 mb-2">Checklist</div>
+                    <ul className="space-y-1.5">
+                      {checklistParsed.map((item, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-indigo-900">
+                          <span className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${
+                            item.checked ? "bg-indigo-500 border-indigo-500 text-white" : "border-indigo-300 bg-white"
+                          }`}>{item.checked ? "✓" : ""}</span>
+                          {item.text}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Section: AI Memory */}
+          {ch?.aiMemoryBullets && ch.aiMemoryBullets.length > 0 && (
+            <div className="px-5 py-4 border-b">
+              <div className="flex items-center gap-1.5 mb-3">
+                <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                <span className="text-xs font-bold uppercase tracking-wider text-violet-500">AI Memory</span>
+              </div>
+              <ul className="space-y-1.5">
+                {ch.aiMemoryBullets.map((bullet, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+                    {bullet}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Section: Job History */}
+          {ch && ch.lastJobs.length > 0 && (
+            <div className="px-5 py-4 border-b">
+              <div className="flex items-center gap-1.5 mb-3">
+                <History className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Last {ch.lastJobs.length} Jobs</span>
+              </div>
+              <div className="space-y-2">
+                {ch.lastJobs.map((j, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-lg bg-gray-50 px-3 py-2.5">
+                    <div className="text-xs text-gray-400 w-16 shrink-0">
+                      {j.jobDate ? new Date(j.jobDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-gray-700 truncate">{j.serviceType ?? "—"}</div>
+                      {j.teamName && <div className="text-xs text-gray-400 truncate">{j.teamName}</div>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {j.price && <span className="text-sm font-semibold text-emerald-600">${j.price}</span>}
+                      {j.rating != null && (
+                        <span className={`flex items-center gap-0.5 text-xs font-bold ${
+                          j.rating >= 4 ? "text-amber-500" : j.rating >= 3 ? "text-yellow-500" : "text-red-500"
+                        }`}>
+                          <Star className="w-3 h-3 fill-current" />{j.rating}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section: Recent Messages */}
+          {ch && ch.lastMessages.length > 0 && (
+            <div className="px-5 py-4">
+              <div className="flex items-center gap-1.5 mb-3">
+                <MessageSquare className="w-3.5 h-3.5 text-gray-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Recent Messages</span>
+              </div>
+              <div className="space-y-2">
+                {ch.lastMessages.map((m, i) => (
+                  <div key={i} className="rounded-xl bg-gray-50 border border-gray-100 px-3.5 py-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-gray-500">Customer</span>
+                      {m.ts && <span className="text-[10px] text-gray-400">{relativeTime(m.ts)}</span>}
+                    </div>
+                    <p className="text-sm text-gray-700 leading-relaxed">{m.content}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!ch && !job?.customerNotes && !job?.staffNotes && !job?.adminNotes && checklistParsed.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center px-5">
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+                <Info className="w-5 h-5 text-gray-400" />
+              </div>
+              <p className="text-sm text-gray-500">No additional client data available</p>
+              <p className="text-xs text-gray-400 mt-1">Client history will appear after their first completed job</p>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 

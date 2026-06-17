@@ -1143,6 +1143,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   complaintChargeApplied: int("complaintChargeApplied").default(0).notNull(),
   /** Whether the cleaner team confirmed their schedule for this job via SMS (1 = confirmed, 0 = not yet) */
   scheduleConfirmed: int("scheduleConfirmed").default(0).notNull(),
+  /** Team requested by the customer in L27 (preferred cleaner/team name) */
+  requestedTeam: varchar("requestedTeam", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
