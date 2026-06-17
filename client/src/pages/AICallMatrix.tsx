@@ -533,6 +533,8 @@ export default function AICallMatrix() {
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [activeVapiCallId, setActiveVapiCallId] = useState<string | null>(null);
   const [callSummary, setCallSummary] = useState<string | null>(null);
+  const [callTranscript, setCallTranscript] = useState<string | null>(null);
+  const [showTranscript, setShowTranscript] = useState(false);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Fetch real people data ──
@@ -582,6 +584,7 @@ export default function AICallMatrix() {
         const s = result.status as CallStatus;
         setCallStatus(s);
         if (result.summary) setCallSummary(result.summary);
+        if (result.transcript) setCallTranscript(result.transcript);
         if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
@@ -938,6 +941,24 @@ export default function AICallMatrix() {
                 </div>
               )}
 
+              {/* Transcript after completion */}
+              {callTranscript && (
+                <div style={{ marginTop: 8, background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 12 }}>
+                  <button
+                    onClick={() => setShowTranscript(v => !v)}
+                    style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: s.muted, fontSize: 12, padding: "10px 12px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>Transcript</span>
+                    <span>{showTranscript ? "▲ Hide" : "▼ Show"}</span>
+                  </button>
+                  {showTranscript && (
+                    <div style={{ fontSize: 12, color: s.muted, padding: "0 12px 12px", maxHeight: 200, overflowY: "auto", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                      {callTranscript}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
                 <button
                   onClick={handleStartCall}
@@ -966,6 +987,8 @@ export default function AICallMatrix() {
                     setCallStatus("idle");
                     setActiveVapiCallId(null);
                     setCallSummary(null);
+                    setCallTranscript(null);
+                    setShowTranscript(false);
                     showFlash("Marked done. Summary added to job record.");
                   }}
                   style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
