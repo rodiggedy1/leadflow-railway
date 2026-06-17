@@ -105,11 +105,15 @@ export const confirmationCallsRouter = router({
 
       if (jobs.length === 0) return [];
 
-      // Fetch any existing confirmation calls for these jobs on this date
-      const jobIds = jobs.map((j) => j.id);
+      // Fetch ALL confirmation calls for this date — by jobDate only, NOT by jobId.
+      // This makes the lookup immune to job ID changes caused by team reassignments:
+      // even if the cleaner_jobs row was deleted+re-inserted with a new ID, the call
+      // is still found because we match by phone (then name as fallback), not by ID.
       const existingCalls = await db
         .select({
           cleanerJobId: confirmationCalls.cleanerJobId,
+          calledPhone: confirmationCalls.calledPhone,
+          clientName: confirmationCalls.clientName,
           id: confirmationCalls.id,
           status: confirmationCalls.status,
           vapiCallId: confirmationCalls.vapiCallId,
@@ -135,24 +139,27 @@ export const confirmationCallsRouter = router({
           smsConfirmedAt: confirmationCalls.smsConfirmedAt,
         })
         .from(confirmationCalls)
-        .where(
-          and(
-            inArray(confirmationCalls.cleanerJobId, jobIds),
-            eq(confirmationCalls.jobDate, input.date),
-          )
-        )
+        .where(eq(confirmationCalls.jobDate, input.date))
         .orderBy(desc(confirmationCalls.firedAt));
 
-      // Map: cleanerJobId → most recent confirmation call
-      const callMap = new Map<number, typeof existingCalls[number]>();
+      // Build lookup maps: phone → most recent call, name → most recent call (fallback)
+      const callByPhone = new Map<string, typeof existingCalls[number]>();
+      const callByName = new Map<string, typeof existingCalls[number]>();
       for (const c of existingCalls) {
-        if (!callMap.has(c.cleanerJobId)) callMap.set(c.cleanerJobId, c);
+        const phone = c.calledPhone?.replace(/\D/g, "");
+        if (phone && !callByPhone.has(phone)) callByPhone.set(phone, c);
+        const name = c.clientName?.trim().toLowerCase();
+        if (name && !callByName.has(name)) callByName.set(name, c);
       }
 
-      return jobs.map((job) => ({
-        ...job,
-        confirmationCall: callMap.get(job.id) ?? null,
-      }));
+      return jobs.map((job) => {
+        const jobPhone = job.customerPhone?.replace(/\D/g, "");
+        const call =
+          (jobPhone && callByPhone.get(jobPhone)) ||
+          callByName.get(job.customerName?.trim().toLowerCase() ?? "") ||
+          null;
+        return { ...job, confirmationCall: call ?? null };
+      });
     }),
 
   /**
