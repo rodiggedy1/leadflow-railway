@@ -396,6 +396,24 @@ function JobCard({
                   )}
                 </div>
               )}
+              {job.requestedTeam && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  <Users className="w-3 h-3 shrink-0 text-gray-300" />
+                  <span className="text-xs text-gray-400">Req:</span>
+                  <span className={`text-xs font-medium truncate ${
+                    a?.teamName && job.requestedTeam &&
+                    !a.teamName.toLowerCase().includes(job.requestedTeam.toLowerCase()) &&
+                    !job.requestedTeam.toLowerCase().includes(a.teamName.toLowerCase())
+                      ? 'text-amber-600'
+                      : 'text-gray-500'
+                  }`}>{job.requestedTeam}</span>
+                  {a?.teamName && job.requestedTeam &&
+                    !a.teamName.toLowerCase().includes(job.requestedTeam.toLowerCase()) &&
+                    !job.requestedTeam.toLowerCase().includes(a.teamName.toLowerCase()) && (
+                    <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                  )}
+                </div>
+              )}
               {!job.assignment && (
                 <div className="flex items-center gap-1 mt-1 text-xs font-medium text-amber-600">
                   <span>Tap to assign</span>
