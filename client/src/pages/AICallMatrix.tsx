@@ -267,6 +267,253 @@ function CallHistoryView({ s }: { s: Record<string, string> }) {
   );
 }
 
+// ─── Merge-field helpers ─────────────────────────────────────────────────────
+
+const MERGE_FIELDS = [
+  "{{firstName}}", "{{fullName}}", "{{phone}}",
+  "{{jobTime}}", "{{eta}}", "{{address}}",
+  "{{serviceType}}", "{{teamName}}", "{{jobCount}}",
+];
+
+function applyMergeFields(body: string, person: PersonItem, audience: Audience): string {
+  const first = person.name.split(" ")[0];
+  const address = person.meta.split("·")[1]?.trim() ?? "your home";
+  return body
+    .replace(/\{\{firstName\}\}/g, first)
+    .replace(/\{\{fullName\}\}/g, person.name)
+    .replace(/\{\{phone\}\}/g, person.phone ?? "")
+    .replace(/\{\{jobTime\}\}/g, person.jobTime)
+    .replace(/\{\{eta\}\}/g, person.eta)
+    .replace(/\{\{address\}\}/g, address)
+    .replace(/\{\{serviceType\}\}/g, person.pay ?? "")
+    .replace(/\{\{teamName\}\}/g, audience === "cleaner" ? person.name : (person.access ?? ""))
+    .replace(/\{\{jobCount\}\}/g, person.pay ?? "");
+}
+
+// ─── Scenario → template slug mapping ────────────────────────────────────────
+
+const SCENARIO_SLUG: Record<string, string> = {
+  "Team running late":               "running_late",
+  "Team at address / access needed": "access_needed",
+  "Put card on file":                "card_on_file",
+  "Confirm address":                 "confirm_address",
+  "Client ETA update":               "client_eta_update",
+  "ETA request":                     "eta_request",
+  "Schedule confirmation":           "schedule_confirmation",
+  "Job status reminder":             "job_status_reminder",
+  "Confirm job completion":          "confirm_job_completion",
+};
+
+// ─── TemplatesView ────────────────────────────────────────────────────────────
+
+type TemplateRow = {
+  id: number;
+  scenario: string;
+  audience: string;
+  title: string;
+  body: string;
+  updatedAt: Date | string;
+};
+
+function TemplateEditModal({
+  template,
+  onClose,
+  onSaved,
+  s,
+}: {
+  template: Partial<TemplateRow> & { scenario: string; audience: string };
+  onClose: () => void;
+  onSaved: () => void;
+  s: Record<string, string>;
+}) {
+  const [title, setTitle] = useState(template.title ?? "");
+  const [body, setBody] = useState(template.body ?? "");
+  const [showPreview, setShowPreview] = useState(false);
+
+  const upsert = trpc.callMatrix.upsertTemplate.useMutation({
+    onSuccess: () => { onSaved(); onClose(); },
+  });
+
+  const samplePreview = body
+    .replace(/\{\{firstName\}\}/g, "Sarah")
+    .replace(/\{\{fullName\}\}/g, "Sarah Johnson")
+    .replace(/\{\{phone\}\}/g, "+12025551234")
+    .replace(/\{\{jobTime\}\}/g, "10:00 AM")
+    .replace(/\{\{eta\}\}/g, "~25 min")
+    .replace(/\{\{address\}\}/g, "1234 Oak St NW")
+    .replace(/\{\{serviceType\}\}/g, "Deep Clean")
+    .replace(/\{\{teamName\}\}/g, "Team Ana")
+    .replace(/\{\{jobCount\}\}/g, "3");
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "grid", placeItems: "center", zIndex: 1100 }}>
+      <div style={{ background: "#171a21", border: "1px solid #2a3040", borderRadius: 20, padding: 28, width: 560, maxWidth: "94vw", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 24px 64px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: 17, fontWeight: 900 }}>{template.id ? "Edit template" : "New template"}</h2>
+            <div style={{ fontSize: 12, color: s.muted, marginTop: 3 }}>
+              {template.audience} · {template.scenario.replace(/_/g, " ")}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: s.muted, cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Title */}
+        <div>
+          <label style={{ fontSize: 12, color: s.muted, display: "block", marginBottom: 5 }}>Template title</label>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            placeholder="e.g. Team running late — customer"
+            style={{ width: "100%", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 10, color: s.text, padding: "10px 12px", fontSize: 13, outline: "none" }}
+          />
+        </div>
+
+        {/* Body */}
+        <div>
+          <label style={{ fontSize: 12, color: s.muted, display: "block", marginBottom: 5 }}>Script body</label>
+          <textarea
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder="Write the call script here. Use merge fields below to insert live job data."
+            style={{ width: "100%", minHeight: 160, resize: "vertical", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 10, color: s.text, padding: "10px 12px", fontSize: 13, fontFamily: "inherit", outline: "none", lineHeight: 1.5 }}
+          />
+        </div>
+
+        {/* Merge field chips */}
+        <div>
+          <div style={{ fontSize: 12, color: s.muted, marginBottom: 6 }}>Click to insert merge field:</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {MERGE_FIELDS.map(f => (
+              <button
+                key={f}
+                onClick={() => setBody(b => b + f)}
+                style={{ fontSize: 11, background: "#1f2430", border: `1px solid ${s.line}`, borderRadius: 8, padding: "4px 8px", color: s.accent, cursor: "pointer", fontFamily: "monospace" }}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Live preview toggle */}
+        <div>
+          <button
+            onClick={() => setShowPreview(v => !v)}
+            style={{ background: "none", border: "none", color: s.muted, cursor: "pointer", fontSize: 12, padding: 0 }}
+          >
+            {showPreview ? "▲ Hide preview" : "▼ Preview with sample values"}
+          </button>
+          {showPreview && (
+            <div style={{ marginTop: 8, background: "#0d1520", border: `1px solid ${s.line}`, borderRadius: 12, padding: "12px 14px", fontSize: 13, color: s.text, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+              {samplePreview || <span style={{ color: s.muted }}>No preview yet</span>}
+            </div>
+          )}
+        </div>
+
+        {upsert.isError && (
+          <div style={{ color: "#ff6b6b", fontSize: 12 }}>Error: {upsert.error?.message}</div>
+        )}
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={() => upsert.mutate({ id: template.id, scenario: template.scenario, audience: template.audience as "customer" | "cleaner", title: title.trim() || template.scenario, body: body.trim() })}
+            disabled={upsert.isPending || !body.trim()}
+            style={{ flex: 1, border: 0, borderRadius: 12, padding: "12px 14px", fontWeight: 800, cursor: upsert.isPending ? "wait" : "pointer", color: "#111", background: s.good, fontSize: 14, opacity: upsert.isPending ? 0.7 : 1 }}
+          >
+            {upsert.isPending ? "Saving…" : "Save template"}
+          </button>
+          <button
+            onClick={onClose}
+            style={{ flex: 1, border: `1px solid ${s.line}`, borderRadius: 12, padding: "12px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: "#1f2430", fontSize: 14 }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TemplatesView({ s }: { s: Record<string, string> }) {
+  const { data: templates, isLoading, refetch } = trpc.callMatrix.getTemplates.useQuery(undefined, { staleTime: 30_000 });
+  const deleteTemplate = trpc.callMatrix.deleteTemplate.useMutation({ onSuccess: () => refetch() });
+  const [editTarget, setEditTarget] = useState<(Partial<TemplateRow> & { scenario: string; audience: string }) | null>(null);
+
+  // All possible scenario+audience combos
+  const allCombos: { scenario: string; audience: Audience; title: string }[] = [
+    ...SCENARIOS.customer.map(sc => ({ scenario: SCENARIO_SLUG[sc.title] ?? sc.title, audience: "customer" as Audience, title: sc.title })),
+    ...SCENARIOS.cleaner.map(sc  => ({ scenario: SCENARIO_SLUG[sc.title]  ?? sc.title,  audience: "cleaner"  as Audience, title: sc.title  })),
+  ];
+
+  const templateMap = new Map((templates ?? []).map(t => [`${t.scenario}|${t.audience}`, t]));
+
+  return (
+    <>
+      <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div>
+            <h2 style={{ fontSize: 15, margin: 0, fontWeight: 700 }}>Call templates</h2>
+            <p style={{ color: s.muted, fontSize: 12, margin: "4px 0 0" }}>One template per scenario. Use merge fields to insert live job data. The script auto-fills when you select a person + scenario on the Call Matrix tab.</p>
+          </div>
+        </div>
+
+        {isLoading && <div style={{ color: s.muted, fontSize: 13 }}>Loading templates…</div>}
+
+        <div style={{ display: "grid", gap: 8 }}>
+          {allCombos.map(combo => {
+            const key = `${combo.scenario}|${combo.audience}`;
+            const existing = templateMap.get(key);
+            return (
+              <div key={key} style={{ background: s.dark, border: `1px solid ${existing ? s.line : "#2a1e00"}`, borderRadius: 14, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <b style={{ fontSize: 13 }}>{combo.title}</b>
+                    <span style={{ fontSize: 11, borderRadius: 999, padding: "2px 7px", background: combo.audience === "customer" ? "#0d1a2a" : "#1a0d2a", color: combo.audience === "customer" ? "#7bb7ff" : "#c4a0ff", border: `1px solid ${combo.audience === "customer" ? "#1a3a5a" : "#3a1a5a"}` }}>
+                      {combo.audience}
+                    </span>
+                    {!existing && <span style={{ fontSize: 11, color: "#f3c96b" }}>No template yet</span>}
+                  </div>
+                  {existing && (
+                    <div style={{ fontSize: 12, color: s.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 380 }}>
+                      {existing.body.slice(0, 80)}{existing.body.length > 80 ? "…" : ""}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={() => setEditTarget(existing ? { ...existing, updatedAt: String(existing.updatedAt) } : { scenario: combo.scenario, audience: combo.audience, title: combo.title })}
+                    style={{ border: `1px solid ${s.line}`, borderRadius: 10, padding: "7px 12px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}
+                  >
+                    {existing ? "Edit" : "Create"}
+                  </button>
+                  {existing && (
+                    <button
+                      onClick={() => { if (confirm(`Delete template for "${combo.title}"?`)) deleteTemplate.mutate({ id: existing.id }); }}
+                      style={{ border: "1px solid #633", borderRadius: 10, padding: "7px 12px", fontWeight: 800, cursor: "pointer", color: "#ff9999", background: "#1a0d0d", fontSize: 12 }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {editTarget && (
+        <TemplateEditModal
+          template={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => { refetch(); setEditTarget(null); }}
+          s={s}
+        />
+      )}
+    </>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AICallMatrix() {
@@ -290,6 +537,17 @@ export default function AICallMatrix() {
 
   // ── Fetch real people data ──
   const { data, isLoading, error } = trpc.callMatrix.getPeople.useQuery({ date }, { staleTime: 60_000 });
+
+  // ── Fetch templates ──
+  const { data: templates } = trpc.callMatrix.getTemplates.useQuery(undefined, { staleTime: 30_000 });
+
+  // ── Template lookup helper ──
+  function scriptFromTemplate(person: PersonItem, scenarioTitle: string, aud: Audience): string {
+    const slug = SCENARIO_SLUG[scenarioTitle] ?? scenarioTitle;
+    const tmpl = (templates ?? []).find(t => t.scenario === slug && t.audience === aud);
+    if (tmpl) return applyMergeFields(tmpl.body, person, aud);
+    return buildScript(person, scenarioTitle, aud);
+  }
 
   // ── tRPC mutations ──
   const startCallMutation = trpc.callMatrix.startCall.useMutation({
@@ -364,7 +622,7 @@ export default function AICallMatrix() {
 
   function selectPerson(item: PersonItem) {
     setSelectedId(item.id);
-    setScript(buildScript(item, selectedScenario, audience));
+    setScript(scriptFromTemplate(item, selectedScenario, audience));
     setCallStatus("idle");
     setActiveVapiCallId(null);
     setCallSummary(null);
@@ -377,7 +635,7 @@ export default function AICallMatrix() {
     const first = items[0] ?? null;
     if (first) {
       setSelectedId(first.id);
-      setScript(buildScript(first, title, type));
+      setScript(scriptFromTemplate(first, title, type));
     }
     setCallStatus("idle");
     setActiveVapiCallId(null);
@@ -392,7 +650,7 @@ export default function AICallMatrix() {
     const first = items[0] ?? null;
     if (first) {
       setSelectedId(first.id);
-      setScript(buildScript(first, firstScenario, type));
+      setScript(scriptFromTemplate(first, firstScenario, type));
     } else {
       setSelectedId(null);
       setScript("");
@@ -402,12 +660,12 @@ export default function AICallMatrix() {
     setCallSummary(null);
   }
 
-  // Ensure script is set once data loads
+  // Ensure script is set once data loads (or templates load)
   useMemo(() => {
     if (!script && selectedPerson) {
-      setScript(buildScript(selectedPerson, selectedScenario, audience));
+      setScript(scriptFromTemplate(selectedPerson, selectedScenario, audience));
     }
-  }, [selectedPerson]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedPerson, templates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleStartCall() {
     if (!selectedPerson) return showFlash("Select a person first.");
@@ -621,28 +879,7 @@ export default function AICallMatrix() {
         {view === "history" && <CallHistoryView s={s} />}
 
         {/* ── TEMPLATES VIEW ── */}
-        {view === "settings" && (
-          <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
-            <h2 style={{ fontSize: 15, margin: "0 0 6px", fontWeight: 700 }}>Template system</h2>
-            <p style={{ color: s.muted, fontSize: 13, margin: "0 0 14px" }}>
-              Each template should merge job data, speak naturally, allow interruption, and end with a confirmation summary.
-            </p>
-            {[
-              { title: "Team running late",     desc: "Uses current ETA, apology, flexibility question, and updated window."   },
-              { title: "Access problem",         desc: "Asks for lockbox, concierge, parking, gate code, or alternate entry."   },
-              { title: "Card on file",           desc: "Explains card requirement without sounding like a debt collection call." },
-              { title: "Cleaner ETA request",    desc: "Asks cleaner for exact ETA and blockers, then updates job status."      },
-            ].map(t => (
-              <div key={t.title} style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", border: `1px solid ${s.line}`, background: s.dark, borderRadius: 14, padding: 10, marginBottom: 8 }}>
-                <div>
-                  <b style={{ fontSize: 14 }}>{t.title}</b>
-                  <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{t.desc}</div>
-                </div>
-                <button onClick={() => showFlash("Template editing coming soon.")} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}>Edit</button>
-              </div>
-            ))}
-          </div>
-        )}
+        {view === "settings" && <TemplatesView s={s} />}
       </main>
 
       {/* ── RIGHT PANEL ── */}

@@ -2940,3 +2940,27 @@ export const missedCalls = mysqlTable("missed_calls", {
 }));
 export type MissedCall = typeof missedCalls.$inferSelect;
 export type InsertMissedCall = typeof missedCalls.$inferInsert;
+
+// ─── AI Call Templates ────────────────────────────────────────────────────────
+/**
+ * Stores editable call scripts for the AI Call Matrix.
+ * Each row is keyed by (scenario, audience) — one template per scenario+audience combo.
+ * Merge fields like {{firstName}}, {{jobTime}}, {{eta}} are resolved at call time.
+ */
+export const aiCallTemplates = mysqlTable("ai_call_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Scenario slug matching the scenario card keys in the UI, e.g. "running_late" */
+  scenario: varchar("scenario", { length: 64 }).notNull(),
+  /** "customer" | "cleaner" */
+  audience: varchar("audience", { length: 16 }).notNull(),
+  /** Human-readable title shown in the Templates tab */
+  title: varchar("title", { length: 128 }).notNull(),
+  /** The script body with optional merge fields: {{firstName}}, {{jobTime}}, {{eta}}, {{address}}, {{serviceType}}, {{teamName}}, {{jobCount}} */
+  body: text("body").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  idxScenarioAudience: uniqueIndex("idx_act_scenario_audience").on(t.scenario, t.audience),
+}));
+export type AiCallTemplate = typeof aiCallTemplates.$inferSelect;
+export type InsertAiCallTemplate = typeof aiCallTemplates.$inferInsert;

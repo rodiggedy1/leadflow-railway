@@ -3,9 +3,13 @@
  * Provides data and call-firing for the AI Call Matrix page.
  *
  * Procedures:
- *   getPeople   — returns today's customers and cleaners for the call matrix people list.
- *   startCall   — fires a Vapi outbound call using the script from the UI, writes to field_mgmt_calls.
- *   pollCall    — polls Vapi for a call's current status (called every 5s after firing).
+ *   getPeople        — returns today's customers and cleaners for the call matrix people list.
+ *   startCall        — fires a Vapi outbound call using the script from the UI, writes to field_mgmt_calls.
+ *   pollCall         — polls Vapi for a call's current status (called every 5s after firing).
+ *   getCallHistory   — returns recent AI matrix calls from field_mgmt_calls.
+ *   getTemplates     — returns all templates from ai_call_templates.
+ *   upsertTemplate   — insert or update a template (keyed by scenario+audience).
+ *   deleteTemplate   — delete a template by id.
  */
 
 import { z } from "zod";
@@ -19,6 +23,7 @@ import {
   scheduleAssignments,
   callLog,
   fieldMgmtCalls,
+  aiCallTemplates,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -473,6 +478,65 @@ export const callMatrixRouter = router({
       }
 
       return { status, endedReason, summary, transcript, durationSeconds, recordingUrl };
+    }),
+
+  /**
+   * getTemplates
+   * Returns all rows from ai_call_templates ordered by audience + scenario.
+   */
+  getTemplates: agentProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      return db.select().from(aiCallTemplates).orderBy(aiCallTemplates.audience, aiCallTemplates.scenario);
+    }),
+
+  /**
+   * upsertTemplate
+   * Insert a new template or update an existing one (matched by id if provided, else by scenario+audience).
+   */
+  upsertTemplate: agentProcedure
+    .input(z.object({
+      id: z.number().optional(),
+      scenario: z.string().min(1).max(64),
+      audience: z.enum(["customer", "cleaner"]),
+      title: z.string().min(1).max(128),
+      body: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      if (input.id) {
+        await db.update(aiCallTemplates)
+          .set({ scenario: input.scenario, audience: input.audience, title: input.title, body: input.body })
+          .where(eq(aiCallTemplates.id, input.id));
+        const [updated] = await db.select().from(aiCallTemplates).where(eq(aiCallTemplates.id, input.id)).limit(1);
+        return updated;
+      }
+
+      // Insert — on duplicate key (scenario+audience) update
+      await db.insert(aiCallTemplates)
+        .values({ scenario: input.scenario, audience: input.audience, title: input.title, body: input.body })
+        .$dynamic();
+
+      const [inserted] = await db.select().from(aiCallTemplates)
+        .where(and(eq(aiCallTemplates.scenario, input.scenario), eq(aiCallTemplates.audience, input.audience)))
+        .limit(1);
+      return inserted;
+    }),
+
+  /**
+   * deleteTemplate
+   * Deletes a template by id.
+   */
+  deleteTemplate: agentProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.delete(aiCallTemplates).where(eq(aiCallTemplates.id, input.id));
+      return { success: true };
     }),
 
   /**
