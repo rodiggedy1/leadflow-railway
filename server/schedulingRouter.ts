@@ -1092,7 +1092,7 @@ export const schedulingRouter = router({
           })
           .from(conversationSessions)
           .where(
-            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') IN (${sql.join(phones10.map(p => sql`${p}`), sql`, `)})`
+            sql`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) IN (${sql.join(phones10.map(p => sql`${p}`), sql`, `)})`
           )
           .orderBy(desc(conversationSessions.updatedAt))
           .limit(phones10.length * 3);
@@ -1140,9 +1140,9 @@ export const schedulingRouter = router({
             } catch { /* skip */ }
           }
 
-          // AI memory bullets from csMemoryCache
+          // AI memory bullets from csMemoryCache — pick most recent session with non-null cache
           let aiMemoryBullets: string[] = [];
-          const bestSession = mySessions[0]; // most recent session
+          const bestSession = mySessions.find(s => s.csMemoryCache != null) ?? mySessions[0];
           if (bestSession?.csMemoryCache) {
             try {
               const parsed = JSON.parse(bestSession.csMemoryCache);
