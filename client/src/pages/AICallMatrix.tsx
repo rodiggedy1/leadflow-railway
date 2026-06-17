@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -11,8 +11,8 @@ interface Scenario {
 
 type Audience = "customer" | "cleaner";
 type View = "matrix" | "queue" | "history" | "settings";
+type CallStatus = "idle" | "firing" | "queued" | "ringing" | "in_progress" | "completed" | "voicemail" | "no_answer" | "failed";
 
-// Real person shapes from the backend
 type CustomerRow = {
   cleanerJobId: number;
   name: string;
@@ -43,9 +43,9 @@ type CleanerRow = {
   hasPhotoMissing: boolean;
 };
 
-// Unified person shape used in the UI
 interface PersonItem {
   id: string;
+  cleanerJobId: number;
   name: string;
   phone: string | null;
   meta: string;
@@ -88,33 +88,58 @@ function buildScript(person: PersonItem, scenarioTitle: string, audience: Audien
   const address = person.meta.split("·")[1]?.trim() ?? "your home";
 
   if (audience === "cleaner") {
-    return `Hi ${person.name}, this is Maids in Black operations. I'm calling about your assigned cleaning schedule.\n\nReason for the call: ${scenarioTitle}.\n\nCan you tell me your exact status right now — are you on the way, at the job, inside the home, finished, or delayed?\n\nOnce I have that, I'll update the office dashboard and customer if needed. Please also confirm any issue with parking, access, supplies, job size, or photos before you move to the next job.`;
+    return `Hi ${person.name}, this is Ava from Maids in Black operations. I'm calling about your assigned cleaning schedule.\n\nReason for the call: ${scenarioTitle}.\n\nCan you tell me your exact status right now — are you on the way, at the job, inside the home, finished, or delayed?\n\nOnce I have that, I'll update the office dashboard and customer if needed. Please also confirm any issue with parking, access, supplies, job size, or photos before you move to the next job.`;
   }
   if (scenarioTitle.toLowerCase().includes("late")) {
-    return `Hi ${first}, this is Maids in Black calling about your cleaning today at ${address}.\n\nI'm sorry, but the team is running behind. Your original arrival was ${person.jobTime}, and the latest ETA we have is ${person.eta}.\n\nDoes that still work for you, or do we need to look at another option? I can also send a text confirmation after this call with the updated arrival window.`;
+    return `Hi ${first}, this is Ava from Maids in Black calling about your cleaning today at ${address}.\n\nI'm sorry, but the team is running behind. Your original arrival was ${person.jobTime}, and the latest ETA we have is ${person.eta}.\n\nDoes that still work for you, or do we need to look at another option? I can also send a text confirmation after this call with the updated arrival window.`;
   }
   if (scenarioTitle.toLowerCase().includes("access")) {
-    return `Hi ${first}, this is Maids in Black. Our team is at or near your address and we need help with access.\n\nCan you confirm the best way to get in — lockbox, front desk, gate code, parking instructions, or should we call when they are outside?\n\nI'll update the team right away so they can get started.`;
+    return `Hi ${first}, this is Ava from Maids in Black. Our team is at or near your address and we need help with access.\n\nCan you confirm the best way to get in — lockbox, front desk, gate code, parking instructions, or should we call when they are outside?\n\nI'll update the team right away so they can get started.`;
   }
   if (scenarioTitle.toLowerCase().includes("card")) {
-    return `Hi ${first}, this is Maids in Black. I'm calling because we still need a card on file to secure your cleaning appointment.\n\nThere is no deposit required, but we do need a card saved before dispatch. You can call Maids in Black or use the secure link we send by text.\n\nWould you like me to send that link now?`;
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling because we still need a card on file to secure your cleaning appointment.\n\nThere is no deposit required, but we do need a card saved before dispatch. You can call Maids in Black or use the secure link we send by text.\n\nWould you like me to send that link now?`;
   }
-  return `Hi ${first}, this is Maids in Black calling about your upcoming cleaning.\n\nI just need to confirm a few details: your service address, unit number if any, parking, entry instructions, and whether there are any special notes for the team.\n\nOnce confirmed, we'll update your job notes so the team has everything before arrival.`;
+  return `Hi ${first}, this is Ava from Maids in Black calling about your upcoming cleaning.\n\nI just need to confirm a few details: your service address, unit number if any, parking, entry instructions, and whether there are any special notes for the team.\n\nOnce confirmed, we'll update your job notes so the team has everything before arrival.`;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function todayET(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }); // YYYY-MM-DD
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
 function customerToItem(c: CustomerRow): PersonItem {
-  return { id: `c-${c.cleanerJobId}`, name: c.name, phone: c.phone, meta: c.meta, jobTime: c.jobTime, eta: c.eta, pay: c.pay, access: c.access, risk: c.risk };
+  return { id: `c-${c.cleanerJobId}`, cleanerJobId: c.cleanerJobId, name: c.name, phone: c.phone, meta: c.meta, jobTime: c.jobTime, eta: c.eta, pay: c.pay, access: c.access, risk: c.risk };
 }
 
 function cleanerToItem(cl: CleanerRow): PersonItem {
-  return { id: `t-${cl.teamName}`, name: cl.teamName, phone: cl.phone, meta: cl.meta, jobTime: "Today", eta: cl.hasNoCheckIn ? "Unknown" : "See jobs", pay: `${cl.jobCount} job${cl.jobCount !== 1 ? "s" : ""}`, access: cl.hasPhotoMissing ? "Photos missing" : cl.hasUnconfirmed ? "Confirm availability" : "OK", risk: cl.risk };
+  // cleaners don't have a single cleanerJobId — use 0 as sentinel; phone is the key
+  return { id: `t-${cl.teamName}`, cleanerJobId: 0, name: cl.teamName, phone: cl.phone, meta: cl.meta, jobTime: "Today", eta: cl.hasNoCheckIn ? "Unknown" : "See jobs", pay: `${cl.jobCount} job${cl.jobCount !== 1 ? "s" : ""}`, access: cl.hasPhotoMissing ? "Photos missing" : cl.hasUnconfirmed ? "Confirm availability" : "OK", risk: cl.risk };
 }
+
+const STATUS_LABELS: Record<CallStatus, string> = {
+  idle: "",
+  firing: "Connecting to Vapi…",
+  queued: "Call queued — dialing…",
+  ringing: "Ringing…",
+  in_progress: "Call in progress",
+  completed: "Call completed",
+  voicemail: "Voicemail left",
+  no_answer: "No answer",
+  failed: "Call failed",
+};
+
+const STATUS_COLORS: Record<CallStatus, string> = {
+  idle: "",
+  firing: "#7bb7ff",
+  queued: "#7bb7ff",
+  ringing: "#f3c96b",
+  in_progress: "#63d297",
+  completed: "#63d297",
+  voicemail: "#f3c96b",
+  no_answer: "#ff9966",
+  failed: "#ff6b6b",
+};
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -156,22 +181,72 @@ export default function AICallMatrix() {
   const [flash, setFlash] = useState<string | null>(null);
   const [script, setScript] = useState("");
 
+  // Call state
+  const [callStatus, setCallStatus] = useState<CallStatus>("idle");
+  const [activeVapiCallId, setActiveVapiCallId] = useState<string | null>(null);
+  const [callSummary, setCallSummary] = useState<string | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // ── Fetch real people data ──
   const { data, isLoading, error } = trpc.callMatrix.getPeople.useQuery({ date }, { staleTime: 60_000 });
+
+  // ── tRPC mutations ──
+  const startCallMutation = trpc.callMatrix.startCall.useMutation({
+    onSuccess: (result) => {
+      if (result.vapiCallId) {
+        setActiveVapiCallId(result.vapiCallId);
+        setCallStatus("queued");
+        startPolling(result.vapiCallId);
+      } else {
+        setCallStatus("failed");
+        showFlash("Call fired but no Vapi ID returned.");
+      }
+    },
+    onError: (err) => {
+      setCallStatus("failed");
+      showFlash(`Call failed: ${err.message}`);
+    },
+  });
+
+  // ── Polling ──
+  const pollCallQuery = trpc.callMatrix.pollCall.useQuery(
+    { vapiCallId: activeVapiCallId ?? "" },
+    { enabled: false, staleTime: 0 }
+  );
+  const utils = trpc.useUtils();
+
+  function startPolling(vapiCallId: string) {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const result = await utils.callMatrix.pollCall.fetch({ vapiCallId });
+        const s = result.status as CallStatus;
+        setCallStatus(s);
+        if (result.summary) setCallSummary(result.summary);
+        if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      } catch {
+        // ignore poll errors silently
+      }
+    }, 5000);
+  }
+
+  useEffect(() => {
+    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+  }, []);
 
   // Build unified person lists
   const customerItems: PersonItem[] = useMemo(() => (data?.customers ?? []).map(customerToItem), [data]);
   const cleanerItems: PersonItem[]  = useMemo(() => (data?.cleaners  ?? []).map(cleanerToItem),  [data]);
-
   const allItems = audience === "customer" ? customerItems : cleanerItems;
 
-  // Filtered list
   const filteredItems = useMemo(() => {
     const q = search.toLowerCase();
     return allItems.filter(p => (p.name + p.meta + p.risk).toLowerCase().includes(q));
   }, [allItems, search]);
 
-  // Resolve selected person (fall back to first in list)
   const selectedPerson: PersonItem | null = useMemo(() => {
     if (selectedId) {
       const found = allItems.find(p => p.id === selectedId);
@@ -183,12 +258,15 @@ export default function AICallMatrix() {
   // ── helpers ──
   function showFlash(msg: string) {
     setFlash(msg);
-    setTimeout(() => setFlash(null), 3500);
+    setTimeout(() => setFlash(null), 4000);
   }
 
   function selectPerson(item: PersonItem) {
     setSelectedId(item.id);
     setScript(buildScript(item, selectedScenario, audience));
+    setCallStatus("idle");
+    setActiveVapiCallId(null);
+    setCallSummary(null);
   }
 
   function selectScenario(type: Audience, title: string) {
@@ -200,6 +278,9 @@ export default function AICallMatrix() {
       setSelectedId(first.id);
       setScript(buildScript(first, title, type));
     }
+    setCallStatus("idle");
+    setActiveVapiCallId(null);
+    setCallSummary(null);
   }
 
   function switchAudience(type: Audience) {
@@ -215,6 +296,9 @@ export default function AICallMatrix() {
       setSelectedId(null);
       setScript("");
     }
+    setCallStatus("idle");
+    setActiveVapiCallId(null);
+    setCallSummary(null);
   }
 
   // Ensure script is set once data loads
@@ -223,6 +307,27 @@ export default function AICallMatrix() {
       setScript(buildScript(selectedPerson, selectedScenario, audience));
     }
   }, [selectedPerson]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleStartCall() {
+    if (!selectedPerson) return showFlash("Select a person first.");
+    if (!selectedPerson.phone) return showFlash(`No phone number on file for ${selectedPerson.name}.`);
+    if (!script.trim()) return showFlash("Script is empty — add a message first.");
+    if (callStatus === "firing" || callStatus === "queued" || callStatus === "ringing" || callStatus === "in_progress") {
+      return showFlash("A call is already in progress.");
+    }
+
+    setCallStatus("firing");
+    setCallSummary(null);
+    startCallMutation.mutate({
+      cleanerJobId: selectedPerson.cleanerJobId || 1, // fallback for cleaner rows
+      jobDate: date,
+      personName: selectedPerson.name,
+      phone: selectedPerson.phone,
+      scenario: selectedScenario,
+      script: script.trim(),
+      audience,
+    });
+  }
 
   // ── Styles ──
   const s = {
@@ -236,6 +341,8 @@ export default function AICallMatrix() {
   const lateTeams = data?.cleaners.filter(cl => cl.risk === "Urgent" || cl.risk === "No check-in").length ?? 0;
   const unconfirmed = data?.cleaners.filter(cl => cl.hasUnconfirmed).length ?? 0;
   const photoMissing = data?.cleaners.filter(cl => cl.hasPhotoMissing).length ?? 0;
+
+  const callActive = callStatus !== "idle" && callStatus !== "completed" && callStatus !== "voicemail" && callStatus !== "no_answer" && callStatus !== "failed";
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "270px 1fr 390px", minHeight: "100vh", background: s.bg, color: s.text, fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, sans-serif" }}>
@@ -300,7 +407,6 @@ export default function AICallMatrix() {
             />
             <button
               onClick={() => {
-                // Smart pick: first customer with non-"On track" risk
                 const urgent = customerItems.find(c => c.risk !== "On track");
                 if (urgent) {
                   setAudience("customer");
@@ -320,13 +426,8 @@ export default function AICallMatrix() {
           </div>
         </div>
 
-        {/* Loading / error states */}
-        {isLoading && (
-          <div style={{ color: s.muted, fontSize: 13, padding: "20px 0" }}>Loading today's jobs…</div>
-        )}
-        {error && (
-          <div style={{ color: "#ff6b6b", fontSize: 13, padding: "20px 0" }}>Error loading jobs: {error.message}</div>
-        )}
+        {isLoading && <div style={{ color: s.muted, fontSize: 13, padding: "20px 0" }}>Loading today's jobs…</div>}
+        {error && <div style={{ color: "#ff6b6b", fontSize: 13, padding: "20px 0" }}>Error loading jobs: {error.message}</div>}
 
         {/* ── MATRIX VIEW ── */}
         {view === "matrix" && !isLoading && (
@@ -339,7 +440,7 @@ export default function AICallMatrix() {
                   </h2>
                   <div style={{ display: "grid", gap: 10 }}>
                     {SCENARIOS[type].map(sc => {
-                      const active = selectedScenario === sc.title;
+                      const active = selectedScenario === sc.title && audience === type;
                       return (
                         <div key={sc.title} onClick={() => selectScenario(type, sc.title)} style={{ padding: 13, border: `1px solid ${active ? s.accent : s.line}`, borderRadius: 15, background: active ? "#1d1b14" : s.dark, cursor: "pointer", transition: "border-color .15s, background .15s" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
@@ -446,7 +547,7 @@ export default function AICallMatrix() {
                   <b style={{ fontSize: 14 }}>{t.title}</b>
                   <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{t.desc}</div>
                 </div>
-                <button style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}>Edit</button>
+                <button onClick={() => showFlash("Template editing coming soon.")} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "9px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 12 }}>Edit</button>
               </div>
             ))}
           </div>
@@ -463,6 +564,9 @@ export default function AICallMatrix() {
                   <div style={{ fontSize: 20, fontWeight: 900 }}>{selectedPerson.name}</div>
                   <div style={{ fontSize: 12, color: s.muted, marginTop: 2 }}>{selectedPerson.meta}</div>
                   <div style={{ marginTop: 8, color: s.accent, fontSize: 13, fontWeight: 800 }}>{selectedScenario}</div>
+                  {selectedPerson.phone && (
+                    <div style={{ marginTop: 4, color: s.muted, fontSize: 12 }}>{selectedPerson.phone}</div>
+                  )}
                 </div>
                 <Tag label={selectedPerson.risk} hot={selectedPerson.risk.toLowerCase().includes("high") || selectedPerson.risk.toLowerCase().includes("urgent")} />
               </div>
@@ -484,23 +588,66 @@ export default function AICallMatrix() {
               <textarea
                 value={script}
                 onChange={e => setScript(e.target.value)}
+                placeholder="Edit the call script here before starting the call…"
                 style={{ width: "100%", minHeight: 150, resize: "vertical", lineHeight: 1.45, marginTop: 10, background: "#11151d", border: `1px solid ${s.line}`, borderRadius: 12, color: s.text, padding: "11px 12px", outline: "none", fontSize: 13, fontFamily: "inherit" }}
               />
 
+              {/* Call status indicator */}
+              {callStatus !== "idle" && (
+                <div style={{ marginTop: 10, padding: "10px 12px", background: "#0d1520", border: `1px solid ${STATUS_COLORS[callStatus]}33`, borderRadius: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  {callActive && (
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], animation: "pulse 1.2s infinite" }} />
+                  )}
+                  <span style={{ fontSize: 13, color: STATUS_COLORS[callStatus], fontWeight: 700 }}>{STATUS_LABELS[callStatus]}</span>
+                </div>
+              )}
+
+              {/* Call summary after completion */}
+              {callSummary && (
+                <div style={{ marginTop: 10, padding: "10px 12px", background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 12 }}>
+                  <div style={{ fontSize: 11, color: s.muted, marginBottom: 4 }}>Call summary</div>
+                  <div style={{ fontSize: 13, color: "#b9ffd4", lineHeight: 1.4 }}>{callSummary}</div>
+                </div>
+              )}
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-                <button onClick={() => showFlash("AI call started. Listening for outcome: confirmed, voicemail, angry client, reschedule, payment complete, or access received.")} style={{ border: 0, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: "#111", background: s.good, fontSize: 13 }}>
-                  Start AI Call
+                <button
+                  onClick={handleStartCall}
+                  disabled={callActive || startCallMutation.isPending}
+                  style={{ border: 0, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: callActive ? "not-allowed" : "pointer", color: "#111", background: callActive ? "#3a5a3a" : s.good, fontSize: 13, opacity: callActive ? 0.7 : 1 }}
+                >
+                  {callActive ? STATUS_LABELS[callStatus] : "Start AI Call"}
                 </button>
-                <button onClick={() => { setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need")); showFlash("Script rewritten with a softer tone."); }} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                <button
+                  onClick={() => {
+                    setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"));
+                    showFlash("Script rewritten with a softer tone.");
+                  }}
+                  style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+                >
                   Rewrite Softer
                 </button>
-                <button onClick={() => showFlash("SMS version queued with secure link / ETA / access request based on this template.")} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                <button
+                  onClick={() => showFlash("SMS version queued with secure link / ETA / access request based on this template.")}
+                  style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+                >
                   Send SMS Instead
                 </button>
-                <button onClick={() => showFlash("Marked done. Summary added to job record and follow-up removed from queue.")} style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                <button
+                  onClick={() => {
+                    setCallStatus("idle");
+                    setActiveVapiCallId(null);
+                    setCallSummary(null);
+                    showFlash("Marked done. Summary added to job record.");
+                  }}
+                  style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+                >
                   Mark Done
                 </button>
-                <button onClick={() => { navigator.clipboard.writeText(script); showFlash("Script copied."); }} style={{ gridColumn: "1 / -1", border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(script); showFlash("Script copied."); }}
+                  style={{ gridColumn: "1 / -1", border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+                >
                   Copy Script
                 </button>
               </div>
@@ -532,6 +679,8 @@ export default function AICallMatrix() {
             ))}
           </div>
         </div>
+
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
       </section>
     </div>
   );
