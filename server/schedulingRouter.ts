@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { eq, and, inArray, ne, sql, desc } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -810,9 +810,13 @@ export const schedulingRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      // Get all jobs for the date
+      // Get all jobs for the date — exclude cancelled and rescheduled (same filter as fieldMgmtRouter)
       const jobs = await db.select().from(cleanerJobs)
-        .where(eq(cleanerJobs.jobDate, input.date));
+        .where(and(
+          eq(cleanerJobs.jobDate, input.date),
+          ne(cleanerJobs.bookingStatus, "cancelled"),
+          ne(cleanerJobs.bookingStatus, "rescheduled"),
+        ));
 
       // Get existing assignments for the date
       const jobIds = jobs.map(j => j.id);
@@ -998,37 +1002,38 @@ export const schedulingRouter = router({
           },
         };
       });
-      // Attach the most recent confirmation call outcome to each job
-      const confCalls = jobIds.length > 0
-        ? await db
-            .select({
-              cleanerJobId: confirmationCalls.cleanerJobId,
-              id: confirmationCalls.id,
-              status: confirmationCalls.status,
-              endedReason: confirmationCalls.endedReason,
-              aiOutcome: confirmationCalls.aiOutcome,
-              aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
-              aiFlexibility: confirmationCalls.aiFlexibility,
-              manualOutcome: confirmationCalls.manualOutcome,
-              manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
-              transcript: confirmationCalls.transcript,
-              summary: confirmationCalls.summary,
-              durationSeconds: confirmationCalls.durationSeconds,
-              firedAt: confirmationCalls.firedAt,
-            })
-            .from(confirmationCalls)
-            .where(
-              and(
-                inArray(confirmationCalls.cleanerJobId, jobIds),
-                eq(confirmationCalls.jobDate, input.date),
-              )
-            )
-            .orderBy(confirmationCalls.firedAt)
-        : [];
-      // Most recent call per job (last in firedAt-asc order)
-      const confCallMap = new Map<number, typeof confCalls[number]>();
+      // Attach the most recent confirmation call outcome to each job.
+      // Fetch by jobDate only — NOT by jobId — so calls survive job ID changes
+      // caused by team reassignments in the sync. Match to jobs by phone/name.
+      const confCalls = await db
+          .select({
+            cleanerJobId: confirmationCalls.cleanerJobId,
+            calledPhone: confirmationCalls.calledPhone,
+            clientName: confirmationCalls.clientName,
+            id: confirmationCalls.id,
+            status: confirmationCalls.status,
+            endedReason: confirmationCalls.endedReason,
+            aiOutcome: confirmationCalls.aiOutcome,
+            aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+            aiFlexibility: confirmationCalls.aiFlexibility,
+            manualOutcome: confirmationCalls.manualOutcome,
+            manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+            transcript: confirmationCalls.transcript,
+            summary: confirmationCalls.summary,
+            durationSeconds: confirmationCalls.durationSeconds,
+            firedAt: confirmationCalls.firedAt,
+          })
+          .from(confirmationCalls)
+          .where(eq(confirmationCalls.jobDate, input.date))
+          .orderBy(confirmationCalls.firedAt);
+      // Build phone/name lookup maps — most recent call wins (firedAt-asc, last overwrites)
+      const confCallByPhone = new Map<string, typeof confCalls[number]>();
+      const confCallByName = new Map<string, typeof confCalls[number]>();
       for (const c of confCalls) {
-        confCallMap.set(c.cleanerJobId, c); // later entries overwrite earlier ones
+        const phone = c.calledPhone?.replace(/\D/g, "");
+        if (phone) confCallByPhone.set(phone, c);
+        const name = c.clientName?.trim().toLowerCase();
+        if (name) confCallByName.set(name, c);
       }
       // ── Batch client history lookup by customerPhone ─────────────────────────
       // Normalize phone to 10 digits for matching
@@ -1079,10 +1084,21 @@ export const schedulingRouter = router({
       }
       // Also merge confirmation_calls into recentCallsMap so every customer's
       // Vapi confirmation call transcript shows in Recent Calls consistently.
+      // Match by phone/name to the current job ID (immune to job ID changes).
       for (const c of confCalls) {
         if (!c.transcript && !c.summary) continue;
+        // Find the current job for this call by phone then name
+        const callPhone = c.calledPhone?.replace(/\D/g, "");
+        const callName = c.clientName?.trim().toLowerCase();
+        const matchedJob = jobs.find(j => {
+          const jp = j.customerPhone?.replace(/\D/g, "");
+          if (callPhone && jp && callPhone === jp) return true;
+          if (callName && j.customerName?.trim().toLowerCase() === callName) return true;
+          return false;
+        });
+        if (!matchedJob) continue;
         const outcome = c.manualOutcome ?? c.aiOutcome ?? c.status ?? "unknown";
-        const existing = recentCallsMap.get(c.cleanerJobId) ?? [];
+        const existing = recentCallsMap.get(matchedJob.id) ?? [];
         existing.push({
           step: "confirmation_call",
           outcome,
@@ -1091,7 +1107,7 @@ export const schedulingRouter = router({
           durationSeconds: c.durationSeconds ?? 0,
           createdAt: c.firedAt ? new Date(c.firedAt) : new Date(),
         });
-        recentCallsMap.set(c.cleanerJobId, existing);
+        recentCallsMap.set(matchedJob.id, existing);
       }
 
       // Map: phone10 → OpenPhone call recordings (all calls, most recent first)
@@ -1297,7 +1313,10 @@ ${callBlocks.join("\n\n")}`;
         const openPhoneCalls = phone10 ? openPhoneCallsMap.get(phone10) ?? [] : [];
         return {
           ...j,
-          confirmationCall: confCallMap.get(j.id) ?? null,
+          confirmationCall: (() => {
+            const p = j.customerPhone?.replace(/\D/g, "");
+            return (p && confCallByPhone.get(p)) || confCallByName.get(j.customerName?.trim().toLowerCase() ?? "") || null;
+          })(),
           clientHistory,
           recentCalls: recentCallsMap.get(j.id) ?? [],
           openPhoneCalls,
