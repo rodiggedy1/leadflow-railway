@@ -31,6 +31,7 @@ import {
   completedJobs,
   conversationSessions,
   fieldMgmtCalls,
+  openphoneCallRecordings,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 
@@ -1074,6 +1075,43 @@ export const schedulingRouter = router({
         }
       }
 
+      // Map: phone10 → OpenPhone call recordings (last 3 per phone, most recent first)
+      // These are human-to-human calls made via the OpenPhone system.
+      type OpenPhoneCall = { callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: Date; callDebrief: string | null; transcript: string | null };
+      const openPhoneCallsMap = new Map<string, OpenPhoneCall[]>();
+      if (phones10.length > 0) {
+        // Build E.164 list for matching against callerPhone column
+        const e164ForOpenPhone = phones10.map(p => `+1${p}`);
+        const opRows = await db
+          .select({
+            callerPhone: openphoneCallRecordings.callerPhone,
+            direction: openphoneCallRecordings.direction,
+            durationSeconds: openphoneCallRecordings.durationSeconds,
+            callStartedAt: openphoneCallRecordings.callStartedAt,
+            callDebrief: openphoneCallRecordings.callDebrief,
+            transcript: openphoneCallRecordings.transcript,
+          })
+          .from(openphoneCallRecordings)
+          .where(inArray(openphoneCallRecordings.callerPhone, e164ForOpenPhone))
+          .orderBy(desc(openphoneCallRecordings.callStartedAt))
+          .limit(phones10.length * 5);
+        for (const row of opRows) {
+          const phone10 = row.callerPhone.replace(/[^\d]/g, "").slice(-10);
+          const existing = openPhoneCallsMap.get(phone10) ?? [];
+          if (existing.length < 3) {
+            existing.push({
+              callerPhone: row.callerPhone,
+              direction: row.direction,
+              durationSeconds: row.durationSeconds,
+              callStartedAt: row.callStartedAt,
+              callDebrief: row.callDebrief,
+              transcript: row.transcript,
+            });
+            openPhoneCallsMap.set(phone10, existing);
+          }
+        }
+      }
+
       if (phones10.length > 0) {
         // 1. Batch completedJobs lookup — all rows for these phones
         const e164List = phones10.map(p => `+1${p}`);
@@ -1184,11 +1222,13 @@ export const schedulingRouter = router({
       const enrichedWithConf = enriched.map(j => {
         const phone10 = j.customerPhone ? digits10(j.customerPhone) : null;
         const clientHistory = phone10 ? clientHistoryMap.get(phone10) ?? null : null;
+        const openPhoneCalls = phone10 ? openPhoneCallsMap.get(phone10) ?? [] : [];
         return {
           ...j,
           confirmationCall: confCallMap.get(j.id) ?? null,
           clientHistory,
           recentCalls: recentCallsMap.get(j.id) ?? [],
+          openPhoneCalls,
         };
       });
       return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };

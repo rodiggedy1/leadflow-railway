@@ -88,6 +88,7 @@ interface Job {
   customerPhone?: string | null;
   clientHistory?: ClientHistory | null;
   recentCalls?: Array<{ step: string; outcome: string; summary: string | null; durationSeconds: number; createdAt: string | Date }>;
+  openPhoneCalls?: Array<{ callerPhone: string; direction: string; durationSeconds: number | null; callStartedAt: string | Date; callDebrief: string | null; transcript: string | null }>;
   requestedTeam?: string | null;
   isNewClient?: boolean;
   isMoveInOut?: boolean;
@@ -2610,6 +2611,66 @@ function ClientPersonaPanel({ job, onClose }: { job: Job | null; onClose: () => 
                       </div>
                       {call.summary && (
                         <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{call.summary}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Section: OpenPhone Calls */}
+          {job?.openPhoneCalls && job.openPhoneCalls.length > 0 && (
+            <div className="px-5 py-4 border-b">
+              <div className="flex items-center gap-1.5 mb-3">
+                <Phone className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-xs font-bold uppercase tracking-wider text-gray-400">OpenPhone Calls</span>
+              </div>
+              <div className="space-y-2">
+                {job.openPhoneCalls.map((call, i) => {
+                  const ts = typeof call.callStartedAt === "string" ? new Date(call.callStartedAt).getTime() : call.callStartedAt.getTime();
+                  const directionLabel = call.direction === "outgoing" ? "Outbound" : "Inbound";
+                  const directionColor = call.direction === "outgoing"
+                    ? "text-blue-600 bg-blue-50 border-blue-100"
+                    : "text-purple-600 bg-purple-50 border-purple-100";
+                  let debriefSummary: string | null = null;
+                  let debriefGrade: string | null = null;
+                  if (call.callDebrief) {
+                    try {
+                      const d = JSON.parse(call.callDebrief);
+                      debriefSummary = d.wentWell ?? null;
+                      debriefGrade = d.grade ?? null;
+                    } catch { /* skip */ }
+                  }
+                  // Fallback: extract plain text from transcript JSON
+                  let transcriptSnippet: string | null = null;
+                  if (!debriefSummary && call.transcript) {
+                    try {
+                      const turns = JSON.parse(call.transcript);
+                      if (Array.isArray(turns) && turns[0]?.content) {
+                        transcriptSnippet = turns[0].content.slice(0, 120);
+                      }
+                    } catch { /* skip */ }
+                  }
+                  const gradeColor = debriefGrade === "A" ? "text-emerald-600 bg-emerald-50 border-emerald-100"
+                    : debriefGrade === "B" ? "text-blue-600 bg-blue-50 border-blue-100"
+                    : debriefGrade === "C" ? "text-amber-600 bg-amber-50 border-amber-100"
+                    : debriefGrade === "D" || debriefGrade === "F" ? "text-red-500 bg-red-50 border-red-100"
+                    : "text-gray-500 bg-gray-50 border-gray-100";
+                  return (
+                    <div key={i} className="rounded-xl bg-indigo-50/40 border border-indigo-100 px-3.5 py-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold uppercase tracking-wide text-indigo-700">OpenPhone</span>
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${directionColor}`}>{directionLabel}</span>
+                          {debriefGrade && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${gradeColor}`}>Grade: {debriefGrade}</span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-gray-400">{relativeTime(ts)}</span>
+                      </div>
+                      {(debriefSummary || transcriptSnippet) && (
+                        <p className="text-xs text-gray-600 leading-relaxed line-clamp-3">{debriefSummary ?? transcriptSnippet}</p>
                       )}
                     </div>
                   );
