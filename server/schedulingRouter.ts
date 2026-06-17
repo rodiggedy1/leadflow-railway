@@ -810,9 +810,9 @@ export const schedulingRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      // Get all jobs for the date (exclude cancelled and rescheduled)
+      // Get all jobs for the date (full set — needed for downstream lookups like confirmation_calls)
       const jobs = await db.select().from(cleanerJobs)
-        .where(and(eq(cleanerJobs.jobDate, input.date), ne(cleanerJobs.bookingStatus, "cancelled"), ne(cleanerJobs.bookingStatus, "rescheduled")));
+        .where(eq(cleanerJobs.jobDate, input.date));
 
       // Get existing assignments for the date
       const jobIds = jobs.map(j => j.id);
@@ -1304,7 +1304,9 @@ ${callBlocks.join("\n\n")}`;
           callsSummary: callsSummaryMap.get(j.id) ?? null,
         };
       });
-      return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
+      // Filter cancelled/rescheduled at the very end so all internal lookups (confirmation_calls,
+      // assignments, geo, OpenPhone) still use the full job set — pills and call counts stay intact.
+      return { jobs: enrichedWithConf.filter(j => j.bookingStatus !== "cancelled" && j.bookingStatus !== "rescheduled"), teams: teamsWithRating, hasAssignments: assignments.length > 0 };
     }),
 
   // ── Run optimizer ───────────────────────────────────────────────────────────
