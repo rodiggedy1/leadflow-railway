@@ -162,6 +162,12 @@ export function registerWebhookRoutes(app: Express) {
           await handleCsOutboundMessage(msg);
         } else {
           await handleCsInboundMessage(msg);
+          // Also check if this is a reply to a confirmation call SMS fallback
+          const csFromPhone = normalizePhone(msg.from ?? "");
+          const csInboundText: string = msg.text ?? msg.body ?? "";
+          if (csFromPhone && csInboundText.trim()) {
+            tryHandleConfirmationSmsReply({ fromPhone: csFromPhone, inboundText: csInboundText }).catch(() => {});
+          }
         }
         return;
       }
