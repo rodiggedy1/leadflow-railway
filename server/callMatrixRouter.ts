@@ -9,7 +9,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, sql, inArray } from "drizzle-orm";
+import { eq, and, sql, inArray, desc, like } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -297,8 +297,11 @@ export const callMatrixRouter = router({
           `You are Ava, a professional operations coordinator for Maids in Black, a premium cleaning company. ` +
           `You are calling ${input.personName} regarding: ${input.scenario}. ` +
           `Be warm, concise, and professional. Listen carefully for the outcome. ` +
-          `If the person wants to call back later, acknowledge and end the call politely. ` +
-          `Do not discuss pricing, other services, or anything outside the scope of this call.`;
+          `Once you have delivered the message and received a response, close the call naturally with: ` +
+          `'Thank you so much, I really appreciate your time. Have a wonderful day!' and then end the call. ` +
+          `If the person wants to call back later, say 'Of course, I completely understand. I'll make a note of that and have someone follow up with you. Have a great day!' then end the call. ` +
+          `Do not repeat yourself. Do not ask multiple questions. Do not discuss pricing, other services, or anything outside the scope of this call. ` +
+          `Keep the call under 2 minutes.`;
 
         const payload = {
           phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
@@ -377,15 +380,53 @@ export const callMatrixRouter = router({
 
   /**
    * pollCall
-   * Polls Vapi for the current status of a call by vapiCallId.
+   * First checks fieldMgmtCalls (updated by the Vapi end-of-call webhook) for the final outcome.
+   * Falls back to polling Vapi directly if the webhook hasn't fired yet.
    * Called every 5s by the frontend after firing a call.
-   * Returns a simplified status object.
    */
   pollCall: agentProcedure
     .input(z.object({ vapiCallId: z.string() }))
     .query(async ({ input }) => {
+      // ── 1. Check fieldMgmtCalls first — webhook updates this reliably ────────
+      try {
+        const db = await getDb();
+        if (db) {
+          const [fmRow] = await db
+            .select()
+            .from(fieldMgmtCalls)
+            .where(eq(fieldMgmtCalls.vapiCallId, input.vapiCallId))
+            .limit(1);
+
+          if (fmRow) {
+            // If outcome has been updated from the default "no_answer" by the webhook
+            // OR if endedReason is set, the call has ended
+            const hasEnded = fmRow.endedReason !== null || fmRow.durationSeconds > 0;
+            if (hasEnded) {
+              const outcome = fmRow.outcome;
+              const status =
+                outcome === "answered"  ? "completed" as const :
+                outcome === "voicemail" ? "voicemail" as const :
+                outcome === "no_answer" ? "no_answer" as const :
+                outcome === "failed"    ? "failed"    as const :
+                "completed" as const;
+              return {
+                status,
+                endedReason: fmRow.endedReason ?? null,
+                summary: fmRow.summary ?? null,
+                transcript: fmRow.transcript ?? null,
+                durationSeconds: fmRow.durationSeconds ?? null,
+                recordingUrl: fmRow.recordingUrl ?? null,
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[CallMatrix] fieldMgmtCalls poll check failed:", err);
+      }
+
+      // ── 2. Fall back to Vapi direct poll ─────────────────────────────────────
       const vapiCall = await vapiGet(`/call/${input.vapiCallId}`);
-      if (!vapiCall) return { status: "unknown", endedReason: null, summary: null, durationSeconds: null };
+      if (!vapiCall) return { status: "queued" as const, endedReason: null, summary: null, durationSeconds: null, transcript: null, recordingUrl: null };
 
       const vapiStatus = vapiCall.status as string | undefined;
       const endedReason = (vapiCall.endedReason as string | undefined) ?? null;
@@ -397,20 +438,20 @@ export const callMatrixRouter = router({
         ? Math.round((new Date(vapiCall.endedAt as string).getTime() - new Date(vapiCall.startedAt as string).getTime()) / 1000)
         : null;
 
-      // Map Vapi status to a simple UI status
       let status: "queued" | "ringing" | "in_progress" | "completed" | "voicemail" | "no_answer" | "failed" = "queued";
       if (vapiStatus === "queued") status = "queued";
       else if (vapiStatus === "ringing") status = "ringing";
       else if (vapiStatus === "in-progress") status = "in_progress";
       else if (vapiStatus === "ended") {
         if (endedReason === "customer-ended-call" || endedReason === "assistant-ended-call" || endedReason === "exceeded-max-duration") status = "completed";
-        else if (endedReason === "voicemail" || endedReason === "machine_end_beep" || endedReason === "machine_end_silence") status = "voicemail";
-        else if (endedReason === "no-answer" || endedReason === "silence-timed-out") status = "no_answer";
+        else if (endedReason?.includes("voicemail") || endedReason === "machine_end_beep" || endedReason === "machine_end_silence") status = "voicemail";
+        else if (endedReason === "no-answer" || endedReason === "silence-timed-out" || endedReason === "customer-did-not-answer") status = "no_answer";
         else if (endedReason === "twilio-failed-to-connect-call" || endedReason === "customer-did-not-give-microphone-permission") status = "failed";
-        else status = "completed";
+        else if (durationSeconds && durationSeconds > 5) status = "completed";
+        else status = "no_answer";
       }
 
-      // If call ended, update fieldMgmtCalls row with outcome
+      // If Vapi says ended, write back to fieldMgmtCalls so next poll hits the fast path
       if (vapiStatus === "ended") {
         try {
           const db = await getDb();
@@ -427,10 +468,44 @@ export const callMatrixRouter = router({
               .where(eq(fieldMgmtCalls.vapiCallId, input.vapiCallId));
           }
         } catch (err) {
-          console.error("[CallMatrix] Failed to update fieldMgmtCalls on poll:", err);
+          console.error("[CallMatrix] Failed to update fieldMgmtCalls on Vapi poll:", err);
         }
       }
 
       return { status, endedReason, summary, transcript, durationSeconds, recordingUrl };
+    }),
+
+  /**
+   * getCallHistory
+   * Returns recent AI Matrix calls from field_mgmt_calls (step starts with 'ai_matrix').
+   * Includes recording URL, transcript, outcome, and duration.
+   */
+  getCallHistory: agentProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(50) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+
+      const rows = await db
+        .select()
+        .from(fieldMgmtCalls)
+        .where(like(fieldMgmtCalls.step, "ai_matrix%"))
+        .orderBy(desc(fieldMgmtCalls.createdAt))
+        .limit(input.limit);
+
+      return rows.map(r => ({
+        id: r.id,
+        cleanerJobId: r.cleanerJobId,
+        step: r.step,
+        calledPhone: r.calledPhone,
+        outcome: r.outcome,
+        durationSeconds: r.durationSeconds,
+        transcript: r.transcript,
+        summary: r.summary,
+        endedReason: r.endedReason,
+        recordingUrl: r.recordingUrl,
+        createdAt: r.createdAt,
+        vapiCallId: r.vapiCallId,
+      }));
     }),
 });

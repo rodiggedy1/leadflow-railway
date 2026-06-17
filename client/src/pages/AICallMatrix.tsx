@@ -169,6 +169,104 @@ function StatusBadge({ risk }: { risk: string }) {
   );
 }
 
+// ─── CallHistoryView ─────────────────────────────────────────────────────────
+
+type HistoryRow = {
+  id: number;
+  step: string;
+  calledPhone: string | null;
+  outcome: string;
+  durationSeconds: number | null;
+  transcript: string | null;
+  summary: string | null;
+  endedReason: string | null;
+  recordingUrl: string | null;
+  createdAt: number | null;
+  vapiCallId: string | null;
+};
+
+function HistoryOutcomeBadge({ outcome }: { outcome: string }) {
+  const map: Record<string, { label: string; color: string; bg: string }> = {
+    answered:  { label: "Answered",  color: "#b9ffd4", bg: "#0d2a1a" },
+    voicemail: { label: "Voicemail", color: "#f3c96b", bg: "#2a1e00" },
+    no_answer: { label: "No Answer", color: "#ffb4b4", bg: "#2a0d0d" },
+    failed:    { label: "Failed",    color: "#ff6b6b", bg: "#2a0d0d" },
+  };
+  const m = map[outcome] ?? { label: outcome, color: "#8f98aa", bg: "#1f2430" };
+  return (
+    <span style={{ fontSize: 11, borderRadius: 999, padding: "3px 8px", background: m.bg, color: m.color, border: `1px solid ${m.color}33`, whiteSpace: "nowrap" }}>
+      {m.label}
+    </span>
+  );
+}
+
+function HistoryCallCard({ row, s }: { row: HistoryRow; s: Record<string, string> }) {
+  const [showTranscript, setShowTranscript] = useState(false);
+  const time = row.createdAt ? new Date(row.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }) : "—";
+  const duration = row.durationSeconds ? (row.durationSeconds < 60 ? `${row.durationSeconds}s` : `${Math.floor(row.durationSeconds / 60)}m ${row.durationSeconds % 60}s`) : null;
+  const scenarioLabel = row.step.replace("ai_matrix_", "").replace(/_/g, " ");
+
+  return (
+    <div style={{ background: s.dark, border: `1px solid ${s.line}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: s.text }}>{row.calledPhone ?? "Unknown"}</div>
+          <div style={{ fontSize: 11, color: s.muted, marginTop: 2 }}>{time}{duration ? ` · ${duration}` : ""} · {scenarioLabel}</div>
+        </div>
+        <HistoryOutcomeBadge outcome={row.outcome} />
+      </div>
+
+      {row.summary && (
+        <div style={{ fontSize: 12, color: "#b9ffd4", background: "#0d2a1a", border: "1px solid #1a4a2a", borderRadius: 10, padding: "8px 10px", lineHeight: 1.4 }}>
+          {row.summary}
+        </div>
+      )}
+
+      {row.recordingUrl && (
+        <div style={{ background: "#0d1a12", border: "1px solid #1a4a2a", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: s.muted, flexShrink: 0 }}>Recording</span>
+          <audio controls src={row.recordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+        </div>
+      )}
+
+      {row.transcript && (
+        <>
+          <button
+            onClick={() => setShowTranscript(v => !v)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: s.muted, fontSize: 12, textAlign: "left", padding: 0 }}
+          >
+            {showTranscript ? "▲ Hide transcript" : "▼ Show transcript"}
+          </button>
+          {showTranscript && (
+            <div style={{ fontSize: 12, color: s.muted, background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 10, padding: "8px 10px", maxHeight: 160, overflowY: "auto", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+              {row.transcript}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CallHistoryView({ s }: { s: Record<string, string> }) {
+  const { data, isLoading } = trpc.callMatrix.getCallHistory.useQuery({ limit: 50 }, { staleTime: 30_000 });
+
+  return (
+    <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
+      <h2 style={{ fontSize: 15, margin: "0 0 12px", fontWeight: 700 }}>Recent AI calls</h2>
+      {isLoading && <div style={{ color: s.muted, fontSize: 13 }}>Loading call history…</div>}
+      {!isLoading && (!data || data.length === 0) && (
+        <div style={{ color: s.muted, fontSize: 13, padding: "12px 0" }}>No AI matrix calls yet. Start a call from the Call Matrix tab.</div>
+      )}
+      <div style={{ display: "grid", gap: 10 }}>
+        {(data ?? []).map(row => (
+          <HistoryCallCard key={row.id} row={row as HistoryRow} s={s} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AICallMatrix() {
@@ -520,23 +618,7 @@ export default function AICallMatrix() {
         )}
 
         {/* ── CALL HISTORY VIEW ── */}
-        {view === "history" && (
-          <div style={{ background: s.panel, border: `1px solid ${s.line}`, borderRadius: 18, padding: 15 }}>
-            <h2 style={{ fontSize: 15, margin: "0 0 12px", fontWeight: 700 }}>Recent AI calls</h2>
-            <div style={{ display: "grid", gap: 10 }}>
-              {[
-                { time: "10:42 AM", name: "Angela Morris",  detail: "Late arrival update. Client confirmed flexible until 2:30 PM." },
-                { time: "10:19 AM", name: "Team Ana",        detail: "ETA request. Cleaner replied 18 minutes away."                },
-                { time: "9:58 AM",  name: "Chris Patel",     detail: "Card-on-file call. Voicemail left and SMS follow-up sent."    },
-                { time: "9:21 AM",  name: "Team Brenda",     detail: "Schedule confirmation. Confirmed 2 jobs today."               },
-              ].map(ev => (
-                <div key={ev.name + ev.time} style={{ borderLeft: `3px solid ${s.line}`, paddingLeft: 10, color: s.muted, fontSize: 12, lineHeight: 1.35 }}>
-                  <b style={{ color: s.text }}>{ev.time} — {ev.name}</b><br />{ev.detail}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {view === "history" && <CallHistoryView s={s} />}
 
         {/* ── TEMPLATES VIEW ── */}
         {view === "settings" && (
