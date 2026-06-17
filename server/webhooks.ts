@@ -1522,9 +1522,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
 
       const { fromPhone, inboundText } = params;
 
-      // Look for the most recent confirmation call row where we sent an SMS fallback
-      // to this phone number (within the last 2 days) and haven't yet recorded a reply.
-      const twoDaysAgo = Date.now() - 2 * 24 * 60 * 60 * 1000;
+      // Look for the most recent confirmation call row where we sent an SMS to this phone number.
       const rows = await db
         .select({
           id: confirmationCalls.id,
@@ -1535,7 +1533,6 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           and(
             eq(confirmationCalls.calledPhone, fromPhone),
             eq(confirmationCalls.smsFollowupSent, 1),
-            sql`${confirmationCalls.smsFollowupAt} >= ${twoDaysAgo}`,
           )
         )
         .orderBy(desc(confirmationCalls.smsFollowupAt))
