@@ -41,6 +41,25 @@ async function waitForRecording(recordingSid: string, maxAttempts = 8): Promise<
 }
 
 export function registerTwilioProxyWebhookRoute(app: Express) {
+  /**
+   * Intercept Callback URL — called by Twilio BEFORE each proxy interaction.
+   * Returning { record: true } tells Twilio to record the voice call.
+   * Must respond within 5 seconds. Always returns 200 so the call is never blocked.
+   * Set this as the Intercept Callback URL in Twilio Proxy console.
+   */
+  app.post("/api/webhooks/twilio-proxy-intercept", (req, res) => {
+    const body = req.body as Record<string, string>;
+    const interactionType = body.InteractionType; // "message" | "voice"
+    console.log("[TwilioProxy] Intercept event:", interactionType, body.SessionUniqueName);
+    if (interactionType === "voice") {
+      // Tell Twilio to record this call
+      res.status(200).json({ record: true });
+    } else {
+      // SMS/chat — no action needed
+      res.status(200).json({});
+    }
+  });
+
   app.post("/api/webhooks/twilio-proxy", async (req, res) => {
     // Acknowledge immediately
     res.status(200).send("OK");
