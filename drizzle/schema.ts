@@ -2986,3 +2986,23 @@ export const aiCallTemplates = mysqlTable("ai_call_templates", {
 }));
 export type AiCallTemplate = typeof aiCallTemplates.$inferSelect;
 export type InsertAiCallTemplate = typeof aiCallTemplates.$inferInsert;
+
+/**
+ * Google API daily usage counter.
+ * One row per calendar date (YYYY-MM-DD). Incremented on each live API call.
+ * Used to show a warning banner on the schedule page when limits are approached.
+ * Limits: 1000 geocodes/day, 300 distance matrix calls/day.
+ */
+export const googleApiUsage = mysqlTable("google_api_usage", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Calendar date in YYYY-MM-DD format — unique, one row per day */
+  date: varchar("date", { length: 10 }).notNull().unique(),
+  /** Number of Geocoding API calls made today */
+  geocodeCalls: int("geocodeCalls").notNull().default(0),
+  /** Number of Distance Matrix API calls made today */
+  distanceCalls: int("distanceCalls").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GoogleApiUsage = typeof googleApiUsage.$inferSelect;
+export type InsertGoogleApiUsage = typeof googleApiUsage.$inferInsert;

@@ -32,6 +32,7 @@ import {
   conversationSessions,
   fieldMgmtCalls,
   openphoneCallRecordings,
+  googleApiUsage,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 import { invokeLLM } from "./_core/llm";
@@ -168,18 +169,52 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
   }
 }
 
+/** Returns today's date as YYYY-MM-DD in Eastern Time (business timezone). */
+function todayDateET(): string {
+  const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+  const yyyy = etNow.getFullYear();
+  const mm = String(etNow.getMonth() + 1).padStart(2, "0");
+  const dd = String(etNow.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/** Normalize an address string for consistent cache key lookup. */
+function normalizeAddressKey(address: string): string {
+  return address.toLowerCase().replace(/[.,#-]/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Increment a Google API usage counter for today. Fire-and-forget — never throws. */
+async function incrementApiUsage(field: "geocodeCalls" | "distanceCalls", count = 1): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    const today = todayDateET();
+    await db.insert(googleApiUsage)
+      .values({ date: today, geocodeCalls: field === "geocodeCalls" ? count : 0, distanceCalls: field === "distanceCalls" ? count : 0 })
+      .onDuplicateKeyUpdate({
+        set: field === "geocodeCalls"
+          ? { geocodeCalls: sql`geocodeCalls + ${count}` }
+          : { distanceCalls: sql`distanceCalls + ${count}` },
+      });
+  } catch { /* never block the caller */ }
+}
+
 async function geocodeWithCache(address: string): Promise<{ lat: number; lng: number; formattedAddress: string } | null> {
   const db = await getDb();
   if (!db) return null;
-  const key = address.trim().toLowerCase();
+  // Normalize key to reduce redundant API calls for the same address with minor formatting differences
+  const key = normalizeAddressKey(address);
 
   // Check cache
   const cached = await db.select().from(jobGeoCache).where(eq(jobGeoCache.addressKey, key)).limit(1);
   if (cached[0]) return { lat: cached[0].lat, lng: cached[0].lng, formattedAddress: cached[0].formattedAddress ?? address };
 
-  // Geocode fresh
+  // Geocode fresh — count this API call
   const result = await geocodeAddress(address);
   if (!result) return null;
+
+  // Track usage (fire-and-forget)
+  void incrementApiUsage("geocodeCalls", 1);
 
   // Store in cache
   try {
@@ -206,6 +241,7 @@ async function fetchDriveTimes(
   pairs: { fromLat: number; fromLng: number; toLat: number; toLng: number }[]
 ): Promise<number[]> {
   const result: number[] = new Array(pairs.length).fill(0);
+  let successfulCalls = 0;
   for (let i = 0; i < pairs.length; i++) {
     const p = pairs[i];
     try {
@@ -218,6 +254,7 @@ async function fetchDriveTimes(
       const el = apiResult?.rows?.[0]?.elements?.[0];
       if (el?.status === 'OK') {
         result[i] = el.duration.value;
+        successfulCalls++;
       } else {
         console.warn(`[DRIVE] pair ${i} status=${el?.status ?? 'NO_ELEMENT'} from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng}) el=${JSON.stringify(el)}`);
         result[i] = 0;
@@ -227,6 +264,8 @@ async function fetchDriveTimes(
       result[i] = 0;
     }
   }
+  // Track distance matrix API usage (fire-and-forget)
+  if (successfulCalls > 0) void incrementApiUsage("distanceCalls", successfulCalls);
   return result;
 }
 
@@ -1323,7 +1362,16 @@ ${callBlocks.join("\n\n")}`;
           callsSummary: callsSummaryMap.get(j.id) ?? null,
         };
       });
-      return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0 };
+      // Check today's Google API usage for warning banner
+      let apiLimitWarning = false;
+      try {
+        const todayUsage = await db.select().from(googleApiUsage).where(eq(googleApiUsage.date, todayDateET())).limit(1);
+        if (todayUsage[0] && (todayUsage[0].geocodeCalls > 1000 || todayUsage[0].distanceCalls > 300)) {
+          apiLimitWarning = true;
+        }
+      } catch { /* never block the schedule from loading */ }
+
+      return { jobs: enrichedWithConf, teams: teamsWithRating, hasAssignments: assignments.length > 0, apiLimitWarning };
     }),
 
   // ── Run optimizer ───────────────────────────────────────────────────────────

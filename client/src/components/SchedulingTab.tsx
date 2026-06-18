@@ -1685,6 +1685,7 @@ export default function SchedulingTab() {
   const jobs: Job[] = (data?.jobs ?? []) as Job[];
   const teams: Team[] = (data?.teams ?? []) as Team[];
   const hasAssignments = data?.hasAssignments ?? false;
+  const apiLimitWarning = data?.apiLimitWarning ?? false;
 
   // Badge filter state
   const [badgeFilter, setBadgeFilter] = useState<"new" | "recurring" | "moveinout" | null>(null);
@@ -1766,6 +1767,13 @@ export default function SchedulingTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Google API limit warning banner */}
+      {apiLimitWarning && (
+        <div className="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+          <span className="text-base">⚠️</span>
+          <span><strong>Google API daily limit reached</strong> — geocodes or distance calls exceeded today&apos;s quota. Drive times may be stale. Contact support if this persists.</span>
+        </div>
+      )}
       {/* Badge filter bar */}
       {(newCount > 0 || recurringCount > 0 || moveInOutCount > 0) && (
         <div className="flex items-center gap-2 flex-wrap">
