@@ -19,7 +19,7 @@
 
 import { randomBytes } from "crypto";
 import { z } from "zod";
-import { and, desc, eq, gte, isNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
 import { router, agentProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -35,6 +35,7 @@ import {
   cleanerJobCustomRules,
   customPayRules,
   confirmationCalls,
+  scheduleAssignments,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { storagePut, generateThumbnail } from "./storage";
@@ -704,6 +705,14 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           const syncData = isTerminalStatus ? (({ bookingStatus, ...rest }) => rest)(jobData) : jobData;
           await db.update(cleanerJobs).set(syncData).where(eq(cleanerJobs.id, existing.id));
           updated++;
+          // If L27 is marking this job as rescheduled (or cancelled), remove its schedule_assignments
+          // row immediately. The job will be hidden by ne(bookingStatus, 'rescheduled') filters, but
+          // the orphan assignment row would otherwise persist until the next optimize run.
+          if (booking.bookingStatus === "rescheduled" || booking.bookingStatus === "cancelled") {
+            await db.delete(scheduleAssignments)
+              .where(eq(scheduleAssignments.cleanerJobId, existing.id));
+            console.log(`[Sync] Removed schedule_assignments for ${booking.bookingStatus} job ${existing.id} (${booking.fullName})`);
+          }
           if (
             booking.bookingStatus === "assigned" &&
             previousStatus !== "assigned" &&
@@ -754,6 +763,9 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           .from(cleanerJobs)
           .where(and(eq(cleanerJobs.bookingId, booking.id), eq(cleanerJobs.jobDate, dateStr), notInArray(cleanerJobs.cleanerProfileId, currentProfileIds)));
         for (const row of staleTeamRows) {
+          // Clean up schedule_assignments before deleting the job row
+          await db.delete(scheduleAssignments)
+            .where(eq(scheduleAssignments.cleanerJobId, row.id));
           await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
           teamReassignRemoved++;
         }
@@ -804,11 +816,23 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
             .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)));
           console.log(`[StaleCleanup] Re-pointed confirmation_calls from stale job ${row.id} (${row.customerName}) to new job ${newJob.id}`);
         } else {
-          // No matching new job found — skip deletion to preserve history
-          console.warn(`[StaleCleanup] Stale job ${row.id} (${row.customerName}) has confirmation_calls but no matching new job found — skipping deletion`);
+          // No matching new job on the same date — job was rescheduled to a different date.
+          // We cannot delete the row (confirmation_calls history must be preserved), but we
+          // MUST mark it as rescheduled so every ne(bookingStatus, 'rescheduled') filter hides it.
+          // Also delete its schedule_assignments row — it has no operational value once the job is gone.
+          await db.update(cleanerJobs)
+            .set({ bookingStatus: "rescheduled" })
+            .where(eq(cleanerJobs.id, row.id));
+          await db.delete(scheduleAssignments)
+            .where(eq(scheduleAssignments.cleanerJobId, row.id));
+          console.log(`[StaleCleanup] Marked stale job ${row.id} (${row.customerName}) as rescheduled and removed schedule_assignments (has conf-call history, no matching new job on ${dateStr})`);
+          staleMarked++;
           continue;
         }
       }
+      // Delete the schedule_assignments row before deleting the job itself
+      await db.delete(scheduleAssignments)
+        .where(eq(scheduleAssignments.cleanerJobId, row.id));
       await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
       staleMarked++;
     }
@@ -1696,13 +1720,19 @@ export const qualityRouter = router({
               const syncData = isTerminalStatus
                 ? (({ bookingStatus, ...rest }) => rest)(jobData)  // strip bookingStatus from update
                 : jobData;
-              // Update existing record with latest data from Launch27
+                            // Update existing record with latest data from Launch27
               await db
                 .update(cleanerJobs)
                 .set(syncData)
                 .where(eq(cleanerJobs.id, existing.id));
               updated++;
-
+              // If L27 is marking this job as rescheduled (or cancelled), remove its schedule_assignments
+              // row immediately so it doesn't ghost on the schedule page.
+              if (booking.bookingStatus === "rescheduled" || booking.bookingStatus === "cancelled") {
+                await db.delete(scheduleAssignments)
+                  .where(eq(scheduleAssignments.cleanerJobId, existing.id));
+                console.log(`[Sync] Removed schedule_assignments for ${booking.bookingStatus} job ${existing.id} (${booking.fullName})`);
+              }
               // If this sync just transitioned the job from unassigned → assigned,
               // fire the late-assignment SMS immediately (the cron window may have passed)
               if (
@@ -1799,6 +1829,9 @@ export const qualityRouter = router({
                 )
               );
             for (const row of staleTeamRows) {
+              // Clean up schedule_assignments before deleting the job row
+              await db.delete(scheduleAssignments)
+                .where(eq(scheduleAssignments.cleanerJobId, row.id));
               await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
               teamReassignRemoved++;
             }
@@ -1845,10 +1878,22 @@ export const qualityRouter = router({
                 .where(and(eq(confirmationCalls.cleanerJobId, row.id), eq(confirmationCalls.jobDate, dateStr)));
               console.log(`[StaleCleanup] Re-pointed confirmation_calls from stale job ${row.id} (${row.customerName}) to new job ${newJob.id}`);
             } else {
-              console.warn(`[StaleCleanup] Stale job ${row.id} (${row.customerName}) has confirmation_calls but no matching new job — skipping deletion`);
+              // No matching new job on the same date — job was rescheduled to a different date.
+              // Mark as rescheduled so all ne(bookingStatus, 'rescheduled') filters hide it.
+              // Also remove its schedule_assignments row — no operational value once the job is gone.
+              await db.update(cleanerJobs)
+                .set({ bookingStatus: "rescheduled" })
+                .where(eq(cleanerJobs.id, row.id));
+              await db.delete(scheduleAssignments)
+                .where(eq(scheduleAssignments.cleanerJobId, row.id));
+              console.log(`[StaleCleanup] Marked stale job ${row.id} (${row.customerName}) as rescheduled and removed schedule_assignments (has conf-call history, no matching new job on ${dateStr})`);
+              staleMarked++;
               continue;
             }
           }
+          // Delete the schedule_assignments row before deleting the job itself
+          await db.delete(scheduleAssignments)
+            .where(eq(scheduleAssignments.cleanerJobId, row.id));
           await db.delete(cleanerJobs).where(eq(cleanerJobs.id, row.id));
           staleMarked++;
         }
