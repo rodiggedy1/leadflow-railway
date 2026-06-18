@@ -19,7 +19,7 @@
  */
 
 import { z } from "zod";
-import { eq, asc, desc, gte, gt, inArray, notInArray, and, ne } from "drizzle-orm";
+import { eq, asc, desc, gte, lte, gt, inArray, notInArray, and, ne } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -1399,6 +1399,82 @@ export const fieldMgmtRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error ?? "Failed to notify client" });
       }
       return { method: result.method };
+    }),
+
+  /**
+   * Returns all cleaner-to-client calls (field_mgmt_calls) with job info,
+   * filterable by date range and customer name/phone. Paginated.
+   */
+  getCleanerCalls: agentProcedure
+    .input(z.object({
+      dateFrom: z.string().optional(),
+      dateTo: z.string().optional(),
+      search: z.string().optional(),
+      page: z.number().int().min(0).default(0),
+      pageSize: z.number().int().min(1).max(100).default(50),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const conditions: any[] = [];
+      if (input.dateFrom) {
+        conditions.push(gte(fieldMgmtCalls.createdAt, new Date(input.dateFrom + "T00:00:00.000Z")));
+      }
+      if (input.dateTo) {
+        conditions.push(lte(fieldMgmtCalls.createdAt, new Date(input.dateTo + "T23:59:59.999Z")));
+      }
+
+      const rows = await db
+        .select({
+          id: fieldMgmtCalls.id,
+          cleanerJobId: fieldMgmtCalls.cleanerJobId,
+          step: fieldMgmtCalls.step,
+          calledPhone: fieldMgmtCalls.calledPhone,
+          outcome: fieldMgmtCalls.outcome,
+          durationSeconds: fieldMgmtCalls.durationSeconds,
+          transcript: fieldMgmtCalls.transcript,
+          summary: fieldMgmtCalls.summary,
+          endedReason: fieldMgmtCalls.endedReason,
+          recordingUrl: fieldMgmtCalls.recordingUrl,
+          smsFollowupSent: fieldMgmtCalls.smsFollowupSent,
+          smsFollowupBody: fieldMgmtCalls.smsFollowupBody,
+          smsReply: fieldMgmtCalls.smsReply,
+          smsConfirmed: fieldMgmtCalls.smsConfirmed,
+          createdAt: fieldMgmtCalls.createdAt,
+          customerName: cleanerJobs.customerName,
+          customerPhone: cleanerJobs.customerPhone,
+          jobAddress: cleanerJobs.jobAddress,
+          jobDate: cleanerJobs.jobDate,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          cleanerName: cleanerJobs.cleanerName,
+          teamName: cleanerJobs.teamName,
+          serviceType: cleanerJobs.serviceType,
+        })
+        .from(fieldMgmtCalls)
+        .leftJoin(cleanerJobs, eq(fieldMgmtCalls.cleanerJobId, cleanerJobs.id))
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(fieldMgmtCalls.createdAt))
+        .limit(input.pageSize + 1)
+        .offset(input.page * input.pageSize);
+
+      // Apply search filter in JS after join
+      const search = input.search?.trim().toLowerCase();
+      const filtered = search
+        ? rows.filter(r =>
+            r.customerName?.toLowerCase().includes(search) ||
+            r.calledPhone?.includes(search) ||
+            r.customerPhone?.includes(search) ||
+            r.cleanerName?.toLowerCase().includes(search)
+          )
+        : rows;
+
+      const hasMore = filtered.length > input.pageSize;
+      return {
+        calls: filtered.slice(0, input.pageSize),
+        hasMore,
+        page: input.page,
+      };
     }),
 
   /**

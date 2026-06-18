@@ -283,7 +283,8 @@ export type AdminTab =
   | "metrics"
   | "lead-nurturing"
   | "confirmation-calls"
-  | "missed-calls";
+  | "missed-calls"
+  | "cleaner-calls";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -375,8 +376,9 @@ const NAV_ENTRIES: NavEntry[] = [
     children: [
       { id: "quality",            label: "Jobs",          href: "/admin/quality",              icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
       { id: "team-pay",           label: "Team Pay",      href: "/admin/team-pay",             icon: <Trophy className="w-3.5 h-3.5" /> },
-      { id: "confirmation-calls", label: "Confirm Calls", href: "/admin/confirmation-calls",   icon: <Phone className="w-3.5 h-3.5" /> },
-      { id: "tracker-flow",       label: "Journey",       href: "/admin/tracker-flow",         icon: <Smartphone className="w-3.5 h-3.5" /> },
+      { id: "confirmation-calls", label: "Confirm Calls",  href: "/admin/confirmation-calls",  icon: <Phone className="w-3.5 h-3.5" /> },
+      { id: "cleaner-calls",       label: "Cleaner Calls", href: "/admin/cleaner-calls",        icon: <Phone className="w-3.5 h-3.5" /> },
+      { id: "tracker-flow",        label: "Journey",       href: "/admin/tracker-flow",         icon: <Smartphone className="w-3.5 h-3.5" /> },
     ],
   },
   {
