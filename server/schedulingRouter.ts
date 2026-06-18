@@ -1846,9 +1846,14 @@ ${callBlocks.join("\n\n")}`;
           eq(scheduleJobLocks.jobId, input.cleanerJobId),
         ));
 
-      // Recalculate the source team's remaining jobs so their route order and drive times stay accurate
+      // Kick off route recalculation in the background — do NOT await it.
+      // recalcTeamRoute makes sequential Google Distance Matrix calls which can take 1-4s per team.
+      // Returning immediately makes the UI feel instant; the updated drive times will appear
+      // on the next getSchedule refetch (triggered by onSuccess in the frontend).
       if (sourceTeamId && sourceTeamId !== 0) {
-        await recalcTeamRoute(db, input.date, sourceTeamId);
+        void recalcTeamRoute(db, input.date, sourceTeamId).catch(err =>
+          console.error('[unassignJob] background recalc error:', err)
+        );
       }
 
       return { ok: true };
@@ -2211,6 +2216,75 @@ ${callBlocks.join("\n\n")}`;
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Snapshot current schedule_assignments for this team at lock time.
+      // This is the source of truth the optimizer will use to preserve the team's jobs.
+      // Without this snapshot, the optimizer falls back to Launch27 teamName matching,
+      // which may not reflect manual drags or previous optimize runs.
+      const currentAssignments = await db.select().from(scheduleAssignments)
+        .where(and(
+          eq(scheduleAssignments.jobDate, input.date),
+          eq(scheduleAssignments.teamId, input.teamId),
+          // Exclude sentinel unassigned rows
+          sql`${scheduleAssignments.isManual} != 2`,
+        ));
+
+      // If there are no saved assignments yet (team hasn't been optimized),
+      // synthesize from Launch27 teamName so the lock still has something to preserve.
+      let rowsToSnapshot = currentAssignments;
+      if (rowsToSnapshot.length === 0) {
+        const teamRow = await db.select().from(schedulingTeams).where(eq(schedulingTeams.id, input.teamId)).limit(1);
+        if (teamRow[0]) {
+          const syntheticJobs = await db.select().from(cleanerJobs)
+            .where(and(
+              eq(cleanerJobs.jobDate, input.date),
+              eq(cleanerJobs.teamName, teamRow[0].name),
+            ));
+          rowsToSnapshot = syntheticJobs.map((j, idx) => ({
+            id: 0,
+            jobDate: input.date,
+            cleanerJobId: j.id,
+            teamId: input.teamId,
+            teamName: teamRow[0].name,
+            routeOrder: idx,
+            estimatedArrivalMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() : null,
+            estimatedDepartureMs: j.serviceDateTime ? new Date(j.serviceDateTime).getTime() + 2 * 3600000 : null,
+            driveTimeSecs: 0,
+            isManual: 0,
+            totalDistanceMeters: null,
+            rationale: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }));
+        }
+      }
+
+      // Persist the snapshot as isManual=1 rows so the optimizer treats them as manually locked.
+      // onDuplicateKeyUpdate preserves teamId/teamName/routeOrder but does NOT overwrite isManual=2 sentinels.
+      for (const row of rowsToSnapshot) {
+        await db.insert(scheduleAssignments)
+          .values({
+            jobDate: input.date,
+            cleanerJobId: row.cleanerJobId,
+            teamId: input.teamId,
+            teamName: row.teamName ?? "",
+            routeOrder: row.routeOrder,
+            estimatedArrivalMs: row.estimatedArrivalMs,
+            estimatedDepartureMs: row.estimatedDepartureMs,
+            driveTimeSecs: row.driveTimeSecs ?? 0,
+            isManual: 1,
+          })
+          .onDuplicateKeyUpdate({
+            set: {
+              teamId: input.teamId,
+              teamName: row.teamName ?? "",
+              routeOrder: row.routeOrder,
+              isManual: 1,
+              updatedAt: new Date(),
+            },
+          });
+      }
+
       await db.insert(teamDayLock)
         .values({ teamId: input.teamId, date: input.date })
         .onDuplicateKeyUpdate({ set: { teamId: input.teamId } });

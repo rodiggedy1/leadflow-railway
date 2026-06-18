@@ -259,12 +259,30 @@ function JobCard({
   const utils = trpc.useUtils();
   const [showReassign, setShowReassign] = useState(false);
   const unassignJob = trpc.scheduling.unassignJob.useMutation({
-    onSuccess: () => {
-      utils.scheduling.getSchedule.invalidate({ date });
+    onMutate: async () => {
+      // Optimistic update: immediately remove the job from its team in the cache
+      await utils.scheduling.getSchedule.cancel({ date });
+      const prev = utils.scheduling.getSchedule.getData({ date });
+      utils.scheduling.getSchedule.setData({ date }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          jobs: old.jobs.map((j: Job) =>
+            j.id === job.id ? { ...j, assignment: undefined } : j
+          ),
+        };
+      });
+      return { prev };
+    },
+    onSuccess: (_data, _vars, _ctx) => {
+      // Refetch to get the server's final state (updated route orders, drive times)
+      utils.scheduling.getSchedule.refetch({ date });
       onUnassignDone?.(job.assignment?.teamId ?? null);
       toast.success("Job unassigned");
     },
-    onError: (e) => {
+    onError: (e, _vars, ctx) => {
+      // Roll back the optimistic update on error
+      if (ctx?.prev) utils.scheduling.getSchedule.setData({ date }, ctx.prev);
       onUnassignDone?.(job.assignment?.teamId ?? null);
       toast.error(e.message);
     },
@@ -1673,12 +1691,13 @@ export default function SchedulingTab() {
   });
   // Weekly work schedule
   const setTeamWorkSchedule = trpc.scheduling.setTeamWorkSchedule.useMutation({
-    onSuccess: () => utils.scheduling.getSchedule.invalidate({ date }),
+    // Use refetch() instead of invalidate() to bypass the 30s staleTime and update immediately
+    onSuccess: () => refetch(),
     onError: (e) => toast.error(e.message),
   });
   // Day-specific override (force on/off + note)
   const setTeamDayOverride = trpc.scheduling.setTeamDayOverride.useMutation({
-    onSuccess: () => utils.scheduling.getSchedule.invalidate({ date }),
+    onSuccess: () => refetch(),
     onError: (e) => toast.error(e.message),
   });
 
