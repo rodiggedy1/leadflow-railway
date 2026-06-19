@@ -1562,6 +1562,7 @@ export default function SchedulingTab() {
   const [personaJob, setPersonaJob] = useState<Job | null>(null);
   // AI Schedule Analysis panel
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const { data: analysisData, isFetching: analysisFetching, refetch: refetchAnalysis } =
     trpc.scheduling.analyzeSchedule.useQuery(
       { date },
@@ -2158,42 +2159,88 @@ export default function SchedulingTab() {
             </div>
           )}
 
-          {/* Issues list */}
-          {analysisData && analysisData.issues.length > 0 && (
-            <div className="divide-y divide-gray-50">
-              {analysisData.issues.map((issue, idx) => (
-                <div
-                  key={`${issue.code}-${idx}`}
-                  className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50/80 transition-colors ${
-                    issue.severity === "critical" ? "bg-red-50/30" :
-                    issue.severity === "warning" ? "bg-amber-50/20" : ""
-                  }`}
-                >
-                  <div className={`mt-0.5 shrink-0 ${
-                    issue.severity === "critical" ? "text-red-500" :
-                    issue.severity === "warning" ? "text-amber-500" : "text-blue-400"
-                  }`}>
-                    {issue.severity === "critical" ? <AlertTriangle className="w-4 h-4" /> :
-                     issue.severity === "warning" ? <AlertCircle className="w-4 h-4" /> :
-                     <Info className="w-4 h-4" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs font-semibold uppercase tracking-wide ${
-                        issue.severity === "critical" ? "text-red-600" :
-                        issue.severity === "warning" ? "text-amber-600" : "text-blue-500"
-                      }`}>{issue.severity}</span>
-                      <span className="text-sm font-medium text-gray-900">{issue.title}</span>
-                      {issue.teamName && (
-                        <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{issue.teamName}</span>
+          {/* Issues list — grouped by issue type */}
+          {analysisData && analysisData.issues.length > 0 && (() => {
+            // Group issues by code+title
+            const groupMap = new Map<string, { title: string; severity: string; items: typeof analysisData.issues }>();
+            for (const issue of analysisData.issues) {
+              const key = issue.code;
+              if (!groupMap.has(key)) groupMap.set(key, { title: issue.title, severity: issue.severity, items: [] });
+              groupMap.get(key)!.items.push(issue);
+            }
+            const groups = Array.from(groupMap.entries());
+            return (
+              <div className="divide-y divide-gray-100">
+                {groups.map(([code, group]) => {
+                  const isCollapsed = collapsedGroups.has(code);
+                  const sev = group.severity;
+                  const toggleGroup = () => setCollapsedGroups(prev => {
+                    const next = new Set(prev);
+                    if (next.has(code)) next.delete(code); else next.add(code);
+                    return next;
+                  });
+                  return (
+                    <div key={code}>
+                      {/* Group header — always visible, clickable */}
+                      <button
+                        onClick={toggleGroup}
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                          sev === "critical" ? "bg-red-50/40" :
+                          sev === "warning" ? "bg-amber-50/30" : "bg-blue-50/20"
+                        }`}
+                      >
+                        <div className={`shrink-0 ${
+                          sev === "critical" ? "text-red-500" :
+                          sev === "warning" ? "text-amber-500" : "text-blue-400"
+                        }`}>
+                          {sev === "critical" ? <AlertTriangle className="w-4 h-4" /> :
+                           sev === "warning" ? <AlertCircle className="w-4 h-4" /> :
+                           <Info className="w-4 h-4" />}
+                        </div>
+                        <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${
+                            sev === "critical" ? "text-red-600" :
+                            sev === "warning" ? "text-amber-600" : "text-blue-500"
+                          }`}>{sev}</span>
+                          <span className="text-sm font-semibold text-gray-900">{group.title}</span>
+                          <span className={`text-xs font-medium rounded-full px-2 py-0.5 ${
+                            sev === "critical" ? "bg-red-100 text-red-700" :
+                            sev === "warning" ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700"
+                          }`}>{group.items.length}</span>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${
+                          isCollapsed ? "-rotate-90" : ""
+                        }`} />
+                      </button>
+                      {/* Group items — shown when expanded */}
+                      {!isCollapsed && (
+                        <div className="divide-y divide-gray-50">
+                          {group.items.map((issue, idx) => (
+                            <div
+                              key={`${code}-${idx}`}
+                              className="flex items-start gap-3 px-4 py-2.5 pl-11 hover:bg-gray-50/60 transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {issue.customerName && (
+                                    <span className="text-sm font-medium text-gray-900">{issue.customerName}</span>
+                                  )}
+                                  {issue.teamName && (
+                                    <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{issue.teamName}</span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-600 mt-0.5 leading-snug">{issue.detail}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <p className="text-sm text-gray-600 mt-0.5 leading-snug">{issue.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* All clear state */}
           {analysisData && analysisData.issues.length === 0 && (
