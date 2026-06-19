@@ -26,7 +26,7 @@ import {
   GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
   SlidersHorizontal, Power, AlertTriangle, Phone, Calendar,
   ChevronDown, Star, MessageSquare, Crown, DollarSign, History,
-  FileText, ClipboardList, Info,
+  FileText, ClipboardList, Info, ShieldAlert, CheckCircle2, Bot,
 } from "lucide-react";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -1560,6 +1560,13 @@ export default function SchedulingTab() {
   const [callLogOpen, setCallLogOpen] = useState(false);
   // Client persona slide-over
   const [personaJob, setPersonaJob] = useState<Job | null>(null);
+  // AI Schedule Analysis panel
+  const [analyzeOpen, setAnalyzeOpen] = useState(false);
+  const { data: analysisData, isFetching: analysisFetching, refetch: refetchAnalysis } =
+    trpc.scheduling.analyzeSchedule.useQuery(
+      { date },
+      { enabled: analyzeOpen, staleTime: 60_000 }
+    );
   const { data: dayIssues = [] } = trpc.calls.getDayIssues.useQuery({ jobDate: date }, { refetchInterval: 30_000 });
 
   // Check-ins for the selected date — cleaners submitted these the day before
@@ -1997,6 +2004,31 @@ export default function SchedulingTab() {
             )}
             {optimize.isPending ? "Optimizing…" : hasAssignments ? "Re-optimize" : "Optimize Routes"}
           </Button>
+
+          {/* Analyze Schedule button */}
+          <Button
+            onClick={() => { setAnalyzeOpen(v => !v); }}
+            variant="outline"
+            className={`gap-2 border-2 transition-colors ${
+              analyzeOpen
+                ? "border-violet-500 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                : analysisData && analysisData.counts.critical > 0
+                  ? "border-red-400 text-red-600 hover:bg-red-50 animate-pulse"
+                  : "border-gray-300 text-gray-700 hover:border-violet-400 hover:text-violet-700"
+            }`}
+          >
+            {analysisFetching ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ShieldAlert className="w-4 h-4" />
+            )}
+            Analyze
+            {analysisData && analysisData.counts.critical > 0 && (
+              <span className="ml-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                {analysisData.counts.critical}
+              </span>
+            )}
+          </Button>
         </div>
       </div>
 
@@ -2049,6 +2081,138 @@ export default function SchedulingTab() {
           >
             <X className="w-4 h-4" />
           </button>
+        </div>
+      )}
+
+      {/* AI Schedule Analysis Panel */}
+      {analyzeOpen && (
+        <div className="bg-white border-2 border-violet-200 rounded-2xl overflow-hidden shadow-sm">
+          {/* Panel header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-violet-50 to-white border-b border-violet-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-violet-100 flex items-center justify-center">
+                <ShieldAlert className="w-4 h-4 text-violet-600" />
+              </div>
+              <div>
+                <span className="font-semibold text-gray-900 text-sm">Schedule Analysis</span>
+                <span className="text-xs text-gray-400 ml-2">{formatDate(date)}</span>
+              </div>
+              {analysisData && (
+                <div className="flex items-center gap-1.5 ml-1">
+                  {analysisData.counts.critical > 0 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                      <AlertTriangle className="w-3 h-3" />
+                      {analysisData.counts.critical} critical
+                    </span>
+                  )}
+                  {analysisData.counts.warning > 0 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+                      <AlertCircle className="w-3 h-3" />
+                      {analysisData.counts.warning} warning{analysisData.counts.warning > 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {analysisData.counts.critical === 0 && analysisData.counts.warning === 0 && (
+                    <span className="flex items-center gap-1 text-xs font-semibold text-green-600 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                      <CheckCircle2 className="w-3 h-3" />
+                      All clear
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => refetchAnalysis()}
+                disabled={analysisFetching}
+                className="text-xs text-violet-500 hover:text-violet-700 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-violet-50 transition-colors disabled:opacity-50"
+              >
+                {analysisFetching ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                Refresh
+              </button>
+              <button
+                onClick={() => setAnalyzeOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Loading state */}
+          {analysisFetching && !analysisData && (
+            <div className="flex items-center gap-3 px-4 py-6 text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+              <span>Analyzing schedule… checking {analysisData?.meta?.totalJobs ?? "all"} jobs for issues</span>
+            </div>
+          )}
+
+          {/* AI Summary */}
+          {analysisData?.aiSummary && (
+            <div className="px-4 py-3 bg-violet-50/60 border-b border-violet-100">
+              <div className="flex items-start gap-2.5">
+                <div className="w-6 h-6 rounded-full bg-violet-200 flex items-center justify-center shrink-0 mt-0.5">
+                  <Bot className="w-3.5 h-3.5 text-violet-700" />
+                </div>
+                <p className="text-sm text-gray-700 leading-relaxed">{analysisData.aiSummary}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Issues list */}
+          {analysisData && analysisData.issues.length > 0 && (
+            <div className="divide-y divide-gray-50">
+              {analysisData.issues.map((issue, idx) => (
+                <div
+                  key={`${issue.code}-${idx}`}
+                  className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50/80 transition-colors ${
+                    issue.severity === "critical" ? "bg-red-50/30" :
+                    issue.severity === "warning" ? "bg-amber-50/20" : ""
+                  }`}
+                >
+                  <div className={`mt-0.5 shrink-0 ${
+                    issue.severity === "critical" ? "text-red-500" :
+                    issue.severity === "warning" ? "text-amber-500" : "text-blue-400"
+                  }`}>
+                    {issue.severity === "critical" ? <AlertTriangle className="w-4 h-4" /> :
+                     issue.severity === "warning" ? <AlertCircle className="w-4 h-4" /> :
+                     <Info className="w-4 h-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${
+                        issue.severity === "critical" ? "text-red-600" :
+                        issue.severity === "warning" ? "text-amber-600" : "text-blue-500"
+                      }`}>{issue.severity}</span>
+                      <span className="text-sm font-medium text-gray-900">{issue.title}</span>
+                      {issue.teamName && (
+                        <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{issue.teamName}</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mt-0.5 leading-snug">{issue.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* All clear state */}
+          {analysisData && analysisData.issues.length === 0 && (
+            <div className="flex items-center gap-3 px-4 py-5 text-sm">
+              <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+              <div>
+                <p className="font-medium text-gray-900">No issues found</p>
+                <p className="text-gray-500 text-xs mt-0.5">{analysisData.meta.totalJobs} jobs analyzed across {analysisData.meta.totalTeams} teams.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Footer meta */}
+          {analysisData && (
+            <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
+              <span>{analysisData.meta.totalJobs} jobs · {analysisData.meta.assignedJobs} assigned · {analysisData.meta.totalTeams} teams</span>
+              <span>{analysisData.counts.total} issue{analysisData.counts.total !== 1 ? "s" : ""} total</span>
+            </div>
+          )}
         </div>
       )}
 

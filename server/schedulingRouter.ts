@@ -2864,6 +2864,595 @@ ${callBlocks.join("\n\n")}`;
    *   - overrideNote: the note from team_day_override if one exists
    *   - overrideIsAvailable: the isAvailable value from team_day_override (null/0/1)
    */
+
+  // ── AI Schedule Analysis ─────────────────────────────────────────────────────────────────────
+  /**
+   * Analyze the schedule for a given date and return a list of issues
+   * (requested team violations, duplicates, unconfirmed high-value jobs, etc.)
+   * plus an AI-generated executive summary.
+   */
+  analyzeSchedule: agentProcedure
+    .input(z.object({ date: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // ── 1. Load all data needed for analysis ─────────────────────────────
+      const jobs = await db.select().from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobDate, input.date),
+          ne(cleanerJobs.bookingStatus, "cancelled"),
+          ne(cleanerJobs.bookingStatus, "rescheduled"),
+        ));
+
+      const assignments = await db.select().from(scheduleAssignments)
+        .where(eq(scheduleAssignments.jobDate, input.date));
+
+      const teams = await db.select().from(schedulingTeams)
+        .where(eq(schedulingTeams.isActive, 1));
+
+      // Work schedule / override for today
+      const dayOfWeek = new Date(input.date + "T12:00:00Z").getUTCDay();
+      const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayOfWeek] as
+        "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+      const workSchedules = await db.select().from(teamWorkSchedule);
+      const scheduleByTeamId = new Map(workSchedules.map(s => [s.teamId, s]));
+      const dayOverrides = await db.select().from(teamDayOverride)
+        .where(eq(teamDayOverride.date, input.date));
+      const overrideByTeamId = new Map(dayOverrides.map(o => [o.teamId, o]));
+
+      // Confirmation calls for today
+      const confCalls = await db.select({
+        cleanerJobId: confirmationCalls.cleanerJobId,
+        calledPhone: confirmationCalls.calledPhone,
+        clientName: confirmationCalls.clientName,
+        aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+        manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+        status: confirmationCalls.status,
+      }).from(confirmationCalls)
+        .where(eq(confirmationCalls.jobDate, input.date));
+
+      const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+      const confByPhone = new Map<string, typeof confCalls[number]>();
+      const confByName = new Map<string, typeof confCalls[number]>();
+      for (const c of confCalls) {
+        const p = c.calledPhone?.replace(/\D/g, "");
+        if (p) confByPhone.set(p, c);
+        const n = c.clientName?.trim().toLowerCase();
+        if (n) confByName.set(n, c);
+      }
+      const getConfCall = (job: typeof jobs[number]) => {
+        const p = job.customerPhone?.replace(/\D/g, "");
+        return (p && confByPhone.get(p)) || confByName.get(job.customerName?.trim().toLowerCase() ?? "") || null;
+      };
+      const isConfirmed = (job: typeof jobs[number]) => {
+        const c = getConfCall(job);
+        if (!c) return false;
+        const label = (c.manualOutcomeLabel || c.aiOutcomeLabel || "").toLowerCase();
+        return /confirm|yes|ok|will be|home|there/.test(label);
+      };
+
+      // Past complaint history per customer phone
+      const jobPhones = jobs.map(j => j.customerPhone).filter(Boolean) as string[];
+      const phoneSet = new Set(jobPhones.map(p => digits10(p)));
+      const phones10 = Array.from(phoneSet).filter(p => p.length === 10);
+      const complaintPhones = new Set<string>();
+      if (phones10.length > 0) {
+        const complaintRows = await db.select({
+          customerPhone: cleanerJobs.customerPhone,
+        }).from(cleanerJobs)
+          .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.join(phones10.map(p => sql`${p}`), sql`, `)})
+            AND ${cleanerJobs.customerComplaint} IS NOT NULL
+            AND ${cleanerJobs.jobDate} < ${input.date}`);
+        for (const r of complaintRows) {
+          if (r.customerPhone) complaintPhones.add(digits10(r.customerPhone));
+        }
+      }
+
+      // ── 2. Build lookup maps ──────────────────────────────────────────────
+      const assignmentByJobId = new Map(assignments.map(a => [a.cleanerJobId, a]));
+      const teamById = new Map(teams.map(t => [t.id, t]));
+
+      // Jobs per team (excluding sentinel unassigned rows)
+      const jobsByTeamId = new Map<number, typeof jobs>();
+      for (const a of assignments) {
+        if (a.isManual === 2) continue;
+        const job = jobs.find(j => j.id === a.cleanerJobId);
+        if (job) {
+          const list = jobsByTeamId.get(a.teamId) ?? [];
+          list.push(job);
+          jobsByTeamId.set(a.teamId, list);
+        }
+      }
+
+      // Team work status today
+      const isTeamOffToday = (teamId: number): boolean => {
+        const override = overrideByTeamId.get(teamId);
+        if (override?.isAvailable === 1) return false;
+        if (override?.isAvailable === 0) return true;
+        const sched = scheduleByTeamId.get(teamId);
+        const defaultSched = { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 0, sun: 0 };
+        const eff = sched ?? defaultSched;
+        return eff[dayKey] !== 1;
+      };
+
+      // Estimate job duration in hours
+      const estimateDuration = (serviceType: string | null, bedrooms: number | null): number => {
+        const svc = (serviceType ?? "").toLowerCase();
+        if (/move.?in|move.?out/i.test(svc)) return 5;
+        if (/deep/i.test(svc)) return 4;
+        const br = bedrooms ?? 2;
+        return Math.max(1.5, 1.5 + (br - 1) * 0.5);
+      };
+
+      // ── 3. Run all checks ─────────────────────────────────────────────────
+      type Severity = "critical" | "warning" | "info";
+      type Issue = {
+        severity: Severity;
+        code: string;
+        title: string;
+        detail: string;
+        jobId?: number;
+        teamId?: number;
+        customerName?: string;
+        teamName?: string;
+      };
+      const issues: Issue[] = [];
+
+      // CHECK 1: Requested team not honored
+      for (const job of jobs) {
+        if (!job.requestedTeam) continue;
+        const a = assignmentByJobId.get(job.id);
+        if (!a || a.isManual === 2) continue;
+        const assignedTeam = teamById.get(a.teamId);
+        if (!assignedTeam) continue;
+        const reqNorm = job.requestedTeam.trim().toLowerCase();
+        const assignedNorm = assignedTeam.name.trim().toLowerCase();
+        if (!assignedNorm.includes(reqNorm) && !reqNorm.includes(assignedNorm)) {
+          issues.push({
+            severity: "critical",
+            code: "REQUESTED_TEAM_VIOLATED",
+            title: "Requested team not honored",
+            detail: `${job.customerName ?? "Customer"} requested "${job.requestedTeam}" but is assigned to ${assignedTeam.name}.`,
+            jobId: job.id,
+            teamId: a.teamId,
+            customerName: job.customerName ?? undefined,
+            teamName: assignedTeam.name,
+          });
+        }
+      }
+
+      // CHECK 2: Duplicate booking on same team (same bookingId)
+      const seenBookingOnTeam = new Map<string, number>();
+      for (const a of assignments) {
+        if (a.isManual === 2) continue;
+        const job = jobs.find(j => j.id === a.cleanerJobId);
+        if (!job?.bookingId) continue;
+        const key = `${job.bookingId}:${a.teamId}`;
+        if (seenBookingOnTeam.has(key)) {
+          const team = teamById.get(a.teamId);
+          issues.push({
+            severity: "critical",
+            code: "DUPLICATE_BOOKING_ON_TEAM",
+            title: "Duplicate booking on same team",
+            detail: `Booking #${job.bookingId} (${job.customerName ?? "?"}) appears more than once on ${team?.name ?? `Team ${a.teamId}`}.`,
+            jobId: job.id,
+            teamId: a.teamId,
+            customerName: job.customerName ?? undefined,
+            teamName: team?.name,
+          });
+        } else {
+          seenBookingOnTeam.set(key, job.id);
+        }
+      }
+
+      // CHECK 3: Same customer address assigned to multiple teams
+      const addrToTeams = new Map<string, Set<number>>();
+      const addrToJob = new Map<string, typeof jobs[number]>();
+      for (const a of assignments) {
+        if (a.isManual === 2) continue;
+        const job = jobs.find(j => j.id === a.cleanerJobId);
+        if (!job?.jobAddress) continue;
+        const norm = job.jobAddress.trim().toLowerCase();
+        const existing = addrToTeams.get(norm) ?? new Set();
+        existing.add(a.teamId);
+        addrToTeams.set(norm, existing);
+        addrToJob.set(norm, job);
+      }
+      for (const [addr, teamIds] of addrToTeams) {
+        if (teamIds.size > 1) {
+          const job = addrToJob.get(addr)!;
+          const teamNames = Array.from(teamIds).map(id => teamById.get(id)?.name ?? `Team ${id}`).join(" & ");
+          issues.push({
+            severity: "critical",
+            code: "SAME_ADDRESS_MULTIPLE_TEAMS",
+            title: "Same address assigned to multiple teams",
+            detail: `"${job.jobAddress}" (${job.customerName ?? "?"}) is assigned to ${teamNames} — possible double-booking.`,
+            jobId: job.id,
+            customerName: job.customerName ?? undefined,
+          });
+        }
+      }
+
+      // CHECK 4: Jobs assigned to a team marked OFF today
+      for (const [teamId, teamJobs] of jobsByTeamId) {
+        if (teamJobs.length === 0) continue;
+        if (isTeamOffToday(teamId)) {
+          const team = teamById.get(teamId);
+          issues.push({
+            severity: "critical",
+            code: "TEAM_OFF_HAS_JOBS",
+            title: "Jobs assigned to an OFF team",
+            detail: `${team?.name ?? `Team ${teamId}`} is marked unavailable today but has ${teamJobs.length} job(s) assigned.`,
+            teamId,
+            teamName: team?.name,
+          });
+        }
+      }
+
+      // CHECK 5: Active job with no assignment
+      for (const job of jobs) {
+        if (job.bookingStatus !== "assigned") continue;
+        const a = assignmentByJobId.get(job.id);
+        if (!a || a.isManual === 2) {
+          issues.push({
+            severity: "critical",
+            code: "JOB_UNASSIGNED",
+            title: "Active job has no team assignment",
+            detail: `${job.customerName ?? "A customer"} (${job.jobAddress ?? "no address"}) has no team assigned.`,
+            jobId: job.id,
+            customerName: job.customerName ?? undefined,
+          });
+        }
+      }
+
+      // CHECK 6: Team over max-jobs cap
+      for (const [teamId, teamJobs] of jobsByTeamId) {
+        const team = teamById.get(teamId);
+        if (!team?.maxJobs) continue;
+        if (teamJobs.length > team.maxJobs) {
+          issues.push({
+            severity: "critical",
+            code: "TEAM_OVER_MAX_JOBS",
+            title: "Team exceeds max-jobs cap",
+            detail: `${team.name} has ${teamJobs.length} jobs but the cap is ${team.maxJobs}.`,
+            teamId,
+            teamName: team.name,
+          });
+        }
+      }
+
+      // CHECK 7: Unconfirmed high-value job (revenue ≥ $250)
+      for (const job of jobs) {
+        const revenue = job.jobRevenue ? parseFloat(job.jobRevenue) : 0;
+        if (revenue >= 250 && !isConfirmed(job)) {
+          issues.push({
+            severity: "critical",
+            code: "HIGH_VALUE_UNCONFIRMED",
+            title: "High-value job not confirmed",
+            detail: `${job.customerName ?? "Customer"} ($${Math.round(revenue)}) has no confirmation call completed.`,
+            jobId: job.id,
+            customerName: job.customerName ?? undefined,
+          });
+        }
+      }
+
+      // CHECK 8: Team under min-jobs floor
+      for (const team of teams) {
+        if (!team.minJobs || isTeamOffToday(team.id)) continue;
+        const count = (jobsByTeamId.get(team.id) ?? []).length;
+        if (count > 0 && count < team.minJobs) {
+          issues.push({
+            severity: "warning",
+            code: "TEAM_UNDER_MIN_JOBS",
+            title: "Team below minimum jobs",
+            detail: `${team.name} has ${count} job(s) but the minimum is ${team.minJobs}.`,
+            teamId: team.id,
+            teamName: team.name,
+          });
+        }
+      }
+
+      // CHECK 9: Job scheduled before team's earliestStartTime
+      for (const [teamId, teamJobs] of jobsByTeamId) {
+        const team = teamById.get(teamId);
+        if (!team?.earliestStartTime) continue;
+        const [eh, em] = team.earliestStartTime.split(":").map(Number);
+        const earliestMins = eh * 60 + em;
+        for (const job of teamJobs) {
+          if (!job.serviceDateTime) continue;
+          const sdt = new Date(job.serviceDateTime);
+          const etOffset = -4; // EDT approximation
+          const etMins = ((sdt.getUTCHours() + etOffset + 24) % 24) * 60 + sdt.getUTCMinutes();
+          if (etMins < earliestMins) {
+            issues.push({
+              severity: "warning",
+              code: "JOB_BEFORE_EARLIEST_START",
+              title: "Job before team's earliest start time",
+              detail: `${job.customerName ?? "A job"} starts before ${team.name}'s earliest allowed start of ${team.earliestStartTime}.`,
+              jobId: job.id,
+              teamId,
+              customerName: job.customerName ?? undefined,
+              teamName: team.name,
+            });
+          }
+        }
+      }
+
+      // CHECK 10: Team exceeds maxHoursPerDay
+      for (const [teamId, teamJobs] of jobsByTeamId) {
+        const team = teamById.get(teamId);
+        const maxHours = team?.maxHoursPerDay ?? 8;
+        const totalHours = teamJobs.reduce((sum, j) => sum + estimateDuration(j.serviceType, j.bedrooms), 0);
+        if (totalHours > maxHours) {
+          issues.push({
+            severity: "warning",
+            code: "TEAM_OVER_MAX_HOURS",
+            title: "Team may exceed max hours",
+            detail: `${team?.name ?? `Team ${teamId}`} has ~${totalHours.toFixed(1)}h of work (max ${maxHours}h). Drive time not included.`,
+            teamId,
+            teamName: team?.name,
+          });
+        }
+      }
+
+      // CHECK 11: New client with no confirmation call
+      for (const job of jobs) {
+        if (job.bookingStatus !== "new") continue;
+        if (!isConfirmed(job)) {
+          issues.push({
+            severity: "warning",
+            code: "NEW_CLIENT_UNCONFIRMED",
+            title: "New client not confirmed",
+            detail: `${job.customerName ?? "New customer"} is a first-time client with no confirmation call completed.`,
+            jobId: job.id,
+            customerName: job.customerName ?? undefined,
+          });
+        }
+      }
+
+      // CHECK 12: Move-in/move-out with no confirmation call
+      for (const job of jobs) {
+        if (!/move.?in|move.?out/i.test(job.serviceType ?? "")) continue;
+        if (!isConfirmed(job)) {
+          issues.push({
+            severity: "warning",
+            code: "MOVE_JOB_UNCONFIRMED",
+            title: "Move-in/out job not confirmed",
+            detail: `${job.customerName ?? "Customer"} has a move-in/out (high complexity) with no confirmation call completed.`,
+            jobId: job.id,
+            customerName: job.customerName ?? undefined,
+          });
+        }
+      }
+
+      // CHECK 13: Customer has a prior complaint on record
+      for (const job of jobs) {
+        if (!job.customerPhone) continue;
+        const p10 = digits10(job.customerPhone);
+        if (complaintPhones.has(p10)) {
+          issues.push({
+            severity: "warning",
+            code: "PRIOR_COMPLAINT_CUSTOMER",
+            title: "Customer has prior complaint on record",
+            detail: `${job.customerName ?? "Customer"} has filed a complaint in the past — confirm expectations before the visit.`,
+            jobId: job.id,
+            customerName: job.customerName ?? undefined,
+          });
+        }
+      }
+
+      // CHECK 14: Job flagged by admin
+      for (const job of jobs) {
+        if (!job.flagged) continue;
+        const a = assignmentByJobId.get(job.id);
+        const team = a ? teamById.get(a.teamId) : undefined;
+        issues.push({
+          severity: "warning",
+          code: "JOB_FLAGGED",
+          title: "Flagged job on schedule",
+          detail: `${job.customerName ?? "A job"} is flagged for admin review${team ? ` (${team.name})` : ""}.${job.adminNotes ? ` Note: ${job.adminNotes}` : ""}`,
+          jobId: job.id,
+          teamId: a?.teamId,
+          customerName: job.customerName ?? undefined,
+          teamName: team?.name,
+        });
+      }
+
+      // CHECK 15: Customer's usual team not assigned (from history)
+      if (phones10.length > 0) {
+        const pastTeamRows = await db.select({
+          customerPhone: cleanerJobs.customerPhone,
+          teamName: cleanerJobs.teamName,
+        }).from(cleanerJobs)
+          .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.join(phones10.map(p => sql`${p}`), sql`, `)})
+            AND ${cleanerJobs.jobDate} < ${input.date}
+            AND ${cleanerJobs.teamName} IS NOT NULL
+            AND ${cleanerJobs.customerPhone} IS NOT NULL`);
+
+        const teamCountByPhone = new Map<string, Map<string, number>>();
+        for (const r of pastTeamRows) {
+          if (!r.customerPhone || !r.teamName) continue;
+          const p10 = digits10(r.customerPhone);
+          const counts = teamCountByPhone.get(p10) ?? new Map<string, number>();
+          counts.set(r.teamName, (counts.get(r.teamName) ?? 0) + 1);
+          teamCountByPhone.set(p10, counts);
+        }
+        const usualTeamByPhone = new Map<string, string>();
+        for (const [p10, counts] of teamCountByPhone) {
+          let maxCount = 0, usualTeam = "";
+          for (const [name, count] of counts) {
+            if (count > maxCount) { maxCount = count; usualTeam = name; }
+          }
+          if (maxCount >= 2) usualTeamByPhone.set(p10, usualTeam);
+        }
+
+        for (const job of jobs) {
+          if (!job.customerPhone || job.requestedTeam) continue;
+          const p10 = digits10(job.customerPhone);
+          const usual = usualTeamByPhone.get(p10);
+          if (!usual) continue;
+          const a = assignmentByJobId.get(job.id);
+          if (!a || a.isManual === 2) continue;
+          const assignedTeam = teamById.get(a.teamId);
+          if (!assignedTeam) continue;
+          const usualNorm = usual.trim().toLowerCase();
+          const assignedNorm = assignedTeam.name.trim().toLowerCase();
+          if (!assignedNorm.includes(usualNorm) && !usualNorm.includes(assignedNorm)) {
+            issues.push({
+              severity: "warning",
+              code: "USUAL_TEAM_VIOLATED",
+              title: "Customer's usual team not assigned",
+              detail: `${job.customerName ?? "Customer"} usually gets ${usual} but is assigned to ${assignedTeam.name} today.`,
+              jobId: job.id,
+              teamId: a.teamId,
+              customerName: job.customerName ?? undefined,
+              teamName: assignedTeam.name,
+            });
+          }
+        }
+      }
+
+      // CHECK 16: Team with only 1 job
+      for (const [teamId, teamJobs] of jobsByTeamId) {
+        if (teamJobs.length === 1 && !isTeamOffToday(teamId)) {
+          const team = teamById.get(teamId);
+          issues.push({
+            severity: "info",
+            code: "TEAM_SINGLE_JOB",
+            title: "Team has only one job",
+            detail: `${team?.name ?? `Team ${teamId}`} has only 1 job today — consider consolidation.`,
+            teamId,
+            teamName: team?.name,
+          });
+        }
+      }
+
+      // CHECK 17: Large gap between consecutive jobs (> 90 min)
+      for (const [teamId] of jobsByTeamId) {
+        const teamAssignments = assignments
+          .filter(a => a.teamId === teamId && a.isManual !== 2)
+          .sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
+        for (let i = 1; i < teamAssignments.length; i++) {
+          const prev = teamAssignments[i - 1];
+          const curr = teamAssignments[i];
+          if (prev.estimatedDepartureMs && curr.estimatedArrivalMs) {
+            const gapMins = (curr.estimatedArrivalMs - prev.estimatedDepartureMs) / 60000;
+            if (gapMins > 90) {
+              const team = teamById.get(teamId);
+              const prevJob = jobs.find(j => j.id === prev.cleanerJobId);
+              const currJob = jobs.find(j => j.id === curr.cleanerJobId);
+              issues.push({
+                severity: "info",
+                code: "LARGE_ROUTE_GAP",
+                title: "Large gap between consecutive jobs",
+                detail: `${team?.name ?? `Team ${teamId}`} has a ${Math.round(gapMins)}-min gap between ${prevJob?.customerName ?? "a job"} and ${currJob?.customerName ?? "the next job"}.`,
+                teamId,
+                teamName: team?.name,
+              });
+            }
+          }
+        }
+      }
+
+      // CHECK 18: Job has special checklist items
+      for (const job of jobs) {
+        if (!job.checklistItems) continue;
+        try {
+          const items = JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>;
+          if (items.length > 0) {
+            const a = assignmentByJobId.get(job.id);
+            const team = a ? teamById.get(a.teamId) : undefined;
+            issues.push({
+              severity: "info",
+              code: "JOB_HAS_CHECKLIST",
+              title: "Job has special instructions",
+              detail: `${job.customerName ?? "Customer"} has ${items.length} special instruction(s): ${items.slice(0, 2).map(i => i.text).join("; ")}${items.length > 2 ? "..." : ""}.`,
+              jobId: job.id,
+              teamId: a?.teamId,
+              customerName: job.customerName ?? undefined,
+              teamName: team?.name,
+            });
+          }
+        } catch { /* skip malformed */ }
+      }
+
+      // CHECK 19: Team schedule not confirmed by any cleaner
+      for (const [teamId, teamJobs] of jobsByTeamId) {
+        if (teamJobs.length === 0) continue;
+        const anyConfirmed = teamJobs.some(j => j.scheduleConfirmed === 1);
+        if (!anyConfirmed) {
+          const team = teamById.get(teamId);
+          issues.push({
+            severity: "info",
+            code: "TEAM_SCHEDULE_UNCONFIRMED",
+            title: "Team has not confirmed their schedule",
+            detail: `${team?.name ?? `Team ${teamId}`} has ${teamJobs.length} job(s) but no cleaner has confirmed the schedule via SMS.`,
+            teamId,
+            teamName: team?.name,
+          });
+        }
+      }
+
+      // ── 4. Sort: critical first, then warning, then info ────────────────────────
+      const severityOrder: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
+      issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+      // ── 5. LLM executive summary ──────────────────────────────────────────
+      let aiSummary: string | null = null;
+      try {
+        const teamSnapshots = Array.from(jobsByTeamId.entries()).map(([teamId, teamJobs]) => {
+          const team = teamById.get(teamId);
+          return {
+            team: team?.name ?? `Team ${teamId}`,
+            jobCount: teamJobs.length,
+            totalRevenue: Math.round(teamJobs.reduce((s, j) => s + (j.jobRevenue ? parseFloat(j.jobRevenue) : 0), 0)),
+            jobs: teamJobs.map(j => ({
+              customer: j.customerName,
+              service: j.serviceType,
+              revenue: j.jobRevenue ? Math.round(parseFloat(j.jobRevenue)) : null,
+              requestedTeam: j.requestedTeam ?? null,
+              isNew: j.bookingStatus === "new",
+              isMoveInOut: /move.?in|move.?out/i.test(j.serviceType ?? ""),
+              confirmed: isConfirmed(j),
+              flagged: !!j.flagged,
+            })),
+          };
+        });
+        const criticalCount = issues.filter(i => i.severity === "critical").length;
+        const warningCount = issues.filter(i => i.severity === "warning").length;
+        const prompt = `You are an operations manager for a residential cleaning company. Review the following schedule for ${input.date} and provide a concise executive summary (3-5 sentences) covering: overall risk level, the most important issues to address before dispatch, and any patterns worth noting. Be direct and actionable. Do not use bullet points.
+
+Schedule:
+${JSON.stringify(teamSnapshots, null, 2)}
+
+Issues found: ${criticalCount} critical, ${warningCount} warnings.
+Top issues:
+${issues.slice(0, 5).map(i => `- [${i.severity.toUpperCase()}] ${i.title}: ${i.detail}`).join("\n")}`;
+        const res = await invokeLLM({ messages: [{ role: "user", content: prompt }] });
+        aiSummary = res?.choices?.[0]?.message?.content?.trim() ?? null;
+      } catch (err) {
+        console.error("[analyzeSchedule] LLM summary error:", err);
+      }
+
+      return {
+        date: input.date,
+        issues,
+        aiSummary,
+        counts: {
+          critical: issues.filter(i => i.severity === "critical").length,
+          warning: issues.filter(i => i.severity === "warning").length,
+          info: issues.filter(i => i.severity === "info").length,
+          total: issues.length,
+        },
+        meta: {
+          totalJobs: jobs.length,
+          totalTeams: jobsByTeamId.size,
+          assignedJobs: assignments.filter(a => a.isManual !== 2).length,
+        },
+      };
+    }),
+
   getTeamScheduleStatus: agentProcedure
     .input(z.object({ date: z.string() }))
     .query(async ({ input }) => {
