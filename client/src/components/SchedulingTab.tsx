@@ -1562,7 +1562,7 @@ export default function SchedulingTab() {
   const [personaJob, setPersonaJob] = useState<Job | null>(null);
   // AI Schedule Analysis panel
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const { data: analysisData, isFetching: analysisFetching, refetch: refetchAnalysis } =
     trpc.scheduling.analyzeSchedule.useQuery(
       { date },
@@ -2172,9 +2172,9 @@ export default function SchedulingTab() {
             return (
               <div className="divide-y divide-gray-100">
                 {groups.map(([code, group]) => {
-                  const isCollapsed = collapsedGroups.has(code);
+                  const isExpanded = expandedGroups.has(code);
                   const sev = group.severity;
-                  const toggleGroup = () => setCollapsedGroups(prev => {
+                  const toggleGroup = () => setExpandedGroups(prev => {
                     const next = new Set(prev);
                     if (next.has(code)) next.delete(code); else next.add(code);
                     return next;
@@ -2209,11 +2209,11 @@ export default function SchedulingTab() {
                           }`}>{group.items.length}</span>
                         </div>
                         <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${
-                          isCollapsed ? "-rotate-90" : ""
+                          isExpanded ? "" : "-rotate-90"
                         }`} />
                       </button>
                       {/* Group items — shown when expanded */}
-                      {!isCollapsed && (
+                      {isExpanded && (
                         <div className="divide-y divide-gray-50">
                           {group.items.map((issue, idx) => (
                             <div
