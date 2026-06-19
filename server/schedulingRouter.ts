@@ -3092,7 +3092,6 @@ ${callBlocks.join("\n\n")}`;
 
       // CHECK 5: Active job with no assignment
       for (const job of jobs) {
-        if (job.bookingStatus !== "assigned") continue;
         const a = assignmentByJobId.get(job.id);
         if (!a || a.isManual === 2) {
           issues.push({
@@ -3322,72 +3321,6 @@ ${callBlocks.join("\n\n")}`;
             code: "TEAM_SINGLE_JOB",
             title: "Team has only one job",
             detail: `${team?.name ?? `Team ${teamId}`} has only 1 job today — consider consolidation.`,
-            teamId,
-            teamName: team?.name,
-          });
-        }
-      }
-
-      // CHECK 17: Large gap between consecutive jobs (> 90 min)
-      for (const [teamId] of jobsByTeamId) {
-        const teamAssignments = assignments
-          .filter(a => a.teamId === teamId && a.isManual !== 2)
-          .sort((a, b) => (a.routeOrder ?? 0) - (b.routeOrder ?? 0));
-        for (let i = 1; i < teamAssignments.length; i++) {
-          const prev = teamAssignments[i - 1];
-          const curr = teamAssignments[i];
-          if (prev.estimatedDepartureMs && curr.estimatedArrivalMs) {
-            const gapMins = (curr.estimatedArrivalMs - prev.estimatedDepartureMs) / 60000;
-            if (gapMins > 90) {
-              const team = teamById.get(teamId);
-              const prevJob = jobs.find(j => j.id === prev.cleanerJobId);
-              const currJob = jobs.find(j => j.id === curr.cleanerJobId);
-              issues.push({
-                severity: "info",
-                code: "LARGE_ROUTE_GAP",
-                title: "Large gap between consecutive jobs",
-                detail: `${team?.name ?? `Team ${teamId}`} has a ${Math.round(gapMins)}-min gap between ${prevJob?.customerName ?? "a job"} and ${currJob?.customerName ?? "the next job"}.`,
-                teamId,
-                teamName: team?.name,
-              });
-            }
-          }
-        }
-      }
-
-      // CHECK 18: Job has special checklist items
-      for (const job of jobs) {
-        if (!job.checklistItems) continue;
-        try {
-          const items = JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>;
-          if (items.length > 0) {
-            const a = assignmentByJobId.get(job.id);
-            const team = a ? teamById.get(a.teamId) : undefined;
-            issues.push({
-              severity: "info",
-              code: "JOB_HAS_CHECKLIST",
-              title: "Job has special instructions",
-              detail: `${job.customerName ?? "Customer"} has ${items.length} special instruction(s): ${items.slice(0, 2).map(i => i.text).join("; ")}${items.length > 2 ? "..." : ""}.`,
-              jobId: job.id,
-              teamId: a?.teamId,
-              customerName: job.customerName ?? undefined,
-              teamName: team?.name,
-            });
-          }
-        } catch { /* skip malformed */ }
-      }
-
-      // CHECK 19: Team schedule not confirmed by any cleaner
-      for (const [teamId, teamJobs] of jobsByTeamId) {
-        if (teamJobs.length === 0) continue;
-        const anyConfirmed = teamJobs.some(j => j.scheduleConfirmed === 1);
-        if (!anyConfirmed) {
-          const team = teamById.get(teamId);
-          issues.push({
-            severity: "info",
-            code: "TEAM_SCHEDULE_UNCONFIRMED",
-            title: "Team has not confirmed their schedule",
-            detail: `${team?.name ?? `Team ${teamId}`} has ${teamJobs.length} job(s) but no cleaner has confirmed the schedule via SMS.`,
             teamId,
             teamName: team?.name,
           });
