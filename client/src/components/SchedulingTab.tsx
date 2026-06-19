@@ -1563,6 +1563,11 @@ export default function SchedulingTab() {
   // AI Schedule Analysis panel
   const [analyzeOpen, setAnalyzeOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  // Close the analysis panel and clear state whenever the selected date changes
+  useEffect(() => {
+    setAnalyzeOpen(false);
+    setExpandedGroups(new Set());
+  }, [date]);
   const { data: analysisData, isFetching: analysisFetching, refetch: refetchAnalysis } =
     trpc.scheduling.analyzeSchedule.useQuery(
       { date },
