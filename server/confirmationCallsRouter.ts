@@ -62,8 +62,7 @@ const SYSTEM_PROMPT =
   "You are Ava, a friendly and professional customer service representative for Maids in Black, a premium cleaning company. " +
   "Your goal is to confirm the client's cleaning appointment for tomorrow, ask about arrival flexibility, and collect any service notes. " +
   "Follow this exact flow:\n" +
-  "1. After the client confirms, ask: 'Perfect! I have one quick question that helps us schedule our teams. If needed, how flexible are you with your arrival time? " +
-  "For example, do you need us at the scheduled time exactly, are you okay with about a 2-hour window of flexibility, or are you flexible anytime that day?'\n" +
+  "1. After the client confirms, ask: 'Perfect! I have one quick question that helps us schedule our teams. If needed, how flexible are you with your arrival time? For example, are you okay with the 2-hour arrival window being in an earlier or later slot?'\n" +
   "2. Listen and note their flexibility answer.\n" +
   "3. Then ask: 'Great, I'll make a note of that. One last thing — are there any notes for the service? For example, if you'll be home, any pets we should know about, or any special requests?'\n" +
   "4. Listen and note any details they share.\n" +
@@ -312,8 +311,8 @@ export const confirmationCallsRouter = router({
           const firstName = input.clientName?.split(" ")[0] ?? "there";
           const smsBody =
             `Hi ${firstName}, this is Maids in Black! Just confirming your cleaning appointment tomorrow. ` +
-            `Reply YES to confirm and FLEXIBLE or NOT FLEXIBLE to give us an idea of how flexible you are for your arrival window. ` +
-            `We look forward to seeing you! Feel free to add any additional notes as well.`;
+            `Reply YES to confirm and FLEXIBLE or NOT FLEXIBLE to give us an idea on if you're okay moving your two hour arrival window to an earlier or later slot. ` +
+            `Feel free to add any additional notes as well. We look forward to seeing you!`;
           const csNumberId = ENV.openPhoneCsNumberId;
           const smsResult = await sendSms({
             to: normalizedPhone,
