@@ -1528,6 +1528,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           id: confirmationCalls.id,
           smsReply: confirmationCalls.smsReply,
           smsReplies: confirmationCalls.smsReplies,
+          aiFlexibility: confirmationCalls.aiFlexibility,
         })
         .from(confirmationCalls)
         .where(
@@ -1608,7 +1609,8 @@ Extract:
             aiOutcome: "confirmed",
             aiOutcomeLabel: "Confirmed via SMS ✓",
           } : {}),
-          ...(smsFlexibility ? { aiFlexibility: smsFlexibility } : {}),
+          // Only set flexibility if not already captured from a prior reply — first signal wins
+          ...(smsFlexibility && !row.aiFlexibility ? { aiFlexibility: smsFlexibility } : {}),
           ...(smsNotes ? { aiNotes: smsNotes } : {}),
         })
         .where(eq(confirmationCalls.id, row.id));
