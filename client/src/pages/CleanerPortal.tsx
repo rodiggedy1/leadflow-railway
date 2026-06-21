@@ -1794,7 +1794,7 @@ function WeeklySchedulePrompt({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
-      <div className="flex-1 flex flex-col px-4 pt-6 pb-6 max-w-lg mx-auto w-full overflow-hidden">
+      <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-6 pb-6 max-w-lg mx-auto w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
         {/* ── Step: Schedule ─── */}
         {step === 'schedule' && (
