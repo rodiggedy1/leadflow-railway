@@ -1710,23 +1710,24 @@ function WeeklySchedulePrompt({
   onSubmitted: () => void;
 }) {
   const { t } = useTranslation();
-  const DAYS = ['mon','tue','wed','thu','fri','sat','sun'] as const;
+  // Week is Sun–Sat. Order: sun, mon, tue, wed, thu, fri, sat
+  const DAYS = ['sun','mon','tue','wed','thu','fri','sat'] as const;
   type Day = typeof DAYS[number];
-  const DAY_LABELS: Record<Day, string> = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' };
-  const DAY_LABELS_ES: Record<Day, string> = { mon:'Lunes', tue:'Martes', wed:'Miércoles', thu:'Jueves', fri:'Viernes', sat:'Sábado', sun:'Domingo' };
-  const DAY_LABELS_PT: Record<Day, string> = { mon:'Segunda', tue:'Terça', wed:'Quarta', thu:'Quinta', fri:'Sexta', sat:'Sábado', sun:'Domingo' };
+  const DAY_LABELS: Record<Day, string> = { sun:'Sunday', mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday' };
+  const DAY_LABELS_ES: Record<Day, string> = { sun:'Domingo', mon:'Lunes', tue:'Martes', wed:'Miércoles', thu:'Jueves', fri:'Viernes', sat:'Sábado' };
+  const DAY_LABELS_PT: Record<Day, string> = { sun:'Domingo', mon:'Segunda', tue:'Terça', wed:'Quarta', thu:'Quinta', fri:'Sexta', sat:'Sábado' };
 
-  // Compute the Mon–Sun dates for the current ET week
+  // Compute the Sun–Sat dates for the current ET week (week starts on Sunday)
   const weekDates = useMemo(() => {
     const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
     const et = new Date(etStr);
     const day = et.getDay(); // 0=Sun
-    // Find Monday of this week
-    const monday = new Date(et);
-    monday.setDate(et.getDate() - ((day + 6) % 7));
+    // Find Sunday of this week (today if Sunday, else go back)
+    const sunday = new Date(et);
+    sunday.setDate(et.getDate() - day);
     return DAYS.map((d, i) => {
-      const dt = new Date(monday);
-      dt.setDate(monday.getDate() + i);
+      const dt = new Date(sunday);
+      dt.setDate(sunday.getDate() + i);
       return { key: d, date: dt };
     });
   }, []);
@@ -1793,7 +1794,7 @@ function WeeklySchedulePrompt({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-8 pb-6 max-w-lg mx-auto w-full">
+      <div className="flex-1 flex flex-col px-4 pt-6 pb-6 max-w-lg mx-auto w-full overflow-hidden">
 
         {/* ── Step: Schedule ─── */}
         {step === 'schedule' && (
@@ -1823,7 +1824,7 @@ function WeeklySchedulePrompt({
             </div>
 
             {/* Day toggles */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {weekDates.map(({ key, date }) => {
                 const isWorking = schedule[key];
                 const dayNum = date.getDate();
@@ -1831,30 +1832,36 @@ function WeeklySchedulePrompt({
                 return (
                   <div
                     key={key}
-                    className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border-2 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] ${
-                      isWorking
-                        ? 'bg-emerald-900/30 border-emerald-600/60'
-                        : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600'
-                    }`}
-                    onClick={() => toggleDay(key)}
+                    className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/50 select-none"
                   >
                     <div>
                       <p className={`font-semibold text-base leading-tight ${isWorking ? 'text-white' : 'text-slate-300'}`}>{getDayLabel(key)}</p>
                       <p className="text-slate-500 text-xs mt-0.5">{monthShort} {dayNum}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {/* Toggle pill */}
-                      <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border font-semibold text-sm transition-all ${
-                        isWorking
-                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/40'
-                          : 'bg-slate-700 border-slate-600 text-slate-400'
-                      }`}>
-                        {isWorking ? (
-                          <><CheckCircle2 className="w-3.5 h-3.5" /><span>{lang === 'es' ? 'Trabajando' : lang === 'pt' ? 'Trabalhando' : 'Working'}</span></>
-                        ) : (
-                          <span>{lang === 'es' ? 'No trabajo' : lang === 'pt' ? 'Não trabalho' : 'Not Working'}</span>
-                        )}
-                      </div>
+                    {/* Two-button Working / Not Working */}
+                    <div className="flex items-center bg-slate-800 rounded-full p-0.5 border border-slate-700">
+                      <button
+                        onClick={e => { e.stopPropagation(); if (isWorking) toggleDay(key); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
+                          !isWorking
+                            ? 'bg-slate-600 text-white shadow'
+                            : 'text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        {!isWorking && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        <span>{lang === 'es' ? 'No trabajo' : lang === 'pt' ? 'Não trabalho' : 'Not Working'}</span>
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); if (!isWorking) toggleDay(key); }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${
+                          isWorking
+                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40'
+                            : 'text-slate-500 hover:text-slate-300'
+                        }`}
+                      >
+                        {isWorking && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        <span>{lang === 'es' ? 'Trabajando' : lang === 'pt' ? 'Trabalhando' : 'Working'}</span>
+                      </button>
                     </div>
                   </div>
                 );
