@@ -2489,13 +2489,8 @@ export default function CleanerPortal() {
         </div>
        </header>
 
-      {/* Sticky availability reminder banner — shown if not yet submitted and past 7:29 AM ET */}
-      {!availabilityCheckQuery.data?.submitted && !showMorningPrompt && (() => {
-        const nowET = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
-        const etDate = new Date(nowET);
-        const totalMinutes = etDate.getHours() * 60 + etDate.getMinutes();
-        return totalMinutes >= 7 * 60 + 29;
-      })() && (
+      {/* Sticky availability reminder banner — shown if not yet submitted */}
+      {!availabilityCheckQuery.data?.submitted && !showMorningPrompt && (
         <div
           className="bg-amber-600/20 border-b border-amber-500/40 px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-amber-600/30 transition-colors"
           onClick={() => setShowMorningPrompt(true)}
