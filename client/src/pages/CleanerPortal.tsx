@@ -2319,17 +2319,10 @@ export default function CleanerPortal() {
     if (availabilityCheckQuery.isLoading || availabilityCheckQuery.data === undefined) return;
     if (availabilityCheckQuery.data.submitted) return; // already done
 
-    // Check current ET time
-    const nowET = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
-    const etDate = new Date(nowET);
-    const hours = etDate.getHours();
-    const minutes = etDate.getMinutes();
-    const totalMinutes = hours * 60 + minutes;
-    // Show from 7:29 AM (449 min) through end of day (1439 min)
-    const SHOW_FROM = 7 * 60 + 29; // 7:29 AM ET
-    if (totalMinutes >= SHOW_FROM) {
-      setShowMorningPrompt(true);
-    }
+    // TEMP: fire immediately for testing (no time gate)
+    // TODO: restore time gate after testing
+    // const SHOW_FROM = 7 * 60 + 29; // 7:29 AM ET
+    setShowMorningPrompt(true);
   }, [meQuery.data, availabilityCheckQuery.data, availabilityCheckQuery.isLoading]);
 
   const jobsQuery = trpc.cleaner.myJobs.useQuery(
