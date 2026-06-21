@@ -2285,6 +2285,8 @@ export const schedulingTeams = mysqlTable("scheduling_teams", {
   tag: varchar("tag", { length: 20 }),
   /** Comma-separated DC/MD/VA region tags for first-job preference (e.g. "DC,MD") */
   regionTags: varchar("regionTags", { length: 50 }),
+  /** Archived teams are hidden from the schedule view but retained for history */
+  isArchived: int("isArchived").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -26,7 +26,7 @@ import {
   GripVertical, RotateCcw, Lock, Unlock, X, ArrowDown, ArrowUp, Timer,
   SlidersHorizontal, Power, AlertTriangle, Phone, Calendar,
   ChevronDown, Star, MessageSquare, Crown, DollarSign, History,
-  FileText, ClipboardList, Info, ShieldAlert, CheckCircle2, Bot,
+  FileText, ClipboardList, Info, ShieldAlert, CheckCircle2, Bot, Archive,
 } from "lucide-react";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -57,6 +57,7 @@ interface Team {
   overrideIsAvailable?: number | null;
   schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null;
   weeklyNote?: string | null;
+  isArchived?: number;
 }
 
 interface ClientHistory {
@@ -2269,82 +2270,8 @@ export default function SchedulingTab() {
         </div>
       )}
 
-      {/* Weekly Team Schedule Panel */}
-      {(() => {
-        const activeTeams = teams.filter(t => t.isActive);
-        if (activeTeams.length === 0) return null;
-        const DAYS = ['mon','tue','wed','thu','fri','sat','sun'] as const;
-        const DAY_LABELS = ['M','T','W','T','F','S','S'];
-        const DAY_FULL = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-        return (
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
-              <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Weekly Schedule</span>
-              {/* Day header labels */}
-              <div className="ml-auto flex items-center gap-1">
-                {DAY_LABELS.map((d, i) => (
-                  <span key={i} className="w-6 text-center text-[10px] font-bold text-gray-400">{d}</span>
-                ))}
-              </div>
-            </div>
-            {/* Team rows */}
-            <div className="divide-y divide-gray-50">
-              {activeTeams.map(team => {
-                const sched = team.schedule;
-                const defaultSched = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
-                const effectiveSched = sched ?? defaultSched;
-                const dot = team.color ?? '#6366f1';
-                const note = team.weeklyNote;
-                return (
-                  <div key={team.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50/50 transition-colors">
-                    {/* Color dot + name */}
-                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
-                    <span className="text-xs font-semibold text-gray-800 w-24 truncate shrink-0">{team.name}</span>
-                    {/* Note badge */}
-                    {note ? (
-                      <div className="group relative">
-                        <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium cursor-default truncate max-w-[100px] block">
-                          📝 {note.length > 18 ? note.slice(0, 18) + '…' : note}
-                        </span>
-                        {/* Tooltip */}
-                        <div className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover:block">
-                          <div className="bg-gray-900 text-white text-[11px] rounded-lg px-2.5 py-1.5 shadow-lg max-w-[200px] whitespace-normal">
-                            {note}
-                          </div>
-                          <div className="w-2 h-2 bg-gray-900 rotate-45 ml-3 -mt-1" />
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-gray-300 italic">no note</span>
-                    )}
-                    {/* Day chips */}
-                    <div className="ml-auto flex items-center gap-1">
-                      {DAYS.map((d, i) => {
-                        const isOn = effectiveSched[d] === 1;
-                        return (
-                          <div
-                            key={d}
-                            title={`${DAY_FULL[i]}: ${isOn ? 'Working' : 'Off'}`}
-                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
-                              isOn
-                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
-                                : 'bg-gray-100 text-gray-300 border border-gray-200'
-                            }`}
-                          >
-                            {DAY_LABELS[i]}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
+      {/* Weekly Team Schedule Panel — collapsible, persisted in localStorage */}
+      <WeeklySchedulePanel teams={teams} />
 
       {/* Suggest Slot panel */}
       <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
@@ -3143,34 +3070,209 @@ function TeamList({ onEdit }: { onEdit: (t: Team) => void }) {
     onError: (e) => toast.error(e.message),
   });
 
+  const archiveTeam = trpc.scheduling.archiveTeam.useMutation({
+    onSuccess: (_data, vars) => {
+      utils.scheduling.getTeams.invalidate();
+      utils.scheduling.getSchedule.invalidate();
+      toast.success(vars.archive ? "Team archived" : "Team unarchived");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const active = teams.filter((t: Team) => !t.isArchived);
+  const archived = teams.filter((t: Team) => t.isArchived);
+
   if (teams.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-4">No teams yet — add one above</p>;
   }
 
+  const renderTeamRow = (t: Team, isArchived: boolean) => (
+    <div
+      key={t.id}
+      className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+        isArchived
+          ? 'bg-gray-50 border-gray-100 opacity-60'
+          : 'bg-white border-gray-100'
+      }`}
+    >
+      <div
+        className="w-3 h-3 rounded-full shrink-0"
+        style={{ backgroundColor: isArchived ? '#9ca3af' : (t.color ?? '#6366f1') }}
+      />
+      <div className="flex-1 min-w-0">
+        <div className={`font-medium text-sm ${ isArchived ? 'text-gray-400 line-through' : 'text-gray-900' }`}>
+          {t.name}
+        </div>
+        {t.homeAddress && !isArchived && (
+          <div className="text-xs text-gray-400 truncate">{t.homeAddress}</div>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        {!isArchived && (
+          <button onClick={() => onEdit(t as Team)} className="p-1.5 rounded hover:bg-gray-100" title="Edit team">
+            <Pencil className="w-3.5 h-3.5 text-gray-400" />
+          </button>
+        )}
+        <button
+          onClick={() => archiveTeam.mutate({ teamId: t.id, archive: !isArchived })}
+          className={`p-1.5 rounded transition-colors ${
+            isArchived
+              ? 'hover:bg-emerald-50 text-emerald-500'
+              : 'hover:bg-amber-50 text-amber-500'
+          }`}
+          title={isArchived ? 'Unarchive team' : 'Archive team'}
+          disabled={archiveTeam.isPending}
+        >
+          {isArchived ? (
+            <RotateCcw className="w-3.5 h-3.5" />
+          ) : (
+            <Archive className="w-3.5 h-3.5" />
+          )}
+        </button>
+        {!isArchived && (
+          <button
+            onClick={() => { if (confirm(`Remove ${t.name}? This cannot be undone.`)) deleteTeam.mutate({ id: t.id }); }}
+            className="p-1.5 rounded hover:bg-red-50"
+            title="Delete team permanently"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-2">
-      {teams.map((t: Team) => (
-        <div key={t.id} className="flex items-center gap-3 p-3 bg-white rounded-xl border border-gray-100">
-          <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: t.color ?? "#6366f1" }} />
-          <div className="flex-1 min-w-0">
-            <div className="font-medium text-sm text-gray-900">{t.name}</div>
-            {t.homeAddress && (
-              <div className="text-xs text-gray-400 truncate">{t.homeAddress}</div>
+      {active.map((t: Team) => renderTeamRow(t, false))}
+      {archived.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 pt-2">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide px-1">
+              Archived ({archived.length})
+            </span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+          {archived.map((t: Team) => renderTeamRow(t, true))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Weekly Schedule Panel (collapsible) ──────────────────────────────────────
+
+function WeeklySchedulePanel({ teams }: { teams: Team[] }) {
+  const STORAGE_KEY = 'weekly-schedule-panel-collapsed';
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem(STORAGE_KEY) === 'true'; } catch { return true; }
+  });
+
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    try { localStorage.setItem(STORAGE_KEY, String(next)); } catch {}
+  };
+
+  // Only show non-archived, active teams
+  const visibleTeams = teams.filter(t => t.isActive && !t.isArchived);
+  if (visibleTeams.length === 0) return null;
+
+  const DAYS = ['mon','tue','wed','thu','fri','sat','sun'] as const;
+  const DAY_LABELS = ['M','T','W','T','F','S','S'];
+  const DAY_FULL = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+  // Count how many teams have notes
+  const noteCount = visibleTeams.filter(t => t.weeklyNote).length;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {/* Clickable header */}
+      <button
+        onClick={toggle}
+        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50 transition-colors group"
+        aria-expanded={!collapsed}
+      >
+        <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+        <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Weekly Schedule</span>
+        {collapsed && (
+          <div className="flex items-center gap-1.5 ml-2">
+            <span className="text-[10px] text-gray-400">{visibleTeams.length} teams</span>
+            {noteCount > 0 && (
+              <span className="text-[10px] bg-blue-50 text-blue-500 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium">
+                {noteCount} note{noteCount > 1 ? 's' : ''}
+              </span>
             )}
           </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => onEdit(t as Team)} className="p-1.5 rounded hover:bg-gray-100">
-              <Pencil className="w-3.5 h-3.5 text-gray-400" />
-            </button>
-            <button
-              onClick={() => { if (confirm(`Remove ${t.name}?`)) deleteTeam.mutate({ id: t.id }); }}
-              className="p-1.5 rounded hover:bg-red-50"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-            </button>
+        )}
+        {/* Day header labels — only when expanded */}
+        {!collapsed && (
+          <div className="ml-auto flex items-center gap-1 mr-1">
+            {DAY_LABELS.map((d, i) => (
+              <span key={i} className="w-6 text-center text-[10px] font-bold text-gray-400">{d}</span>
+            ))}
           </div>
+        )}
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ${collapsed ? '' : 'rotate-180'} ${!collapsed ? 'ml-1' : 'ml-auto'}`}
+        />
+      </button>
+
+      {/* Expandable body */}
+      {!collapsed && (
+        <div className="divide-y divide-gray-50 border-t border-gray-100">
+          {visibleTeams.map(team => {
+            const sched = team.schedule;
+            const defaultSched = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
+            const effectiveSched = sched ?? defaultSched;
+            const dot = team.color ?? '#6366f1';
+            const note = team.weeklyNote;
+            return (
+              <div key={team.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50/50 transition-colors">
+                {/* Color dot + name */}
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+                <span className="text-xs font-semibold text-gray-800 w-24 truncate shrink-0">{team.name}</span>
+                {/* Note badge */}
+                {note ? (
+                  <div className="group relative">
+                    <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium cursor-default truncate max-w-[100px] block">
+                      📝 {note.length > 18 ? note.slice(0, 18) + '…' : note}
+                    </span>
+                    <div className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover:block">
+                      <div className="bg-gray-900 text-white text-[11px] rounded-lg px-2.5 py-1.5 shadow-lg max-w-[200px] whitespace-normal">
+                        {note}
+                      </div>
+                      <div className="w-2 h-2 bg-gray-900 rotate-45 ml-3 -mt-1" />
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-[10px] text-gray-300 italic">no note</span>
+                )}
+                {/* Day chips */}
+                <div className="ml-auto flex items-center gap-1">
+                  {DAYS.map((d, i) => {
+                    const isOn = effectiveSched[d] === 1;
+                    return (
+                      <div
+                        key={d}
+                        title={`${DAY_FULL[i]}: ${isOn ? 'Working' : 'Off'}`}
+                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                          isOn
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                            : 'bg-gray-100 text-gray-300 border border-gray-200'
+                        }`}
+                      >
+                        {DAY_LABELS[i]}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
-      ))}
+      )}
     </div>
   );
 }

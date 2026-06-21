@@ -797,6 +797,25 @@ export const schedulingRouter = router({
       return { ok: true };
     }),
 
+  /**
+   * archiveTeam — soft-archive or unarchive a team.
+   * Archived teams are hidden from the schedule view and weekly schedule panel
+   * but remain in the Teams management list for unarchiving.
+   */
+  archiveTeam: agentProcedure
+    .input(z.object({
+      teamId: z.number(),
+      archive: z.boolean(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db.update(schedulingTeams)
+        .set({ isArchived: input.archive ? 1 : 0 } as any)
+        .where(eq(schedulingTeams.id, input.teamId));
+      return { ok: true };
+    }),
+
   setTeamRegionTags: agentProcedure
     .input(z.object({
       teamId: z.number(),
@@ -867,8 +886,8 @@ export const schedulingRouter = router({
             ))
         : [];
 
-      // Get all teams
-      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      // Get all teams — exclude archived teams from the schedule view
+      const teams = await db.select().from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
 
       // Merge: attach assignment info to each job
       const assignmentMap = new Map(assignments.map(a => [a.cleanerJobId, a]));
@@ -1391,7 +1410,7 @@ ${callBlocks.join("\n\n")}`;
       if (activeJobs.length === 0) return { assigned: 0, message: "No active jobs for this date." };
 
       // 2. Load active teams, excluding those marked unavailable for this date
-      const allTeams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const allTeams = await db.select().from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
       const unavailRows = await db.select({ teamId: teamDayUnavailability.teamId })
         .from(teamDayUnavailability)
         .where(eq(teamDayUnavailability.date, input.date));
@@ -2109,7 +2128,7 @@ ${callBlocks.join("\n\n")}`;
       const jobById = new Map(jobRows.map(j => [j.id, j]));
 
       // Load teams to resolve Launch27 teamName → teamId
-      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teams = await db.select().from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
       const teamByName = new Map(teams.map(t => [t.name, t]));
 
       // Update each assignment: reset optimizer fields, preserve driveTimeSecs only if team didn't change
@@ -2368,7 +2387,7 @@ ${callBlocks.join("\n\n")}`;
               inArray(scheduleAssignments.cleanerJobId, jobIds),
             ))
         : [];
-      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teams = await db.select().from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
       const teamByName = new Map(teams.map(t => [t.name, t]));
       const assignmentMap = new Map(assignments.filter(a => a.isManual !== 2).map(a => [a.cleanerJobId, a]));
 
@@ -2591,7 +2610,7 @@ ${callBlocks.join("\n\n")}`;
       const db = await getDb();
       if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
       // Load all teams
-      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teams = await db.select().from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
       const teamByName = new Map(teams.map(t => [t.name, t]));
       const teamsToProcess = input.teamId ? teams.filter(t => t.id === input.teamId) : teams;
 
@@ -2890,7 +2909,7 @@ ${callBlocks.join("\n\n")}`;
         .where(eq(scheduleAssignments.jobDate, input.date));
 
       const teams = await db.select().from(schedulingTeams)
-        .where(eq(schedulingTeams.isActive, 1));
+        .where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
 
       // Work schedule / override for today
       const dayOfWeek = new Date(input.date + "T12:00:00Z").getUTCDay();
@@ -3397,7 +3416,7 @@ ${issues.slice(0, 5).map(i => `- [${i.severity.toUpperCase()}] ${i.title}: ${i.d
       const dayKey = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayOfWeek] as
         "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
       // Load all active teams
-      const teams = await db.select().from(schedulingTeams).where(eq(schedulingTeams.isActive, 1));
+      const teams = await db.select().from(schedulingTeams).where(and(eq(schedulingTeams.isActive, 1), eq(schedulingTeams.isArchived, 0)));
       // Load all work schedules
       const schedules = await db.select().from(teamWorkSchedule);
       const scheduleByTeam = new Map(schedules.map(s => [s.teamId, s]));
