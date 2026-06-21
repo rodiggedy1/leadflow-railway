@@ -1030,6 +1030,7 @@ export const schedulingRouter = router({
           workScheduleUnavailable,
           overrideNote: override?.note ?? null,
           overrideIsAvailable: override?.isAvailable ?? null,
+          weeklyNote: sched?.note ?? null,
           schedule: {
             mon: effectiveSched.mon,
             tue: effectiveSched.tue,

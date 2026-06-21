@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   Camera, Star, CheckCircle2, Clock, MapPin, DollarSign,
   ChevronLeft, ChevronRight, Upload, Loader2, LogOut, User,
-  CalendarDays, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X, Phone
+  CalendarDays, Calendar, TrendingUp, ImageIcon, CheckCheck, AlertCircle, AlertTriangle, X, Phone
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1694,12 +1694,13 @@ function WeekJobRow({
 
 // ── Main Portal ───────────────────────────────────────────────────────────────
 
-// ── Morning Availability Prompt ──────────────────────────────────────────────
+// ── Weekly Schedule Prompt ───────────────────────────────────────────────────
 /**
- * Full-screen morning prompt shown at 7:29 AM ET if the cleaner hasn't yet
- * submitted tomorrow's availability. Blocks back-button navigation.
+ * Full-screen weekly schedule confirmation shown at 7:29 AM ET if the cleaner
+ * hasn't yet submitted today. Replaces the old availability prompt entirely.
+ * Blocks back-button navigation to ensure the cleaner completes it.
  */
-function MorningAvailabilityPrompt({
+function WeeklySchedulePrompt({
   open,
   cleanerName,
   onSubmitted,
@@ -1709,259 +1710,278 @@ function MorningAvailabilityPrompt({
   onSubmitted: () => void;
 }) {
   const { t } = useTranslation();
-  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
-  const [maxJobs, setMaxJobs] = useState<number | null>(null);
-  const [note, setNote] = useState("");
-  const [step, setStep] = useState<"greeting" | "availability" | "details" | "confirm" | "confirmed">("greeting");
+  const DAYS = ['mon','tue','wed','thu','fri','sat','sun'] as const;
+  type Day = typeof DAYS[number];
+  const DAY_LABELS: Record<Day, string> = { mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday', sun:'Sunday' };
+  const DAY_LABELS_ES: Record<Day, string> = { mon:'Lunes', tue:'Martes', wed:'Miércoles', thu:'Jueves', fri:'Viernes', sat:'Sábado', sun:'Domingo' };
+  const DAY_LABELS_PT: Record<Day, string> = { mon:'Segunda', tue:'Terça', wed:'Quarta', thu:'Quinta', fri:'Sexta', sat:'Sábado', sun:'Domingo' };
 
-  const submitCheckin = trpc.cleaner.submitCheckin.useMutation({
+  // Compute the Mon–Sun dates for the current ET week
+  const weekDates = useMemo(() => {
+    const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const et = new Date(etStr);
+    const day = et.getDay(); // 0=Sun
+    // Find Monday of this week
+    const monday = new Date(et);
+    monday.setDate(et.getDate() - ((day + 6) % 7));
+    return DAYS.map((d, i) => {
+      const dt = new Date(monday);
+      dt.setDate(monday.getDate() + i);
+      return { key: d, date: dt };
+    });
+  }, []);
+
+  const [schedule, setSchedule] = useState<Record<Day, boolean>>({ mon:false, tue:false, wed:false, thu:false, fri:false, sat:false, sun:false });
+  const [step, setStep] = useState<'schedule' | 'note' | 'confirmed'>('schedule');
+  const [note, setNote] = useState('');
+
+  const submitWeeklySchedule = trpc.cleaner.submitWeeklySchedule.useMutation({
     onSuccess: () => {
-      setStep("confirmed");
-      setTimeout(onSubmitted, 2200);
+      setStep('confirmed');
+      setTimeout(onSubmitted, 2000);
     },
     onError: (err) => toast.error(`Submission failed: ${err.message}`),
   });
 
-  // Block back-button navigation while prompt is open
-  useEffect(() => {
-    if (!open) return;
-    // Push a dummy history entry so back button hits it first
-    window.history.pushState({ morningPrompt: true }, "");
-    const onPopState = (e: PopStateEvent) => {
-      if (e.state?.morningPrompt) return; // already at our entry
-      // User hit back — re-push to keep modal open
-      window.history.pushState({ morningPrompt: true }, "");
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [open]);
+  const toggleDay = (day: Day) => setSchedule(s => ({ ...s, [day]: !s[day] }));
 
-  const handleAvailabilityChoice = (available: boolean) => {
-    setIsAvailable(available);
-    setStep("details");
-  };
+  const handleConfirmSchedule = () => setStep('note');
 
-  const handleSubmit = () => {
-    if (isAvailable === null) return;
-    if (isAvailable && maxJobs === null) {
-      toast.warning("Please select how many jobs you can do tomorrow.");
-      return;
-    }
-    // Show confirmation step before actually submitting
-    setStep("confirm");
-  };
-
-  const handleConfirmedSubmit = () => {
-    submitCheckin.mutate({
-      isAvailable: isAvailable!,
-      maxJobs: isAvailable ? maxJobs : null,
+  const handleFinalSubmit = () => {
+    submitWeeklySchedule.mutate({
+      mon: schedule.mon ? 1 : 0,
+      tue: schedule.tue ? 1 : 0,
+      wed: schedule.wed ? 1 : 0,
+      thu: schedule.thu ? 1 : 0,
+      fri: schedule.fri ? 1 : 0,
+      sat: schedule.sat ? 1 : 0,
+      sun: schedule.sun ? 1 : 0,
       note: note.trim() || null,
     });
   };
 
-  // Time-aware greeting
-  const hourET = parseInt(
-    new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" })
-  );
-  const greetingWord =
-    hourET < 12 ? t("morning.greeting.morning") :
-    hourET < 17 ? t("morning.greeting.afternoon") :
-    t("morning.greeting.evening");
-  const greeting = `${greetingWord}, ${cleanerName.split(" ")[0]}! 👋`;
-  // Compute "tomorrow" label in ET timezone, e.g. "Wednesday, May 14"
-  // Uses Intl.DateTimeFormat.formatToParts so the ET date is correct regardless of the cleaner's device timezone
-  const _etParts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-  const _etTomorrow = new Date(parseInt(_etParts.find(p => p.type === "year")!.value), parseInt(_etParts.find(p => p.type === "month")!.value) - 1, parseInt(_etParts.find(p => p.type === "day")!.value) + 1);
-  const tomorrowLabel = _etTomorrow.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  const { i18n } = useTranslation();
+  const lang = i18n.language as 'en' | 'es' | 'pt';
+  const getDayLabel = (d: Day) => lang === 'es' ? DAY_LABELS_ES[d] : lang === 'pt' ? DAY_LABELS_PT[d] : DAY_LABELS[d];
+
+  const workingCount = DAYS.filter(d => schedule[d]).length;
+
+  // Format week range
+  const weekStart = weekDates[0].date;
+  const weekEnd = weekDates[6].date;
+  const fmtShort = (dt: Date) => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const weekRange = `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`;
+
+  // Greeting
+  const hourET = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }));
+  const greetingWord = hourET < 12 ? t('morning.greeting.morning') : hourET < 17 ? t('morning.greeting.afternoon') : t('morning.greeting.evening');
+  const firstName = cleanerName.split(' ')[0];
+
+  // Block back-button navigation while prompt is open
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ weeklyPrompt: true }, '');
+    const onPopState = (e: PopStateEvent) => {
+      if (e.state?.weeklyPrompt) return;
+      window.history.pushState({ weeklyPrompt: true }, '');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [open]);
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
-      {/* No header — full immersive experience */}
-      <div className="flex-1 overflow-y-auto flex flex-col px-4 py-8 max-w-lg mx-auto w-full">
+    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-8 pb-6 max-w-lg mx-auto w-full">
 
-        {/* ── Step: Greeting ─── */}
-        {step === "greeting" && (
-          <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
-            <div className="text-7xl animate-bounce">🌅</div>
-            <div className="space-y-2">
-              <h2 className="text-white text-3xl font-bold">{greeting}</h2>
-              <p className="text-slate-400 text-base leading-relaxed">
-                {t("morning.title")} —<br />
-                {t("morning.subtitle")}<br />
-                {t("morning.scheduleNote")}
+        {/* ── Step: Schedule ─── */}
+        {step === 'schedule' && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="text-center space-y-1.5">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-2">
+                <CalendarDays className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h2 className="text-white text-2xl font-bold leading-tight">
+                {lang === 'es' ? 'Confirma tu horario' : lang === 'pt' ? 'Confirme sua agenda' : 'Confirm this week\'s schedule'}
+              </h2>
+              <p className="text-slate-400 text-sm">
+                {lang === 'es' ? `Hola ${firstName} — marca los días que trabajarás` : lang === 'pt' ? `Olá ${firstName} — marque os dias que você vai trabalhar` : `Hey ${firstName} — select the days you'll be working`}
               </p>
             </div>
+
+            {/* Week range badge */}
+            <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-2.5 border border-slate-700/50">
+              <span className="text-slate-300 text-sm font-semibold">
+                {lang === 'es' ? 'Esta semana' : lang === 'pt' ? 'Esta semana' : 'This Week'}
+              </span>
+              <div className="flex items-center gap-1.5 text-slate-400 text-sm">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{weekRange}</span>
+              </div>
+            </div>
+
+            {/* Day toggles */}
+            <div className="space-y-2.5">
+              {weekDates.map(({ key, date }) => {
+                const isWorking = schedule[key];
+                const dayNum = date.getDate();
+                const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-center justify-between px-4 py-3.5 rounded-2xl border-2 transition-all duration-150 cursor-pointer select-none active:scale-[0.98] ${
+                      isWorking
+                        ? 'bg-emerald-900/30 border-emerald-600/60'
+                        : 'bg-slate-800/60 border-slate-700/50 hover:border-slate-600'
+                    }`}
+                    onClick={() => toggleDay(key)}
+                  >
+                    <div>
+                      <p className={`font-semibold text-base leading-tight ${isWorking ? 'text-white' : 'text-slate-300'}`}>{getDayLabel(key)}</p>
+                      <p className="text-slate-500 text-xs mt-0.5">{monthShort} {dayNum}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {/* Toggle pill */}
+                      <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border font-semibold text-sm transition-all ${
+                        isWorking
+                          ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-900/40'
+                          : 'bg-slate-700 border-slate-600 text-slate-400'
+                      }`}>
+                        {isWorking ? (
+                          <><CheckCircle2 className="w-3.5 h-3.5" /><span>{lang === 'es' ? 'Trabajando' : lang === 'pt' ? 'Trabalhando' : 'Working'}</span></>
+                        ) : (
+                          <span>{lang === 'es' ? 'No trabajo' : lang === 'pt' ? 'Não trabalho' : 'Not Working'}</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Working count summary */}
+            <div className="flex items-center gap-2 px-4 py-3 bg-slate-800/40 rounded-xl border border-slate-700/40">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <p className="text-slate-300 text-sm">
+                {workingCount === 0
+                  ? (lang === 'es' ? 'Ningún día seleccionado' : lang === 'pt' ? 'Nenhum dia selecionado' : 'No days selected')
+                  : lang === 'es' ? `${workingCount} día${workingCount !== 1 ? 's' : ''} de trabajo esta semana`
+                  : lang === 'pt' ? `${workingCount} dia${workingCount !== 1 ? 's' : ''} de trabalho esta semana`
+                  : `${workingCount} working day${workingCount !== 1 ? 's' : ''} this week`
+                }
+              </p>
+            </div>
+
+            {/* Confirm button */}
             <Button
-              className="w-full max-w-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl mt-4"
-              onClick={() => setStep("availability")}
+              className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold py-4 text-base h-auto rounded-2xl shadow-lg shadow-emerald-900/30 transition-all"
+              onClick={handleConfirmSchedule}
             >
-              {t("morning.letsDoIt")}
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              {lang === 'es' ? 'Confirmar horario' : lang === 'pt' ? 'Confirmar agenda' : 'Confirm Schedule'}
             </Button>
           </div>
         )}
 
-        {/* ── Step: Availability choice ─── */}
-        {step === "availability" && (
+        {/* ── Step: Note ─── */}
+        {step === 'note' && (
           <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <div className="text-5xl mb-4">🌅</div>
-              <h3 className="text-white text-2xl font-bold">{t("morning.availabilityQuestion")} {tomorrowLabel}?</h3>
-              <p className="text-slate-400 text-sm">{t("morning.availabilitySubtitle")}</p>
+            <div className="text-center space-y-1.5">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-900/50 border border-blue-700/50 mb-2">
+                <span className="text-2xl">📝</span>
+              </div>
+              <h2 className="text-white text-2xl font-bold">
+                {lang === 'es' ? '¿Alguna nota?' : lang === 'pt' ? 'Alguma observação?' : 'Any notes?'}
+              </h2>
+              <p className="text-slate-400 text-sm">
+                {lang === 'es' ? 'Opcional — comparte cualquier detalle con el equipo'
+                  : lang === 'pt' ? 'Opcional — compartilhe detalhes com a equipe'
+                  : 'Optional — share any details with the team'}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-4 mt-8">
-              <button
-                onClick={() => handleAvailabilityChoice(true)}
-                className="flex flex-col items-center gap-3 p-6 bg-emerald-900/40 border-2 border-emerald-600/60 rounded-2xl hover:bg-emerald-900/60 hover:border-emerald-500 transition-all active:scale-95"
-              >
-                <span className="text-4xl">✅</span>
-                <span className="text-emerald-300 font-bold text-lg">{t("morning.yes")}</span>
-                <span className="text-emerald-500 text-xs text-center">{t("morning.iAmAvailable")}</span>
-              </button>
-              <button
-                onClick={() => handleAvailabilityChoice(false)}
-                className="flex flex-col items-center gap-3 p-6 bg-slate-800 border-2 border-slate-600 rounded-2xl hover:bg-slate-700 hover:border-slate-500 transition-all active:scale-95"
-              >
-                <span className="text-4xl">❌</span>
-                <span className="text-slate-300 font-bold text-lg">{t("morning.no")}</span>
-                <span className="text-slate-500 text-xs text-center">{t("morning.notAvailable")}</span>
-              </button>
-            </div>
-          </div>
-        )}
 
-        {/* ── Step: Details ─── */}
-        {step === "details" && isAvailable === true && (
-          <div className="space-y-6">
-            <div className="text-center space-y-1">
-              <div className="text-4xl mb-3">📋</div>
-              <h3 className="text-white text-xl font-bold">{t("morning.howManyDo")}</h3>
-              <p className="text-slate-400 text-sm">{t("morning.howManyDoSubtitle")}</p>
+            {/* Schedule summary */}
+            <div className="bg-slate-800/60 rounded-xl border border-slate-700/50 px-4 py-3 space-y-1">
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                {lang === 'es' ? 'Tu horario' : lang === 'pt' ? 'Sua agenda' : 'Your schedule'}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {DAYS.map(d => (
+                  <span key={d} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    schedule[d]
+                      ? 'bg-emerald-900/40 border-emerald-600/60 text-emerald-300'
+                      : 'bg-slate-700/40 border-slate-600/40 text-slate-500'
+                  }`}>
+                    {getDayLabel(d).slice(0, 3)}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-4 gap-3">
-              {[1, 2, 3, 4].map(n => (
-                <button
-                  key={n}
-                  onClick={() => setMaxJobs(n === 4 ? 10 : n)}
-                  className={`py-5 rounded-2xl border-2 font-bold text-xl transition-all active:scale-95 ${
-                    (n === 4 ? maxJobs !== null && maxJobs >= 4 : maxJobs === n)
-                      ? "bg-emerald-600 border-emerald-500 text-white"
-                      : "bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500"
-                  }`}
-                >
-                  {n === 4 ? "4+" : n}
-                </button>
-              ))}
-            </div>
+
             <div className="space-y-2">
-              <label className="text-slate-300 text-sm font-medium block">{t("morning.noteLabel")}</label>
               <textarea
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                placeholder={t("morning.notePlaceholder")}
-                rows={3}
-                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-emerald-500"
-                maxLength={500}
-              />
-            </div>
-            <div className="space-y-3 pt-2">
-              <Button
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 text-base h-auto"
-                onClick={handleSubmit}
-                disabled={submitCheckin.isPending || maxJobs === null}
-              >
-                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                {t("morning.submitAvailability")}
-              </Button>
-              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">{t("morning.back")}</button>
-            </div>
-          </div>
-        )}
-
-        {step === "details" && isAvailable === false && (
-          <div className="space-y-6">
-            <div className="text-center space-y-1">
-              <div className="text-4xl mb-3">📝</div>
-              <h3 className="text-white text-xl font-bold">{t("morning.whyNotTitle")}</h3>
-              <p className="text-slate-400 text-sm">{t("morning.whyNotSubtitle")}</p>
-            </div>
-            <div className="space-y-2">
-              <label className="text-slate-300 text-sm font-medium block">{t("morning.reasonLabel")}</label>
-              <textarea
-                value={note}
-                onChange={e => setNote(e.target.value)}
-                placeholder={t("morning.reasonPlaceholder")}
+                placeholder={lang === 'es' ? 'ej. Disponible después de las 9am, prefiero el lado Este…' : lang === 'pt' ? 'ex. Disponível após as 9h, prefiro o lado Leste…' : 'e.g. Available after 9am, prefer East side…'}
                 rows={4}
-                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500"
                 maxLength={500}
+                className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3.5 py-3 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
+                autoFocus
               />
+              <p className="text-slate-600 text-xs text-right">{note.length}/500</p>
             </div>
-            <div className="space-y-3 pt-2">
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 text-base h-auto"
-                onClick={handleSubmit}
-                disabled={submitCheckin.isPending}
-              >
-                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                {t("morning.submit")}
-              </Button>
-              <button onClick={() => setStep("availability")} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2">{t("morning.back")}</button>
-            </div>
-          </div>
-        )}
 
-        {/* ── Step: Confirm ─── */}
-        {step === "confirm" && (
-          <div className="space-y-6">
-            <div className="text-center space-y-2">
-              <div className="text-5xl mb-4">⚠️</div>
-              <h3 className="text-white text-2xl font-bold">Are you sure?</h3>
-              <p className="text-slate-400 text-sm">Please read carefully before confirming.</p>
-            </div>
-            <div className="bg-amber-950/60 border border-amber-600/50 rounded-2xl p-5 space-y-3">
-              <p className="text-amber-300 font-semibold text-base leading-snug">
-                {isAvailable
-                  ? `You are confirming that you ARE available to work on ${tomorrowLabel}.`
-                  : `You are confirming that you are NOT available to work on ${tomorrowLabel}.`}
-              </p>
-              <p className="text-amber-400/90 text-sm leading-relaxed">
-                {isAvailable
-                  ? `By submitting, you may be assigned jobs on ${tomorrowLabel}. If you cancel or no-show after being assigned, you may be subject to a penalty. Only confirm if you are 100% sure you can work.`
-                  : `By submitting, you will not be scheduled for ${tomorrowLabel}. Make sure this is correct before confirming.`}
-              </p>
-            </div>
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3">
               <Button
-                className={`w-full font-semibold py-3 text-base h-auto ${
-                  isAvailable
-                    ? "bg-emerald-600 hover:bg-emerald-500 text-white"
-                    : "bg-blue-600 hover:bg-blue-500 text-white"
-                }`}
-                onClick={handleConfirmedSubmit}
-                disabled={submitCheckin.isPending}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl"
+                onClick={handleFinalSubmit}
+                disabled={submitWeeklySchedule.isPending}
               >
-                {submitCheckin.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Yes, I confirm — submit
+                {submitWeeklySchedule.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                {lang === 'es' ? 'Enviar' : lang === 'pt' ? 'Enviar' : 'Submit'}
               </Button>
               <button
-                onClick={() => setStep("details")}
-                className="w-full text-slate-500 text-sm hover:text-slate-300 py-2"
+                onClick={() => setStep('schedule')}
+                className="w-full text-slate-500 text-sm hover:text-slate-300 py-2 transition-colors"
               >
-                Go back and change my answer
+                ← {lang === 'es' ? 'Atrás' : lang === 'pt' ? 'Voltar' : 'Back'}
               </button>
             </div>
           </div>
         )}
 
         {/* ── Step: Confirmed ─── */}
-        {step === "confirmed" && (
-          <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center">
-            <div className="text-6xl">🎉</div>
-            <h3 className="text-white text-2xl font-bold">{t("morning.allSet")}</h3>
-            <p className="text-slate-400 text-base">{t("morning.recorded")}<br />{t("morning.greatDay")}</p>
+        {step === 'confirmed' && (
+          <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center py-12">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-900/50 border-2 border-emerald-500">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-white text-2xl font-bold">
+                {lang === 'es' ? '¡Todo listo!' : lang === 'pt' ? 'Tudo certo!' : 'All set!'}
+              </h2>
+              <p className="text-slate-400 text-base">
+                {lang === 'es' ? 'Tu horario ha sido registrado.' : lang === 'pt' ? 'Sua agenda foi registrada.' : 'Your schedule has been recorded.'}
+              </p>
+            </div>
+            {/* Mini schedule recap */}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {DAYS.map(d => (
+                <span key={d} className={`text-sm font-semibold px-3 py-1.5 rounded-full ${
+                  schedule[d] ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-500'
+                }`}>
+                  {getDayLabel(d).slice(0, 3)}
+                </span>
+              ))}
+            </div>
+            <p className="text-slate-500 text-sm">
+              {lang === 'es' ? '¡Que tengas un excelente día!' : lang === 'pt' ? 'Tenha um ótimo dia!' : 'Have a great day!'}
+            </p>
           </div>
         )}
+
       </div>
     </div>
   );
@@ -2805,8 +2825,8 @@ export default function CleanerPortal() {
     {/* End-of-day check-in modal — fullscreen takeover */}
     <CheckinModal open={showCheckin} onClose={() => setShowCheckin(false)} />
 
-    {/* Morning availability prompt — fullscreen, shown at 7:29 AM ET if not yet submitted */}
-    <MorningAvailabilityPrompt
+    {/* Weekly schedule prompt — fullscreen, shown at 7:29 AM ET if not yet submitted */}
+    <WeeklySchedulePrompt
       open={showMorningPrompt}
       cleanerName={meQuery.data?.name ?? ""}
       onSubmitted={() => {

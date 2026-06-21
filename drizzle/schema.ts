@@ -2738,6 +2738,8 @@ export const teamWorkSchedule = mysqlTable("team_work_schedule", {
   fri: tinyint("fri").notNull().default(1),
   sat: tinyint("sat").notNull().default(0),
   sun: tinyint("sun").notNull().default(0),
+  /** Optional note from the cleaner about their weekly schedule */
+  note: varchar("note", { length: 500 }),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type TeamWorkSchedule = typeof teamWorkSchedule.$inferSelect;

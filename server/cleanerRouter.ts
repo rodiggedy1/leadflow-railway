@@ -9,7 +9,7 @@ import { TRPCError } from "@trpc/server";
 import bcrypt from "bcryptjs";
 import { and, count, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { z } from "zod";
-import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts, teamAvailabilityCheckins } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, jobPhotos, jobStatusHistory, customPayRules, cleanerJobCustomRules, cleanerStreaks, cleanerMagicLinkTokens, opsChatMessages, jobAlerts, teamAvailabilityCheckins, schedulingTeams, teamWorkSchedule } from "../drizzle/schema";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { CLEANER_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
@@ -1349,6 +1349,134 @@ export const cleanerRouter = router({
       tomorrowAvailability: { submitted: availabilityRows.length > 0, tomorrowDate: tomorrowStr },
     };
   }),
+
+  /**
+   * cleaner.getMyTeamSchedule — returns the team work schedule for the cleaner's team.
+   * Looks up the cleaner's most recent teamName from cleaner_jobs, then joins to scheduling_teams
+   * and team_work_schedule to return the weekly template.
+   */
+  getMyTeamSchedule: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    // Find the cleaner's most recent team via cleaner_jobs
+    const recentJob = await db
+      .select({ teamName: cleanerJobs.teamName })
+      .from(cleanerJobs)
+      .where(and(eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId), ne(cleanerJobs.teamName, '')))
+      .orderBy(desc(cleanerJobs.id))
+      .limit(1);
+    const teamName = recentJob[0]?.teamName ?? null;
+    if (!teamName) return { teamId: null, teamName: null, schedule: null };
+    // Look up scheduling_teams by name
+    const teamRows = await db
+      .select({ id: schedulingTeams.id, name: schedulingTeams.name })
+      .from(schedulingTeams)
+      .where(eq(schedulingTeams.name, teamName))
+      .limit(1);
+    const team = teamRows[0];
+    if (!team) return { teamId: null, teamName, schedule: null };
+    // Look up team_work_schedule
+    const schedRows = await db
+      .select()
+      .from(teamWorkSchedule)
+      .where(eq(teamWorkSchedule.teamId, team.id))
+      .limit(1);
+    const sched = schedRows[0] ?? null;
+    return {
+      teamId: team.id,
+      teamName: team.name,
+      schedule: sched ? { mon: sched.mon, tue: sched.tue, wed: sched.wed, thu: sched.thu, fri: sched.fri, sat: sched.sat, sun: sched.sun } : null,
+    };
+  }),
+
+  /**
+   * cleaner.submitWeeklySchedule — saves the cleaner's weekly work schedule.
+   * Upserts team_work_schedule for their team and posts a notification.
+   * Also records a team_availability_checkin so the morning prompt doesn't re-fire today.
+   */
+  submitWeeklySchedule: cleanerProcedure
+    .input(z.object({
+      mon: z.number().int().min(0).max(1),
+      tue: z.number().int().min(0).max(1),
+      wed: z.number().int().min(0).max(1),
+      thu: z.number().int().min(0).max(1),
+      fri: z.number().int().min(0).max(1),
+      sat: z.number().int().min(0).max(1),
+      sun: z.number().int().min(0).max(1),
+      note: z.string().max(500).nullable(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      // Resolve the cleaner's team
+      const recentJob = await db
+        .select({ teamName: cleanerJobs.teamName })
+        .from(cleanerJobs)
+        .where(and(eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId), ne(cleanerJobs.teamName, '')))
+        .orderBy(desc(cleanerJobs.id))
+        .limit(1);
+      const teamName = recentJob[0]?.teamName ?? null;
+      if (!teamName) throw new TRPCError({ code: "NOT_FOUND", message: "No team found for this cleaner" });
+      const teamRows = await db
+        .select({ id: schedulingTeams.id, name: schedulingTeams.name })
+        .from(schedulingTeams)
+        .where(eq(schedulingTeams.name, teamName))
+        .limit(1);
+      const team = teamRows[0];
+      if (!team) throw new TRPCError({ code: "NOT_FOUND", message: "Team not found in scheduling_teams" });
+      // Upsert the weekly template
+      await db.insert(teamWorkSchedule)
+        .values({ teamId: team.id, mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note })
+        .onDuplicateKeyUpdate({ set: { mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note } });
+      // Record a check-in for tomorrow so the morning prompt doesn't re-fire
+      const now = new Date();
+      const todayStr = now.toISOString().slice(0, 10);
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      await db.delete(teamAvailabilityCheckins).where(
+        and(eq(teamAvailabilityCheckins.cleanerProfileId, ctx.cleaner.cleanerId), eq(teamAvailabilityCheckins.availabilityDate, tomorrowStr))
+      );
+      await db.insert(teamAvailabilityCheckins).values({
+        cleanerProfileId: ctx.cleaner.cleanerId,
+        submittedForDate: todayStr,
+        availabilityDate: tomorrowStr,
+        isAvailable: input.mon || input.tue || input.wed || input.thu || input.fri || input.sat || input.sun ? 1 : 0,
+        maxJobs: null,
+        note: input.note,
+        submittedAt: Date.now(),
+      });
+      // Notify owner
+      const cleanerName = ctx.cleaner.cleanerName ?? "A cleaner";
+      const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+      const workingDays = [
+        input.sun ? 'Sun' : null, input.mon ? 'Mon' : null, input.tue ? 'Tue' : null,
+        input.wed ? 'Wed' : null, input.thu ? 'Thu' : null, input.fri ? 'Fri' : null, input.sat ? 'Sat' : null,
+      ].filter(Boolean).join(', ');
+      await notifyOwner({
+        title: `Weekly Schedule: ${cleanerName} (${team.name})`,
+        content: `${cleanerName} confirmed their weekly schedule. Working days: ${workingDays || 'None'}${input.note ? `. Note: ${input.note}` : ''}`,
+      }).catch(() => {});
+      // Post to CommandChat
+      (async () => {
+        try {
+          await db.insert(opsChatMessages).values({
+            channel: "command",
+            cleanerJobId: null,
+            authorName: cleanerName,
+            authorRole: "cleaner",
+            body: `📅 ${cleanerName} confirmed weekly schedule · Working: ${workingDays || 'None'}${input.note ? ` · Note: ${input.note}` : ''}`,
+            quickAction: "weekly_schedule",
+            metadata: JSON.stringify({ cleanerName, teamName: team.name, teamId: team.id, mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note }),
+          });
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message", { channel: "command" });
+        } catch (err) {
+          console.error("[submitWeeklySchedule] CommandChat post failed:", err);
+        }
+      })();
+      return { ok: true, teamId: team.id, teamName: team.name };
+    }),
 
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();

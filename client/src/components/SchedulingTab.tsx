@@ -56,6 +56,7 @@ interface Team {
   overrideNote?: string | null;
   overrideIsAvailable?: number | null;
   schedule?: { mon: number; tue: number; wed: number; thu: number; fri: number; sat: number; sun: number } | null;
+  weeklyNote?: string | null;
 }
 
 interface ClientHistory {
@@ -2268,72 +2269,82 @@ export default function SchedulingTab() {
         </div>
       )}
 
-      {/* Tomorrow's Availability Check-ins */}
-      {checkins.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <span className="text-sm">📋</span>
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-              Tomorrow — {formatDate(date)}
-            </span>
-            <div className="flex flex-wrap gap-1.5 ml-2">
-              {checkins.map(c => {
-                const initials = (c.cleanerName ?? 'U').split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
-                const jobLabel = c.isAvailable
-                  ? `${c.maxJobs != null && c.maxJobs >= 10 ? '4+' : c.maxJobs ?? '?'} job${c.maxJobs !== 1 ? 's' : ''}`
-                  : 'Off';
-                const tooltipText = c.isAvailable
-                  ? `✅ ${c.cleanerName} — up to ${jobLabel}${c.note ? ` · ${c.note}` : ''}`
-                  : `❌ ${c.cleanerName} — Not available${c.note ? ` · ${c.note}` : ''}`;
+      {/* Weekly Team Schedule Panel */}
+      {(() => {
+        const activeTeams = teams.filter(t => t.isActive);
+        if (activeTeams.length === 0) return null;
+        const DAYS = ['mon','tue','wed','thu','fri','sat','sun'] as const;
+        const DAY_LABELS = ['M','T','W','T','F','S','S'];
+        const DAY_FULL = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+        return (
+          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100">
+              <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Weekly Schedule</span>
+              {/* Day header labels */}
+              <div className="ml-auto flex items-center gap-1">
+                {DAY_LABELS.map((d, i) => (
+                  <span key={i} className="w-6 text-center text-[10px] font-bold text-gray-400">{d}</span>
+                ))}
+              </div>
+            </div>
+            {/* Team rows */}
+            <div className="divide-y divide-gray-50">
+              {activeTeams.map(team => {
+                const sched = team.schedule;
+                const defaultSched = { mon:1, tue:1, wed:1, thu:1, fri:1, sat:0, sun:0 };
+                const effectiveSched = sched ?? defaultSched;
+                const dot = team.color ?? '#6366f1';
+                const note = team.weeklyNote;
                 return (
-                  <div
-                    key={c.id}
-                    title={tooltipText}
-                    className={`group relative flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-semibold cursor-default select-none transition-all ${
-                      c.isAvailable
-                        ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
-                        : 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100'
-                    }`}
-                  >
-                    <span>{c.isAvailable ? '✅' : '❌'}</span>
-                    <span>{initials}</span>
-                    {c.isAvailable && (
-                      <span className={`text-[10px] font-medium ${
-                        c.isAvailable ? 'text-emerald-500' : 'text-red-400'
-                      }`}>{jobLabel}</span>
-                    )}
-                    {/* Hover tooltip */}
-                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-50 hidden group-hover:block">
-                      <div className="bg-gray-900 text-white text-[11px] rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg max-w-[220px] text-center">
-                        <div className="font-semibold">{c.cleanerName ?? 'Unknown'}</div>
-                        {c.isAvailable ? (
-                          <div className="text-emerald-300">✅ Available · up to {jobLabel}</div>
-                        ) : (
-                          <div className="text-red-300">❌ Not available</div>
-                        )}
-                        {c.note && <div className="text-gray-300 mt-0.5 text-[10px] whitespace-normal">{c.note}</div>}
-                        <div className="text-gray-400 text-[10px] mt-0.5">
-                          {c.submittedAt ? new Date(c.submittedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/New_York' }) : ''}
+                  <div key={team.id} className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50/50 transition-colors">
+                    {/* Color dot + name */}
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dot }} />
+                    <span className="text-xs font-semibold text-gray-800 w-24 truncate shrink-0">{team.name}</span>
+                    {/* Note badge */}
+                    {note ? (
+                      <div className="group relative">
+                        <span className="text-[10px] text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full font-medium cursor-default truncate max-w-[100px] block">
+                          📝 {note.length > 18 ? note.slice(0, 18) + '…' : note}
+                        </span>
+                        {/* Tooltip */}
+                        <div className="pointer-events-none absolute bottom-full left-0 mb-1.5 z-50 hidden group-hover:block">
+                          <div className="bg-gray-900 text-white text-[11px] rounded-lg px-2.5 py-1.5 shadow-lg max-w-[200px] whitespace-normal">
+                            {note}
+                          </div>
+                          <div className="w-2 h-2 bg-gray-900 rotate-45 ml-3 -mt-1" />
                         </div>
                       </div>
-                      <div className="w-2 h-2 bg-gray-900 rotate-45 mx-auto -mt-1" />
+                    ) : (
+                      <span className="text-[10px] text-gray-300 italic">no note</span>
+                    )}
+                    {/* Day chips */}
+                    <div className="ml-auto flex items-center gap-1">
+                      {DAYS.map((d, i) => {
+                        const isOn = effectiveSched[d] === 1;
+                        return (
+                          <div
+                            key={d}
+                            title={`${DAY_FULL[i]}: ${isOn ? 'Working' : 'Off'}`}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-colors ${
+                              isOn
+                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                                : 'bg-gray-100 text-gray-300 border border-gray-200'
+                            }`}
+                          >
+                            {DAY_LABELS[i]}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
               })}
             </div>
-            {(() => {
-              const activeTeamCount = teams.filter(t => t.isActive).length;
-              const notResponded = activeTeamCount - checkins.length;
-              return notResponded > 0 ? (
-                <span className="ml-auto text-[10px] text-amber-500 font-medium">{notResponded} not responded</span>
-              ) : (
-                <span className="ml-auto text-[10px] text-emerald-500 font-medium">All responded ✅</span>
-              );
-            })()}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Suggest Slot panel */}
       <div className="bg-white border border-gray-200 rounded-xl px-4 py-3">
