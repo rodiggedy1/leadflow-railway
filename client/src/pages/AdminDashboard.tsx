@@ -1318,6 +1318,7 @@ function ConversationDrawer({
       utils.leads.list.invalidate();
       utils.leads.stats.invalidate();
       utils.leads.attentionItems.invalidate();
+      utils.leads.getLeadReplies.invalidate();
       onClose();
     },
     onError: (e) => toast.error(e.message),
