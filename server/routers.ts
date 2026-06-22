@@ -1438,7 +1438,7 @@ export const appRouter = router({
         if (!db) throw new Error("Database unavailable");
         await db
           .update(conversationSessions)
-          .set({ respondedAt: Date.now() })
+          .set({ respondedAt: Date.now(), lastReadAt: Date.now() })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
