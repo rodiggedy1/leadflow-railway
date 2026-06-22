@@ -22,7 +22,20 @@ export function registerGbpRoutes(app: Express) {
   // ── OAuth: initiate ──────────────────────────────────────────────────────────
   app.get("/api/gbp/oauth/start", (_req, res) => {
     const url = getGbpAuthUrl();
+    console.log("[GBP] Auth URL:", url);
     res.redirect(url);
+  });
+
+  // Debug: print the exact auth URL without redirecting
+  app.get("/api/gbp/oauth/debug", (_req, res) => {
+    const url = getGbpAuthUrl();
+    const parsed = new URL(url);
+    res.json({
+      fullUrl: url,
+      redirect_uri: parsed.searchParams.get("redirect_uri"),
+      client_id: parsed.searchParams.get("client_id"),
+      scope: parsed.searchParams.get("scope"),
+    });
   });
 
   // ── OAuth: callback ──────────────────────────────────────────────────────────
