@@ -4733,6 +4733,39 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
     getLeadReplies: opsChatProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
+      // Use EXACT same sourceFilter as leads.list so the count matches Unreads on leads page
+      const sourceFilter = and(
+        sql`(
+          ${conversationSessions.leadSource} IS NULL OR
+          ${conversationSessions.leadSource} NOT IN (${sql.raw(NON_LEAD_SOURCES.map((s: string) => `'${s}'`).join(', '))}) AND
+          NOT (
+            ${conversationSessions.leadSource} = 'cs_initiated' AND
+            ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD')
+          )
+        )`,
+        sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+        or(
+          sql`${conversationSessions.leadSource} IS NULL`,
+          sql`(
+            ${conversationSessions.leadSource} IS NOT NULL AND
+            ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+            ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+            ${conversationSessions.leadSource} NOT IN (${sql.raw([...NON_LEAD_SOURCES, 'reactivation', 'command-center', 'review_rebooking'].map((s: string) => `'${s}'`).join(', '))})
+          )`,
+          sql`(
+            (
+              ${conversationSessions.leadSource} LIKE 'always-on%' OR
+              ${conversationSessions.leadSource} LIKE 'campaign:%' OR
+              ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
+            ) AND
+            JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+          )`,
+          sql`(
+            ${conversationSessions.leadSource} = 'review_rebooking' AND
+            JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+          )`
+        )
+      );
       const rows = await db
         .select({
           id:                conversationSessions.id,
@@ -4749,14 +4782,11 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .where(
           and(
             sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
-            sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
-            nonLeadSourceFilter(),
-            sql`NOT (${conversationSessions.leadSource} = 'cs_initiated' AND ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))`,
+            sourceFilter,
           )
         )
         .orderBy(desc(conversationSessions.createdAt))
-        .limit(300);
-
+        .limit(500);
       const results: Array<{
         id: number;
         leadName: string;
@@ -4768,26 +4798,21 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         isUnread: boolean;
         ageMs: number;
       }> = [];
-
       const now = Date.now();
       for (const r of rows) {
         try {
           const history: Array<{ role: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
           if (history.length === 0) continue;
-          // Find the most recent customer message (scan backwards)
-          // Notification shows whenever a customer has replied, regardless of whether
-          // Jade already responded after them.
-          const lastCustomerMsg = [...history].reverse().find(
-            m => m.role === 'user' || m.role === 'customer'
-          );
-          if (!lastCustomerMsg || !lastCustomerMsg.ts) continue;
-          const lastInboundAt = lastCustomerMsg.ts;
-          // Only show replies that came in after this feature's deploy cutoff
-          // (prevents showing 30+ old sessions that happened to have customer messages)
-          const DEPLOY_CUTOFF_MS = 1781029060130; // ~Jun 9 2026 deploy time
-          if (lastInboundAt < DEPLOY_CUTOFF_MS) continue;
+          // EXACT same hasUnread logic as leads.list:
+          // A lead is unread ONLY when the LAST message is from the customer AND newer than lastReadAt
+          const lastMsg = history.length > 0 ? history[history.length - 1] : null;
+          const lastIsCustomer = lastMsg && (lastMsg.role === 'user' || lastMsg.role === 'customer');
+          if (!lastIsCustomer || !lastMsg?.ts) continue;
+          const lastInboundAt = lastMsg.ts;
           const lastReadAt = r.lastReadAt as number | null | undefined;
           const isUnread = !lastReadAt || lastInboundAt > lastReadAt;
+          // Only return unread leads — matches Unreads count on leads page exactly
+          if (!isUnread) continue;
           results.push({
             id: r.id,
             leadName: r.leadName ?? 'Unknown',
@@ -4801,11 +4826,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           });
         } catch { /* skip malformed */ }
       }
-      // Sort: unread first, then by most recent reply
-      results.sort((a, b) => {
-        if (a.isUnread !== b.isUnread) return a.isUnread ? -1 : 1;
-        return b.lastInboundAt - a.lastInboundAt;
-      });
+      // Sort by most recent unread reply
+      results.sort((a, b) => b.lastInboundAt - a.lastInboundAt);
       return results;
     }),
 
