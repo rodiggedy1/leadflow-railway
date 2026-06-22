@@ -4672,7 +4672,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     )}
                   >
                     <MessageCircle className="h-3 w-3" />
-                    {leadRepliesCount} unread lead repl{leadRepliesCount > 1 ? "ies" : "y"}
+                    {leadRepliesCount} lead repl{leadRepliesCount > 1 ? "ies" : "y"}
+                    {unreadLeadRepliesCount > 0 && (
+                      <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                        {unreadLeadRepliesCount > 9 ? "9+" : unreadLeadRepliesCount}
+                      </span>
+                    )}
                   </button>
                 </>
               )}
