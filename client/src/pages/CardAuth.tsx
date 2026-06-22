@@ -70,26 +70,8 @@ function CardForm({
         Your card is never saved by us or ever seen by a human being.
       </div>
 
-      <h2 className="text-xl font-black text-[#1e2430] mb-3">Secure your home cleaning</h2>
-
-      {/* Trust strip */}
-      <div className="flex flex-col gap-2 mb-4">
-        {[
-          "Powered by Stripe",
-          "No charge until after service",
-          "Card never stored or viewed by our team",
-        ].map(item => (
-          <div
-            key={item}
-            className="flex items-center gap-2 px-3 py-2 rounded-[10px] bg-[#f4f6f9] border border-[#e4e8ee] text-[13px] font-bold text-[#1e2430]"
-          >
-            <svg className="w-3.5 h-3.5 text-[#ff7a1a] flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 1a5 5 0 0 0-5 5v3H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V11a2 2 0 0 0-2-2h-2V6a5 5 0 0 0-5-5zm0 2a3 3 0 0 1 3 3v3H9V6a3 3 0 0 1 3-3zm0 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4z"/>
-            </svg>
-            {item}
-          </div>
-        ))}
-      </div>
+      <h2 className="text-xl font-black text-[#1e2430] mb-1">Secure your home cleaning</h2>
+      <p className="text-[13px] text-[#657080] mb-2">No deposit. No charge until after service. Secure preauthorization only.</p>
 
       <label className={labelClass}>Cardholder name</label>
       <input
