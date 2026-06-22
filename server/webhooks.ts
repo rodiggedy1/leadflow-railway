@@ -1547,6 +1547,25 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       let isConfirmed = false;
       let smsFlexibility: string | null = null;
       let smsNotes: string | null = null;
+
+      // ── Regex-first: catch clear affirmatives without hitting the LLM ──────────
+      // If the reply starts with yes/yep/yeah/sure/ok/correct/confirmed/sounds good/
+      // we'll be there/all set/perfect/great/absolutely/definitely — it's confirmed.
+      // We still run the LLM afterwards ONLY to extract flexibility + notes.
+      const lowerText = inboundText.trim().toLowerCase();
+      const AFFIRM_RE = /^(yes|yep|yeah|yup|sure|ok|okay|k|correct|confirmed|confirm|sounds good|sounds great|all set|perfect|great|absolutely|definitely|we'll be there|we will be there|we'll be home|we will be home|see you|see you then|see you tomorrow|that works|that's fine|that's great|that's correct|👍|✅)/i;
+      const CANCEL_RE = /^(no\b|cancel|cancelling|canceling|not coming|won't be|will not be|can't make|cannot make|need to cancel|need to reschedule)/i;
+      if (AFFIRM_RE.test(lowerText)) {
+        isConfirmed = true;
+      } else if (CANCEL_RE.test(lowerText)) {
+        isConfirmed = false;
+      }
+      // Extract flexibility from regex regardless (fast, no LLM cost)
+      if (/\bnot flexible\b/i.test(lowerText)) smsFlexibility = "not_flexible";
+      else if (/\bflexible\b/i.test(lowerText)) smsFlexibility = "flexible";
+      else if (/\banytime\b|\bany time\b|\bwhenever\b/i.test(lowerText)) smsFlexibility = "anytime";
+      // ─────────────────────────────────────────────────────────────────────────
+
       try {
         const { invokeLLM } = await import("./_core/llm");
         const llmResult = await invokeLLM({
@@ -1584,16 +1603,21 @@ Extract:
           },
         });
         const parsed = JSON.parse(llmResult.choices[0].message.content as string);
-        isConfirmed = parsed.confirmed === true;
-        smsFlexibility = (parsed.flexibility && parsed.flexibility !== "unknown") ? parsed.flexibility : null;
+        // Only let LLM override isConfirmed if regex didn't already make a determination
+        // (AFFIRM_RE or CANCEL_RE matched). This prevents the LLM from misclassifying
+        // replies like "Yes not flexible" as unclear.
+        const regexMadeDetermination = AFFIRM_RE.test(lowerText) || CANCEL_RE.test(lowerText);
+        if (!regexMadeDetermination) {
+          isConfirmed = parsed.confirmed === true;
+        }
+        // LLM always wins for flexibility + notes (more nuanced)
+        if (!smsFlexibility) {
+          smsFlexibility = (parsed.flexibility && parsed.flexibility !== "unknown") ? parsed.flexibility : null;
+        }
         smsNotes = parsed.notes ?? null;
       } catch (llmErr) {
-        console.error('[Webhook] LLM extraction failed for SMS reply, falling back to keyword match:', llmErr);
-        // Fallback to simple keyword match
-        const lower = inboundText.trim().toLowerCase();
-        isConfirmed = /\b(yes|confirmed|confirm|see you|sounds good|perfect|great|ok|okay|all set)\b/.test(lower);
-        if (/\bnot flexible\b/.test(lower)) smsFlexibility = "not_flexible";
-        else if (/\bflexible\b/.test(lower)) smsFlexibility = "flexible";
+        console.error('[Webhook] LLM extraction failed for SMS reply, regex result stands:', llmErr);
+        // Regex already handled isConfirmed and smsFlexibility above — nothing more to do
       }
 
       // Append to replies array so all messages are preserved
