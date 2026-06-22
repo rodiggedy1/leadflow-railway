@@ -1526,6 +1526,9 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       const rows = await db
         .select({
           id: confirmationCalls.id,
+          cleanerJobId: confirmationCalls.cleanerJobId,
+          clientName: confirmationCalls.clientName,
+          jobDate: confirmationCalls.jobDate,
           smsReply: confirmationCalls.smsReply,
           smsReplies: confirmationCalls.smsReplies,
           aiFlexibility: confirmationCalls.aiFlexibility,
@@ -1543,29 +1546,39 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       const row = rows[0];
       if (!row) return; // Not a confirmation SMS reply
 
-      // Use LLM to extract confirmation, flexibility, and notes from the reply
-      let isConfirmed = false;
+      // ── STEP 1: Classify the reply (regex-first, no LLM for clear signals) ────
+      //
+      // Three possible states:
+      //   confirmed    — customer said yes in any form
+      //   cancellation — customer is cancelling or skipping
+      //   unclear      — genuinely ambiguous, LLM decides
+      //
+      type SmsIntent = 'confirmed' | 'cancellation' | 'unclear';
+      let intent: SmsIntent = 'unclear';
       let smsFlexibility: string | null = null;
       let smsNotes: string | null = null;
 
-      // ── Regex-first: catch clear affirmatives without hitting the LLM ──────────
-      // If the reply starts with yes/yep/yeah/sure/ok/correct/confirmed/sounds good/
-      // we'll be there/all set/perfect/great/absolutely/definitely — it's confirmed.
-      // We still run the LLM afterwards ONLY to extract flexibility + notes.
       const lowerText = inboundText.trim().toLowerCase();
+
+      // Clear affirmatives — regex wins, LLM cannot override
       const AFFIRM_RE = /^(yes|yep|yeah|yup|sure|ok|okay|k|correct|confirmed|confirm|sounds good|sounds great|all set|perfect|great|absolutely|definitely|we'll be there|we will be there|we'll be home|we will be home|see you|see you then|see you tomorrow|that works|that's fine|that's great|that's correct|👍|✅)/i;
-      const CANCEL_RE = /^(no\b|cancel|cancelling|canceling|not coming|won't be|will not be|can't make|cannot make|need to cancel|need to reschedule)/i;
+
+      // Clear cancellations — regex wins, LLM cannot override
+      // "skip", "skip tomorrow", "skip the cleaning", "we can skip" all match
+      const CANCEL_RE = /\b(cancel|cancell?ing|cancell?ed|not coming|won't be (there|home)|will not be (there|home)|can't make it|cannot make it|need to cancel|need to reschedule|skip|skipping|skip tomorrow|skip the cleaning|we can skip|don't come|do not come|not needed|not needed tomorrow|won't need|will not need)/i;
+
       if (AFFIRM_RE.test(lowerText)) {
-        isConfirmed = true;
+        intent = 'confirmed';
       } else if (CANCEL_RE.test(lowerText)) {
-        isConfirmed = false;
+        intent = 'cancellation';
       }
-      // Extract flexibility from regex regardless (fast, no LLM cost)
+
+      // Flexibility extraction — regex is fast and accurate enough
       if (/\bnot flexible\b/i.test(lowerText)) smsFlexibility = "not_flexible";
       else if (/\bflexible\b/i.test(lowerText)) smsFlexibility = "flexible";
       else if (/\banytime\b|\bany time\b|\bwhenever\b/i.test(lowerText)) smsFlexibility = "anytime";
-      // ─────────────────────────────────────────────────────────────────────────
 
+      // ── STEP 2: LLM for genuinely ambiguous replies + notes extraction ────────
       try {
         const { invokeLLM } = await import("./_core/llm");
         const llmResult = await invokeLLM({
@@ -1579,9 +1592,9 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
               content: `Customer SMS reply: "${inboundText}"
 
 Extract:
-1. confirmed: true if the customer is confirming their appointment (yes, sure, sounds good, we'll be there, etc.), false if cancelling or unclear
-2. flexibility: use exactly one of these values — "exact" if they need the team at a specific time, "two_hour" if they are okay with a 2-hour arrival window, "anytime" if they are fully flexible, "unknown" if not mentioned
-3. notes: any additional info they shared (special instructions, timing constraints, access notes, etc.), or null if nothing notable`,
+1. intent: "confirmed" if confirming, "cancellation" if cancelling/skipping/rescheduling, "unclear" if genuinely ambiguous
+2. flexibility: "exact" | "two_hour" | "anytime" | "unknown"
+3. notes: any additional info (special instructions, access notes, etc.), or null`,
             },
           ],
           response_format: {
@@ -1592,54 +1605,86 @@ Extract:
               schema: {
                 type: "object",
                 properties: {
-                  confirmed: { type: "boolean", description: "Whether the customer confirmed their appointment" },
-                  flexibility: { type: "string", enum: ["exact", "two_hour", "anytime", "unknown"], description: "Arrival window flexibility" },
-                  notes: { type: ["string", "null"], description: "Any additional notes from the customer" },
+                  intent: { type: "string", enum: ["confirmed", "cancellation", "unclear"] },
+                  flexibility: { type: "string", enum: ["exact", "two_hour", "anytime", "unknown"] },
+                  notes: { type: ["string", "null"] },
                 },
-                required: ["confirmed", "flexibility", "notes"],
+                required: ["intent", "flexibility", "notes"],
                 additionalProperties: false,
               },
             },
           },
         });
         const parsed = JSON.parse(llmResult.choices[0].message.content as string);
-        // Only let LLM override isConfirmed if regex didn't already make a determination
-        // (AFFIRM_RE or CANCEL_RE matched). This prevents the LLM from misclassifying
-        // replies like "Yes not flexible" as unclear.
-        const regexMadeDetermination = AFFIRM_RE.test(lowerText) || CANCEL_RE.test(lowerText);
-        if (!regexMadeDetermination) {
-          isConfirmed = parsed.confirmed === true;
+        // Only let LLM set intent if regex didn't already make a determination
+        if (intent === 'unclear' && (parsed.intent === 'confirmed' || parsed.intent === 'cancellation')) {
+          intent = parsed.intent as SmsIntent;
         }
-        // LLM always wins for flexibility + notes (more nuanced)
+        // LLM fills in flexibility + notes
         if (!smsFlexibility) {
           smsFlexibility = (parsed.flexibility && parsed.flexibility !== "unknown") ? parsed.flexibility : null;
         }
         smsNotes = parsed.notes ?? null;
       } catch (llmErr) {
         console.error('[Webhook] LLM extraction failed for SMS reply, regex result stands:', llmErr);
-        // Regex already handled isConfirmed and smsFlexibility above — nothing more to do
       }
 
-      // Append to replies array so all messages are preserved
+      // ── STEP 3: Persist the result ────────────────────────────────────────────
       const existingReplies = Array.isArray(row.smsReplies) ? row.smsReplies : [];
       const updatedReplies = [...existingReplies, { text: inboundText, receivedAt: Date.now() }];
 
+      const outcomeMap: Record<SmsIntent, { aiOutcome: string; aiOutcomeLabel: string }> = {
+        confirmed:    { aiOutcome: 'confirmed',    aiOutcomeLabel: 'Confirmed via SMS ✓' },
+        cancellation: { aiOutcome: 'reschedule',   aiOutcomeLabel: 'Cancellation Request ⚠️' },
+        unclear:      { aiOutcome: 'unknown',      aiOutcomeLabel: 'Reply Unclear — Review' },
+      };
+      const outcomeFields = outcomeMap[intent];
+
       await db.update(confirmationCalls)
         .set({
-          smsReply: inboundText, // keep latest for backwards compat
+          smsReply: inboundText,
           smsReplies: updatedReplies,
-          smsConfirmedAt: isConfirmed ? Date.now() : null,
-          ...(isConfirmed ? {
-            aiOutcome: "confirmed",
-            aiOutcomeLabel: "Confirmed via SMS ✓",
-          } : {}),
-          // Only set flexibility if not already captured from a prior reply — first signal wins
+          smsConfirmedAt: intent === 'confirmed' ? Date.now() : null,
+          aiOutcome: outcomeFields.aiOutcome,
+          aiOutcomeLabel: outcomeFields.aiOutcomeLabel,
           ...(smsFlexibility && !row.aiFlexibility ? { aiFlexibility: smsFlexibility } : {}),
           ...(smsNotes ? { aiNotes: smsNotes } : {}),
         })
         .where(eq(confirmationCalls.id, row.id));
 
-      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — confirmed=${isConfirmed}, flexibility=${smsFlexibility}, notes=${smsNotes}, text="${inboundText.slice(0, 80)}"`);
+      // ── STEP 4: Post CommandChat alert for cancellations and unclear replies ──
+      if (intent === 'cancellation' || intent === 'unclear') {
+        const alertEmoji = intent === 'cancellation' ? '🚨' : '❓';
+        const alertTitle = intent === 'cancellation' ? 'Cancellation Request' : 'Unclear SMS Reply';
+        const alertBody = `${alertEmoji} **${alertTitle}** — ${row.clientName ?? fromPhone} (${row.jobDate})
+
+Customer replied to confirmation SMS:
+> "${inboundText}"
+
+Please review and action this in the Confirmation Calls page.`;
+
+        // Post to job thread
+        await db.insert(opsChatMessages).values({
+          cleanerJobId: row.cleanerJobId,
+          channel: null,
+          authorName: '📱 Customer SMS Reply',
+          authorRole: 'system',
+          body: alertBody,
+          metadata: JSON.stringify({ intent, fromPhone, confirmationCallId: row.id }),
+        });
+
+        // Post to command channel so ops sees it immediately
+        await db.insert(opsChatMessages).values({
+          cleanerJobId: null,
+          channel: 'command',
+          authorName: '📱 Customer SMS Reply',
+          authorRole: 'system',
+          body: alertBody,
+          metadata: JSON.stringify({ intent, fromPhone, confirmationCallId: row.id }),
+        });
+      }
+
+      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — intent=${intent}, flexibility=${smsFlexibility}, notes=${smsNotes}, text="${inboundText.slice(0, 80)}"`);
     } catch (err) {
       console.error('[Webhook] tryHandleConfirmationSmsReply error:', err);
     }
