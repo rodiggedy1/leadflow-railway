@@ -4749,9 +4749,37 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         .where(
           and(
             sql`${conversationSessions.stage} NOT IN ('LOST','COLD','NOT_INTERESTED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')`,
-            sql`${conversationSessions.createdAt} >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
-            nonLeadSourceFilter(),
-            sql`NOT (${conversationSessions.leadSource} = 'cs_initiated' AND ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))`,
+            // Exact same sourceFilter as leads.list — ensures counts match Unreads on leads page
+            sql`(
+              ${conversationSessions.leadSource} IS NULL OR
+              ${conversationSessions.leadSource} NOT IN (${sql.raw(NON_LEAD_SOURCES.map(s => `'${s}'`).join(', '))}) AND
+              NOT (
+                ${conversationSessions.leadSource} = 'cs_initiated' AND
+                ${conversationSessions.stage} NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD')
+              )
+            )`,
+            sql`(${conversationSessions.leadSource} IS NULL OR ${conversationSessions.leadSource} != 'review')`,
+            or(
+              sql`${conversationSessions.leadSource} IS NULL`,
+              sql`(
+                ${conversationSessions.leadSource} IS NOT NULL AND
+                ${conversationSessions.leadSource} NOT LIKE 'always-on%' AND
+                ${conversationSessions.leadSource} NOT LIKE 'campaign:%' AND
+                ${conversationSessions.leadSource} NOT IN (${sql.raw([...NON_LEAD_SOURCES, 'reactivation', 'command-center', 'review_rebooking'].map(s => `'${s}'`).join(', '))})
+              )`,
+              sql`(
+                (
+                  ${conversationSessions.leadSource} LIKE 'always-on%' OR
+                  ${conversationSessions.leadSource} LIKE 'campaign:%' OR
+                  ${conversationSessions.leadSource} IN ('reactivation', 'command-center')
+                ) AND
+                JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+              )`,
+              sql`(
+                ${conversationSessions.leadSource} = 'review_rebooking' AND
+                JSON_SEARCH(${conversationSessions.messageHistory}, 'one', 'user', NULL, '$[*].role') IS NOT NULL
+              )`
+            ),
           )
         )
         .orderBy(desc(conversationSessions.createdAt))
@@ -4774,20 +4802,16 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         try {
           const history: Array<{ role: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
           if (history.length === 0) continue;
-          // Find the most recent customer message (scan backwards)
-          // Notification shows whenever a customer has replied, regardless of whether
-          // Jade already responded after them.
-          const lastCustomerMsg = [...history].reverse().find(
-            m => m.role === 'user' || m.role === 'customer'
-          );
-          if (!lastCustomerMsg || !lastCustomerMsg.ts) continue;
-          const lastInboundAt = lastCustomerMsg.ts;
-          // Only show replies that came in after this feature's deploy cutoff
-          // (prevents showing 30+ old sessions that happened to have customer messages)
-          const DEPLOY_CUTOFF_MS = 1781029060130; // ~Jun 9 2026 deploy time
-          if (lastInboundAt < DEPLOY_CUTOFF_MS) continue;
+          // Exact same hasUnread logic as leads.list:
+          // A lead is unread ONLY when the LAST message is from the customer AND newer than lastReadAt
+          const lastMsg = history[history.length - 1];
+          const lastIsCustomer = lastMsg && (lastMsg.role === 'user' || lastMsg.role === 'customer');
+          if (!lastIsCustomer || !lastMsg.ts) continue;
+          const lastInboundAt = lastMsg.ts;
           const lastReadAt = r.lastReadAt as number | null | undefined;
           const isUnread = !lastReadAt || lastInboundAt > lastReadAt;
+          // Only include unread leads — matches Unreads filter on leads page exactly
+          if (!isUnread) continue;
           results.push({
             id: r.id,
             leadName: r.leadName ?? 'Unknown',
