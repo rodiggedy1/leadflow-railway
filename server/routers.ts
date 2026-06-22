@@ -4734,8 +4734,8 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       if (!db) return [];
 
       // Raw SQL: find all sessions where the last SMS is from the customer and not yet read.
-      // No stage filtering — any unread customer reply counts regardless of stage.
-      // Only real phone numbers (no thumbtack-*/bark-sms-* placeholders).
+      // Only real phone numbers. Excludes internal sources (cs-inbound, hiring, schedule_confirm, review).
+      const nonLeadSourceList = NON_LEAD_SOURCES.map((s: string) => `'${s}'`).join(',');
       const rawRows = await db.execute(sql`
         SELECT
           id, leadName, leadPhone, leadSource, stage,
@@ -4746,6 +4746,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           AND leadPhone NOT REGEXP '[a-zA-Z]'
           AND LENGTH(REGEXP_REPLACE(leadPhone, '[^0-9]', '')) >= 10
           AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          AND (leadSource IS NULL OR leadSource NOT IN (${sql.raw(nonLeadSourceList)}))
           AND JSON_VALID(messageHistory)
           AND JSON_LENGTH(messageHistory) > 0
           AND JSON_UNQUOTE(JSON_EXTRACT(messageHistory, CONCAT('$[', JSON_LENGTH(messageHistory)-1, '].role'))) IN ('user','customer')
