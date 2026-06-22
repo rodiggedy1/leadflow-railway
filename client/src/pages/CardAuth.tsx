@@ -214,7 +214,26 @@ export default function CardAuth() {
         {/* On desktop: left content + right sticky form side by side */}
         <div className="pb-[54px] pt-2 sm:pt-5">
 
-          {/* Mobile: form at top */}
+          {/* Mobile: hero + video first */}
+          <div className="block lg:hidden mb-6">
+            <div className="inline-flex gap-2 items-center px-3 py-2 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-[13px] mb-4">
+              Trusted home cleaning authorization
+            </div>
+            <h1 className="text-[36px] leading-[1.05] tracking-[-0.04em] font-black my-4 text-[#1e2430]">
+              Reserve your trusted cleaning team.
+            </h1>
+            <p className="text-[17px] leading-[1.55] text-[#657080] mb-5">
+              To protect your appointment time, we securely preauthorize your card before service. You are not charged until your cleaning is completed.
+            </p>
+            <div className="mb-6 rounded-[24px] overflow-hidden" style={{ boxShadow: "0 16px 40px rgba(71,54,35,.12)" }}>
+              <video autoPlay loop muted playsInline className="w-full h-[220px] object-cover">
+                <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
+                <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
+              </video>
+            </div>
+          </div>
+
+          {/* Mobile: form below hero */}
           <div className="block lg:hidden mb-8">
             {submitted ? (
               <div className="bg-white border border-[#e4e8ee] rounded-[28px] p-7 shadow-[0_22px_60px_rgba(71,54,35,.09)] text-center">
