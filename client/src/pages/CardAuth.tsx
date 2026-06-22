@@ -152,7 +152,7 @@ function CardForm({
       </button>
 
       <p className="text-[12px] text-[#657080] text-center mt-3">
-        Powered by Stripe secure payment processing.
+        Secured by Stripe — 256-bit SSL encryption.
       </p>
     </form>
   );
@@ -206,7 +206,7 @@ export default function CardAuth() {
             Maids in Black
           </div>
           <div className="inline-flex gap-1.5 items-center px-2.5 py-1.5 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-[11px] sm:text-[13px]">
-            Secure <span className="hidden sm:inline">payment powered by</span> <span className="font-black tracking-tight">stripe</span>
+            Secured by <span className="font-black tracking-tight">Stripe</span>
           </div>
         </div>
 
@@ -226,7 +226,7 @@ export default function CardAuth() {
                   No charge today — your card will only be processed after your cleaning is completed. We look forward to seeing you soon! 🏠✨
                 </p>
                 <div className="mt-6 inline-flex gap-2 items-center px-4 py-2 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-sm">
-                  Powered by <span className="font-black tracking-tight">stripe</span>
+                  Secured by <span className="font-black tracking-tight">Stripe</span>
                 </div>
               </div>
             ) : (
@@ -312,22 +312,22 @@ export default function CardAuth() {
                     No charge today — your card will only be processed after your cleaning is completed. We look forward to seeing you soon! 🏠✨
                   </p>
                   <div className="mt-6 inline-flex gap-2 items-center px-4 py-2 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-sm">
-                    Powered by <span className="font-black tracking-tight">stripe</span>
-                  </div>
+Secured by <span className="font-black tracking-tight">Stripe</span>
                 </div>
-              ) : (
-                <CardForm
-                  name={name} setName={setName}
-                  cardNumber={cardNumber} cardBrand={cardBrand}
-                  expiry={expiry} cvc={cvc} setCvc={setCvc}
-                  zip={zip} setZip={setZip}
-                  loading={loading}
-                  handleCardInput={handleCardInput}
-                  handleExpiryInput={handleExpiryInput}
-                  handleSubmit={handleSubmit}
-                />
-              )}
-            </aside>
+              </div>
+            ) : (
+              <CardForm
+                name={name} setName={setName}
+                cardNumber={cardNumber} cardBrand={cardBrand}
+                expiry={expiry} cvc={cvc} setCvc={setCvc}
+                zip={zip} setZip={setZip}
+                loading={loading}
+                handleCardInput={handleCardInput}
+                handleExpiryInput={handleExpiryInput}
+                handleSubmit={handleSubmit}
+              />
+            )}
+          </aside>
           </div>
 
           {/* Mobile: content below form */}
