@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -4648,7 +4648,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 transition"
                 >
                   <MessageSquare className="h-3 w-3" />
-                  {activeThreadCount} thread{activeThreadCount > 1 ? "s" : ""}
+                  threads
                   {unreadThreadCount > 0 && (
                     <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
                       {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
@@ -4672,12 +4672,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     )}
                   >
                     <MessageCircle className="h-3 w-3" />
-                    {leadRepliesCount} lead repl{leadRepliesCount > 1 ? "ies" : "y"}
-                    {unreadLeadRepliesCount > 0 && (
-                      <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
-                        {unreadLeadRepliesCount > 9 ? "9+" : unreadLeadRepliesCount}
-                      </span>
-                    )}
+                    lead replies
+                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                      {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
+                    </span>
                   </button>
                 </>
               )}
@@ -4715,8 +4713,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 onClick={() => { window.location.href = "/admin/ai-calls"; }}
                 className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-violet-100 text-violet-700 hover:bg-violet-200"
               >
-                <Phone className="h-3 w-3" />
-                AI Call
+                <Bot className="h-3 w-3" />
+                Call with AI
               </button>
             </div>
           )}

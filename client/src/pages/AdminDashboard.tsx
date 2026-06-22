@@ -1034,7 +1034,10 @@ function ConversationDrawer({
 
   // Mark as read when the drawer opens — clears the unread badge on this lead
   const markReadMutation = trpc.leads.markRead.useMutation({
-    onSuccess: () => utils.leads.list.invalidate(),
+    onSuccess: () => {
+      utils.leads.list.invalidate();
+      utils.leads.getLeadReplies.invalidate();
+    },
   });
   useEffect(() => {
     if (session.hasUnread) {
