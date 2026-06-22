@@ -33,7 +33,6 @@ import {
   fieldMgmtCalls,
   openphoneCallRecordings,
   googleApiUsage,
-  driveTimeCache,
 } from "../drizzle/schema";
 import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
 import { invokeLLM } from "./_core/llm";
@@ -238,34 +237,13 @@ async function geocodeWithCache(address: string): Promise<{ lat: number; lng: nu
  * Each pair is called as 1 origin × 1 destination — no batching ambiguity, no cache.
  * Always returns a fresh Google value. Returns 0 if Google fails.
  */
-/** Round a coordinate to 5 decimal places for cache key stability (~1m precision). */
-function roundCoord(n: number): string { return n.toFixed(5); }
-function driveKey(fromLat: number, fromLng: number, toLat: number, toLng: number): string {
-  return `${roundCoord(fromLat)},${roundCoord(fromLng)}->${roundCoord(toLat)},${roundCoord(toLng)}`;
-}
-
 async function fetchDriveTimes(
   pairs: { fromLat: number; fromLng: number; toLat: number; toLng: number }[]
 ): Promise<number[]> {
   const result: number[] = new Array(pairs.length).fill(0);
-  const db = await getDb();
   let successfulCalls = 0;
-
   for (let i = 0; i < pairs.length; i++) {
     const p = pairs[i];
-    const key = driveKey(p.fromLat, p.fromLng, p.toLat, p.toLng);
-
-    // ── Cache check ──────────────────────────────────────────────────────────
-    if (db) {
-      const cached = await db.select().from(driveTimeCache)
-        .where(eq(driveTimeCache.routeKey, key)).limit(1);
-      if (cached[0]) {
-        result[i] = cached[0].durationSeconds;
-        continue; // cache hit — no API call
-      }
-    }
-
-    // ── Cache miss: call Google ───────────────────────────────────────────────
     try {
       const apiResult = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
         origins: `${p.fromLat},${p.fromLng}`,
@@ -277,15 +255,8 @@ async function fetchDriveTimes(
       if (el?.status === 'OK') {
         result[i] = el.duration.value;
         successfulCalls++;
-        // Write to cache (fire-and-forget)
-        if (db) {
-          void db.insert(driveTimeCache)
-            .ignore()
-            .values({ routeKey: key, durationSeconds: el.duration.value })
-            .catch(() => {});
-        }
       } else {
-        console.warn(`[DRIVE] pair ${i} status=${el?.status ?? 'NO_ELEMENT'} from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng})`);
+        console.warn(`[DRIVE] pair ${i} status=${el?.status ?? 'NO_ELEMENT'} from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng}) el=${JSON.stringify(el)}`);
         result[i] = 0;
       }
     } catch (err) {
@@ -293,7 +264,6 @@ async function fetchDriveTimes(
       result[i] = 0;
     }
   }
-
   // Track distance matrix API usage (fire-and-forget)
   if (successfulCalls > 0) void incrementApiUsage("distanceCalls", successfulCalls);
   return result;
@@ -1827,10 +1797,21 @@ ${callBlocks.join("\n\n")}`;
           }
 
           {
-            // Use fetchDriveTimes so the drive_time_cache is checked before hitting Google
-            const [secs] = await fetchDriveTimes([{ fromLat, fromLng, toLat: curGeo.lat, toLng: curGeo.lng }]);
-            console.log(`[DRIVE] job=${cur.cleanerJobId} from=(${fromLat.toFixed(4)},${fromLng.toFixed(4)}) to=(${curGeo.lat.toFixed(4)},${curGeo.lng.toFixed(4)}) secs=${secs} (${Math.round(secs/60)}m)`);
-            cur.driveTimeSecs = secs;
+            try {
+              const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
+                origins: `${fromLat},${fromLng}`,
+                destinations: `${curGeo.lat},${curGeo.lng}`,
+                mode: "driving",
+                units: "metric",
+              });
+              const el = result?.rows?.[0]?.elements?.[0];
+              const secs = el?.status === "OK" ? el.duration.value : 0;
+              console.log(`[DRIVE] job=${cur.cleanerJobId} from=(${fromLat.toFixed(4)},${fromLng.toFixed(4)}) to=(${curGeo.lat.toFixed(4)},${curGeo.lng.toFixed(4)}) status=${el?.status} secs=${secs} (${Math.round(secs/60)}m)`);
+              cur.driveTimeSecs = secs;
+            } catch (err) {
+              console.log(`[DRIVE] job=${cur.cleanerJobId} ERROR: ${err}`);
+              cur.driveTimeSecs = 0;
+            }
           }
         }
       }
