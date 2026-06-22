@@ -1156,14 +1156,12 @@ const MessageList = memo(function MessageList({
                 )}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
-                {leadRepliesCount > 0 && (
-                  <span className={cn(
+                <span className={cn(
                     "absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none ring-1 ring-white",
                     unreadLeadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
                   )}>
                     {unreadLeadRepliesCount > 0 ? (unreadLeadRepliesCount > 9 ? "9+" : unreadLeadRepliesCount) : leadRepliesCount}
                   </span>
-                )}
               </button>
               <button
                 title="AI Call Log"
@@ -2537,6 +2535,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const unreadThreadCount = (activeThreads as any[]).filter((t: any) => t.hasUnread).length;
   const { data: leadReplies = [] } = trpc.leads.getLeadReplies.useQuery(undefined, {
     refetchInterval: 30_000,
+    staleTime: 0,
   });
   const leadRepliesCount = leadReplies.length;
   const unreadLeadRepliesCount = (leadReplies as any[]).filter((l: any) => l.isUnread).length;
