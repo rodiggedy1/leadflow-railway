@@ -4655,33 +4655,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </button>
               )}
-              {/* Lead Replies pill */}
-              {leadRepliesCount > 0 && (
-                <>
-                  {(unreadTagIds.length > 0 || activeThreadCount > 0) && (
-                    <span className="text-slate-300 text-xs">|</span>
-                  )}
-                  <button
-                    onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
-                    className={cn(
-                      "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
-                      leadRepliesOpen
-                        ? "bg-emerald-200 text-emerald-800"
-                        : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                    )}
-                  >
-                    <MessageCircle className="h-3 w-3" />
-                    lead replies
-                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
-                      {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
-                    </span>
-                  </button>
-                </>
-              )}
-              {/* Email Inbox pill — always visible */}
-              {(unreadTagIds.length > 0 || allMentions.length > 0 || activeThreadCount > 0 || leadRepliesCount > 0) && (
+              {/* Lead Replies pill — always visible */}
+              {(unreadTagIds.length > 0 || activeThreadCount > 0) && (
                 <span className="text-slate-300 text-xs">|</span>
               )}
+              <button
+                onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
+                className={cn(
+                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
+                  leadRepliesOpen
+                    ? "bg-emerald-200 text-emerald-800"
+                    : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                )}
+              >
+                <MessageCircle className="h-3 w-3" />
+                lead replies
+                <span className={cn(
+                  "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none",
+                  leadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                )}>
+                  {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
+                </span>
+              </button>
+              {/* Email Inbox pill — always visible */}
+              <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { window.location.href = "/admin/inbox"; }}
                 className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
