@@ -4733,15 +4733,9 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       const db = await getDb();
       if (!db) return [];
 
-      // Raw SQL — mirrors the exact DB query that produces the correct unread count.
-      // Filters:
-      //   1. Real phone numbers only (no placeholder thumbtack-*/bark-sms-* values)
-      //   2. Non-terminal stages
-      //   3. Last 30 days
-      //   4. Non-lead sources excluded (cs-inbound, hiring, schedule_confirm, review)
-      //   5. Last message in history is customer role (user/customer)
-      //   6. That last message ts > lastReadAt (or lastReadAt is null) = unread
-      const nonLeadSourceList = NON_LEAD_SOURCES.map((s: string) => `'${s}'`).join(',');
+      // Raw SQL: find all sessions where the last SMS is from the customer and not yet read.
+      // No stage filtering — any unread customer reply counts regardless of stage.
+      // Only real phone numbers (no thumbtack-*/bark-sms-* placeholders).
       const rawRows = await db.execute(sql`
         SELECT
           id, leadName, leadPhone, leadSource, stage,
@@ -4751,11 +4745,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           leadPhone IS NOT NULL
           AND leadPhone NOT REGEXP '[a-zA-Z]'
           AND LENGTH(REGEXP_REPLACE(leadPhone, '[^0-9]', '')) >= 10
-          AND stage NOT IN ('LOST','COLD','NOT_INTERESTED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','REVIEW_REQUESTED','REVIEW_DONE','QUALITY_RATING_REQUESTED','QUALITY_RATING_DONE','QUALITY_MISSED_FOLLOWUP','REVIEW_REBOOKING_REQUESTED','REVIEW_REBOOKING_DONE')
           AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-          AND (leadSource IS NULL OR leadSource NOT IN (${sql.raw(nonLeadSourceList)}))
-          AND (leadSource IS NULL OR leadSource != 'review')
-          AND NOT (leadSource = 'cs_initiated' AND stage NOT IN ('QUOTE_SENT','CALL_SCHEDULED','FOLLOW_UP_SCHEDULED','BOOKED','BOOKING_CONFIRMED','BOOKING_COMPLETE','NOT_INTERESTED','LOST','COLD'))
           AND JSON_VALID(messageHistory)
           AND JSON_LENGTH(messageHistory) > 0
           AND JSON_UNQUOTE(JSON_EXTRACT(messageHistory, CONCAT('$[', JSON_LENGTH(messageHistory)-1, '].role'))) IN ('user','customer')
