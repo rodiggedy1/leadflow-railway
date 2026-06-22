@@ -3837,6 +3837,19 @@ export default function AdminDashboard() {
   const [leadsView, setLeadsView] = useState<"split" | "board">("split");
   const [leadsCollapsed, setLeadsCollapsed] = useState(false);
   const [selectedLeadPanel, setSelectedLeadPanel] = useState<typeof sessions[0] | null>(null);
+  // Mark lead as read when the side panel opens — clears the unread badge immediately
+  const panelMarkReadMutation = trpc.leads.markRead.useMutation({
+    onSuccess: () => {
+      trpcUtils.leads.list.invalidate();
+      trpcUtils.leads.getLeadReplies.invalidate();
+    },
+  });
+  useEffect(() => {
+    if (selectedLeadPanel && !!(selectedLeadPanel as any).hasUnread) {
+      panelMarkReadMutation.mutate({ sessionId: selectedLeadPanel.id });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLeadPanel?.id]);
   // No auto-select — table starts full-width with nothing selected
   // ── Auth guards (after ALL hooks)) ─────────────────────────────────────────────────────
   if (!authChecked) {
