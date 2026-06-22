@@ -3010,3 +3010,18 @@ export const googleApiUsage = mysqlTable("google_api_usage", {
 });
 export type GoogleApiUsage = typeof googleApiUsage.$inferSelect;
 export type InsertGoogleApiUsage = typeof googleApiUsage.$inferInsert;
+
+/**
+ * gbp_state — stores the Google Business Profile OAuth refresh token.
+ * One row (id=1). Written by /api/gbp/oauth/callback.
+ */
+export const gbpState = mysqlTable("gbp_state", {
+  id: int("id").primaryKey(),
+  refreshToken: text("refreshToken").notNull(),
+  /** GBP account name, e.g. "accounts/123456789" */
+  accountName: varchar("accountName", { length: 128 }).default(""),
+  /** GBP location name, e.g. "accounts/123456789/locations/987654321" */
+  locationName: varchar("locationName", { length: 255 }).default(""),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GbpState = typeof gbpState.$inferSelect;

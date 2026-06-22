@@ -28,6 +28,7 @@ import { registerDeepgramStreamRoute } from "../deepgramStream";
 import { registerAgentLoginRoute } from "../agentLoginRoute";
 import { registerGmailRoutes } from "../gmailRoutes";
 import { registerGmailWatchRenewCron } from "../gmailWatchRenewCron";
+import { registerGbpRoutes } from "../gbpRoutes";
 import { backfillTeamGeocodesOnStartup } from "../schedulingUtils";
 import { startGlanceWorker, backfillGlanceQueue } from "../gmailGlanceWorker";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
@@ -203,6 +204,8 @@ async function startServer() {
   registerGmailRoutes(app);
   // Gmail watch auto-renewal cron (Heartbeat, every 6 days)
   registerGmailWatchRenewCron(app);
+  // Google Business Profile OAuth + reviews routes
+  registerGbpRoutes(app);
 
   // Preview auto-login: when PREVIEW_MODE=true, visiting /api/preview-login sets
   // an admin agent session cookie automatically so the UI is accessible without credentials.
