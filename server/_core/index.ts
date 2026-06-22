@@ -97,6 +97,79 @@ async function runStartupMigrations() {
     console.error('[Migration] Failed to apply confirmation_calls migration:', err);
     // Non-fatal: server continues — columns may already exist or DB may be read-only
   }
+
+  // ── Stripe card-on-file tables ────────────────────────────────────────────
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS card_auth_tokens (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        token VARCHAR(64) NOT NULL UNIQUE,
+        customerPhone VARCHAR(30) NOT NULL,
+        customerName VARCHAR(255),
+        jobDate VARCHAR(64),
+        jobAddress VARCHAR(512),
+        cleanerJobId INT,
+        used TINYINT NOT NULL DEFAULT 0,
+        expiresAt BIGINT NOT NULL,
+        completedAt BIGINT,
+        createdAt TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `));
+    console.log('[Migration] card_auth_tokens: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to create card_auth_tokens:', err);
+  }
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS stripe_customers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        phone VARCHAR(30) NOT NULL UNIQUE,
+        name VARCHAR(255),
+        stripeCustomerId VARCHAR(64) NOT NULL,
+        stripePaymentMethodId VARCHAR(64),
+        cardBrand VARCHAR(32),
+        cardLast4 VARCHAR(4),
+        cardExpMonth INT,
+        cardExpYear INT,
+        cardSavedAt BIGINT,
+        createdAt TIMESTAMP NOT NULL DEFAULT NOW(),
+        updatedAt TIMESTAMP NOT NULL DEFAULT NOW() ON UPDATE CURRENT_TIMESTAMP
+      )
+    `));
+    console.log('[Migration] stripe_customers: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to create stripe_customers:', err);
+  }
+
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS payment_authorizations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        cleanerJobId INT,
+        jobLabel VARCHAR(255),
+        customerPhone VARCHAR(30) NOT NULL,
+        customerName VARCHAR(255),
+        stripeCustomerId VARCHAR(64) NOT NULL,
+        stripePaymentMethodId VARCHAR(64) NOT NULL,
+        stripePaymentIntentId VARCHAR(64),
+        amountCents INT NOT NULL,
+        currency VARCHAR(8) NOT NULL DEFAULT 'usd',
+        status VARCHAR(32) NOT NULL DEFAULT 'authorized',
+        errorMessage TEXT,
+        createdBy VARCHAR(128),
+        actionBy VARCHAR(128),
+        notes TEXT,
+        authorizedAt BIGINT,
+        capturedAt BIGINT,
+        cancelledAt BIGINT,
+        createdAt TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `));
+    console.log('[Migration] payment_authorizations: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to create payment_authorizations:', err);
+  }
 }
 
 async function startServer() {

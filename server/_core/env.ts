@@ -29,4 +29,7 @@ export const ENV = {
   gmailRedirectUri: process.env.GMAIL_REDIRECT_URI ?? "https://quote.maidinblack.com/api/gmail/oauth/callback",
   gmailRefreshToken: process.env.GMAIL_REFRESH_TOKEN ?? "",
   gmailPubsubTopic: process.env.GMAIL_PUBSUB_TOPIC ?? "",
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
+  stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY ?? "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
 };

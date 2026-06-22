@@ -3025,3 +3025,71 @@ export const gbpState = mysqlTable("gbp_state", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type GbpState = typeof gbpState.$inferSelect;
+
+// ── Stripe: card-on-file tables ───────────────────────────────────────────────
+
+/**
+ * card_auth_tokens — one-time-use tokens for the /pay/:token card collection page.
+ */
+export const cardAuthTokens = mysqlTable("card_auth_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
+  customerName: varchar("customerName", { length: 255 }),
+  jobDate: varchar("jobDate", { length: 64 }),
+  jobAddress: varchar("jobAddress", { length: 512 }),
+  cleanerJobId: int("cleanerJobId"),
+  used: tinyint("used").notNull().default(0),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  completedAt: bigint("completedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type CardAuthToken = typeof cardAuthTokens.$inferSelect;
+export type InsertCardAuthToken = typeof cardAuthTokens.$inferInsert;
+
+/**
+ * stripe_customers — one row per customer phone number.
+ */
+export const stripeCustomers = mysqlTable("stripe_customers", {
+  id: int("id").autoincrement().primaryKey(),
+  phone: varchar("phone", { length: 30 }).notNull().unique(),
+  name: varchar("name", { length: 255 }),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 64 }).notNull(),
+  stripePaymentMethodId: varchar("stripePaymentMethodId", { length: 64 }),
+  cardBrand: varchar("cardBrand", { length: 32 }),
+  cardLast4: varchar("cardLast4", { length: 4 }),
+  cardExpMonth: int("cardExpMonth"),
+  cardExpYear: int("cardExpYear"),
+  cardSavedAt: bigint("cardSavedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type StripeCustomer = typeof stripeCustomers.$inferSelect;
+export type InsertStripeCustomer = typeof stripeCustomers.$inferInsert;
+
+/**
+ * payment_authorizations — one row per preauth/capture attempt.
+ */
+export const paymentAuthorizations = mysqlTable("payment_authorizations", {
+  id: int("id").autoincrement().primaryKey(),
+  cleanerJobId: int("cleanerJobId"),
+  jobLabel: varchar("jobLabel", { length: 255 }),
+  customerPhone: varchar("customerPhone", { length: 30 }).notNull(),
+  customerName: varchar("customerName", { length: 255 }),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 64 }).notNull(),
+  stripePaymentMethodId: varchar("stripePaymentMethodId", { length: 64 }).notNull(),
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
+  amountCents: int("amountCents").notNull(),
+  currency: varchar("currency", { length: 8 }).notNull().default("usd"),
+  status: varchar("status", { length: 32 }).notNull().default("authorized"),
+  errorMessage: text("errorMessage"),
+  createdBy: varchar("createdBy", { length: 128 }),
+  actionBy: varchar("actionBy", { length: 128 }),
+  notes: text("notes"),
+  authorizedAt: bigint("authorizedAt", { mode: "number" }),
+  capturedAt: bigint("capturedAt", { mode: "number" }),
+  cancelledAt: bigint("cancelledAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PaymentAuthorization = typeof paymentAuthorizations.$inferSelect;
+export type InsertPaymentAuthorization = typeof paymentAuthorizations.$inferInsert;
