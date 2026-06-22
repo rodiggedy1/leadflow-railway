@@ -2531,10 +2531,11 @@ ${callBlocks.join("\n\n")}`;
         }
       }
 
-      // 6. Batch distance matrix for all pairs (with cache)
-      const driveSecs: number[] = allPairs.length > 0
-        ? await fetchDriveTimes(allPairs)
-        : [];
+      // 6. Compute drive time estimates using haversine — no Google API calls.
+      // suggestSlots ranks teams by insertion cost; haversine is accurate enough for ranking.
+      const driveSecs: number[] = allPairs.map(p =>
+        Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10)
+      );
 
       // 7. Compute insertion cost for each gap
       for (const spec of gapSpecs as Array<TeamGapSpec & { suggestedTimeMs: number | null }>) {
