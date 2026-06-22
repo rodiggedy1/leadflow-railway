@@ -114,15 +114,18 @@ export default function CardAuth() {
               To protect your appointment time, we securely preauthorize your card before service. You are not charged until your cleaning is completed.
             </p>
 
-            {/* Photo placeholder */}
-            <div
-              className="h-[260px] rounded-[32px] flex items-end p-6 font-black text-[28px] my-6"
-              style={{
-                background: "linear-gradient(135deg,#ffd7a8,#ffeeda 45%,#dbeafe)",
-                boxShadow: "inset 0 -80px 90px rgba(255,122,26,.16)",
-              }}
-            >
-              Trusted professionals for your home
+            {/* Animated cleaner video */}
+            <div className="my-6 rounded-[32px] overflow-hidden" style={{ boxShadow: "0 22px 60px rgba(71,54,35,.12)" }}>
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-[260px] object-cover"
+              >
+                <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
+                <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
+              </video>
             </div>
 
             {/* Trust cards */}
