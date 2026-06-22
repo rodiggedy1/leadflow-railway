@@ -1717,14 +1717,18 @@ function WeeklySchedulePrompt({
   const DAY_LABELS_ES: Record<Day, string> = { sun:'Domingo', mon:'Lunes', tue:'Martes', wed:'Miércoles', thu:'Jueves', fri:'Viernes', sat:'Sábado' };
   const DAY_LABELS_PT: Record<Day, string> = { sun:'Domingo', mon:'Segunda', tue:'Terça', wed:'Quarta', thu:'Quinta', fri:'Sexta', sat:'Sábado' };
 
-  // Compute the Sun–Sat dates for the current ET week (week starts on Sunday)
+  // Compute the Sun–Sat dates for the relevant week.
+  // On Saturday (day=6), show NEXT week so cleaners set availability for the coming week.
+  // Every other day, show the current week.
   const weekDates = useMemo(() => {
     const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
     const et = new Date(etStr);
-    const day = et.getDay(); // 0=Sun
-    // Find Sunday of this week (today if Sunday, else go back)
+    const day = et.getDay(); // 0=Sun, 6=Sat
+    // Find Sunday of the current week
     const sunday = new Date(et);
     sunday.setDate(et.getDate() - day);
+    // On Saturday, advance to next Sunday
+    if (day === 6) sunday.setDate(sunday.getDate() + 7);
     return DAYS.map((d, i) => {
       const dt = new Date(sunday);
       dt.setDate(sunday.getDate() + i);
