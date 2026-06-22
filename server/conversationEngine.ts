@@ -734,36 +734,46 @@ async function handleWidgetSizingReply(
   // use LLM to determine if the lead is confirming the pre-known size
   if ((!bedrooms || !bathrooms) && (context.bedrooms || context.bathrooms)) {
     let isConfirmation = false;
-    try {
-      const resp = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `You are determining if a customer SMS reply is a confirmation (yes/correct/that's right/etc.) or something else (a new size, a question, off-topic).
+
+    // Fast-path regex — "Correct", "yes", "right", thumbs up, etc.
+    // This runs BEFORE the LLM so a simple affirmative word never falls through.
+    const AFFIRMATIVE = /^\s*(yes|yeah|yep|correct|right|yup|sure|ok|okay|confirmed?|that.?s right|absolutely|exactly|affirmative|perfect|sounds good|👍|✅)/i;
+    if (AFFIRMATIVE.test(leadReply.trim())) {
+      isConfirmation = true;
+    } else {
+      // Only call the LLM when the reply is ambiguous (not a plain yes/no)
+      try {
+        const resp = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are determining if a customer SMS reply is a confirmation (yes/correct/that's right/etc.) or something else (a new size, a question, off-topic).
 Respond ONLY with JSON: { "intent": "confirm" | "new_size" | "question" | "other" }`,
-          },
-          { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "sizing_intent",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: { intent: { type: "string" } },
-              required: ["intent"],
-              additionalProperties: false,
+            },
+            { role: "user", content: `Customer reply: "${leadReply.trim()}"` },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "sizing_intent",
+              strict: true,
+              schema: {
+                type: "object",
+                properties: { intent: { type: "string" } },
+                required: ["intent"],
+                additionalProperties: false,
+              },
             },
           },
-        },
-      });
-      const parsed = JSON.parse(resp.choices[0].message.content as string);
-      isConfirmation = parsed.intent === "confirm";
-    } catch {
-      // LLM failed — fall back to a broad regex so we don't break the flow
-      isConfirmation = /\b(yes|yeah|yep|correct|right|yup|sure|ok|okay|confirmed?|that.?s right|absolutely|exactly|affirmative)/i.test(leadReply);
+        });
+        const parsed = JSON.parse(resp.choices[0].message.content as string);
+        isConfirmation = parsed.intent === "confirm";
+      } catch {
+        // LLM failed — broad regex safety net
+        isConfirmation = AFFIRMATIVE.test(leadReply);
+      }
     }
+
     if (isConfirmation) {
       bedrooms = bedrooms ?? context.bedrooms ?? null;
       bathrooms = bathrooms ?? context.bathrooms ?? null;
