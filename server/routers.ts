@@ -4774,20 +4774,17 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         try {
           const history: Array<{ role: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
           if (history.length === 0) continue;
-          // Find the most recent customer message (scan backwards)
-          // Notification shows whenever a customer has replied, regardless of whether
-          // Jade already responded after them.
-          const lastCustomerMsg = [...history].reverse().find(
-            m => m.role === 'user' || m.role === 'customer'
-          );
-          if (!lastCustomerMsg || !lastCustomerMsg.ts) continue;
-          const lastInboundAt = lastCustomerMsg.ts;
-          // Only show replies that came in after this feature's deploy cutoff
-          // (prevents showing 30+ old sessions that happened to have customer messages)
-          const DEPLOY_CUTOFF_MS = 1781029060130; // ~Jun 9 2026 deploy time
-          if (lastInboundAt < DEPLOY_CUTOFF_MS) continue;
+          // Use EXACT same logic as leads.list hasUnread:
+          // A lead is unread ONLY when the LAST message is from the customer AND newer than lastReadAt.
+          // If the agent replied last, it is NOT unread — matches the Unreads filter on the leads page.
+          const lastMsg = history[history.length - 1];
+          const lastIsCustomer = lastMsg && (lastMsg.role === 'user' || lastMsg.role === 'customer');
+          if (!lastIsCustomer || !lastMsg.ts) continue;
+          const lastInboundAt = lastMsg.ts;
           const lastReadAt = r.lastReadAt as number | null | undefined;
           const isUnread = !lastReadAt || lastInboundAt > lastReadAt;
+          // Only include unread leads — panel must match the Unreads filter exactly
+          if (!isUnread) continue;
           results.push({
             id: r.id,
             leadName: r.leadName ?? 'Unknown',
