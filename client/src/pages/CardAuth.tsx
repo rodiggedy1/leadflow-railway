@@ -2,9 +2,9 @@
  * /pay/:token — Public card authorization page
  * Design: Warm Coral / Maids in Black brand
  * Mobile-first responsive layout
- * UI-only for now; Stripe integration wired in next phase
+ * Enhancements: card logos, appointment summary, animated success, micro-copy, Google rating
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useSearch } from "wouter";
 
 function formatCardNumber(value: string) {
@@ -12,10 +12,13 @@ function formatCardNumber(value: string) {
   return digits.replace(/(.{4})/g, "$1 ").trim();
 }
 
-function detectBrand(digits: string): string {
+type Brand = "VISA" | "MASTERCARD" | "AMEX" | "DISCOVER" | "CARD";
+
+function detectBrand(digits: string): Brand {
   if (digits.startsWith("4")) return "VISA";
-  if (digits.startsWith("5")) return "MASTERCARD";
-  if (digits.startsWith("3")) return "AMEX";
+  if (/^5[1-5]/.test(digits) || /^2[2-7]/.test(digits)) return "MASTERCARD";
+  if (/^3[47]/.test(digits)) return "AMEX";
+  if (/^6(?:011|5)/.test(digits)) return "DISCOVER";
   return "CARD";
 }
 
@@ -25,20 +28,134 @@ function formatExpiry(value: string) {
   return digits;
 }
 
-function FaqItem({ q, a }: { q: string; a: string }) {
-  const [open, setOpen] = useState(false);
+// SVG brand logos
+function BrandLogos({ active }: { active: Brand }) {
+  const logos: { id: Brand; svg: React.ReactNode }[] = [
+    {
+      id: "VISA",
+      svg: (
+        <svg viewBox="0 0 48 16" className="h-5 w-auto" aria-label="Visa">
+          <text x="0" y="13" fontFamily="Arial Black,Arial" fontWeight="900" fontSize="14" fill={active === "VISA" ? "#1a1f71" : "#c0c8d8"}>VISA</text>
+        </svg>
+      ),
+    },
+    {
+      id: "MASTERCARD",
+      svg: (
+        <svg viewBox="0 0 38 24" className="h-5 w-auto" aria-label="Mastercard">
+          <circle cx="14" cy="12" r="10" fill={active === "MASTERCARD" ? "#eb001b" : "#d8dde8"} />
+          <circle cx="24" cy="12" r="10" fill={active === "MASTERCARD" ? "#f79e1b" : "#e8ecf2"} fillOpacity={active === "MASTERCARD" ? "0.85" : "1"} />
+        </svg>
+      ),
+    },
+    {
+      id: "AMEX",
+      svg: (
+        <svg viewBox="0 0 48 16" className="h-5 w-auto" aria-label="Amex">
+          <text x="0" y="13" fontFamily="Arial Black,Arial" fontWeight="900" fontSize="11" fill={active === "AMEX" ? "#007bc1" : "#c0c8d8"}>AMEX</text>
+        </svg>
+      ),
+    },
+    {
+      id: "DISCOVER",
+      svg: (
+        <svg viewBox="0 0 60 16" className="h-5 w-auto" aria-label="Discover">
+          <text x="0" y="13" fontFamily="Arial Black,Arial" fontWeight="900" fontSize="10" fill={active === "DISCOVER" ? "#f76f20" : "#c0c8d8"}>DISC</text>
+          <circle cx="52" cy="8" r="7" fill={active === "DISCOVER" ? "#f76f20" : "#d8dde8"} />
+        </svg>
+      ),
+    },
+  ];
   return (
-    <div className="bg-white border border-[#e4e8ee] rounded-[20px] my-2.5 px-[18px]">
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full bg-transparent border-0 text-left py-[18px] text-base font-extrabold flex justify-between items-center cursor-pointer text-[#1e2430]"
-      >
-        {q}
-        <span className="text-xl font-black text-[#ff7a1a] ml-4 flex-shrink-0">{open ? "−" : "+"}</span>
-      </button>
-      {open && (
-        <p className="text-sm text-[#657080] leading-relaxed pb-[18px]">{a}</p>
-      )}
+    <div className="flex gap-3 items-center mt-1 mb-3">
+      {logos.map(l => (
+        <span
+          key={l.id}
+          className={`transition-opacity duration-200 ${active !== "CARD" && active !== l.id ? "opacity-30" : "opacity-100"}`}
+        >
+          {l.svg}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// Animated success checkmark
+function SuccessScreen({ name }: { name: string }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => { setTimeout(() => setShow(true), 80); }, []);
+  const firstName = name ? name.split(" ")[0] : "";
+  return (
+    <div className="bg-white border border-[#e4e8ee] rounded-[28px] p-7 shadow-[0_22px_60px_rgba(71,54,35,.09)] text-center">
+      {/* Animated checkmark */}
+      <div className="flex justify-center mb-4">
+        <svg
+          className={`w-20 h-20 transition-all duration-700 ${show ? "opacity-100 scale-100" : "opacity-0 scale-50"}`}
+          viewBox="0 0 80 80"
+        >
+          <circle cx="40" cy="40" r="38" fill="#f0fdf4" stroke="#22c55e" strokeWidth="3" />
+          <polyline
+            points="22,42 34,54 58,28"
+            fill="none"
+            stroke="#22c55e"
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              strokeDasharray: 60,
+              strokeDashoffset: show ? 0 : 60,
+              transition: "stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1) 0.3s",
+            }}
+          />
+        </svg>
+      </div>
+      <h2 className="text-2xl font-black text-[#1e2430] mb-2">
+        {firstName ? `You're all set, ${firstName}!` : "You're all set!"}
+      </h2>
+      <p className="text-[15px] text-[#657080] leading-relaxed">
+        Your card has been securely authorized. No charge today — you'll only be billed after your cleaning is completed.
+      </p>
+      {/* What happens next */}
+      <div className="mt-5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-[16px] px-4 py-3 text-[13px] font-bold text-[#166534]">
+        📱 We'll text you a confirmation within 5 minutes.
+      </div>
+      <div className="mt-5 inline-flex gap-2 items-center px-4 py-2 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-sm">
+        Secured by <span className="font-black tracking-tight ml-1">Stripe</span>
+      </div>
+    </div>
+  );
+}
+
+// Appointment summary card (shown above form)
+function AppointmentSummary({ name, date, address }: { name: string; date?: string; address?: string }) {
+  if (!name && !date && !address) return null;
+  return (
+    <div className="bg-[#fff8f2] border border-[#ffd8ac] rounded-[18px] px-4 py-3 mb-4 flex items-start gap-3">
+      <div className="w-8 h-8 rounded-xl bg-[#ff7a1a] text-white grid place-items-center flex-shrink-0 text-base mt-0.5">🏠</div>
+      <div>
+        {name && <p className="text-[14px] font-black text-[#1e2430]">{name}</p>}
+        {date && <p className="text-[13px] text-[#7c3b00] font-bold">{date}</p>}
+        {address && <p className="text-[12px] text-[#a75500]">{address}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Google rating badge
+function GoogleBadge() {
+  return (
+    <div className="flex items-center gap-2 bg-white border border-[#e4e8ee] rounded-[14px] px-3 py-2 shadow-sm">
+      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+      </svg>
+      <div className="flex items-center gap-1">
+        <span className="text-[#f59e0b] text-sm leading-none">★★★★★</span>
+        <span className="text-[13px] font-black text-[#1e2430]">4.9</span>
+        <span className="text-[12px] text-[#657080]">· 172 reviews</span>
+      </div>
     </div>
   );
 }
@@ -49,22 +166,28 @@ const labelClass = "block text-[13px] font-bold mt-[14px] mb-[7px] text-[#1e2430
 
 function CardForm({
   name, setName, cardNumber, cardBrand, expiry, cvc, setCvc, zip, setZip,
-  loading, handleCardInput, handleExpiryInput, handleSubmit,
+  loading, handleCardInput, handleExpiryInput, handleSubmit, prefillName, date, address,
 }: {
   name: string; setName: (v: string) => void;
-  cardNumber: string; cardBrand: string;
+  cardNumber: string; cardBrand: Brand;
   expiry: string; cvc: string; setCvc: (v: string) => void;
   zip: string; setZip: (v: string) => void;
   loading: boolean;
   handleCardInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleExpiryInput: (e: React.ChangeEvent<HTMLInputElement>) => void;
   handleSubmit: (e: React.FormEvent) => void;
+  prefillName: string;
+  date?: string;
+  address?: string;
 }) {
   return (
     <form
       onSubmit={handleSubmit}
       className="bg-white border border-[#e4e8ee] rounded-[28px] p-6 shadow-[0_22px_60px_rgba(71,54,35,.09)]"
     >
+      {/* Appointment summary */}
+      <AppointmentSummary name={prefillName} date={date} address={address} />
+
       {/* Notice */}
       <div className="bg-[#fff4e7] border border-[#ffd8ac] text-[#7c3b00] rounded-[18px] p-4 font-extrabold text-sm leading-[1.45] mb-4">
         Your card is never saved by us or ever seen by a human being.
@@ -72,6 +195,11 @@ function CardForm({
 
       <h2 className="text-xl font-black text-[#1e2430] mb-1">Secure your home cleaning</h2>
       <p className="text-[13px] text-[#657080] mb-2">No deposit. No charge until after service. Secure preauthorization only.</p>
+
+      {/* Google rating badge */}
+      <div className="mb-4">
+        <GoogleBadge />
+      </div>
 
       <label className={labelClass}>Cardholder name</label>
       <input
@@ -83,10 +211,9 @@ function CardForm({
         autoComplete="cc-name"
       />
 
-      <label className={labelClass}>
-        Card number{" "}
-        <span className="text-[11px] font-black tracking-[.1em] text-[#ff7a1a] ml-1">{cardBrand}</span>
-      </label>
+      <label className={labelClass}>Card number</label>
+      {/* Card brand logos */}
+      <BrandLogos active={cardBrand} />
       <input
         required
         className={inputClass}
@@ -148,13 +275,36 @@ function CardForm({
             </svg>
             Processing…
           </span>
-        ) : "Secure My Appointment"}
+        ) : "Secure My Appointment →"}
       </button>
 
-      <p className="text-[12px] text-[#657080] text-center mt-3">
+      {/* Micro-copy: what happens next */}
+      <p className="text-[12px] text-[#657080] text-center mt-2">
+        📱 We'll text you a confirmation within 5 minutes.
+      </p>
+
+      <p className="text-[12px] text-[#657080] text-center mt-1">
         Secured by Stripe — 256-bit SSL encryption.
       </p>
     </form>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white border border-[#e4e8ee] rounded-[20px] my-2.5 px-[18px]">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full bg-transparent border-0 text-left py-[18px] text-base font-extrabold flex justify-between items-center cursor-pointer text-[#1e2430]"
+      >
+        {q}
+        <span className="text-xl font-black text-[#ff7a1a] ml-4 flex-shrink-0">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <p className="text-sm text-[#657080] leading-relaxed pb-[18px]">{a}</p>
+      )}
+    </div>
   );
 }
 
@@ -163,10 +313,12 @@ export default function CardAuth() {
   const search = useSearch();
   const urlParams = new URLSearchParams(search);
   const prefillName = urlParams.get("name") ?? "";
+  const prefillDate = urlParams.get("date") ?? "";
+  const prefillAddress = urlParams.get("address") ?? "";
 
   const [name, setName] = useState(prefillName);
   const [cardNumber, setCardNumber] = useState("");
-  const [cardBrand, setCardBrand] = useState("CARD");
+  const [cardBrand, setCardBrand] = useState<Brand>("CARD");
   const [expiry, setExpiry] = useState("");
   const [cvc, setCvc] = useState("");
   const [zip, setZip] = useState("");
@@ -193,6 +345,19 @@ export default function CardAuth() {
     }, 1400);
   }
 
+  const formProps = {
+    name, setName, cardNumber, cardBrand, expiry, cvc, setCvc, zip, setZip,
+    loading, handleCardInput, handleExpiryInput, handleSubmit,
+    prefillName, date: prefillDate, address: prefillAddress,
+  };
+
+  const trustCards = [
+    { title: "Card never seen by humans", body: "Your full card number is never visible to our cleaners, dispatchers, or office team." },
+    { title: "Not stored on our system", body: "Stripe securely processes your card details. We do not save card numbers." },
+    { title: "Insured cleaning service", body: "Your appointment is handled by a professional home service team." },
+    { title: "Satisfaction guarantee", body: "We stand behind the quality of your completed cleaning." },
+  ];
+
   return (
     <div
       className="min-h-screen"
@@ -206,44 +371,22 @@ export default function CardAuth() {
             Maids in Black
           </div>
           <div className="inline-flex gap-1.5 items-center px-2.5 py-1.5 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-[11px] sm:text-[13px]">
-            Secured by <span className="font-black tracking-tight">Stripe</span>
+            Secured by <span className="font-black tracking-tight ml-1">Stripe</span>
           </div>
         </div>
 
-        {/* On mobile: form first (above the fold), then content below */}
-        {/* On desktop: left content + right sticky form side by side */}
         <div className="pb-[54px] pt-2 sm:pt-5">
 
-          {/* Mobile: form at top */}
+          {/* ── MOBILE layout ── */}
           <div className="block lg:hidden mb-8">
             {submitted ? (
-              <div className="bg-white border border-[#e4e8ee] rounded-[28px] p-7 shadow-[0_22px_60px_rgba(71,54,35,.09)] text-center">
-                <div className="text-[56px] mb-2">✅</div>
-                <h2 className="text-2xl font-black text-[#1e2430] mt-2 mb-1">Your booking is confirmed!</h2>
-                <p className="text-[15px] text-[#657080] leading-relaxed mt-2">
-                  Thank you{name ? `, ${name.split(" ")[0]}` : ""}! Your card has been securely authorized.
-                  <br /><br />
-                  No charge today — your card will only be processed after your cleaning is completed. We look forward to seeing you soon! 🏠✨
-                </p>
-                <div className="mt-6 inline-flex gap-2 items-center px-4 py-2 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-sm">
-                  Secured by <span className="font-black tracking-tight">Stripe</span>
-                </div>
-              </div>
+              <SuccessScreen name={name} />
             ) : (
-              <CardForm
-                name={name} setName={setName}
-                cardNumber={cardNumber} cardBrand={cardBrand}
-                expiry={expiry} cvc={cvc} setCvc={setCvc}
-                zip={zip} setZip={setZip}
-                loading={loading}
-                handleCardInput={handleCardInput}
-                handleExpiryInput={handleExpiryInput}
-                handleSubmit={handleSubmit}
-              />
+              <CardForm {...formProps} />
             )}
           </div>
 
-          {/* Desktop: 2-column grid */}
+          {/* ── DESKTOP layout ── */}
           <div className="hidden lg:grid gap-[30px]" style={{ gridTemplateColumns: "1fr 0.9fr" }}>
 
             {/* Left column */}
@@ -268,12 +411,7 @@ export default function CardAuth() {
 
               {/* Trust cards */}
               <div className="grid grid-cols-2 gap-[18px] my-[22px]">
-                {[
-                  { title: "Card never seen by humans", body: "Your full card number is never visible to our cleaners, dispatchers, or office team." },
-                  { title: "Not stored on our system", body: "Stripe securely processes your card details. We do not save card numbers." },
-                  { title: "Insured cleaning service", body: "Your appointment is handled by a professional home service team." },
-                  { title: "Satisfaction guarantee", body: "We stand behind the quality of your completed cleaning." },
-                ].map(c => (
+                {trustCards.map(c => (
                   <div key={c.title} className="bg-white border border-[#e4e8ee] rounded-[28px] p-6 shadow-[0_22px_60px_rgba(71,54,35,.09)]">
                     <h3 className="font-extrabold text-[#1e2430] mb-1">{c.title}</h3>
                     <p className="text-[13px] text-[#657080] leading-relaxed">{c.body}</p>
@@ -303,31 +441,11 @@ export default function CardAuth() {
             {/* Right column — sticky form */}
             <aside className="sticky top-6 self-start">
               {submitted ? (
-                <div className="bg-white border border-[#e4e8ee] rounded-[28px] p-7 shadow-[0_22px_60px_rgba(71,54,35,.09)] text-center">
-                  <div className="text-[56px] mb-2">✅</div>
-                  <h2 className="text-2xl font-black text-[#1e2430] mt-2 mb-1">Your booking is confirmed!</h2>
-                  <p className="text-[15px] text-[#657080] leading-relaxed mt-2">
-                    Thank you{name ? `, ${name.split(" ")[0]}` : ""}! Your card has been securely authorized.
-                    <br /><br />
-                    No charge today — your card will only be processed after your cleaning is completed. We look forward to seeing you soon! 🏠✨
-                  </p>
-                  <div className="mt-6 inline-flex gap-2 items-center px-4 py-2 rounded-full bg-[#fff0dc] text-[#a75500] font-extrabold text-sm">
-Secured by <span className="font-black tracking-tight">Stripe</span>
-                </div>
-              </div>
-            ) : (
-              <CardForm
-                name={name} setName={setName}
-                cardNumber={cardNumber} cardBrand={cardBrand}
-                expiry={expiry} cvc={cvc} setCvc={setCvc}
-                zip={zip} setZip={setZip}
-                loading={loading}
-                handleCardInput={handleCardInput}
-                handleExpiryInput={handleExpiryInput}
-                handleSubmit={handleSubmit}
-              />
-            )}
-          </aside>
+                <SuccessScreen name={name} />
+              ) : (
+                <CardForm {...formProps} />
+              )}
+            </aside>
           </div>
 
           {/* Mobile: content below form */}
@@ -352,12 +470,7 @@ Secured by <span className="font-black tracking-tight">Stripe</span>
 
             {/* Trust cards — single column on mobile */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-              {[
-                { title: "Card never seen by humans", body: "Your full card number is never visible to our cleaners, dispatchers, or office team." },
-                { title: "Not stored on our system", body: "Stripe securely processes your card details. We do not save card numbers." },
-                { title: "Insured cleaning service", body: "Your appointment is handled by a professional home service team." },
-                { title: "Satisfaction guarantee", body: "We stand behind the quality of your completed cleaning." },
-              ].map(c => (
+              {trustCards.map(c => (
                 <div key={c.title} className="bg-white border border-[#e4e8ee] rounded-[24px] p-5 shadow-[0_8px_30px_rgba(71,54,35,.07)]">
                   <h3 className="font-extrabold text-[#1e2430] mb-1 text-[15px]">{c.title}</h3>
                   <p className="text-[13px] text-[#657080] leading-relaxed">{c.body}</p>
