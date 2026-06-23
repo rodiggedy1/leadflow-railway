@@ -124,12 +124,14 @@ function StripeCardForm({
   prefillName,
   date,
   address,
+  clientSecret,
   onSuccess,
 }: {
   token: string;
   prefillName: string;
   date?: string;
   address?: string;
+  clientSecret: string;
   onSuccess: (name: string) => void;
 }) {
   const stripe = useStripe();
@@ -156,8 +158,7 @@ function StripeCardForm({
 
       // confirmCardSetup — card data goes directly to Stripe, never our server
       const { setupIntent, error } = await stripe.confirmCardSetup(
-        // The clientSecret is injected via the Elements provider options
-        (elements as unknown as { _commonOptions?: { clientSecret?: string } })._commonOptions?.clientSecret ?? "",
+        clientSecret,
         {
           payment_method: {
             card: cardElement,
@@ -330,6 +331,7 @@ function CardAuthInner({
         prefillName={prefillName}
         date={prefillDate}
         address={prefillAddress}
+        clientSecret={clientSecret}
         onSuccess={handleSuccess}
       />
     </Elements>
