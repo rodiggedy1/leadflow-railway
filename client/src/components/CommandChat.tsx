@@ -27,7 +27,7 @@ import {
   ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2552,6 +2552,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { staleTime: 30_000, refetchInterval: 60_000, retry: false }
   );
   const missedCallsTodayCount = missedCallsTodayData?.count ?? 0;
+  // ── Unanswered CS SMS count (202-888-5362 line only) ─────────────────────────
+  const { data: csUnansweredData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
+    staleTime: 30_000, refetchInterval: 60_000, retry: false,
+  });
+  const csUnansweredCount = csUnansweredData?.count ?? 0;
+  const csUnansweredUrgent = csUnansweredData?.urgentCount ?? 0;
+  const csUnansweredWarning = csUnansweredData?.warningCount ?? 0;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -2592,6 +2599,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.leads.list.invalidate();
       // Refresh lead replies notification immediately on any inbound lead event
       utils.leads.getLeadReplies.invalidate();
+      // Refresh unanswered CS SMS count
+      utils.leads.getUnansweredCsCount.invalidate();
     },
     onReactionUpdate: () => {
       refetchReactions();
@@ -4711,6 +4720,39 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               >
                 <Bot className="h-3 w-3" />
                 Call with AI
+              </button>
+              {/* CS SMS unanswered pill — 202-888-5362 line */}
+              <span className="text-slate-300 text-xs">|</span>
+              <button
+                onClick={() => { if (onSwitchToCS) onSwitchToCS(); }}
+                className={[
+                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
+                  csUnansweredUrgent > 0
+                    ? "bg-red-100 text-red-700 hover:bg-red-200"
+                    : csUnansweredWarning > 0
+                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ].join(" ")}
+                title={
+                  csUnansweredUrgent > 0
+                    ? `${csUnansweredUrgent} waiting 1h+`
+                    : csUnansweredWarning > 0
+                    ? `${csUnansweredWarning} waiting 15min+`
+                    : "All CS SMS caught up"
+                }
+              >
+                <Smartphone className="h-3 w-3" />
+                CS SMS
+                <span className={[
+                  "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none",
+                  csUnansweredUrgent > 0
+                    ? "bg-red-500 text-white animate-pulse"
+                    : csUnansweredWarning > 0
+                    ? "bg-amber-500 text-white animate-pulse"
+                    : "bg-slate-400 text-white"
+                ].join(" ")}>
+                  {csUnansweredCount > 99 ? "99+" : csUnansweredCount}
+                </span>
               </button>
             </div>
           )}
