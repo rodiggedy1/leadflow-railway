@@ -6429,7 +6429,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         open={tasksOpen}
         onClose={() => setTasksOpen(false)}
         isAdmin={true}
-        agentList={(agentList ?? []).map(a => ({ id: a.id, name: a.name }))}
+        agentList={(agentList ?? []).map(a => ({ id: a.id, name: a.name, photoUrl: a.photoUrl ?? null }))}
         refetchTick={taskRefetchTick}
       />
       {/* Due task popup — fires when tasks come due */}
