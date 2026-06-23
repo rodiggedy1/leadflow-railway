@@ -3337,8 +3337,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           });
         } catch { /* skip malformed */ }
       }
-      // Sort by age descending (oldest first)
-      unansweredSessions.sort((a, b) => b.ageMs - a.ageMs);
+      // Sort by age ascending (most recent / shortest wait first)
+      unansweredSessions.sort((a, b) => a.ageMs - b.ageMs);
       return { count, urgentCount, warningCount, sessions: unansweredSessions };
     }),
     /**

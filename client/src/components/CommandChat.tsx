@@ -6256,7 +6256,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <div className="divide-y divide-slate-100">
                 {csUnansweredSessions.map((session) => {
                   const ageMin = Math.floor(session.ageMs / 60_000);
-                  const ageLabel = ageMin < 1 ? 'just now' : ageMin < 60 ? `${ageMin}m ago` : `${Math.floor(ageMin / 60)}h ${ageMin % 60}m ago`;
+                  const ageDays = Math.floor(session.ageMs / 86_400_000);
+                  const ageHours = Math.floor(session.ageMs / 3_600_000);
+                  const ageLabel = ageMin < 1 ? 'just now' : ageMin < 60 ? `${ageMin}m ago` : ageDays >= 1 ? `${ageDays}d ago` : `${ageHours}h ${ageMin % 60}m ago`;
                   const isUrgent = session.ageMs > 60 * 60 * 1000;
                   const isWarning = !isUrgent && session.ageMs > 15 * 60 * 1000;
                   const displayName = session.leadName || session.leadPhone;

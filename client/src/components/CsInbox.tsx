@@ -211,9 +211,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const setActiveFilter = setFilterProp ?? setActiveFilterLocal;
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  // Auto-open a specific session when focusSessionId changes
+  // Track the pending focus request in a ref so it can be applied once data loads
+  const pendingFocusRef = useRef<number | null>(null);
   useEffect(() => {
     if (focusSessionId != null) {
+      pendingFocusRef.current = focusSessionId;
       setSelectedId(focusSessionId);
     }
   }, [focusSessionId]);
@@ -320,7 +322,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       const lastTs = msgs.slice(-1)[0]?.ts;
       const waitMs = lastTs ? Date.now() - lastTs : 0;
       const waitMin = Math.round(waitMs / 60000);
-      const waitStr = waitMin < 60 ? `${waitMin} min` : `${Math.round(waitMin / 60)} hr`;
+      const waitDays = Math.floor(waitMs / 86_400_000);
+      const waitHours = Math.floor(waitMs / 3_600_000);
+      const waitStr = waitMin < 1 ? 'just now' : waitMin < 60 ? `${waitMin} min` : waitDays >= 1 ? `${waitDays}d ago` : `${waitHours}h ${waitMin % 60}m ago`;
       // Resolve name: batch map > leadName > raw phone
       const phone10 = (row.leadPhone ?? "").replace(/[^\d]/g, "").slice(-10);
       const resolvedName = (nameMap && phone10 && nameMap[phone10]) || row.leadName || row.leadPhone || "Unknown";
@@ -369,7 +373,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   }, [csData, nameMap]);
 
   const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
-
+  // Once data arrives, apply any pending focus (handles the case where data wasn't
+  // loaded yet when the tab switched and focusSessionId fired)
+  useEffect(() => {
+    if (pendingFocusRef.current != null && displayConversations.length > 0) {
+      const exists = displayConversations.some((c) => c.id === pendingFocusRef.current);
+      if (exists) {
+        setSelectedId(pendingFocusRef.current);
+        pendingFocusRef.current = null;
+      }
+    }
+  }, [displayConversations]);
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
       setCompose("");
