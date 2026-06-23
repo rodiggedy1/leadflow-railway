@@ -246,7 +246,7 @@ function InlinePreauthForm({
   customer,
   onDone,
 }: {
-  customer: { phone: string; name: string | null };
+  customer: { phone: string; name: string | null; cardBrand?: string | null; cardLast4?: string | null };
   onDone: () => void;
 }) {
   const [amount, setAmount] = useState("");
@@ -277,6 +277,12 @@ function InlinePreauthForm({
 
   return (
     <form onSubmit={handleSubmit} className="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {customer.cardBrand && customer.cardLast4 && (
+        <div className="sm:col-span-3 flex items-center gap-2 mb-1 text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          <CreditCard className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+          A hold will be placed on <span className="font-bold text-gray-700 capitalize">{customer.cardBrand} ••••{customer.cardLast4}</span> — no charge until you capture.
+        </div>
+      )}
       <div>
         <label className="block text-xs font-semibold text-gray-500 mb-1">Amount (USD) *</label>
         <div className="relative">
@@ -409,7 +415,7 @@ function CardsOnFilePanel() {
               </div>
               {preauthFor === c.phone && (
                 <InlinePreauthForm
-                  customer={{ phone: c.phone, name: c.name ?? null }}
+                  customer={{ phone: c.phone, name: c.name ?? null, cardBrand: c.cardBrand, cardLast4: c.cardLast4 }}
                   onDone={() => setPreauthFor(null)}
                 />
               )}
