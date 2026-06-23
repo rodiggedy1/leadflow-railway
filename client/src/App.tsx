@@ -155,7 +155,8 @@ function GlobalOpsChat() {
   // Poll every 60s for unanswered CS SMS count (202-888-5362 line only)
   const utils = trpc.useUtils();
   const { data: csData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
-    refetchInterval: 60_000,
+    enabled: isEligible,
+    refetchInterval: isEligible ? 60_000 : false,
     refetchIntervalInBackground: false,
     retry: false,
     throwOnError: false,
