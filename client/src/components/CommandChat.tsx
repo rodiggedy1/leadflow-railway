@@ -2559,10 +2559,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const { data: csUnansweredData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
     staleTime: 0, refetchInterval: 60_000, retry: false,
   });
-  const csUnansweredCount = csUnansweredData?.count ?? 0;
+  // Optimistically-hidden session IDs — removed from list immediately on checkmark click
+  const [hiddenCsSessionIds, setHiddenCsSessionIds] = useState<Set<number>>(new Set());
+  const rawCsUnansweredSessions = csUnansweredData?.sessions ?? [];
+  const csUnansweredSessions = rawCsUnansweredSessions.filter(s => !hiddenCsSessionIds.has(s.id));
+  const csUnansweredCount = Math.max(0, (csUnansweredData?.count ?? 0) - hiddenCsSessionIds.size);
   const csUnansweredUrgent = csUnansweredData?.urgentCount ?? 0;
   const csUnansweredWarning = csUnansweredData?.warningCount ?? 0;
-  const csUnansweredSessions = csUnansweredData?.sessions ?? [];
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -6308,6 +6311,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          // Optimistically hide immediately so count drops at once
+                          setHiddenCsSessionIds(prev => new Set([...prev, session.id]));
                           resolveSessionFromBanner.mutate({ sessionId: session.id });
                         }}
                         title="Resolve"
