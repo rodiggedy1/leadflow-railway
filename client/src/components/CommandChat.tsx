@@ -2556,12 +2556,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   );
   const missedCallsTodayCount = missedCallsTodayData?.count ?? 0;
   // ── Unanswered CS SMS count (202-888-5362 line only) ─────────────────────────
-  const resolveSessionFromBanner = trpc.leads.resolveSession.useMutation({
-    onSuccess: () => {
-      utils.leads.getUnansweredCsCount.invalidate();
-      utils.leads.listCsInbox.invalidate();
-    },
-  });
   const { data: csUnansweredData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
     staleTime: 0, refetchInterval: 60_000, retry: false,
   });
@@ -2574,6 +2568,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const imBackFiredRef = useRef(false);
 
   const utils = trpc.useUtils();
+
+  const resolveSessionFromBanner = trpc.leads.resolveSession.useMutation({
+    onSuccess: () => {
+      utils.leads.getUnansweredCsCount.invalidate();
+      utils.leads.listCsInbox.invalidate();
+    },
+  });
 
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 60_000, // SSE triggers immediate refetch; interval is fallback only
