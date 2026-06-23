@@ -1737,8 +1737,31 @@ function WeeklySchedulePrompt({
   }, []);
 
   const [schedule, setSchedule] = useState<Record<Day, boolean>>({ mon:false, tue:false, wed:false, thu:false, fri:false, sat:false, sun:false });
+  const [seeded, setSeeded] = useState(false);
   const [step, setStep] = useState<'schedule' | 'note' | 'confirmed'>('schedule');
   const [note, setNote] = useState('');
+
+  // Pre-populate from saved team schedule so cleaners don't start blank every day
+  const savedScheduleQuery = trpc.cleaner.getMyTeamSchedule.useQuery(undefined, {
+    enabled: open && !seeded,
+    retry: false,
+    throwOnError: false,
+  });
+  useEffect(() => {
+    if (seeded) return;
+    const s = savedScheduleQuery.data?.schedule;
+    if (!s) return;
+    setSchedule({
+      mon: s.mon === 1,
+      tue: s.tue === 1,
+      wed: s.wed === 1,
+      thu: s.thu === 1,
+      fri: s.fri === 1,
+      sat: s.sat === 1,
+      sun: s.sun === 1,
+    });
+    setSeeded(true);
+  }, [savedScheduleQuery.data, seeded]);
 
   const submitWeeklySchedule = trpc.cleaner.submitWeeklySchedule.useMutation({
     onSuccess: () => {
