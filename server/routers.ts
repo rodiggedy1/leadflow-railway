@@ -1354,6 +1354,9 @@ export const appRouter = router({
         }
 
         console.log(`[sendMessage] Agent ${agentSession.agentName} sent to ${session.leadPhone}: "${input.message}"`);
+        // Broadcast so CS badge updates immediately on all connected clients
+        const { broadcastOpsUpdate: bcastSend } = await import("./sseBroadcast");
+        bcastSend("lead_update");
         return { success: true, smsSent: smsResult.success };
       }),
 
@@ -3266,6 +3269,48 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         return { count };
       }),
     /**
+     * getUnansweredCsCount — returns count of open CS inbox sessions (202-888-5362)
+     * where the last real message is from the customer and has not been replied to.
+     * Used for the MIB Chat bubble badge and AdminHeader badge.
+     * Returns urgentCount (>1h), warningCount (15min–1h), and total count.
+     */
+    getUnansweredCsCount: opsChatProcedure.query(async () => {
+      const db = await getDb();
+      if (!db) return { count: 0, urgentCount: 0, warningCount: 0 };
+      const sourceFilter = or(
+        eq(conversationSessions.leadSource, "cs-inbound"),
+        eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+        eq(conversationSessions.leadSource, "cs_initiated")
+      );
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          messageHistory: conversationSessions.messageHistory,
+        })
+        .from(conversationSessions)
+        .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)))
+        .limit(300);
+      const now = Date.now();
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+      let count = 0;
+      let urgentCount = 0;
+      let warningCount = 0;
+      for (const s of sessions) {
+        try {
+          const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+          // Find last real message (skip notes/system)
+          const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
+          if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
+          count++;
+          const age = lastReal.ts ? now - lastReal.ts : 0;
+          if (age > ONE_HOUR_MS) urgentCount++;
+          else if (age > FIFTEEN_MIN_MS) warningCount++;
+        } catch { count++; } // malformed — count it to be safe
+      }
+      return { count, urgentCount, warningCount };
+    }),
+    /**
      * resolveSession — marks a CS inbox session as resolved (archived).
      * Sets csResolvedAt to the current timestamp.
      */
@@ -3278,6 +3323,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .update(conversationSessions)
           .set({ csResolvedAt: Date.now() } as any)
           .where(eq(conversationSessions.id, input.sessionId));
+        // Broadcast so CS badge updates immediately on all connected clients
+        const { broadcastOpsUpdate: bcastResolve } = await import("./sseBroadcast");
+        bcastResolve("lead_update");
         return { success: true };
       }),
     /**

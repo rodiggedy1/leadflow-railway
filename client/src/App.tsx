@@ -9,6 +9,8 @@ import LeadAssignmentWatcher from "./components/LeadAssignmentWatcher";
 import SuperAlertWatcher from "./components/SuperAlertWatcher";
 import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
+import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "./hooks/useOpsStream";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -138,7 +140,6 @@ function GlobalOpsChat() {
   // consuming the rate limit before the login mutation can fire.
   // The bubble shows unconditionally on eligible routes — OpsChat's AgentLoginGate handles auth.
   // The unread badge is populated by OpsChat itself once it has a session.
-  const totalUnread = 0;
 
   // OpsChat is only relevant on admin / agent / call-assist routes.
   // IMPORTANT: Once OpsChat has been mounted, we must NEVER unmount it while
@@ -150,6 +151,20 @@ function GlobalOpsChat() {
     location.startsWith("/admin") ||
     location.startsWith("/agent") ||
     location.startsWith("/call-assist");
+
+  // Poll every 60s for unanswered CS SMS count (202-888-5362 line only)
+  const utils = trpc.useUtils();
+  const { data: csData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+    throwOnError: false,
+  });
+  // Invalidate immediately when any lead_update SSE fires (agent reply or resolve)
+  useOpsStream({ onLeadUpdate: () => utils.leads.getUnansweredCsCount.invalidate() }, { enabled: isEligible });
+  const csCount = csData?.count ?? 0;
+  const csUrgent = csData?.urgentCount ?? 0;
+  const csWarning = csData?.warningCount ?? 0;
 
   // Track whether OpsChat has ever been mounted in this session.
   // Once true, keep it in the DOM for the rest of the session (eligible routes only).
@@ -190,12 +205,16 @@ function GlobalOpsChat() {
               className="w-7 h-7 rounded-full object-cover"
             />
             <span className="text-sm font-bold tracking-wide">MIB Chat</span>
-            {/* Unread badge */}
-            {totalUnread > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 shadow">
-                {totalUnread > 99 ? "99+" : totalUnread}
-              </span>
-            )}
+            {/* CS SMS unanswered badge — always visible, color-coded by urgency */}
+            <span
+              className={[
+                "absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full text-white text-[10px] font-bold flex items-center justify-center px-1 shadow transition-colors",
+                csUrgent > 0 ? "bg-red-500" : csWarning > 0 ? "bg-amber-500" : "bg-slate-500"
+              ].join(" ")}
+              title={csUrgent > 0 ? `${csUrgent} waiting 1h+` : csWarning > 0 ? `${csWarning} waiting 15min+` : "All caught up"}
+            >
+              {csCount > 99 ? "99+" : csCount}
+            </span>
           </button>
           {state === "minimized" && (
             <button
