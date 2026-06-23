@@ -2563,9 +2563,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [hiddenCsSessionIds, setHiddenCsSessionIds] = useState<Set<number>>(new Set());
   const rawCsUnansweredSessions = csUnansweredData?.sessions ?? [];
   const csUnansweredSessions = rawCsUnansweredSessions.filter(s => !hiddenCsSessionIds.has(s.id));
+  const hiddenSessions = rawCsUnansweredSessions.filter(s => hiddenCsSessionIds.has(s.id));
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+  const hiddenUrgentCount = hiddenSessions.filter(s => s.ageMs > ONE_HOUR_MS).length;
+  const hiddenWarningCount = hiddenSessions.filter(s => s.ageMs > FIFTEEN_MIN_MS && s.ageMs <= ONE_HOUR_MS).length;
   const csUnansweredCount = Math.max(0, (csUnansweredData?.count ?? 0) - hiddenCsSessionIds.size);
-  const csUnansweredUrgent = csUnansweredData?.urgentCount ?? 0;
-  const csUnansweredWarning = csUnansweredData?.warningCount ?? 0;
+  const csUnansweredUrgent = Math.max(0, (csUnansweredData?.urgentCount ?? 0) - hiddenUrgentCount);
+  const csUnansweredWarning = Math.max(0, (csUnansweredData?.warningCount ?? 0) - hiddenWarningCount);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
