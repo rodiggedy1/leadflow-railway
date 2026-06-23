@@ -393,6 +393,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       if (effectiveSelectedIdRef.current !== null) {
         setSelectedId(effectiveSelectedIdRef.current);
       }
+      utils.leads.getUnansweredCsCount.invalidate();
       utils.leads.listCsInbox.invalidate();
     },
   });

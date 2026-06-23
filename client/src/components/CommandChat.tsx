@@ -2557,7 +2557,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const missedCallsTodayCount = missedCallsTodayData?.count ?? 0;
   // ── Unanswered CS SMS count (202-888-5362 line only) ─────────────────────────
   const { data: csUnansweredData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
-    staleTime: 30_000, refetchInterval: 60_000, retry: false,
+    staleTime: 0, refetchInterval: 60_000, retry: false,
   });
   const csUnansweredCount = csUnansweredData?.count ?? 0;
   const csUnansweredUrgent = csUnansweredData?.urgentCount ?? 0;
