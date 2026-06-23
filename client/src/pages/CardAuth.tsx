@@ -306,7 +306,7 @@ function CardAuthInner({
   clientSecret: string;
   publishableKey: string;
 }) {
-  const [stripePromise] = useState(() => loadStripe(publishableKey));
+  const [stripePromise] = useState(() => loadStripe(publishableKey.trim()));
   const [submitted, setSubmitted] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
 

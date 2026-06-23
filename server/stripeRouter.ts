@@ -183,7 +183,7 @@ export const stripeRouter = router({
 
       return {
         clientSecret: setupIntent.client_secret!,
-        stripePublishableKey: ENV.stripePublishableKey,
+        stripePublishableKey: ENV.stripePublishableKey.trim(),
       };
     }),
 
