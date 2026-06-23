@@ -203,13 +203,20 @@ type CsInboxProps = {
   onSwitchTab?: (tab: "today" | "channels" | "cs" | "leadops") => void;
   activeFilter?: InboxFilter;
   setActiveFilter?: (f: InboxFilter) => void;
+  focusSessionId?: number | null;
 };
-export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActiveFilter: setFilterProp }: CsInboxProps) {
+export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActiveFilter: setFilterProp, focusSessionId }: CsInboxProps) {
   const [activeFilterLocal, setActiveFilterLocal] = useState<InboxFilter>("All");
   const activeFilter = filterProp ?? activeFilterLocal;
   const setActiveFilter = setFilterProp ?? setActiveFilterLocal;
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  // Auto-open a specific session when focusSessionId changes
+  useEffect(() => {
+    if (focusSessionId != null) {
+      setSelectedId(focusSessionId);
+    }
+  }, [focusSessionId]);
   const [compose, setCompose] = useState("");
   const [showResolved, setShowResolved] = useState(false);
   const [resolvingId, setResolvingId] = useState<number | null>(null);

@@ -944,6 +944,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [activeFilter, setActiveFilter] = useState<PriorityStatus | null>(null);
   const [csFilter, setCsFilter] = useState<InboxFilter>("All");
   const [focusLeadSessionId, setFocusLeadSessionId] = useState<number | undefined>(undefined);
+  const [focusCsSessionId, setFocusCsSessionId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
@@ -2731,6 +2732,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
             onSwitchToCS={() => handleSetActiveTab("cs")}
+            onSwitchToCSSession={(sessionId) => { setFocusCsSessionId(sessionId); handleSetActiveTab("cs"); }}
             onSwitchToLeadOps={(sessionId) => { setFocusLeadSessionId(sessionId); handleSetActiveTab("leadops"); }}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
@@ -2954,7 +2956,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: CS Inbox */}
         {activeTab === "cs" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <CsInbox onSwitchTab={handleSetActiveTab} activeFilter={csFilter} setActiveFilter={setCsFilter} />
+            <CsInbox onSwitchTab={handleSetActiveTab} activeFilter={csFilter} setActiveFilter={setCsFilter} focusSessionId={focusCsSessionId} />
           </div>
         )}
 

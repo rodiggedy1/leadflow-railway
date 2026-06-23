@@ -80,6 +80,7 @@ interface CommandChatProps {
   onSwitchToToday: () => void;
   /** Called when user clicks "CS" in the in-panel tab switcher */
   onSwitchToCS?: () => void;
+  onSwitchToCSSession?: (sessionId: number) => void;
   /** Called when user clicks the Lead Ops badge in the header */
   onSwitchToLeadOps?: (sessionId?: number) => void;
   /** Current away status of the calling agent (null = available) */
@@ -2472,7 +2473,8 @@ const MessageList = memo(function MessageList({
 // (unlike useRef which resets to its initial value on each mount).
 let _commandChatScrollTop = 0;
 
-export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
+  onSwitchToCSSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // Message quality check
 
@@ -6263,11 +6265,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       key={session.id}
                       onClick={() => {
                         setCsSmsOpen(false);
-                        if (onSwitchToCS) onSwitchToCS();
-                        // Small delay to let the tab switch before navigating
-                        setTimeout(() => {
-                          window.location.href = `/admin/cs-inbox?session=${session.id}`;
-                        }, 100);
+                        if (onSwitchToCSSession) {
+                          onSwitchToCSSession(session.id);
+                        } else if (onSwitchToCS) {
+                          onSwitchToCS();
+                        }
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
                     >

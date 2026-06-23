@@ -3288,6 +3288,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           leadName: conversationSessions.leadName,
           leadPhone: conversationSessions.leadPhone,
           messageHistory: conversationSessions.messageHistory,
+          lastCustomerReplyAt: conversationSessions.lastCustomerReplyAt,
         })
         .from(conversationSessions)
         .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)))
@@ -3295,6 +3296,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
       const now = Date.now();
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const FIFTEEN_MIN_MS = 15 * 60 * 1000;
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
       let count = 0;
       let urgentCount = 0;
       let warningCount = 0;
@@ -3311,8 +3313,16 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           // Find last real message (skip notes/system)
           const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
           if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
+          // Use message ts first, fall back to lastCustomerReplyAt on the session row
+          const msgTs = lastReal.ts && lastReal.ts > 1_000_000_000_000 ? lastReal.ts : null;
+          const fallbackTs = s.lastCustomerReplyAt && s.lastCustomerReplyAt > 1_000_000_000_000 ? s.lastCustomerReplyAt : null;
+          const resolvedTs = msgTs ?? fallbackTs;
+          // Skip sessions with no valid timestamp (old data with no ts)
+          if (!resolvedTs) continue;
+          const age = now - resolvedTs;
+          // Skip sessions older than 30 days — they're stale/dead
+          if (age > THIRTY_DAYS_MS) continue;
           count++;
-          const age = lastReal.ts ? now - lastReal.ts : 0;
           if (age > ONE_HOUR_MS) urgentCount++;
           else if (age > FIFTEEN_MIN_MS) warningCount++;
           const preview = typeof lastReal.content === "string"
@@ -3325,7 +3335,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             lastMessagePreview: preview,
             ageMs: age,
           });
-        } catch { count++; } // malformed — count it to be safe
+        } catch { /* skip malformed */ }
       }
       // Sort by age descending (oldest first)
       unansweredSessions.sort((a, b) => b.ageMs - a.ageMs);
