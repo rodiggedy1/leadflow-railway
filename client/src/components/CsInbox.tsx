@@ -646,6 +646,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   const resolveSession = trpc.leads.resolveSession.useMutation({
     onSuccess: (_data, variables) => {
+      // Immediately decrement the badge — don't wait for SSE round-trip
+      utils.leads.getUnansweredCsCount.invalidate();
       // Play celebration for 900ms, then let the card disappear from current view
       setResolvingId(variables.sessionId);
       window.setTimeout(() => {
