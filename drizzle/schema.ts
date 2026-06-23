@@ -3093,3 +3093,43 @@ export const paymentAuthorizations = mysqlTable("payment_authorizations", {
 });
 export type PaymentAuthorization = typeof paymentAuthorizations.$inferSelect;
 export type InsertPaymentAuthorization = typeof paymentAuthorizations.$inferInsert;
+
+// ── Ops Tasks ─────────────────────────────────────────────────────────────────
+/**
+ * ops_tasks — internal task management for ops agents.
+ * Admin can create tasks, assign to agents, set priority/due date.
+ * Agents see their own tasks; admin sees all.
+ */
+export const opsTasks = mysqlTable("ops_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Short title of the task */
+  title: varchar("title", { length: 255 }).notNull(),
+  /** Optional longer description */
+  description: text("description"),
+  /** Priority level: urgent | high | medium | low */
+  priority: varchar("priority", { length: 16 }).notNull().default("medium"),
+  /** Status: todo | in_progress | done */
+  status: varchar("status", { length: 16 }).notNull().default("todo"),
+  /** Assigned agent id (FK → agents.id) */
+  assigneeAgentId: int("assigneeAgentId"),
+  /** Assigned agent name (denormalized for display) */
+  assigneeAgentName: varchar("assigneeAgentName", { length: 128 }),
+  /** Who created this task (agent name) */
+  createdByAgentName: varchar("createdByAgentName", { length: 128 }),
+  /** Who created this task (agent id) */
+  createdByAgentId: int("createdByAgentId"),
+  /** Due date (UTC epoch ms) */
+  dueAt: bigint("dueAt", { mode: "number" }),
+  /** When task was marked done */
+  completedAt: bigint("completedAt", { mode: "number" }),
+  /** When the due-date popup was dismissed by the assignee */
+  popupDismissedAt: bigint("popupDismissedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  idxAssignee: index("idx_ot_assignee").on(table.assigneeAgentId),
+  idxStatus: index("idx_ot_status").on(table.status),
+  idxDue: index("idx_ot_due").on(table.dueAt),
+}));
+export type OpsTask = typeof opsTasks.$inferSelect;
+export type InsertOpsTask = typeof opsTasks.$inferInsert;

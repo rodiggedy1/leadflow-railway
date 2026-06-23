@@ -42,6 +42,8 @@ export type OpsStreamCallbacks = {
   onMissedCallResolved?: () => void;
   /** Called when new Gmail messages arrive via Pub/Sub push */
   onGmailNewMessages?: () => void;
+  /** Called when a task is created, updated, or completed */
+  onTaskUpdate?: () => void;
 };
 
 // Minimum 5s before first reconnect attempt — prevents thundering herd when
@@ -131,6 +133,9 @@ export function useOpsStream(
               break;
             case "missed_call_resolved":
               cbRef.current.onMissedCallResolved?.();
+              break;
+            case "task_update":
+              cbRef.current.onTaskUpdate?.();
               break;
             case "ping":
               // keepalive — no action needed

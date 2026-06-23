@@ -19,6 +19,7 @@ import { TypingBubble } from "@/components/TypingBubble";
 import { trpc } from "@/lib/trpc";
 import { senderHex } from "@/lib/senderColor";
 import GlitterBurst from "@/components/GlitterBurst";
+import TasksPanel, { DueTaskPopup } from "@/components/TasksPanel";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
@@ -2530,6 +2531,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [leadRepliesOpen, setLeadRepliesOpen] = useState(false);
   const [csSmsOpen, setCsSmsOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [taskRefetchTick, setTaskRefetchTick] = useState(0);
+  const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
+  const { data: dueTasks = [] } = trpc.tasks.getDue.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const visibleDueTasks = (dueTasks as any[]).filter((t: any) => !dueTaskPopupDismissed.has(t.id));
   const [threadRefetchTick, setThreadRefetchTick] = useState(0);
   const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -2633,6 +2642,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onMissedCallResolved: () => {
       // Decrement the today count immediately when an agent marks a call as called back (or undoes it)
       refetchMissedCallsToday();
+    },
+    onTaskUpdate: () => {
+      utils.tasks.list.invalidate();
+      utils.tasks.listMine.invalidate();
+      utils.tasks.getDue.invalidate();
+      setTaskRefetchTick(t => t + 1);
     },
   });
 
@@ -4758,6 +4773,28 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {csUnansweredCount > 99 ? "99+" : csUnansweredCount}
                 </span>
               </button>
+              {/* Tasks pill */}
+              <span className="text-slate-300 text-xs">|</span>
+              <button
+                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
+                className={[
+                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
+                  tasksOpen
+                    ? "bg-indigo-200 text-indigo-800"
+                    : visibleDueTasks.length > 0
+                    ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ].join(" ")}
+                title="Tasks"
+              >
+                <ClipboardList className="h-3 w-3" />
+                Tasks
+                {visibleDueTasks.length > 0 && (
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-indigo-500 text-white animate-pulse">
+                    {visibleDueTasks.length > 99 ? "99+" : visibleDueTasks.length}
+                  </span>
+                )}
+              </button>
             </div>
           )}
 
@@ -6387,6 +6424,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
+      {/* Tasks slide-in panel */}
+      <TasksPanel
+        open={tasksOpen}
+        onClose={() => setTasksOpen(false)}
+        isAdmin={true}
+        agentList={(agentList ?? []).map(a => ({ id: a.id, name: a.name }))}
+        refetchTick={taskRefetchTick}
+      />
+      {/* Due task popup — fires when tasks come due */}
+      <DueTaskPopup
+        tasks={visibleDueTasks as any[]}
+        onDismiss={(id) => setDueTaskPopupDismissed(prev => new Set(Array.from(prev).concat(id)))}
+        onMarkDone={(id) => {
+          setDueTaskPopupDismissed(prev => new Set(Array.from(prev).concat(id)));
+          utils.tasks.getDue.invalidate();
+          utils.tasks.list.invalidate();
+          utils.tasks.listMine.invalidate();
+        }}
+        onOpenPanel={() => setTasksOpen(true)}
+      />
     </div>
   );
 }
