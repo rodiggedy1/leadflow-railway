@@ -2527,6 +2527,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [openThreadId, setOpenThreadId] = useState<number | null>(null);
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [leadRepliesOpen, setLeadRepliesOpen] = useState(false);
+  const [csSmsOpen, setCsSmsOpen] = useState(false);
   const [threadRefetchTick, setThreadRefetchTick] = useState(0);
   const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -2559,6 +2560,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const csUnansweredCount = csUnansweredData?.count ?? 0;
   const csUnansweredUrgent = csUnansweredData?.urgentCount ?? 0;
   const csUnansweredWarning = csUnansweredData?.warningCount ?? 0;
+  const csUnansweredSessions = csUnansweredData?.sessions ?? [];
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Guard: prevent duplicate "I'm Back" messages when button click + keystroke both fire
   const imBackFiredRef = useRef(false);
@@ -4724,7 +4726,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { if (onSwitchToCS) onSwitchToCS(); }}
+                onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
                 className={[
                   "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
                   csUnansweredUrgent > 0
@@ -6216,6 +6218,87 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         }}
       />
       {/* Lead Replies panel — opened from header MessageCircle button */}
+      {/* CS SMS unanswered slide-in panel */}
+      {csSmsOpen && (
+        <div
+          className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-white shadow-2xl border-l border-slate-200 animate-in slide-in-from-right-2 duration-200"
+          style={{ width: "360px", maxWidth: "90vw" }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <Smartphone className="h-4 w-4 text-orange-500" />
+              <span className="text-sm font-semibold text-slate-900">Unanswered CS SMS</span>
+              {csUnansweredUrgent > 0 && (
+                <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none animate-pulse">
+                  {csUnansweredUrgent} urgent
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setCsSmsOpen(false)}
+              className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {/* Body */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {csUnansweredSessions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-16">
+                <Smartphone className="h-8 w-8 opacity-30" />
+                <p className="text-sm font-medium">No unanswered CS messages</p>
+                <p className="text-xs text-slate-400">You're all caught up!</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {csUnansweredSessions.map((session) => {
+                  const ageMin = Math.floor(session.ageMs / 60_000);
+                  const ageLabel = ageMin < 1 ? 'just now' : ageMin < 60 ? `${ageMin}m ago` : `${Math.floor(ageMin / 60)}h ${ageMin % 60}m ago`;
+                  const isUrgent = session.ageMs > 60 * 60 * 1000;
+                  const isWarning = !isUrgent && session.ageMs > 15 * 60 * 1000;
+                  const displayName = session.leadName || session.leadPhone;
+                  return (
+                    <button
+                      key={session.id}
+                      onClick={() => {
+                        setCsSmsOpen(false);
+                        if (onSwitchToCS) onSwitchToCS();
+                        // Small delay to let the tab switch before navigating
+                        setTimeout(() => {
+                          window.location.href = `/admin/cs-inbox?session=${session.id}`;
+                        }, 100);
+                      }}
+                      className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Age dot */}
+                        <div className={cn(
+                          "mt-1.5 h-2 w-2 rounded-full shrink-0",
+                          isUrgent ? "bg-red-500 animate-pulse" : isWarning ? "bg-amber-400" : "bg-slate-300"
+                        )} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-slate-900 truncate">{displayName}</span>
+                            <span className={cn(
+                              "text-[10px] font-semibold shrink-0",
+                              isUrgent ? "text-red-500" : isWarning ? "text-amber-500" : "text-slate-400"
+                            )}>{ageLabel}</span>
+                          </div>
+                          {session.lastMessagePreview && (
+                            <p className="text-xs text-slate-500 truncate mt-0.5">{session.lastMessagePreview}</p>
+                          )}
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-orange-500 transition-colors shrink-0 mt-1" />
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {leadRepliesOpen && (
         <div
           className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-white shadow-2xl border-l border-slate-200 animate-in slide-in-from-right-2 duration-200"

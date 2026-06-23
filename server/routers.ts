@@ -3276,7 +3276,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
      */
     getUnansweredCsCount: opsChatProcedure.query(async () => {
       const db = await getDb();
-      if (!db) return { count: 0, urgentCount: 0, warningCount: 0 };
+      if (!db) return { count: 0, urgentCount: 0, warningCount: 0, sessions: [] };
       const sourceFilter = or(
         eq(conversationSessions.leadSource, "cs-inbound"),
         eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
@@ -3285,6 +3285,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
       const sessions = await db
         .select({
           id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
           messageHistory: conversationSessions.messageHistory,
         })
         .from(conversationSessions)
@@ -3296,9 +3298,16 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
       let count = 0;
       let urgentCount = 0;
       let warningCount = 0;
+      const unansweredSessions: Array<{
+        id: number;
+        leadName: string | null;
+        leadPhone: string;
+        lastMessagePreview: string;
+        ageMs: number;
+      }> = [];
       for (const s of sessions) {
         try {
-          const history: Array<{ role: string; ts?: number }> = JSON.parse(s.messageHistory ?? "[]");
+          const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
           // Find last real message (skip notes/system)
           const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
           if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
@@ -3306,9 +3315,21 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           const age = lastReal.ts ? now - lastReal.ts : 0;
           if (age > ONE_HOUR_MS) urgentCount++;
           else if (age > FIFTEEN_MIN_MS) warningCount++;
+          const preview = typeof lastReal.content === "string"
+            ? lastReal.content.slice(0, 80)
+            : "";
+          unansweredSessions.push({
+            id: s.id,
+            leadName: s.leadName ?? null,
+            leadPhone: s.leadPhone,
+            lastMessagePreview: preview,
+            ageMs: age,
+          });
         } catch { count++; } // malformed — count it to be safe
       }
-      return { count, urgentCount, warningCount };
+      // Sort by age descending (oldest first)
+      unansweredSessions.sort((a, b) => b.ageMs - a.ageMs);
+      return { count, urgentCount, warningCount, sessions: unansweredSessions };
     }),
     /**
      * resolveSession — marks a CS inbox session as resolved (archived).
