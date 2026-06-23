@@ -229,9 +229,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [worldClassOpen, setWorldClassOpen] = useState(false);
   // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
-  const elevateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // AbortController for the in-flight streaming elevate request — cancel on conversation switch
-  const elevateAbortRef = useRef<AbortController | null>(null);
+
   const userPickedFilter = useRef(false);
   const filteredRef = useRef<Conversation[]>([]);
   const effectiveSelectedIdRef = useRef<number | null>(null);
@@ -244,12 +242,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   // Unread tracking: sessionId -> timestamp when agent last viewed it
   const [lastViewedMap, setLastViewedMap] = useState<Record<number, number>>({});
-  // AI Elevate suggestion state
-  const [elevateSuggestion, setElevateSuggestion] = useState<string | null>(null);
-  // null = not yet approved; set to the exact text the agent explicitly chose to send
-  const [elevateApprovedText, setElevateApprovedText] = useState<string | null>(null);
-  // true while streaming tokens are arriving (shows typing indicator in the card)
-  const [elevateStreaming, setElevateStreaming] = useState(false);
+
   // Compose mode: "reply" sends SMS, "note" saves internal note (never sent to customer)
   const [composeMode, setComposeMode] = useState<"reply" | "note">("reply");
   // SMS date/time sanity check warnings — shown as a blocking card before send
@@ -387,8 +380,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const sendMessage = trpc.leads.sendMessage.useMutation({
     onSuccess: () => {
       setCompose("");
-      setElevateSuggestion(null);
-      setElevateApprovedText(null);
       // Lock the current conversation so list re-sort after invalidate doesn't jump away
       if (effectiveSelectedIdRef.current !== null) {
         setSelectedId(effectiveSelectedIdRef.current);
@@ -411,117 +402,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     onError: (err: { message?: string }) => toast.error(err.message || "Failed to save note"),
   });
 
-  // Keep the tRPC mutation for the on-send gate path (needs full result synchronously)
-  const elevateReply = trpc.opsChat.elevateReply.useMutation({
-    onSuccess: (data) => {
-      setElevateSuggestion(data.elevated);
-      setElevateStreaming(false);
-    },
-    onError: () => setElevateStreaming(false),
-  });
 
-  /**
-   * streamElevate — streams the world-class rewrite token-by-token via SSE.
-   * Used for the debounced typing path so the suggestion appears live like ChatGPT.
-   * Falls back to the tRPC mutation if the stream endpoint fails.
-   */
-  async function streamElevate(params: {
-    draft: string;
-    clientName?: string;
-    messageHistory?: string;
-    jobContext?: string;
-  }) {
-    // Cancel any previous in-flight stream
-    if (elevateAbortRef.current) {
-      elevateAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    elevateAbortRef.current = controller;
-
-    setElevateSuggestion("");
-    setElevateStreaming(true);
-
-    try {
-      const res = await fetch("/api/cs-elevate-stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(params),
-        signal: controller.signal,
-      });
-
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      let accumulated = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          const dataStr = trimmed.slice(5).trim();
-          if (dataStr === "[DONE]") {
-            setElevateStreaming(false);
-            elevateAbortRef.current = null;
-            continue;
-          }
-          let parsed: { token?: string; error?: string };
-          try { parsed = JSON.parse(dataStr); } catch { continue; }
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          }
-          if (parsed.token) {
-            accumulated += parsed.token;
-            setElevateSuggestion(accumulated);
-          }
-        }
-      }
-      setElevateStreaming(false);
-      elevateAbortRef.current = null;
-    } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        // Intentional cancel — do not show error or fall back
-        return;
-      }
-      // Fall back to tRPC mutation
-      console.warn("[elevate stream] falling back to tRPC:", err);
-      setElevateSuggestion(null);
-      setElevateStreaming(false);
-      elevateReply.mutate(params);
-    }
-  }
-
-  // Trigger elevate on debounce when agent types (non-Teams only)
-  function triggerElevateDebounced(draft: string, conv: typeof selected) {
-    if (!conv || conv.queue === "Teams") return;
-    if (elevateDebounceRef.current) clearTimeout(elevateDebounceRef.current);
-    if (draft.trim().length < 10) {
-      // Cancel any in-flight stream and clear state
-      if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
-      setElevateSuggestion(null);
-      setElevateApprovedText(null);
-      setElevateStreaming(false);
-      return;
-    }
-    elevateDebounceRef.current = setTimeout(() => {
-      streamElevate({
-        draft: draft.trim(),
-        clientName: conv.name,
-        messageHistory: JSON.stringify(conv.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
-        jobContext: jobContext ?? undefined,
-      });
-    }, 1500);
-  }
 
   function doSendCs(afterSend?: () => void) {
     if (!selected || !compose.trim()) return;
@@ -536,8 +417,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     const isTeams = selected.queue === "Teams";
     // Teams: send directly, no elevation or sanity check
     if (isTeams) { doSendCs(afterSend); return; }
-    // Agent explicitly approved this exact text — send directly
-    if (elevateApprovedText !== null && compose.trim() === elevateApprovedText) { doSendCs(afterSend); return; }
     // Auto-draft is still streaming — text is AI-generated, send directly without gate
     if (autoDraftLoading) { doSendCs(afterSend); return; }
     // Short message: send directly
@@ -559,29 +438,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     // Clear any stale warnings
     setSanityWarnings([]);
     setSanityApprovedText(null);
-    // Cancel any pending debounce + in-flight stream so they can't wipe the suggestion card
-    if (elevateDebounceRef.current) { clearTimeout(elevateDebounceRef.current); elevateDebounceRef.current = null; }
-    if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
-    // Card already visible (debounce pre-loaded it) — agent must choose Use or Send Original
-    if (elevateSuggestion !== null && elevateSuggestion !== "") return;
-    // Run elevation check — show the gate card with the world-class rewrite
-    setElevateStreaming(true);
-    elevateReply.mutate(
-      {
-        draft: compose.trim(),
-        clientName: selected.name,
-        messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
-        jobContext: jobContext ?? undefined,
-      },
-      {
-        onSuccess: (data) => {
-          setElevateSuggestion(data.elevated);
-          setElevateStreaming(false);
-          // Gate is now shown — agent must choose Use or Send Original
-        },
-        onError: () => { setElevateStreaming(false); doSendCs(afterSend); },
-      }
-    );
+    doSendCs(afterSend);
   }
 
   // ── AI priority queue (must be before filtered useMemo) ─────────────────────
@@ -698,8 +555,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       const replyText = typeof data.reply === "string" ? data.reply : "";
       if (replyText) {
         setCompose(replyText);
-        // Mark as AI-approved so Send bypasses the elevate gate (same as streaming path)
-        setElevateApprovedText(replyText.trim());
+
       }
       setLoadingAction(null);
       setAutoDraftLoading(false);
@@ -772,7 +628,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       }
       // Guard: only apply final result if still on the same conversation
       if (sessionId == null || sessionId === effectiveSelectedIdRef.current) {
-        if (accumulated) setElevateApprovedText(accumulated.trim());
+
       }
       setAutoDraftLoading(false);
       autoDraftAbortRef.current = null;
@@ -824,17 +680,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   // Clear stale compose text, AI suggestion, and elevation state when switching conversations
   useEffect(() => {
-    // Cancel any in-flight streaming elevate request immediately
-    if (elevateAbortRef.current) {
-      elevateAbortRef.current.abort();
-      elevateAbortRef.current = null;
-    }
     // NOTE: do NOT abort autoDraftAbortRef here — triggerAutoDraft handles that
     // before creating the new controller, so we never abort the new stream.
     setCompose("");
-    setElevateSuggestion(null);
-    setElevateApprovedText(null);
-    setElevateStreaming(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
@@ -2604,7 +2452,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       <span>AI is drafting a reply…</span>
                     </div>
                   )}
-                  {composeMode === "reply" && !autoDraftLoading && compose && !elevateSuggestion && (
+                  {composeMode === "reply" && !autoDraftLoading && compose && (
                     <div className="flex items-center gap-2 px-4 pt-3 pb-0">
                       <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
                         <Sparkles className="h-3 w-3" />
@@ -2691,9 +2539,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const val = e.target.value;
                         setCompose(val);
                         if (composeMode === "reply") {
-                          setElevateSuggestion(null);
-                          setElevateApprovedText(null);
-                          triggerElevateDebounced(val, selected);
                           if (sanityWarnings.length > 0) { setSanityWarnings([]); setSanityApprovedText(null); }
                         }
                       }}
@@ -2748,52 +2593,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
                     </div>
                   )}
-                  {/* AI Elevate suggestion card */}
-                  {elevateReply.isPending && !elevateSuggestion && (
-                    <div className="mx-4 mb-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs flex items-center gap-2 text-violet-600">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin shrink-0" />
-                      <span className="font-medium">Elevating to world-class level…</span>
-                    </div>
-                  )}
-                  {(elevateSuggestion !== null && elevateSuggestion !== "") && selected?.queue !== "Teams" && (
-                    <div className="mx-4 mb-2 px-3 py-2.5 bg-violet-50 border border-violet-200 rounded-xl text-xs space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 font-semibold text-violet-700">
-                          <Sparkles className={`h-3.5 w-3.5 shrink-0 ${elevateStreaming ? "animate-pulse" : ""}`} />
-                          <span>World-class suggestion</span>
-                          {elevateStreaming ? (
-                            <span className="text-[10px] font-normal text-violet-400 animate-pulse">writing…</span>
-                          ) : (
-                            <span className="text-[10px] font-normal text-violet-400">Disney · Ritz-Carlton · Zappos</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (elevateAbortRef.current) { elevateAbortRef.current.abort(); elevateAbortRef.current = null; }
-                            setElevateSuggestion(null);
-                            setElevateApprovedText(null);
-                            setElevateStreaming(false);
-                          }}
-                          className="text-violet-400 hover:text-violet-600 shrink-0"
-                        ><X className="h-3.5 w-3.5" /></button>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <p className="text-slate-700 italic flex-1 leading-relaxed">
-                          "{elevateSuggestion}"
-                          {elevateStreaming && <span className="inline-block w-0.5 h-3.5 bg-violet-500 ml-0.5 animate-pulse align-middle" />}
-                        </p>
-                        {!elevateStreaming && (
-                          <button
-                            onClick={() => { const t = elevateSuggestion!; setCompose(t); setElevateSuggestion(null); setElevateApprovedText(t.trim()); }}
-                            className="shrink-0 text-[10px] font-semibold text-violet-700 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 whitespace-nowrap"
-                          >Use</button>
-                        )}
-                      </div>
-                      {!elevateStreaming && (
-                        <p className="text-violet-400 text-[10px]">Or <button onClick={() => { setElevateApprovedText(compose.trim()); doSendCs(); }} className="underline font-semibold">send your original</button></p>
-                      )}
-                    </div>
-                  )}
+
 
                   {/* Bottom toolbar */}
                   <div className="flex items-center justify-between gap-2 px-3 pb-3 pt-1">
@@ -2853,7 +2653,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                 setComposeMode("reply");
                               } else {
                                 setComposeMode("note");
-                                setElevateSuggestion(null);
+
                               }
                             }}
                             className={`rounded-full h-8 w-8 transition-colors ${
@@ -2890,9 +2690,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
                             onClick={() => handleCsSend()}
                           >
-                            {elevateReply.isPending ? (
-                              <><RefreshCw className="h-4 w-4 animate-spin" /> Elevating…</>
-                            ) : sendMessage.isPending ? (
+                            {sendMessage.isPending ? (
                               <><Send className="h-4 w-4" /> Sending…</>
                             ) : (
                               <><Send className="h-4 w-4" /> Send</>
