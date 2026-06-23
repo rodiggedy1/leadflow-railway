@@ -3098,8 +3098,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .select()
           .from(conversationSessions)
           .where(resolvedFilter ? and(sourceFilter, resolvedFilter) : sourceFilter)
-          .orderBy(desc(conversationSessions.updatedAt))
-          .limit(100);
+          .orderBy(desc(conversationSessions.updatedAt));
 
         // Augment and sort by last message ts in messageHistory.
         // We cannot rely on updatedAt because MySQL ON UPDATE CURRENT_TIMESTAMP fires
