@@ -59,7 +59,7 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   // to Manus OAuth. A protectedProcedure error on those pages just means the
   // Manus user session is absent, which is expected and fine.
   const path = window.location.pathname;
-  if (path.startsWith("/admin") || path.startsWith("/agent") || path.startsWith("/cleaner")) return;
+  if (path.startsWith("/admin") || path.startsWith("/agent") || path.startsWith("/cleaner") || path.startsWith("/auth")) return;
 
   window.location.href = getLoginUrl();
 };
