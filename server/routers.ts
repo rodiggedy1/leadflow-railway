@@ -3290,8 +3290,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           lastCustomerReplyAt: conversationSessions.lastCustomerReplyAt,
         })
         .from(conversationSessions)
-        .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)))
-        .limit(300);
+        .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)));
       const now = Date.now();
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const FIFTEEN_MIN_MS = 15 * 60 * 1000;
