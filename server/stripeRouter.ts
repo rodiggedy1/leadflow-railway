@@ -555,4 +555,34 @@ export const stripeRouter = router({
 
       return rows;
     }),
+
+  // 10. listAllCustomers (admin) — lists all stripe_customers rows
+  // ────────────────────────────────────────────────────────────────────────────
+  listAllCustomers: adminAgentProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(200).default(100) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const rows = await db
+        .select()
+        .from(stripeCustomers)
+        .orderBy(desc(stripeCustomers.updatedAt))
+        .limit(input.limit);
+      return rows;
+    }),
+
+  // 11. listAllCardAuthTokens (admin) — lists recent card auth tokens
+  // ────────────────────────────────────────────────────────────────────────────
+  listAllCardAuthTokens: adminAgentProcedure
+    .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const rows = await db
+        .select()
+        .from(cardAuthTokens)
+        .orderBy(desc(cardAuthTokens.createdAt))
+        .limit(input.limit);
+      return rows;
+    }),
 });

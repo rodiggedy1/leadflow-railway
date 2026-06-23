@@ -48,6 +48,7 @@ const EmailInbox = lazy(() => import("./pages/EmailInbox"));
 const AICallMatrix = lazy(() => import("./pages/AICallMatrix"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
+const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -115,6 +116,7 @@ function Router() {
         <Route path={"/admin/ai-calls"} component={AICallMatrix} />
         <Route path={"/admin/cleaner-calls"} component={CleanerCalls} />
         <Route path={"/pay/:token"} component={CardAuth} />
+        <Route path={"/admin/payments"} component={AdminPayments} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

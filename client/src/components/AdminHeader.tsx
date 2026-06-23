@@ -44,6 +44,7 @@ import {
   Sparkles,
   BarChart3,
   TrendingUp,
+  CreditCard,
 } from "lucide-react";
 
 // ── Delayed-enable hook — prevents health checks from joining the initial page-load batch.
@@ -284,7 +285,8 @@ export type AdminTab =
   | "lead-nurturing"
   | "confirmation-calls"
   | "missed-calls"
-  | "cleaner-calls";
+  | "cleaner-calls"
+  | "payments";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -379,6 +381,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { id: "confirmation-calls", label: "Confirm Calls",  href: "/admin/confirmation-calls",  icon: <Phone className="w-3.5 h-3.5" /> },
       { id: "cleaner-calls",       label: "Cleaner Calls", href: "/admin/cleaner-calls",        icon: <Phone className="w-3.5 h-3.5" /> },
       { id: "tracker-flow",        label: "Journey",       href: "/admin/tracker-flow",         icon: <Smartphone className="w-3.5 h-3.5" /> },
+      { id: "payments",             label: "Payments",      href: "/admin/payments",             icon: <CreditCard className="w-3.5 h-3.5" /> },
     ],
   },
   {
