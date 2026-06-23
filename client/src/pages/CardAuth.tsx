@@ -15,6 +15,9 @@ import {
 } from "@stripe/react-stripe-js";
 import { trpc } from "@/lib/trpc";
 
+// Publishable key is a public key — safe to bake into the frontend build via VITE_
+const STRIPE_PK = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string;
+
 // ── Stripe Elements card style ───────────────────────────────────────────────
 const CARD_ELEMENT_OPTIONS = {
   style: {
@@ -306,7 +309,7 @@ function CardAuthInner({
   clientSecret: string;
   publishableKey: string;
 }) {
-  const [stripePromise] = useState(() => loadStripe(publishableKey.trim()));
+  const [stripePromise] = useState(() => loadStripe(publishableKey));
   const [submitted, setSubmitted] = useState(false);
   const [submittedName, setSubmittedName] = useState("");
 
@@ -485,7 +488,7 @@ export default function CardAuth() {
 
   // 2. Create SetupIntent (only after token is validated)
   const setupIntentMutation = trpc.stripe.createSetupIntent.useMutation();
-  const [setupData, setSetupData] = useState<{ clientSecret: string; stripePublishableKey: string } | null>(null);
+  const [setupData, setSetupData] = useState<{ clientSecret: string } | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -545,7 +548,7 @@ export default function CardAuth() {
       prefillDate={prefillDate}
       prefillAddress={prefillAddress}
       clientSecret={setupData.clientSecret}
-      publishableKey={setupData.stripePublishableKey}
+      publishableKey={STRIPE_PK}
     />
   );
 }
