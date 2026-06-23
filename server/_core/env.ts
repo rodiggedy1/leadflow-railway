@@ -21,7 +21,7 @@ export const ENV = {
   mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY ?? "",
   zapierWebhookSecret: process.env.ZAPIER_WEBHOOK_SECRET ?? "",
   quoteAppSecret: process.env.QUOTE_APP_SECRET ?? "",
-  quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://maidsquotes-b55s3sg4.manus.space",
+  quoteAppUrl: process.env.QUOTE_APP_URL ?? "https://quote.maidinblack.com",
   businessTimezone: process.env.BUSINESS_TIMEZONE ?? "America/Los_Angeles",
   isPreviewMode: process.env.PREVIEW_MODE === "true",
   gmailClientId: process.env.GMAIL_CLIENT_ID ?? "",
