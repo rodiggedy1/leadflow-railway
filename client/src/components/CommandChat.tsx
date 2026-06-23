@@ -4770,7 +4770,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     ? "bg-amber-500 text-white animate-pulse"
                     : "bg-slate-400 text-white"
                 ].join(" ")}>
-                  {csUnansweredCount > 99 ? "99+" : csUnansweredCount}
+                  {csUnansweredUrgent > 99 ? "99+" : csUnansweredUrgent}
                 </span>
               </button>
             </div>
