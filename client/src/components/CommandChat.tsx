@@ -4636,7 +4636,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+            <div className="shrink-0 flex items-center gap-2 px-5 py-1.5 bg-slate-50 border-b border-slate-200">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
