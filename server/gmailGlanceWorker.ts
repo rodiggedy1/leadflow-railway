@@ -53,8 +53,68 @@ export const GLANCE_CATEGORY_META: Record<GlanceCategory, { label: string; emoji
 const _queue = new Set<string>();
 let _workerStarted = false;
 
-export function enqueueThread(threadId: string) {
+// ── Instrumentation counters (reset every 60s) ────────────────────────────────
+let _threadsGetCount = 0;        // gmail.users.threads.get calls
+let _threadsListCount = 0;       // gmail.users.threads.list calls (backfill)
+let _count429 = 0;               // 429 responses from Gmail API
+let _cacheHitCount = 0;          // processThread: historyId matched, skipped
+let _cacheMissCount = 0;         // processThread: historyId changed, processed
+let _enqueueTotal = 0;           // total enqueueThread calls (all sources)
+let _enqueueDuplicates = 0;      // calls where threadId was already in queue
+let _enqueueFromPubSub = 0;      // enqueues from Pub/Sub webhook
+let _enqueueFromBackfill = 0;    // enqueues from backfillGlanceQueue
+let _enqueueFromManual = 0;      // enqueues from manual/other callers
+let _uniqueThreadsProcessed = new Set<string>(); // unique threadIds that hit threads.get
+let _queueSizeAtWindowStart = 0; // queue size when the window opened
+let _maxQueueSizeInWindow = 0;   // peak queue size seen during the window
+let _minuteWindowStart = Date.now();
+
+function _snapshotQueueMax() {
+  if (_queue.size > _maxQueueSizeInWindow) _maxQueueSizeInWindow = _queue.size;
+}
+
+function _logMinuteSummary() {
+  const elapsed = ((Date.now() - _minuteWindowStart) / 1000).toFixed(1);
+  console.log(
+    `[GlanceWorker][Metrics] window=${elapsed}s | threads.get=${_threadsGetCount} | threads.list=${_threadsListCount} | 429s=${_count429} | cacheHit=${_cacheHitCount} | cacheMiss=${_cacheMissCount} | enqueued=${_enqueueTotal} | duplicates=${_enqueueDuplicates} | fromPubSub=${_enqueueFromPubSub} | fromBackfill=${_enqueueFromBackfill} | fromManual=${_enqueueFromManual} | uniqueThreads=${_uniqueThreadsProcessed.size} | queueStart=${_queueSizeAtWindowStart} | queueEnd=${_queue.size} | maxQueue=${_maxQueueSizeInWindow}`
+  );
+  // Reset all counters
+  _threadsGetCount = 0;
+  _threadsListCount = 0;
+  _count429 = 0;
+  _cacheHitCount = 0;
+  _cacheMissCount = 0;
+  _enqueueTotal = 0;
+  _enqueueDuplicates = 0;
+  _enqueueFromPubSub = 0;
+  _enqueueFromBackfill = 0;
+  _enqueueFromManual = 0;
+  _uniqueThreadsProcessed = new Set<string>();
+  _queueSizeAtWindowStart = _queue.size;
+  _maxQueueSizeInWindow = _queue.size;
+  _minuteWindowStart = Date.now();
+}
+
+// ── Enqueue with source tagging ───────────────────────────────────────────────
+export type EnqueueSource = "pubsub" | "backfill" | "manual";
+
+export function enqueueThread(threadId: string, source: EnqueueSource = "manual") {
+  _enqueueTotal++;
+  if (source === "pubsub") _enqueueFromPubSub++;
+  else if (source === "backfill") _enqueueFromBackfill++;
+  else _enqueueFromManual++;
+
+  const sizeBefore = _queue.size;
   _queue.add(threadId);
+  _snapshotQueueMax();
+
+  if (_queue.size === sizeBefore) {
+    // Duplicate — Set.add was a no-op
+    _enqueueDuplicates++;
+    console.log(`[GlanceWorker][Enqueue][${source.toUpperCase()}] DUPLICATE threadId=${threadId} queueSize=${_queue.size}`);
+  } else {
+    console.log(`[GlanceWorker][Enqueue][${source.toUpperCase()}] threadId=${threadId} queueSize=${_queue.size}`);
+  }
 }
 
 // ── Gmail client (mirrors gmailService pattern without importing it) ──────────
@@ -88,7 +148,29 @@ export async function processThread(threadId: string): Promise<void> {
     const gmail = await getGmailClient();
 
     // Fetch thread from Gmail — minimal format to get historyId + messages
-    const res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
+    _threadsGetCount++;
+    _uniqueThreadsProcessed.add(threadId);
+    const t0 = Date.now();
+    console.log(`[GlanceWorker][API] threads.get threadId=${threadId} queueSize=${_queue.size}`);
+
+    let res: Awaited<ReturnType<typeof gmail.users.threads.get>>;
+    try {
+      res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
+    } catch (apiErr: any) {
+      const status = apiErr?.response?.status ?? apiErr?.code;
+      const durationMs = Date.now() - t0;
+      if (status === 429) {
+        _count429++;
+        console.error(`[GlanceWorker][429] threads.get threadId=${threadId} duration=${durationMs}ms`);
+      } else {
+        console.error(`[GlanceWorker][APIError] threads.get threadId=${threadId} status=${status} duration=${durationMs}ms`, apiErr?.message);
+      }
+      return;
+    }
+
+    const durationMs = Date.now() - t0;
+    console.log(`[GlanceWorker][API] threads.get OK threadId=${threadId} duration=${durationMs}ms`);
+
     const currentHistoryId = String(res.data.historyId ?? "");
     const messages = res.data.messages ?? [];
 
@@ -100,8 +182,13 @@ export async function processThread(threadId: string): Promise<void> {
 
     if (existing?.aiHistoryId && existing.aiHistoryId === currentHistoryId) {
       // Cache hit — nothing changed
+      _cacheHitCount++;
+      console.log(`[GlanceWorker][CacheHit] threadId=${threadId} historyId=${currentHistoryId}`);
       return;
     }
+
+    _cacheMissCount++;
+    console.log(`[GlanceWorker][CacheMiss] threadId=${threadId} oldHistoryId=${existing?.aiHistoryId ?? "none"} newHistoryId=${currentHistoryId}`);
 
     // Extract last 3 messages for LLM (cost control)
     const lastMsgs = messages.slice(-3);
@@ -246,8 +333,16 @@ function findTextBody(payload: any): string {
 
 // ── Worker loop ───────────────────────────────────────────────────────────────
 function startWorkerLoop() {
+  // Snapshot queue size at window start
+  _queueSizeAtWindowStart = _queue.size;
+  _maxQueueSizeInWindow = _queue.size;
+
+  // Per-minute metrics summary
+  setInterval(() => { _logMinuteSummary(); }, 60_000);
+
   setInterval(async () => {
     if (_queue.size === 0) return;
+    _snapshotQueueMax();
     const threadId = _queue.values().next().value as string;
     _queue.delete(threadId);
     await processThread(threadId);
@@ -269,13 +364,37 @@ export async function backfillGlanceQueue(): Promise<void> {
     if (!db) return;
 
     // Fetch last 100 non-Thumbtack inbox threads (list only — no full fetch)
-    const listRes = await gmail.users.threads.list({
-      userId: "me",
-      maxResults: 100,
-      q: "in:inbox -from:thumbtack.com",
-    });
+    _threadsListCount++;
+    const t0 = Date.now();
+    console.log(`[GlanceWorker][API] threads.list (backfill start)`);
+
+    let listRes: Awaited<ReturnType<typeof gmail.users.threads.list>>;
+    try {
+      listRes = await gmail.users.threads.list({
+        userId: "me",
+        maxResults: 100,
+        q: "in:inbox -from:thumbtack.com",
+      });
+    } catch (apiErr: any) {
+      const status = apiErr?.response?.status ?? apiErr?.code;
+      const durationMs = Date.now() - t0;
+      if (status === 429) {
+        _count429++;
+        console.error(`[GlanceWorker][429] threads.list (backfill) duration=${durationMs}ms`);
+      } else {
+        console.error(`[GlanceWorker][APIError] threads.list status=${status} duration=${durationMs}ms`, apiErr?.message);
+      }
+      return;
+    }
+
+    const durationMs = Date.now() - t0;
     const threadItems = listRes.data.threads ?? [];
-    if (threadItems.length === 0) return;
+    console.log(`[GlanceWorker][API] threads.list OK count=${threadItems.length} duration=${durationMs}ms`);
+
+    if (threadItems.length === 0) {
+      console.log(`[GlanceWorker] Backfill: 0 threads returned from Gmail`);
+      return;
+    }
 
     const threadIds = threadItems.map((t) => t.id!).filter(Boolean);
 
@@ -290,12 +409,12 @@ export async function backfillGlanceQueue(): Promise<void> {
     let enqueued = 0;
     for (const id of threadIds) {
       if (!processedSet.has(id)) {
-        enqueueThread(id);
+        enqueueThread(id, "backfill");
         enqueued++;
       }
     }
 
-    console.log(`[GlanceWorker] Backfill: ${enqueued} threads enqueued (${threadIds.length - enqueued} already processed)`);
+    console.log(`[GlanceWorker] Backfill: ${enqueued} threads enqueued (${threadIds.length - enqueued} already processed) totalInbox=${threadIds.length} totalInDB=${existingRows.length} processedInDB=${processedSet.size}`);
   } catch (err) {
     console.error("[GlanceWorker] Backfill error:", err);
   }

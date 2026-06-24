@@ -3,7 +3,7 @@
  */
 import type { Express } from "express";
 import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
-import { enqueueThread } from "./gmailGlanceWorker";
+import { enqueueThread, type EnqueueSource } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { getDb } from "./db";
@@ -113,7 +113,7 @@ export function registerGmailRoutes(app: Express) {
         // Enqueue affected threads for AI re-processing (non-blocking)
         const affectedThreadIds = Array.from(new Set(newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
         for (const tid of affectedThreadIds) {
-          enqueueThread(tid);
+          enqueueThread(tid, "pubsub" as EnqueueSource);
           // Optimistic isUnread=1 — UPDATE only (never INSERT to avoid partial rows)
           // Worker will correct if wrong when it processes the thread
           db.update(gmailThreadMeta)
