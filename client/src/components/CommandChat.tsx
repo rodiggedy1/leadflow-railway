@@ -4224,7 +4224,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* White card wrapper with grey showing on sides */}
         <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Header */}
-        <div className="px-5 pt-3 pb-3 border-b border-slate-100 shrink-0">
+        <div className="px-5 pt-3 pb-3 border-b border-slate-200 bg-slate-50 shadow-sm shrink-0">
           {/* Compact single-row header */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
