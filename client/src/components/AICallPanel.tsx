@@ -180,6 +180,7 @@ function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | n
   const [showTx, setShowTx] = useState(false);
   const time = (() => {
     if (!row.createdAt) return "—";
+    console.log("[history createdAt]", row.createdAt, typeof row.createdAt, row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt);
     const utcMs = row.createdAt instanceof Date ? row.createdAt.getTime() : Number(row.createdAt);
     // Hardcode EDT offset (-4h). Covers EST (-5h) Nov-Mar but EDT is current.
     const estMs = utcMs - 4 * 60 * 60 * 1000;
