@@ -324,37 +324,16 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   // ── Polling ──
   function startPolling(vapiCallId: string) {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    let stuckInProgressCount = 0;
     pollIntervalRef.current = setInterval(async () => {
       try {
         const result = await utils.callMatrix.pollCall.fetch({ vapiCallId });
-        let status = result.status as CallStatus;
-        // If Vapi has an endedReason but status is still in_progress, force completed
-        if (result.endedReason && status === "in_progress") {
-          if (result.endedReason.includes("voicemail") || result.endedReason === "machine_end_beep" || result.endedReason === "machine_end_silence") {
-            status = "voicemail";
-          } else if (result.endedReason === "no-answer" || result.endedReason === "silence-timed-out") {
-            status = "no_answer";
-          } else if (result.endedReason.includes("fail") || result.endedReason.includes("error")) {
-            status = "failed";
-          } else {
-            status = "completed";
-          }
-        }
-        // Safety: if stuck in_progress for 5+ polls (25s), force completed
-        if (status === "in_progress") {
-          stuckInProgressCount++;
-          if (stuckInProgressCount >= 5) status = "completed";
-        } else {
-          stuckInProgressCount = 0;
-        }
-        setCallStatus(status);
+        const s = result.status as CallStatus;
+        setCallStatus(s);
         if (result.summary) setCallSummary(result.summary);
         if (result.transcript) setCallTranscript(result.transcript);
         if (result.recordingUrl) setCallRecordingUrl(result.recordingUrl);
         if (result.endedReason) setCallEndedReason(result.endedReason);
-        const done = ["completed", "voicemail", "no_answer", "failed"].includes(status);
-        if (done) {
+        if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
         }
@@ -929,35 +908,52 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
 
         {/* ── Footer CTA ── */}
         {step === "script" && (
-          <div style={{ padding: "12px 18px", borderTop: `1px solid ${s.line}`, flexShrink: 0, display: "flex", gap: 8 }}>
-            {(callStatus === "completed" || callStatus === "voicemail" || callStatus === "no_answer" || callStatus === "failed") ? (
-              <button
-                onClick={() => { setCallStatus("idle"); setActiveVapiCallId(null); setCallSummary(null); setCallTranscript(null); setCallRecordingUrl(null); setCallEndedReason(null); setShowTranscript(false); }}
-                style={{ flex: 1, padding: "12px 0", background: s.panel2, border: `1px solid ${s.line}`, borderRadius: 12, color: s.text, fontWeight: 800, fontSize: 14, cursor: "pointer" }}
-              >
-                New Call
-              </button>
-            ) : (
+          <div style={{ padding: "12px 18px", borderTop: `1px solid ${s.line}`, flexShrink: 0 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <button
                 onClick={handleStartCall}
                 disabled={callActive || startCallMutation.isPending}
-                style={{
-                  flex: 1, padding: "12px 0", border: 0, borderRadius: 12,
-                  fontWeight: 800, fontSize: 14, cursor: callActive ? "not-allowed" : "pointer",
-                  color: "#111", background: callActive ? "#3a5a3a" : s.good,
-                  opacity: callActive ? 0.7 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                }}
+                style={{ border: 0, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: callActive ? "not-allowed" : "pointer", color: "#111", background: callActive ? "#3a5a3a" : s.good, fontSize: 13, opacity: callActive ? 0.7 : 1 }}
               >
-                <Phone size={15} />
                 {callActive ? STATUS_LABELS[callStatus] : "Start AI Call"}
               </button>
-            )}
-            <button
-              onClick={onClose}
-              style={{ padding: "12px 16px", background: s.dark, border: `1px solid ${s.line}`, borderRadius: 12, color: s.muted, fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-            >
-              <PhoneOff size={14} />
-            </button>
+              <button
+                onClick={() => {
+                  setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"));
+                  showFlash("Script rewritten with a softer tone.");
+                }}
+                style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+              >
+                Rewrite Softer
+              </button>
+              <button
+                onClick={() => showFlash("SMS version queued with secure link / ETA / access request based on this template.")}
+                style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+              >
+                Send SMS Instead
+              </button>
+              <button
+                onClick={() => {
+                  setCallStatus("idle");
+                  setActiveVapiCallId(null);
+                  setCallSummary(null);
+                  setCallTranscript(null);
+                  setCallRecordingUrl(null);
+                  setCallEndedReason(null);
+                  setShowTranscript(false);
+                  showFlash("Marked done. Summary added to job record.");
+                }}
+                style={{ border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+              >
+                Mark Done
+              </button>
+              <button
+                onClick={() => { navigator.clipboard.writeText(script); showFlash("Script copied."); }}
+                style={{ gridColumn: "1 / -1", border: `1px solid ${s.line}`, borderRadius: 12, padding: "11px 14px", fontWeight: 800, cursor: "pointer", color: s.text, background: s.panel2, fontSize: 13 }}
+              >
+                Copy Script
+              </button>
+            </div>
           </div>
         )}
 
