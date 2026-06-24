@@ -191,12 +191,18 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     const summary = JSON.stringify(parsed.summary ?? []);
     const urgency = parsed.urgency ?? "medium";
 
+    // Compute isUnread from Gmail labels — authoritative, always overwrites
+    const isUnread = messages.some((m) =>
+      (m.labelIds ?? []).includes("UNREAD")
+    ) ? 1 : 0;
+
     // Upsert into gmail_thread_meta — purely additive, never overwrites isIssue/assignment
     await db
       .insert(gmailThreadMeta)
       .values({
         threadId,
         isIssue: 0,
+        isUnread,
         aiCategory: category,
         aiSummary: summary,
         aiUrgency: urgency,
@@ -205,6 +211,7 @@ Return ONLY valid JSON. No markdown, no explanation.`,
       })
       .onDuplicateKeyUpdate({
         set: {
+          isUnread,
           aiCategory: category,
           aiSummary: summary,
           aiUrgency: urgency,

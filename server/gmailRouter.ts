@@ -195,7 +195,15 @@ export const gmailRouter = router({
   markRead: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
+      const db = await getDb();
       await markThreadRead(input.threadId);
+      // Sync isUnread in gmail_thread_meta (UPDATE only — never insert partial rows)
+      if (db) {
+        await db.update(gmailThreadMeta)
+          .set({ isUnread: 0 })
+          .where(eq(gmailThreadMeta.threadId, input.threadId))
+          .catch(() => {});
+      }
       return { success: true };
     }),
 
@@ -203,7 +211,15 @@ export const gmailRouter = router({
   markUnread: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
+      const db = await getDb();
       await markThreadUnread(input.threadId);
+      // Sync isUnread in gmail_thread_meta (UPDATE only — never insert partial rows)
+      if (db) {
+        await db.update(gmailThreadMeta)
+          .set({ isUnread: 1 })
+          .where(eq(gmailThreadMeta.threadId, input.threadId))
+          .catch(() => {});
+      }
       return { success: true };
     }),
 

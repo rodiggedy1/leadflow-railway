@@ -7,7 +7,7 @@ import { enqueueThread } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { getDb } from "./db";
-import { gmailState } from "../drizzle/schema";
+import { gmailState, gmailThreadMeta } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 
 export function registerGmailRoutes(app: Express) {
@@ -112,7 +112,15 @@ export function registerGmailRoutes(app: Express) {
         broadcastOpsUpdate("gmail_new_messages");
         // Enqueue affected threads for AI re-processing (non-blocking)
         const affectedThreadIds = Array.from(new Set(newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
-        for (const tid of affectedThreadIds) enqueueThread(tid);
+        for (const tid of affectedThreadIds) {
+          enqueueThread(tid);
+          // Optimistic isUnread=1 — UPDATE only (never INSERT to avoid partial rows)
+          // Worker will correct if wrong when it processes the thread
+          db.update(gmailThreadMeta)
+            .set({ isUnread: 1 })
+            .where(eq(gmailThreadMeta.threadId, tid))
+            .catch(() => {});
+        }
       }
 
       res.status(200).send("ok");

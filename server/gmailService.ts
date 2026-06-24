@@ -8,8 +8,8 @@
 import { google } from "googleapis";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
-import { gmailState } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { gmailState, gmailThreadMeta } from "../drizzle/schema";
+import { eq, and, sql } from "drizzle-orm";
 
 // In-memory cache so we don't hit the DB on every API call.
 // Cleared when a new token is stored via the OAuth callback.
@@ -393,22 +393,21 @@ export async function getAttachmentData(
 }
 
 /** Return the count of unread threads in the Conversations tab (non-Thumbtack).
- * Uses 2 Gmail API calls total:
- *   1. labels.get("INBOX") → exact threadsUnread count for the whole inbox
- *   2. threads.list(q="is:unread from:thumbtack.com") → subtract Thumbtack unread threads
- * This replaces the old approach of fetching up to 100 threads individually (101 API calls). */
+ * Reads from gmail_thread_meta.isUnread — zero Gmail API calls.
+ * isUnread is kept authoritative by processThread (worker), markRead/markUnread mutations,
+ * and the one-time backfill script (scripts/backfill-isunread.mjs).
+ * COALESCE handles NULL aiCategory rows (threads not yet processed by worker). */
 export async function getConversationsUnreadCount(): Promise<number> {
-  const gmail = await getGmailClient();
-  // Call 1: get exact unread thread count for INBOX label — single API call
-  const [labelRes, thumbtackRes] = await Promise.all([
-    gmail.users.labels.get({ userId: "me", id: "INBOX" }),
-    gmail.users.threads.list({
-      userId: "me",
-      maxResults: 500,
-      q: "in:inbox is:unread from:thumbtack.com",
-    }),
-  ]);
-  const totalUnread = labelRes.data.threadsUnread ?? 0;
-  const thumbtackUnread = (thumbtackRes.data.threads ?? []).length;
-  return Math.max(0, totalUnread - thumbtackUnread);
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(gmailThreadMeta)
+    .where(
+      and(
+        eq(gmailThreadMeta.isUnread, 1),
+        sql`COALESCE(${gmailThreadMeta.aiCategory}, '') != 'thumbtack'`
+      )
+    );
+  return Number(row?.count ?? 0);
 }
