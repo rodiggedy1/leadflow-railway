@@ -3112,9 +3112,14 @@ ${callBlocks.join("\n\n")}`;
       }
 
       // CHECK 5: Active job with no assignment
+      // A job is considered assigned if:
+      //   (a) schedule_assignments has a real row (isManual != 2), OR
+      //   (b) the cleaner_jobs row itself has a teamId from Launch27 sync
       for (const job of jobs) {
         const a = assignmentByJobId.get(job.id);
-        if (!a || a.isManual === 2) {
+        const hasScheduleAssignment = a && a.isManual !== 2;
+        const hasJobTeamId = !!(job.teamId && job.teamId !== 0);
+        if (!hasScheduleAssignment && !hasJobTeamId) {
           issues.push({
             severity: "critical",
             code: "JOB_UNASSIGNED",

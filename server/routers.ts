@@ -3100,8 +3100,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           .select()
           .from(conversationSessions)
           .where(resolvedFilter ? and(sourceFilter, resolvedFilter) : sourceFilter)
-          .orderBy(desc(conversationSessions.updatedAt))
-          .limit(100);
+          .orderBy(desc(conversationSessions.updatedAt));
 
         // Augment and sort by last message ts in messageHistory.
         // We cannot rely on updatedAt because MySQL ON UPDATE CURRENT_TIMESTAMP fires
@@ -3293,8 +3292,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           lastCustomerReplyAt: conversationSessions.lastCustomerReplyAt,
         })
         .from(conversationSessions)
-        .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)))
-        .limit(300);
+        .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)));
       const now = Date.now();
       const ONE_HOUR_MS = 60 * 60 * 1000;
       const FIFTEEN_MIN_MS = 15 * 60 * 1000;

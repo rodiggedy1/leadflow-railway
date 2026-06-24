@@ -2732,7 +2732,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             }}
             onSwitchToToday={() => handleSetActiveTab("today")}
             onSwitchToCS={() => handleSetActiveTab("cs")}
-            onSwitchToCSSession={(sessionId) => { setFocusCsSessionId(sessionId); handleSetActiveTab("cs"); }}
+            onSwitchToCSSession={(sessionId) => { setCsFilter("All"); setFocusCsSessionId(null); setTimeout(() => setFocusCsSessionId(sessionId), 0); handleSetActiveTab("cs"); }}
             onSwitchToLeadOps={(sessionId) => { setFocusLeadSessionId(sessionId); handleSetActiveTab("leadops"); }}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
