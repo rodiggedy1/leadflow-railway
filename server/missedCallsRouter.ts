@@ -26,29 +26,16 @@ export const missedCallsRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      // Use raw SQL subquery to get one customer name per phone (avoids duplicate rows from LEFT JOIN)
-      const filterClause = input.filter === "pending"
-        ? sql`WHERE mc.calledBack = 0`
-        : input.filter === "resolved"
-        ? sql`WHERE mc.calledBack = 1`
-        : sql``;
-      const rows = await db.execute(sql`
-        SELECT
-          mc.id, mc.openphoneCallId, mc.callerPhone, mc.phoneNumberId, mc.phoneNumberLabel,
-          mc.calledAt, mc.smsSent, mc.smsSentAt, mc.calledBack, mc.calledBackAt,
-          mc.calledBackByAgentName, mc.notes, mc.createdAt,
-          (
-            SELECT ql.leadName FROM quote_leads ql
-            WHERE ql.leadPhone = mc.callerPhone
-            ORDER BY ql.createdAt DESC
-            LIMIT 1
-          ) AS customerName
-        FROM missed_calls mc
-        ${filterClause}
-        ORDER BY mc.calledAt DESC
-        LIMIT ${input.limit} OFFSET ${input.offset}
-      `);
-      return rows[0] as any[];
+      const conditions = [];
+      if (input.filter === "pending") conditions.push(eq(missedCalls.calledBack, 0));
+      else if (input.filter === "resolved") conditions.push(eq(missedCalls.calledBack, 1));
+      return db
+        .select()
+        .from(missedCalls)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(missedCalls.calledAt))
+        .limit(input.limit)
+        .offset(input.offset);
     }),
 
   getPendingCount: agentProcedure
