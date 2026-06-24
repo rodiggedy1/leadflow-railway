@@ -2506,6 +2506,20 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
               <span className="text-slate-200">·</span>
               <span>{new Date(row.calledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
+            {/* AI outcome badge — only shown when Madison handled the call */}
+            {row.aiOutcome && row.aiOutcome !== 'missed' && (
+              <div className="mt-1">
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                  row.aiOutcome === 'callback_requested' ? 'bg-yellow-100 text-yellow-700' :
+                  row.aiOutcome === 'booked' ? 'bg-emerald-100 text-emerald-700' :
+                  row.aiOutcome === 'quote_given' ? 'bg-blue-100 text-blue-700' :
+                  row.aiOutcome === 'faq_answered' ? 'bg-violet-100 text-violet-700' :
+                  'bg-gray-100 text-gray-600'
+                }`}>
+                  AI: {(row.aiOutcome as string).replace(/_/g, ' ')}
+                </span>
+              </div>
+            )}
           </div>
         </div>
         <button
@@ -2517,6 +2531,18 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
           Done
         </button>
       </div>
+      {/* AI summary block — shown below the row when Madison handled the call */}
+      {row.aiSummary && (
+        <div className="mt-2 mx-0 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+          <p className="text-xs text-amber-800 leading-relaxed">{row.aiSummary}</p>
+          {row.aiRecordingUrl && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <Bot className="h-3 w-3 text-amber-500 shrink-0" />
+              <audio controls src={row.aiRecordingUrl} style={{ flex: 1, height: 24, minWidth: 0 }} />
+            </div>
+          )}
+        </div>
+      )}
       {showDialog && (
         <Dialog open onOpenChange={(o) => { if (!o) setShowDialog(false); }}>
           <DialogContent className="max-w-sm">

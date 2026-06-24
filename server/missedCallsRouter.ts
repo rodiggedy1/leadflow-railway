@@ -11,8 +11,8 @@ import { z } from "zod";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { missedCalls } from "../drizzle/schema";
-import { eq, desc, and, gte, sql } from "drizzle-orm";
+import { missedCalls, voiceCalls } from "../drizzle/schema";
+import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 
 export const missedCallsRouter = router({
   listMissedCalls: agentProcedure
@@ -29,13 +29,47 @@ export const missedCallsRouter = router({
       const conditions = [];
       if (input.filter === "pending") conditions.push(eq(missedCalls.calledBack, 0));
       else if (input.filter === "resolved") conditions.push(eq(missedCalls.calledBack, 1));
-      return db
-        .select()
+      // LEFT JOIN voice_calls to attach AI summary/recording when the call was forwarded to Madison.
+      // Join on callerPhone + a ±2h time window so back-to-back missed calls each get their own row.
+      // LEFT JOIN means every missed_calls row is always returned — zero rows are ever dropped.
+      const rows = await db
+        .select({
+          // All original missed_calls columns
+          id: missedCalls.id,
+          openphoneCallId: missedCalls.openphoneCallId,
+          callerPhone: missedCalls.callerPhone,
+          phoneNumberId: missedCalls.phoneNumberId,
+          phoneNumberLabel: missedCalls.phoneNumberLabel,
+          calledAt: missedCalls.calledAt,
+          smsSent: missedCalls.smsSent,
+          smsSentAt: missedCalls.smsSentAt,
+          calledBack: missedCalls.calledBack,
+          calledBackAt: missedCalls.calledBackAt,
+          calledBackByAgentName: missedCalls.calledBackByAgentName,
+          notes: missedCalls.notes,
+          createdAt: missedCalls.createdAt,
+          // AI fields from voice_calls (null when no matching AI call exists)
+          aiSummary: voiceCalls.summary,
+          aiRecordingUrl: voiceCalls.recordingUrl,
+          aiOutcome: voiceCalls.outcome,
+          aiDurationSeconds: voiceCalls.durationSeconds,
+          aiTranscript: voiceCalls.transcript,
+        })
         .from(missedCalls)
+        .leftJoin(
+          voiceCalls,
+          and(
+            eq(voiceCalls.callerPhone, missedCalls.callerPhone),
+            // voice call must have happened within 2 hours of the missed call
+            gte(voiceCalls.createdAt, sql`DATE_SUB(${missedCalls.calledAt}, INTERVAL 2 HOUR)`),
+            lte(voiceCalls.createdAt, sql`DATE_ADD(${missedCalls.calledAt}, INTERVAL 2 HOUR)`)
+          )
+        )
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(missedCalls.calledAt))
         .limit(input.limit)
         .offset(input.offset);
+      return rows;
     }),
 
   getPendingCount: agentProcedure
