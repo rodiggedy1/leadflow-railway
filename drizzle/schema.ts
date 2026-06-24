@@ -3133,3 +3133,33 @@ export const opsTasks = mysqlTable("ops_tasks", {
 }));
 export type OpsTask = typeof opsTasks.$inferSelect;
 export type InsertOpsTask = typeof opsTasks.$inferInsert;
+
+// ── Inbound SMS Log ───────────────────────────────────────────────────────────
+/**
+ * inbound_sms — permanent log of every inbound SMS received via OpenPhone webhook.
+ * Written immediately before any processing so no customer reply is ever lost.
+ * processing_status tracks whether the message was matched to a confirmation call.
+ */
+export const inboundSms = mysqlTable("inbound_sms", {
+  id: int("id").autoincrement().primaryKey(),
+  fromPhone: varchar("fromPhone", { length: 32 }).notNull(),
+  toPhone: varchar("toPhone", { length: 32 }),
+  message: text("message").notNull(),
+  openPhoneMessageId: varchar("openPhoneMessageId", { length: 128 }),
+  processingStatus: varchar("processingStatus", { length: 32 }).notNull().default("pending"),
+  confirmationCallId: int("confirmationCallId"),
+  extractedIntent: varchar("extractedIntent", { length: 32 }),
+  extractedFlexibility: varchar("extractedFlexibility", { length: 32 }),
+  extractedNotes: text("extractedNotes"),
+  extractedConfidence: int("extractedConfidence"),
+  processingError: text("processingError"),
+  receivedAt: bigint("receivedAt", { mode: "number" }).notNull(),
+  processedAt: bigint("processedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  idxFromPhone: index("idx_isms_from_phone").on(table.fromPhone),
+  idxStatus: index("idx_isms_status").on(table.processingStatus),
+  idxMsgId: index("idx_isms_msg_id").on(table.openPhoneMessageId),
+}));
+export type InboundSms = typeof inboundSms.$inferSelect;
+export type InsertInboundSms = typeof inboundSms.$inferInsert;

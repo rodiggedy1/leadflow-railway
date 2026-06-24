@@ -166,7 +166,7 @@ export function registerWebhookRoutes(app: Express) {
           const csFromPhone = normalizePhone(msg.from ?? "");
           const csInboundText: string = msg.text ?? msg.body ?? "";
           if (csFromPhone && csInboundText.trim()) {
-            tryHandleConfirmationSmsReply({ fromPhone: csFromPhone, inboundText: csInboundText }).catch(() => {});
+            tryHandleConfirmationSmsReply({ fromPhone: csFromPhone, inboundText: csInboundText, messageId: msg.id, toPhone: null }).catch(() => {});
           }
         }
         return;
@@ -228,7 +228,7 @@ export function registerWebhookRoutes(app: Express) {
       // ── Confirmation call SMS fallback reply detection ───────────────────────
       // If this inbound SMS is a reply to our no-answer fallback SMS, update the
       // confirmation_calls row with the reply and mark as confirmed if appropriate.
-      tryHandleConfirmationSmsReply({ fromPhone, inboundText }).catch(() => {});
+      tryHandleConfirmationSmsReply({ fromPhone, inboundText, messageId: inboundMessageId, toPhone: Array.isArray(msg.to) ? msg.to[0] : (msg.to ?? null) }).catch(() => {});
 
       // ── STOP / UNSUBSCRIBE detection ─────────────────────────────────────────
       // Only exact single-word matches (case-insensitive, trimmed) to avoid
@@ -1515,14 +1515,49 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
   async function tryHandleConfirmationSmsReply(params: {
     fromPhone: string;
     inboundText: string;
+    messageId?: string;
+    toPhone?: string | null;
   }): Promise<void> {
+    const receivedAt = Date.now();
+    const { fromPhone, inboundText, messageId, toPhone } = params;
+    const db = await getDb();
+    if (!db) return;
+
+    // ── STEP 0: Save every inbound SMS immediately — never lose a customer reply ──
+    let inboundSmsRowId: number | null = null;
     try {
-      const db = await getDb();
-      if (!db) return;
+      const { inboundSms } = await import('../drizzle/schema');
+      const insertResult = await db.insert(inboundSms).values({
+        fromPhone,
+        toPhone: toPhone ?? null,
+        message: inboundText,
+        openPhoneMessageId: messageId ?? null,
+        processingStatus: 'pending',
+        receivedAt,
+      });
+      inboundSmsRowId = (insertResult as any).insertId ?? null;
+      console.log(`[ConfirmSMS] Saved inbound SMS id=${inboundSmsRowId} from=${fromPhone}`);
+    } catch (saveErr) {
+      console.error('[ConfirmSMS] Failed to save inbound SMS (non-fatal, continuing):', saveErr);
+    }
 
-      const { fromPhone, inboundText } = params;
+    const markInboundSms = async (status: string, confirmationCallId?: number, error?: string) => {
+      if (!inboundSmsRowId) return;
+      try {
+        const { inboundSms } = await import('../drizzle/schema');
+        await db.update(inboundSms).set({
+          processingStatus: status,
+          confirmationCallId: confirmationCallId ?? null,
+          processingError: error ?? null,
+          processedAt: Date.now(),
+        }).where(eq(inboundSms.id, inboundSmsRowId));
+      } catch { /* non-fatal */ }
+    };
 
-      // Look for the most recent confirmation call row where we sent an SMS to this phone number.
+    try {
+      // ── STEP 1: Find the most recent confirmation call for this phone ──────────
+      // Simplified: no smsFollowupSent filter — just most recent call for this phone
+      console.log(`[ConfirmSMS] Looking up confirmation call for fromPhone=${fromPhone}`);
       const rows = await db
         .select({
           id: confirmationCalls.id,
@@ -1532,19 +1567,22 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           smsReply: confirmationCalls.smsReply,
           smsReplies: confirmationCalls.smsReplies,
           aiFlexibility: confirmationCalls.aiFlexibility,
+          calledPhone: confirmationCalls.calledPhone,
+          smsFollowupSent: confirmationCalls.smsFollowupSent,
         })
         .from(confirmationCalls)
-        .where(
-          and(
-            eq(confirmationCalls.calledPhone, fromPhone),
-            eq(confirmationCalls.smsFollowupSent, 1),
-          )
-        )
+        .where(eq(confirmationCalls.calledPhone, fromPhone))
         .orderBy(desc(confirmationCalls.smsFollowupAt))
         .limit(1);
 
+      console.log(`[ConfirmSMS] Rows found: ${rows.length}${rows[0] ? `, smsFollowupSent=${rows[0].smsFollowupSent}, id=${rows[0].id}` : ''}`);
+
       const row = rows[0];
-      if (!row) return; // Not a confirmation SMS reply
+      if (!row) {
+        console.log(`[ConfirmSMS] No confirmation call found for ${fromPhone} — marking as no_match`);
+        await markInboundSms('no_match');
+        return;
+      }
 
       // ── STEP 1: Classify the reply (regex-first, no LLM for clear signals) ────
       //
@@ -1578,7 +1616,8 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       else if (/\bflexible\b/i.test(lowerText)) smsFlexibility = "flexible";
       else if (/\banytime\b|\bany time\b|\bwhenever\b/i.test(lowerText)) smsFlexibility = "anytime";
 
-      // ── STEP 2: LLM for genuinely ambiguous replies + notes extraction ────────
+      // ── STEP 2: LLM extraction — always run for notes + flexibility, intent only if unclear ──
+      console.log(`[ConfirmSMS] Running LLM extraction, regex intent=${intent}`);
       try {
         const { invokeLLM } = await import("./_core/llm");
         const llmResult = await invokeLLM({
@@ -1616,6 +1655,7 @@ Extract:
           },
         });
         const parsed = JSON.parse(llmResult.choices[0].message.content as string);
+        console.log(`[ConfirmSMS] LLM result: intent=${parsed.intent}, flexibility=${parsed.flexibility}, confidence=${parsed.confidence ?? 'n/a'}, notes=${parsed.notes}`);
         // Only let LLM set intent if regex didn't already make a determination
         if (intent === 'unclear' && (parsed.intent === 'confirmed' || parsed.intent === 'cancellation')) {
           intent = parsed.intent as SmsIntent;
@@ -1626,7 +1666,7 @@ Extract:
         }
         smsNotes = parsed.notes ?? null;
       } catch (llmErr) {
-        console.error('[Webhook] LLM extraction failed for SMS reply, regex result stands:', llmErr);
+        console.error('[ConfirmSMS] LLM extraction failed, regex result stands:', llmErr);
       }
 
       // ── STEP 3: Persist the result ────────────────────────────────────────────
@@ -1640,6 +1680,7 @@ Extract:
       };
       const outcomeFields = outcomeMap[intent];
 
+      console.log(`[ConfirmSMS] Updating confirmation_calls id=${row.id} with intent=${intent}, flexibility=${smsFlexibility}`);
       await db.update(confirmationCalls)
         .set({
           smsReply: inboundText,
@@ -1651,6 +1692,7 @@ Extract:
           ...(smsNotes ? { aiNotes: smsNotes } : {}),
         })
         .where(eq(confirmationCalls.id, row.id));
+      await markInboundSms('processed', row.id);
 
       // ── STEP 4: Post CommandChat alert for cancellations and unclear replies ──
       if (intent === 'cancellation' || intent === 'unclear') {
@@ -1684,9 +1726,11 @@ Please review and action this in the Confirmation Calls page.`;
         });
       }
 
-      console.log(`[Webhook] Confirmation SMS reply from ${fromPhone} — intent=${intent}, flexibility=${smsFlexibility}, notes=${smsNotes}, text="${inboundText.slice(0, 80)}"`);
+      console.log(`[ConfirmSMS] Done — from=${fromPhone} intent=${intent} flexibility=${smsFlexibility} notes=${smsNotes} text="${inboundText.slice(0, 80)}"`);
     } catch (err) {
-      console.error('[Webhook] tryHandleConfirmationSmsReply error:', err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('[ConfirmSMS] Error:', errMsg, err);
+      await markInboundSms('error', undefined, errMsg);
     }
   }
 }
