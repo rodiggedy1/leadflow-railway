@@ -507,125 +507,65 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
         {/* ── Body ── */}
         <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
 
+
           {/* ── STEP 1: PERSON ── */}
           {step === "person" && (
             <>
-              {/* Audience toggle */}
-              <div style={{ display: "flex", gap: 6 }}>
-                {(["customer","cleaner"] as Audience[]).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => { setAudience(type); setSelectedId(null); setPersonSearch(""); }}
-                    style={{
-                      flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${audience === type ? s.accent : s.line}`,
-                      background: audience === type ? "#1d1b14" : s.dark,
-                      color: audience === type ? s.accent : s.muted,
-                      fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all .15s",
-                    }}
-                  >
-                    {type === "customer" ? `Customers (${customerItems.length})` : `Cleaners (${cleanerItems.length})`}
-                  </button>
-                ))}
-              </div>
-
-              {/* Smart Pick banner */}
-              {(() => {
-                const urgent = customerItems.find(c => c.risk !== "On track" && c.risk !== "OK");
-                if (!urgent) return null;
-                return (
-                  <button
-                    onClick={() => {
-                      setAudience("customer");
-                      setSelectedId(urgent.id);
-                      setSelectedScenario(SCENARIOS.customer[0].title);
-                      setScript(scriptFromTemplate(urgent, SCENARIOS.customer[0].title, "customer"));
-                      setStep("scenario");
-                      showFlash(`Smart Pick: ${urgent.name}`);
-                    }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-                      background: "#1a1500", border: `1px solid #3d3000`, borderRadius: 12,
-                      cursor: "pointer", textAlign: "left", width: "100%",
-                    }}
-                  >
-                    <Zap size={14} color={s.accent} style={{ flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: s.accent }}>Smart Pick: {urgent.name}</div>
-                      <div style={{ fontSize: 11, color: "#a08040", marginTop: 1 }}>{urgent.risk} · {urgent.meta}</div>
-                    </div>
-                  </button>
-                );
-              })()}
-
-              {/* Search */}
-              <div style={{ position: "relative" }}>
-                <Search size={13} color={s.muted} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-                <input
-                  value={personSearch}
-                  onChange={e => setPersonSearch(e.target.value)}
-                  placeholder="Search name, address, phone…"
-                  style={{ width: "100%", paddingLeft: 30, paddingRight: 12, paddingTop: 9, paddingBottom: 9, background: s.dark, border: `1px solid ${s.line}`, borderRadius: 10, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
-                />
-              </div>
-
-              {/* People list */}
-              {isLoading && <div style={{ color: s.muted, fontSize: 13, padding: "8px 0" }}>Loading today's jobs…</div>}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {filteredPeople.map(p => {
-                  const active = selectedId === p.id;
-                  const rc = riskColor(p.risk);
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => selectPerson(p)}
-                      style={{
-                        display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, alignItems: "center",
-                        padding: "10px 12px", border: `1px solid ${active ? s.blue : s.line}`,
-                        borderRadius: 12, background: active ? "#132033" : s.dark,
-                        cursor: "pointer", textAlign: "left", width: "100%", transition: "all .12s",
-                      }}
-                    >
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: "#1f2430", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0, color: s.accent }}>
-                        {initials(p.name)}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: s.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
-                        <div style={{ fontSize: 11, color: s.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.meta}</div>
-                      </div>
-                      <div style={{ fontSize: 10, fontWeight: 800, color: rc, background: rc + "18", border: `1px solid ${rc}40`, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
-                        {p.risk}
-                      </div>
-                    </button>
-                  );
-                })}
-                {filteredPeople.length === 0 && !isLoading && (
-                  <div style={{ color: s.muted, fontSize: 13, padding: "12px 0", textAlign: "center" }}>
-                    {allItems.length === 0 ? "No jobs found for today." : `No results for "${personSearch}"`}
-                  </div>
-                )}
-              </div>
-
-              {/* ── DB Search divider ── */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0" }}>
-                <div style={{ flex: 1, height: 1, background: s.line }} />
-                <span style={{ fontSize: 10, color: s.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>or search all contacts</span>
-                <div style={{ flex: 1, height: 1, background: s.line }} />
-              </div>
-
-              {/* DB search box */}
+              {/* ── Unified search — always at the top ── */}
               <div style={{ position: "relative" }}>
                 <Search size={13} color={s.muted} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
                 <input
                   value={dbSearchQuery}
-                  onChange={e => { setDbSearchQuery(e.target.value); setDbSearchActive(true); }}
-                  placeholder="Search past customers, leads, cleaners…"
-                  style={{ width: "100%", paddingLeft: 30, paddingRight: 12, paddingTop: 9, paddingBottom: 9, background: s.dark, border: `1px solid ${s.line}`, borderRadius: 10, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setDbSearchQuery(v);
+                    setDbSearchActive(v.trim().length >= 2);
+                    setPersonSearch("");
+                  }}
+                  placeholder="Search by name or phone…"
+                  style={{ width: "100%", paddingLeft: 30, paddingRight: 12, paddingTop: 10, paddingBottom: 10, background: "#11151d", border: `1px solid ${dbSearchActive ? s.blue : s.line}`, borderRadius: 10, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box", transition: "border-color .15s" }}
                 />
               </div>
 
-              {/* DB search results */}
-              {dbSearchActive && dbSearchQuery.trim().length >= 2 && (
+              {/* ── Manual entry — always visible at top ── */}
+              <div style={{ background: s.dark, border: `1px solid ${showCustomNumber ? s.accent + "60" : s.line}`, borderRadius: 12, overflow: "hidden", transition: "border-color .15s" }}>
+                <button
+                  onClick={() => setShowCustomNumber(v => !v)}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+                >
+                  <Phone size={13} color={showCustomNumber ? s.accent : s.muted} style={{ flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: showCustomNumber ? s.accent : s.muted, flex: 1 }}>Enter number manually</span>
+                  <span style={{ fontSize: 11, color: s.muted }}>{showCustomNumber ? "▲" : "▼"}</span>
+                </button>
+                {showCustomNumber && (
+                  <div style={{ padding: "0 12px 12px", display: "flex", flexDirection: "column", gap: 7 }}>
+                    <input
+                      value={customName}
+                      onChange={e => setCustomName(e.target.value)}
+                      placeholder="Name (optional)"
+                      style={{ width: "100%", padding: "8px 10px", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 8, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
+                    />
+                    <input
+                      value={customPhone}
+                      onChange={e => setCustomPhone(e.target.value)}
+                      placeholder="Phone number (required)"
+                      type="tel"
+                      style={{ width: "100%", padding: "8px 10px", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 8, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
+                    />
+                    <button
+                      onClick={selectCustomPerson}
+                      style={{ padding: "9px 0", background: "#1d1b14", border: `1px solid ${s.accent}`, borderRadius: 8, color: s.accent, fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+                    >
+                      Use this number →
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Search results (when typing) OR today's list ── */}
+              {dbSearchActive && dbSearchQuery.trim().length >= 2 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: s.muted, textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 2 }}>Search results</div>
                   {dbSearchFetching && <div style={{ color: s.muted, fontSize: 12, padding: "6px 0" }}>Searching…</div>}
                   {!dbSearchFetching && dbSearchResults.length === 0 && (
                     <div style={{ color: s.muted, fontSize: 12, padding: "6px 0" }}>No contacts found for "{dbSearchQuery}"</div>
@@ -633,22 +573,11 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
                   {dbSearchResults.map(r => {
                     const sourceColors: Record<string, string> = { customer: "#7bb7ff", lead: "#a78bfa", cleaner: "#34d399" };
                     const sc = sourceColors[r.source] ?? s.muted;
+                    const item: PersonItem = { id: r.id, cleanerJobId: 0, name: r.name, phone: r.phone, meta: r.context, jobTime: "N/A", eta: "N/A", pay: "N/A", access: "N/A", risk: r.source === "cleaner" ? "Cleaner" : r.source === "lead" ? "Lead" : "Past customer" };
                     return (
                       <button
                         key={r.id}
                         onClick={() => {
-                          const item: PersonItem = {
-                            id: r.id,
-                            cleanerJobId: 0,
-                            name: r.name,
-                            phone: r.phone,
-                            meta: r.context,
-                            jobTime: "N/A",
-                            eta: "N/A",
-                            pay: "N/A",
-                            access: "N/A",
-                            risk: r.source === "cleaner" ? "Cleaner" : r.source === "lead" ? "Lead" : "Past customer",
-                          };
                           setCustomPersonItem(item);
                           setSelectedId(r.id);
                           setScript(scriptFromTemplate(item, selectedScenario, audience));
@@ -656,18 +585,14 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
                           setDbSearchQuery("");
                           setDbSearchActive(false);
                         }}
-                        style={{
-                          display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, alignItems: "center",
-                          padding: "10px 12px", border: `1px solid ${s.line}`,
-                          borderRadius: 12, background: s.dark, cursor: "pointer", textAlign: "left", width: "100%",
-                        }}
+                        style={{ display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, alignItems: "center", padding: "10px 12px", border: `1px solid ${s.line}`, borderRadius: 12, background: s.dark, cursor: "pointer", textAlign: "left", width: "100%", transition: "border-color .12s" }}
                       >
                         <div style={{ width: 36, height: 36, borderRadius: 10, background: sc + "18", border: `1px solid ${sc}40`, display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, color: sc }}>
                           {initials(r.name)}
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: 700, fontSize: 13, color: s.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
-                          <div style={{ fontSize: 11, color: s.muted, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.context}</div>
+                          <div style={{ fontSize: 11, color: s.muted, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.phone ?? "No phone"} · {r.context}</div>
                         </div>
                         <div style={{ fontSize: 10, fontWeight: 800, color: sc, background: sc + "18", border: `1px solid ${sc}40`, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap" }}>
                           {r.source}
@@ -676,43 +601,71 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
                     );
                   })}
                 </div>
-              )}
+              ) : (
+                <>
+                  {/* Audience toggle */}
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {(["customer","cleaner"] as Audience[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => { setAudience(type); setSelectedId(null); setPersonSearch(""); }}
+                        style={{ flex: 1, padding: "8px 0", borderRadius: 10, border: `1px solid ${audience === type ? s.accent : s.line}`, background: audience === type ? "#1d1b14" : s.dark, color: audience === type ? s.accent : s.muted, fontWeight: 700, fontSize: 12, cursor: "pointer", transition: "all .15s" }}
+                      >
+                        {type === "customer" ? `Customers (${customerItems.length})` : `Cleaners (${cleanerItems.length})`}
+                      </button>
+                    ))}
+                  </div>
 
-              {/* ── Custom number divider ── */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0" }}>
-                <div style={{ flex: 1, height: 1, background: s.line }} />
-                <button
-                  onClick={() => setShowCustomNumber(v => !v)}
-                  style={{ fontSize: 10, color: showCustomNumber ? s.accent : s.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap", padding: "0 4px" }}
-                >
-                  {showCustomNumber ? "▲ hide" : "▼ enter number manually"}
-                </button>
-                <div style={{ flex: 1, height: 1, background: s.line }} />
-              </div>
+                  {/* Smart Pick banner */}
+                  {(() => {
+                    const urgent = customerItems.find(c => c.risk !== "On track" && c.risk !== "OK");
+                    if (!urgent) return null;
+                    return (
+                      <button
+                        onClick={() => { setAudience("customer"); setSelectedId(urgent.id); setSelectedScenario(SCENARIOS.customer[0].title); setScript(scriptFromTemplate(urgent, SCENARIOS.customer[0].title, "customer")); setStep("scenario"); showFlash(`Smart Pick: ${urgent.name}`); }}
+                        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "#1a1500", border: `1px solid #3d3000`, borderRadius: 12, cursor: "pointer", textAlign: "left", width: "100%" }}
+                      >
+                        <Zap size={14} color={s.accent} style={{ flexShrink: 0 }} />
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: s.accent }}>Smart Pick: {urgent.name}</div>
+                          <div style={{ fontSize: 11, color: "#a08040", marginTop: 1 }}>{urgent.risk} · {urgent.meta}</div>
+                        </div>
+                      </button>
+                    );
+                  })()}
 
-              {/* Custom number form */}
-              {showCustomNumber && (
-                <div style={{ background: s.dark, border: `1px solid ${s.line}`, borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                  <input
-                    value={customName}
-                    onChange={e => setCustomName(e.target.value)}
-                    placeholder="Name (optional)"
-                    style={{ width: "100%", padding: "8px 10px", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 8, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
-                  />
-                  <input
-                    value={customPhone}
-                    onChange={e => setCustomPhone(e.target.value)}
-                    placeholder="Phone number (required)"
-                    type="tel"
-                    style={{ width: "100%", padding: "8px 10px", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 8, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
-                  />
-                  <button
-                    onClick={selectCustomPerson}
-                    style={{ padding: "9px 0", background: "#1d1b14", border: `1px solid ${s.accent}`, borderRadius: 8, color: s.accent, fontWeight: 800, fontSize: 13, cursor: "pointer" }}
-                  >
-                    Use this number →
-                  </button>
-                </div>
+                  {/* Today's people list */}
+                  {isLoading && <div style={{ color: s.muted, fontSize: 13, padding: "8px 0" }}>Loading today's jobs…</div>}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {filteredPeople.map(p => {
+                      const active = selectedId === p.id;
+                      const rc = riskColor(p.risk);
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => selectPerson(p)}
+                          style={{ display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, alignItems: "center", padding: "10px 12px", border: `1px solid ${active ? s.blue : s.line}`, borderRadius: 12, background: active ? "#132033" : s.dark, cursor: "pointer", textAlign: "left", width: "100%", transition: "all .12s" }}
+                        >
+                          <div style={{ width: 36, height: 36, borderRadius: 10, background: "#1f2430", display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, flexShrink: 0, color: s.accent }}>
+                            {initials(p.name)}
+                          </div>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13, color: s.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                            <div style={{ fontSize: 11, color: s.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.meta}</div>
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 800, color: rc, background: rc + "18", border: `1px solid ${rc}40`, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap", flexShrink: 0 }}>
+                            {p.risk}
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {filteredPeople.length === 0 && !isLoading && (
+                      <div style={{ color: s.muted, fontSize: 13, padding: "12px 0", textAlign: "center" }}>
+                        {allItems.length === 0 ? "No jobs today — search above or enter a number manually." : `No results for "${personSearch}"`}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </>
           )}
