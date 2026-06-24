@@ -379,10 +379,10 @@ function CardAuthInner({
               </p>
 
               <div className="my-6 rounded-[32px] overflow-hidden" style={{ boxShadow: "0 22px 60px rgba(71,54,35,.12)" }}>
-                <video autoPlay loop muted playsInline className="w-full h-[260px] object-cover">
-                  <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
-                  <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
-                </video>
+                <script src="https://fast.wistia.com/player.js" async></script>
+                <script src="https://fast.wistia.com/embed/jtv8f50ale.js" async type="module"></script>
+                {/* @ts-ignore */}
+                <wistia-player media-id="jtv8f50ale" seo="false" aspect="1.7777777777777777"></wistia-player>
               </div>
 
               <div className="grid grid-cols-2 gap-[18px] my-[22px]">
@@ -430,10 +430,10 @@ function CardAuthInner({
             </p>
 
             <div className="mb-6 rounded-[24px] overflow-hidden" style={{ boxShadow: "0 16px 40px rgba(71,54,35,.12)" }}>
-              <video autoPlay loop muted playsInline className="w-full h-[220px] object-cover">
-                <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
-                <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
-              </video>
+              <script src="https://fast.wistia.com/player.js" async></script>
+              <script src="https://fast.wistia.com/embed/jtv8f50ale.js" async type="module"></script>
+              {/* @ts-ignore */}
+              <wistia-player media-id="jtv8f50ale" seo="false" aspect="1.7777777777777777"></wistia-player>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
