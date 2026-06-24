@@ -72,6 +72,25 @@ const STATUS_CONFIG: Record<Status, { label: string; color: string; dot: string;
   done:        { label: "Done",        color: "text-green-700", dot: "bg-green-500", bg: "bg-green-50 border border-green-200" },
 };
 
+function StatusBadgeWithOverdue({ status, dueAt }: { status: string; dueAt: number | null }) {
+  const isOverdue = status !== "done" && dueAt !== null && dueAt < Date.now();
+  if (isOverdue) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-700">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+        Overdue
+      </span>
+    );
+  }
+  const cfg = STATUS_CONFIG[status as Status] ?? STATUS_CONFIG.todo;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full", cfg.bg, cfg.color)}>
+      <span className={cn("h-1.5 w-1.5 rounded-full", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
+}
+
 function formatDue(dueAt: number | null): { label: string; overdue: boolean; dateStr: string } {
   if (!dueAt) return { label: "—", overdue: false, dateStr: "" };
   const now = Date.now();
@@ -733,15 +752,16 @@ export default function TasksPanel({ open, onClose, isAdmin, agentList, refetchT
                   return (
                     <tr
                       key={task.id}
+                      onClick={() => setEditTask(task)}
                       className={cn(
-                        "group hover:bg-slate-50/80 transition-colors",
+                        "group hover:bg-slate-50/80 transition-colors cursor-pointer",
                         isDone && "opacity-50"
                       )}
                     >
                       {/* Done toggle */}
                       <td className="px-6 py-3.5">
                         <button
-                          onClick={() => updateStatus.mutate({ id: task.id, status: isDone ? "todo" : "done" })}
+                          onClick={(e) => { e.stopPropagation(); updateStatus.mutate({ id: task.id, status: isDone ? "todo" : "done" }); }}
                           className={cn(
                             "h-4.5 w-4.5 h-[18px] w-[18px] rounded-full border-2 flex items-center justify-center transition-all",
                             isDone
@@ -797,11 +817,11 @@ export default function TasksPanel({ open, onClose, isAdmin, agentList, refetchT
 
                       {/* Status */}
                       <td className="px-3 py-3.5">
-                        <StatusBadge status={task.status} />
+                        <StatusBadgeWithOverdue status={task.status} dueAt={task.dueAt} />
                       </td>
 
                       {/* Actions */}
-                      <td className="px-3 py-3.5">
+                      <td className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <button className="opacity-0 group-hover:opacity-100 h-7 w-7 flex items-center justify-center rounded-md hover:bg-slate-200 transition-all">
