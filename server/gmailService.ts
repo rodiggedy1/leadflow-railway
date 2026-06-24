@@ -168,9 +168,15 @@ function parseMessage(msg: any): GmailMessage {
   };
 }
 
+// Max simultaneous threads.get calls per listInboxThreads() invocation.
+// Keeps Gmail per-user quota pressure low while keeping inbox loads fast.
+// Increase to 10 if inbox feels slow; decrease to 3 if 429s persist.
+const GMAIL_THREAD_FETCH_CONCURRENCY = 5;
+
 export async function listInboxThreads(opts: {
   pageToken?: string; maxResults?: number; query?: string;
 }): Promise<{ threads: GmailThread[]; nextPageToken?: string }> {
+  const t0 = Date.now();
   const gmail = await getGmailClient();
   const listRes = await gmail.users.threads.list({
     userId: "me",
@@ -181,14 +187,27 @@ export async function listInboxThreads(opts: {
   const threadItems = listRes.data.threads ?? [];
   const nextPageToken = listRes.data.nextPageToken ?? undefined;
   if (threadItems.length === 0) return { threads: [], nextPageToken };
-  const threads = await Promise.all(
-    threadItems.map(async (t) => {
-      try { return await getThreadDetail(t.id!); } catch { return null; }
-    })
-  );
+
+  // Fetch thread details with bounded concurrency to avoid Gmail quota bursts.
+  // GMAIL_THREAD_FETCH_CONCURRENCY controls max simultaneous threads.get calls.
+  const results: (GmailThread | null)[] = new Array(threadItems.length).fill(null);
+  for (let i = 0; i < threadItems.length; i += GMAIL_THREAD_FETCH_CONCURRENCY) {
+    const batch = threadItems.slice(i, i + GMAIL_THREAD_FETCH_CONCURRENCY);
+    const batchResults = await Promise.all(
+      batch.map(async (t) => {
+        try { return await getThreadDetail(t.id!); } catch { return null; }
+      })
+    );
+    for (let j = 0; j < batchResults.length; j++) {
+      results[i + j] = batchResults[j];
+    }
+  }
+
   // Sort by latest message date descending — Gmail's list order is not purely
   // chronological and Promise.all doesn't preserve input order.
-  const sorted = (threads.filter(Boolean) as GmailThread[]).sort((a, b) => b.date - a.date);
+  const sorted = (results.filter(Boolean) as GmailThread[]).sort((a, b) => b.date - a.date);
+  const durationMs = Date.now() - t0;
+  console.log(`[Inbox] threadsReturned=${threadItems.length} threadsFetched=${sorted.length} concurrency=${GMAIL_THREAD_FETCH_CONCURRENCY} duration=${(durationMs / 1000).toFixed(1)}s`);
   return { threads: sorted, nextPageToken };
 }
 

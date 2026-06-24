@@ -1036,7 +1036,7 @@ export default function EmailInbox() {
 
   const threadsQuery = trpc.gmail.listThreads.useQuery(
     { maxResults: 100, query: composedQuery },
-    { enabled: statusQuery.data?.connected === true, staleTime: 30_000, retry: false }
+    { enabled: statusQuery.data?.connected === true, staleTime: 30_000, retry: false, refetchOnWindowFocus: false }
   );
 
   async function loadMore() {
