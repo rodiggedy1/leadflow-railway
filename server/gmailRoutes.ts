@@ -2,7 +2,7 @@
  * gmailRoutes.ts — Gmail OAuth callback + Pub/Sub push webhook
  */
 import type { Express } from "express";
-import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
+import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch, syncThreadsToDb } from "./gmailService";
 import { enqueueThread } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -110,8 +110,10 @@ export function registerGmailRoutes(app: Express) {
       if (newMessages.length > 0) {
         console.log(`[Gmail] ${newMessages.length} new message(s) received`);
         broadcastOpsUpdate("gmail_new_messages");
-        // Enqueue affected threads for AI re-processing (non-blocking)
+        // Sync affected threads to DB cache (non-blocking) so inbox list is instant on next load
         const affectedThreadIds = Array.from(new Set(newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
+        setImmediate(() => syncThreadsToDb(affectedThreadIds).catch(console.error));
+        // Enqueue affected threads for AI re-processing (non-blocking)
         for (const tid of affectedThreadIds) enqueueThread(tid);
       }
 

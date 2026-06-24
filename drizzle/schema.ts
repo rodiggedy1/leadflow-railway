@@ -2850,6 +2850,39 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
 });
 export type GmailThreadMeta = typeof gmailThreadMeta.$inferSelect;
 
+/**
+ * gmail_thread_cache — DB-backed inbox cache (world-class pattern).
+ * One row per thread. Written by syncInboxToDb() and invalidated by mutations.
+ * listInboxThreads reads from this table — zero Gmail API calls on page load.
+ * Cache is considered stale when needsRefresh=1; background sync refreshes it.
+ */
+export const gmailThreadCache = mysqlTable("gmail_thread_cache", {
+  /** Gmail thread ID — primary key */
+  threadId: varchar("threadId", { length: 255 }).primaryKey(),
+  /** Display name of the other party (not the inbox address) */
+  fromName: varchar("fromName", { length: 512 }).notNull().default(""),
+  /** Email address of the other party */
+  fromEmail: varchar("fromEmail", { length: 512 }).notNull().default(""),
+  /** Thread subject line */
+  subject: varchar("subject", { length: 1024 }).notNull().default("(no subject)"),
+  /** Latest message snippet */
+  snippet: text("snippet").notNull().default(""),
+  /** Whether the thread has any unread messages */
+  isUnread: int("isUnread").notNull().default(0),
+  /** Timestamp (ms) of the latest message in the thread */
+  receivedAt: bigint("receivedAt", { mode: "number" }).notNull().default(0),
+  /** JSON-encoded array of Gmail label IDs e.g. ["INBOX","UNREAD"] */
+  labelIds: text("labelIds").notNull().default("[]"),
+  /** Number of messages in the thread */
+  messageCount: int("messageCount").notNull().default(1),
+  /** 1 = stale, needs background refresh from Gmail API on next sync */
+  needsRefresh: int("needsRefresh").notNull().default(0),
+  /** When this row was last written from Gmail API */
+  cachedAt: timestamp("cachedAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GmailThreadCache = typeof gmailThreadCache.$inferSelect;
+
 // ── Confirmation Calls ────────────────────────────────────────────────────────
 /**
  * confirmation_calls — one row per AI confirmation call placed from the

@@ -31,6 +31,7 @@ import { registerGmailWatchRenewCron } from "../gmailWatchRenewCron";
 import { registerGbpRoutes } from "../gbpRoutes";
 import { backfillTeamGeocodesOnStartup } from "../schedulingUtils";
 import { startGlanceWorker, backfillGlanceQueue } from "../gmailGlanceWorker";
+import { syncInboxToDb } from "../gmailService";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
@@ -351,6 +352,9 @@ async function startServer() {
       // Purely additive — never touches existing inbox/SMS/webhook flows.
       startGlanceWorker();
       setTimeout(() => { backfillGlanceQueue().catch(console.error); }, 15_000);
+      // Warm up the DB inbox cache on startup so the first inbox visit is instant.
+      // Runs 20s after boot (after glance backfill starts) to avoid competing for quota.
+      setTimeout(() => { syncInboxToDb({ maxResults: 50 }).catch(console.error); }, 20_000);
       startInternalCron();
       // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
       // Always use the production domain so Vapi tool calls reach the live server.

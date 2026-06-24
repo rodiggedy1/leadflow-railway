@@ -24,6 +24,9 @@ import {
   setupGmailWatch,
   getAttachmentData,
   getConversationsUnreadCount,
+  invalidateThreadCache,
+  refreshStaleThreads,
+  syncInboxToDb,
 } from "./gmailService";
 import { ENV } from "./_core/env";
 
@@ -170,6 +173,9 @@ export const gmailRouter = router({
         console.error("[sendReply] Failed to log agent attribution (non-fatal):", logErr);
       }
 
+      // Invalidate this thread in the DB cache so the next list view shows fresh data
+      setImmediate(() => invalidateThreadCache(input.threadId).then(() => refreshStaleThreads()).catch(console.error));
+
       return result;
     }),
 
@@ -184,11 +190,14 @@ export const gmailRouter = router({
     )
     .mutation(async ({ input }) => {
       await requireGmailConnected();
-      return sendNewGmailEmail({
+      const result = await sendNewGmailEmail({
         to: input.to,
         subject: input.subject,
         bodyHtml: input.bodyHtml,
       });
+      // New email — trigger full inbox sync so it appears in the cache
+      setImmediate(() => syncInboxToDb({ maxResults: 50 }).catch(console.error));
+      return result;
     }),
 
   /** Mark a thread as read */
@@ -196,6 +205,16 @@ export const gmailRouter = router({
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await markThreadRead(input.threadId);
+      // Update isUnread=0 in DB cache immediately (no need to re-fetch from Gmail)
+      setImmediate(async () => {
+        try {
+          const db = await getDb();
+          if (db) {
+            const { gmailThreadCache } = await import("../drizzle/schema");
+            await db.update(gmailThreadCache).set({ isUnread: 0 }).where(eq(gmailThreadCache.threadId, input.threadId));
+          }
+        } catch { /* non-fatal */ }
+      });
       return { success: true };
     }),
 
@@ -204,6 +223,16 @@ export const gmailRouter = router({
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await markThreadUnread(input.threadId);
+      // Update isUnread=1 in DB cache immediately
+      setImmediate(async () => {
+        try {
+          const db = await getDb();
+          if (db) {
+            const { gmailThreadCache } = await import("../drizzle/schema");
+            await db.update(gmailThreadCache).set({ isUnread: 1 }).where(eq(gmailThreadCache.threadId, input.threadId));
+          }
+        } catch { /* non-fatal */ }
+      });
       return { success: true };
     }),
 
@@ -219,6 +248,9 @@ export const gmailRouter = router({
           .values({ threadId: input.threadId, isInInbox: 0 })
           .onDuplicateKeyUpdate({ set: { isInInbox: 0 } })
           .catch(() => {});
+        // Remove from DB cache — archived threads don't belong in the inbox list
+        const { gmailThreadCache } = await import("../drizzle/schema");
+        await db.delete(gmailThreadCache).where(eq(gmailThreadCache.threadId, input.threadId)).catch(() => {});
       }
       return { success: true };
     }),
