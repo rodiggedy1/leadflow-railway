@@ -19,6 +19,7 @@ import { TypingBubble } from "@/components/TypingBubble";
 import { trpc } from "@/lib/trpc";
 import { senderHex } from "@/lib/senderColor";
 import GlitterBurst from "@/components/GlitterBurst";
+import TasksPanel, { DueTaskPopup } from "@/components/TasksPanel";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
@@ -2530,6 +2531,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [leadRepliesOpen, setLeadRepliesOpen] = useState(false);
   const [csSmsOpen, setCsSmsOpen] = useState(false);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [taskRefetchTick, setTaskRefetchTick] = useState(0);
+  const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
+  const { data: dueTasks = [] } = trpc.tasks.getDue.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const visibleDueTasks = (dueTasks as any[]).filter((t: any) => !dueTaskPopupDismissed.has(t.id));
   const [threadRefetchTick, setThreadRefetchTick] = useState(0);
   const { data: activeThreads = [] } = trpc.opsChat.listActiveThreads.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -2648,6 +2657,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onMissedCallResolved: () => {
       // Decrement the today count immediately when an agent marks a call as called back (or undoes it)
       refetchMissedCallsToday();
+    },
+    onTaskUpdate: () => {
+      utils.tasks.list.invalidate();
+      utils.tasks.listMine.invalidate();
+      utils.tasks.getDue.invalidate();
+      setTaskRefetchTick(t => t + 1);
     },
   });
 
@@ -4214,44 +4229,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold text-slate-900 leading-none">MIB Command Chat</h2>
-                  {agentList && agentList.length > 0 && (() => {
-                    const MAX_SHOW = 8;
-                    const visible = agentList.slice(0, MAX_SHOW);
-                    const overflow = agentList.length - MAX_SHOW;
-                    return (
-                      <div className="flex items-center" style={{ gap: 0 }}>
-                        {visible.map((ag, idx) => {
-                          const status = senderStatusMap?.[ag.name] ?? "offline";
-                          const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
-                          const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                          const hue = (ag.name.charCodeAt(0) * 37) % 360;
-                          const isOnCall = Boolean(ag.onCallSince);
-                          return (
-                            <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 6 : -4, zIndex: visible.length - idx }}>
-                              {ag.photoUrl ? (
-                                <img src={ag.photoUrl} alt={ag.name} className={cn("w-7 h-7 rounded-full object-cover border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} />
-                              ) : (
-                                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
-                              )}
-                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
-                            </div>
-                          );
-                        })}
-                        {overflow > 0 && (
-                          <div className="w-7 h-7 rounded-full bg-slate-100 border border-white flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -4 }}>+{overflow}</div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <h2 className="text-lg font-bold text-slate-900 leading-none mr-2">MIB Command</h2>
+                  {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onSwitchToLeadOps?.()}
-                        title="Open Lead Ops"
-                        className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors cursor-pointer"
+                        className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer min-w-[64px]"
                       >
-                        🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
+                        <span className="text-lg font-bold text-blue-600 leading-tight">{todayStats?.total ?? 0}</span>
+                        <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">New Leads</span>
                       </button>
                     </TooltipTrigger>
                     {todayStats?.leadList && todayStats.leadList.length > 0 && (
@@ -4275,17 +4262,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </TooltipContent>
                     )}
                   </Tooltip>
-                  {myAssignedLeads.length > 0 && (
-                    <button
-                      onClick={() => setShowMyLeads(v => !v)}
-                      title="My assigned leads today"
-                      className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
-                    >
-                      📋 My leads: {myAssignedLeads.length}
-                    </button>
-                  )}
-                  {/* Booking count badge with agent breakdown tooltip */}
-                  {todayBookingCount > 0 && (() => {
+                  {/* Booked card */}
+                  {(() => {
                     const byAgent: Record<string, number> = {};
                     (todayStats?.bookedList ?? []).forEach(b => {
                       const name = b.bookedByAgentName ?? 'Unassigned';
@@ -4295,8 +4273,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
-                            ✓ {todayBookingCount} booked
+                          <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[56px]">
+                            <span className="text-lg font-bold text-emerald-600 leading-tight">{todayBookingCount}</span>
+                            <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">Booked</span>
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" align="start" className="p-0 overflow-hidden min-w-[180px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -4315,16 +4294,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </Tooltip>
                     );
                   })()}
-                  {/* Conversion rate badge */}
+                  {/* CVR card */}
                   {(todayStats?.total ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                      {Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}% CVR
+                    <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[56px]">
+                      <span className="text-lg font-bold text-blue-500 leading-tight">{Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}%</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">CVR</span>
                     </span>
                   )}
+                  {/* Revenue card */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
-                        ${todayRevenue.toLocaleString()} today
+                      <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[72px]">
+                        <span className="text-lg font-bold text-emerald-600 leading-tight">${todayRevenue.toLocaleString()}</span>
+                        <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">Today</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[230px] max-w-[290px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -4351,8 +4333,48 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       )}
                     </TooltipContent>
                   </Tooltip>
+                  {/* My leads button — only when assigned */}
+                  {myAssignedLeads.length > 0 && (
+                    <button
+                      onClick={() => setShowMyLeads(v => !v)}
+                      className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer min-w-[56px]"
+                    >
+                      <span className="text-lg font-bold text-amber-500 leading-tight">{myAssignedLeads.length}</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">My Leads</span>
+                    </button>
+                  )}
                 </div>
             </div>
+            {/* Agent presence circles — far right */}
+            {agentList && agentList.length > 0 && (() => {
+              const MAX_SHOW = 8;
+              const visible = agentList.slice(0, MAX_SHOW);
+              const overflow = agentList.length - MAX_SHOW;
+              return (
+                <div className="flex items-center shrink-0" style={{ gap: 0 }}>
+                  {visible.map((ag, idx) => {
+                    const status = senderStatusMap?.[ag.name] ?? "offline";
+                    const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
+                    const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = (ag.name.charCodeAt(0) * 37) % 360;
+                    const isOnCall = Boolean(ag.onCallSince);
+                    return (
+                      <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
+                        {ag.photoUrl ? (
+                          <img src={ag.photoUrl} alt={ag.name} className={cn("w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400")} />
+                        ) : (
+                          <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+                        )}
+                        <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
+                      </div>
+                    );
+                  })}
+                  {overflow > 0 && (
+                    <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -6 }}>+{overflow}</div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -4635,31 +4657,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+            <div className="shrink-0 flex items-center gap-2 px-5 py-1.5 bg-slate-50 border-b border-slate-200">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
-                  {unreadTagIds.length > 0 && (
-                    <>
-                      <button
-                        onClick={jumpToNextMention}
-                        className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
-                      >
-                        🔔 {unreadTagIds.length} mention{unreadTagIds.length > 1 ? "s" : ""}
-                      </button>
-                      <button
-                        onClick={markTagsSeen}
-                        className="text-amber-400 hover:text-amber-600 transition"
-                        title="Dismiss"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </>
-                  )}
                   <button
-                    onClick={() => setShowMentionHistory(true)}
-                    className="text-[10px] text-amber-600 hover:text-amber-800 transition"
+                    onClick={unreadTagIds.length > 0 ? jumpToNextMention : () => setShowMentionHistory(true)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition",
+                      unreadTagIds.length > 0
+                        ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                        : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                    )}
                   >
+                    <Bell className="h-3 w-3" />
+                    {unreadTagIds.length > 0 ? (
+                      <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {unreadTagIds.length > 99 ? "99+" : unreadTagIds.length}
+                      </span>
+                    ) : null}
+                  </button>
+                  {unreadTagIds.length > 0 && (
+                    <button onClick={markTagsSeen} className="text-slate-300 hover:text-slate-500 transition" title="Dismiss">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button onClick={() => setShowMentionHistory(true)} className="text-[10px] text-slate-400 hover:text-slate-600 transition font-medium">
                     See all
                   </button>
                 </div>
@@ -4672,12 +4695,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {activeThreadCount > 0 && (
                 <button
                   onClick={() => setAllThreadsOpen(true)}
-                  className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 transition"
+                  className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition"
                 >
-                  <MessageSquare className="h-3 w-3" />
-                  threads
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Threads
                   {unreadThreadCount > 0 && (
-                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                    <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center leading-none">
                       {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
                     </span>
                   )}
@@ -4690,31 +4713,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   leadRepliesOpen
-                    ? "bg-emerald-200 text-emerald-800"
-                    : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
                 )}
               >
-                <MessageCircle className="h-3 w-3" />
-                lead replies
-                <span className={cn(
-                  "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none",
-                  leadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                )}>
-                  {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
-                </span>
+                <MessageCircle className="h-3.5 w-3.5" />
+                Lead Chats
+                {leadRepliesCount > 0 && (
+                  <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
+                  </span>
+                )}
               </button>
               {/* Email Inbox pill — always visible */}
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { window.location.href = "/admin/inbox"; }}
-                className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
+                className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
-                <Mail className="h-3 w-3" />
-                Inbox
+                <Mail className="h-3.5 w-3.5" />
+                Email
                 {emailUnreadCount > 0 && (
-                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center leading-none">
                     {emailUnreadCount}
                   </span>
                 )}
@@ -4723,35 +4745,29 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { window.location.href = "/admin/missed-calls"; }}
-                className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-red-100 text-red-700 hover:bg-red-200"
+                className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
-                <PhoneMissed className="h-3 w-3" />
-                Missed Call
-                <span className={`ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none ${missedCallsTodayCount > 0 ? "bg-red-500 text-white animate-pulse" : "bg-red-200 text-red-600"}`}>
-                  {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
-                </span>
+                <PhoneMissed className="h-3.5 w-3.5" />
+                Missed
+                {missedCallsTodayCount > 0 && (
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
+                  </span>
+                )}
               </button>
-              {/* AI Call pill — links to AI Call Matrix */}
-              <span className="text-slate-300 text-xs">|</span>
-              <button
-                onClick={() => { window.location.href = "/admin/ai-calls"; }}
-                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-violet-100 text-violet-700 hover:bg-violet-200"
-              >
-                <Bot className="h-3 w-3" />
-                Call with AI
-              </button>
+
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
-                className={[
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
-                  csUnansweredUrgent > 0
-                    ? "bg-red-100 text-red-700 hover:bg-red-200"
-                    : csUnansweredWarning > 0
-                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                ].join(" ")}
+                className={cn(
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
+                  csSmsOpen
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : csUnansweredUrgent > 0
+                    ? "bg-white text-red-600 border-red-200 hover:bg-red-50"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
                 title={
                   csUnansweredUrgent > 0
                     ? `${csUnansweredUrgent} waiting 1h+`
@@ -4760,18 +4776,44 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     : "All CS SMS caught up"
                 }
               >
-                <Smartphone className="h-3 w-3" />
-                CS SMS
-                <span className={[
-                  "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none",
-                  csUnansweredUrgent > 0
-                    ? "bg-red-500 text-white animate-pulse"
-                    : csUnansweredWarning > 0
-                    ? "bg-amber-500 text-white animate-pulse"
-                    : "bg-slate-400 text-white"
-                ].join(" ")}>
-                  {csUnansweredUrgent > 99 ? "99+" : csUnansweredUrgent}
-                </span>
+                <Smartphone className="h-3.5 w-3.5" />
+                CS
+                {csUnansweredCount > 0 && (
+                  <span className={cn(
+                    "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none",
+                    csUnansweredUrgent > 0 ? "bg-red-500 text-white" : "bg-slate-700 text-white"
+                  )}>
+                    {csUnansweredCount > 99 ? "99+" : csUnansweredCount}
+                  </span>
+                )}
+              </button>
+              {/* Tasks pill */}
+              <span className="text-slate-300 text-xs">|</span>
+              <button
+                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
+                className={cn(
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
+                  tasksOpen
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
+                title="Tasks"
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+                Tasks
+                {visibleDueTasks.length > 0 && (
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-indigo-500 text-white animate-pulse">
+                    {visibleDueTasks.length > 99 ? "99+" : visibleDueTasks.length}
+                  </span>
+                )}
+              </button>
+              {/* Make Call button — pushed to far right */}
+              <button
+                onClick={() => { window.location.href = "/admin/ai-calls"; }}
+                className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition shrink-0"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                + Make Call
               </button>
             </div>
           )}
@@ -6417,6 +6459,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
+      {/* Tasks slide-in panel */}
+      <TasksPanel
+        open={tasksOpen}
+        onClose={() => setTasksOpen(false)}
+        isAdmin={true}
+        agentList={(agentList ?? []).map(a => ({ id: a.id, name: a.name, photoUrl: a.photoUrl ?? null }))}
+        refetchTick={taskRefetchTick}
+      />
+      {/* Due task popup — fires when tasks come due */}
+      <DueTaskPopup
+        tasks={visibleDueTasks as any[]}
+        onDismiss={(id) => setDueTaskPopupDismissed(prev => new Set(Array.from(prev).concat(id)))}
+        onMarkDone={(id) => {
+          setDueTaskPopupDismissed(prev => new Set(Array.from(prev).concat(id)));
+          utils.tasks.getDue.invalidate();
+          utils.tasks.list.invalidate();
+          utils.tasks.listMine.invalidate();
+        }}
+        onOpenPanel={() => setTasksOpen(true)}
+      />
     </div>
   );
 }

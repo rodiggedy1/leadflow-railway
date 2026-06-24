@@ -49,6 +49,7 @@ import { missedCallsRouter } from "./missedCallsRouter";
 import { gmailRouter } from "./gmailRouter";
 import { callMatrixRouter } from "./callMatrixRouter";
 import { stripeRouter } from "./stripeRouter";
+import { tasksRouter } from "./tasksRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -93,6 +94,7 @@ export const appRouter = router({
   gmail: gmailRouter,
   callMatrix: callMatrixRouter,
   stripe: stripeRouter,
+  tasks: tasksRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),

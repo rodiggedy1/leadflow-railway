@@ -19,6 +19,7 @@
  *   "issue_comment"     — a comment was posted on an issue thread in Command Chat
  *   "lead_assignment"   — a lead was assigned to an agent from Lead Ops
  *   "ping"              — keepalive (sent every 25s to prevent proxy timeouts)
+ *   "task_update"       — a task was created, updated, or completed
  */
 
 import type { Response } from "express";
@@ -37,7 +38,8 @@ export type OpsEventType =
   | "ping"
   | "gmail_new_messages"
   | "missed_call"
-  | "missed_call_resolved";
+  | "missed_call_resolved"
+  | "task_update";
 
 export interface OpsEvent {
   type: OpsEventType;
