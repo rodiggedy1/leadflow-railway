@@ -4214,15 +4214,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-semibold text-slate-900 leading-none">MIB Command Chat</h2>
+                  <h2 className="text-lg font-bold text-slate-900 leading-none mr-2">MIB Command</h2>
+                  {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onSwitchToLeadOps?.()}
-                        title="Open Lead Ops"
-                        className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
+                        className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer min-w-[64px]"
                       >
-                        🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
+                        <span className="text-lg font-bold text-blue-600 leading-tight">{todayStats?.total ?? 0}</span>
+                        <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">New Leads</span>
                       </button>
                     </TooltipTrigger>
                     {todayStats?.leadList && todayStats.leadList.length > 0 && (
@@ -4246,17 +4247,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </TooltipContent>
                     )}
                   </Tooltip>
-                  {myAssignedLeads.length > 0 && (
-                    <button
-                      onClick={() => setShowMyLeads(v => !v)}
-                      title="My assigned leads today"
-                      className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
-                    >
-                      📋 My leads: {myAssignedLeads.length}
-                    </button>
-                  )}
-                  {/* Booking count badge with agent breakdown tooltip */}
-                  {todayBookingCount > 0 && (() => {
+                  {/* Booked card */}
+                  {(() => {
                     const byAgent: Record<string, number> = {};
                     (todayStats?.bookedList ?? []).forEach(b => {
                       const name = b.bookedByAgentName ?? 'Unassigned';
@@ -4266,8 +4258,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
-                            ✓ {todayBookingCount} booked
+                          <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[56px]">
+                            <span className="text-lg font-bold text-emerald-600 leading-tight">{todayBookingCount}</span>
+                            <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">Booked</span>
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" align="start" className="p-0 overflow-hidden min-w-[180px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -4286,16 +4279,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       </Tooltip>
                     );
                   })()}
-                  {/* Conversion rate badge */}
+                  {/* CVR card */}
                   {(todayStats?.total ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap">
-                      {Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}% CVR
+                    <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[56px]">
+                      <span className="text-lg font-bold text-blue-500 leading-tight">{Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}%</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">CVR</span>
                     </span>
                   )}
+                  {/* Revenue card */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
-                        ${todayRevenue.toLocaleString()} today
+                      <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[72px]">
+                        <span className="text-lg font-bold text-emerald-600 leading-tight">${todayRevenue.toLocaleString()}</span>
+                        <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">Today</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[230px] max-w-[290px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -4322,6 +4318,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       )}
                     </TooltipContent>
                   </Tooltip>
+                  {/* My leads button — only when assigned */}
+                  {myAssignedLeads.length > 0 && (
+                    <button
+                      onClick={() => setShowMyLeads(v => !v)}
+                      className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer min-w-[56px]"
+                    >
+                      <span className="text-lg font-bold text-amber-500 leading-tight">{myAssignedLeads.length}</span>
+                      <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">My Leads</span>
+                    </button>
+                  )}
                 </div>
             </div>
             {/* Agent presence circles — far right */}
