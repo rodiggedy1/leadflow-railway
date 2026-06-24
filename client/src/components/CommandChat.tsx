@@ -28,7 +28,7 @@ import {
   ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2472,90 +2472,8 @@ const MessageList = memo(function MessageList({
 
 // Module-level variable: persists across CommandChat unmount/remount cycles
 // (unlike useRef which resets to its initial value on each mount).
-// ── Missed Calls Panel Row ─────────────────────────────────────────────────
-function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResolved }: {
-  row: any; lineColor: string;
-  fmtPhone: (p: string) => string;
-  tAgo: (d: Date) => string;
-  agentName: string;
-  onResolved: () => void;
-}) {
-  const [showDialog, setShowDialog] = useState(false);
-  const [notes, setNotes] = useState("");
-  const markMutation = trpc.missedCalls.markCalledBack.useMutation({
-    onSuccess: () => { onResolved(); setShowDialog(false); },
-  });
-  return (
-    <div className="px-4 py-3 hover:bg-slate-50 transition-colors">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5 min-w-0">
-          <div className="mt-0.5 w-8 h-8 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <PhoneMissed className="h-4 w-4 text-red-500" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-sm font-semibold text-slate-900">{fmtPhone(row.callerPhone)}</span>
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${lineColor}`}>{row.phoneNumberLabel}</span>
-              {row.smsSent === 1 && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">SMS sent</span>
-              )}
-            </div>
-            <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-400">
-              <Clock className="h-3 w-3" />
-              <span>{tAgo(row.calledAt)}</span>
-              <span className="text-slate-200">·</span>
-              <span>{new Date(row.calledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowDialog(true)}
-          className="shrink-0 flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
-          disabled={markMutation.isPending}
-        >
-          {markMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-          Done
-        </button>
-      </div>
-      {showDialog && (
-        <Dialog open onOpenChange={(o) => { if (!o) setShowDialog(false); }}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                Mark as Called Back
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 py-1">
-              <p className="text-sm text-slate-600">{fmtPhone(row.callerPhone)} · {row.phoneNumberLabel} line</p>
-              <Textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Notes (optional) — e.g. Left voicemail"
-                className="resize-none text-sm"
-                rows={3}
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" size="sm" onClick={() => setShowDialog(false)} disabled={markMutation.isPending}>Cancel</Button>
-              <Button
-                size="sm"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                onClick={() => markMutation.mutate({ id: row.id, agentName, notes: notes || undefined })}
-                disabled={markMutation.isPending}
-              >
-                {markMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
-                Confirm
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
-  );
-}
-
 let _commandChatScrollTop = 0;
+
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
@@ -2613,7 +2531,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [allThreadsOpen, setAllThreadsOpen] = useState(false);
   const [leadRepliesOpen, setLeadRepliesOpen] = useState(false);
   const [csSmsOpen, setCsSmsOpen] = useState(false);
-  const [missedCallsOpen, setMissedCallsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
@@ -2647,11 +2564,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { staleTime: 30_000, refetchInterval: 60_000, retry: false }
   );
   const missedCallsTodayCount = missedCallsTodayData?.count ?? 0;
-  // ── Missed calls list for the slide-in panel ────────────────────────────────
-  const { data: missedCallsListData = [], refetch: refetchMissedCallsList } = trpc.missedCalls.listMissedCalls.useQuery(
-    { filter: "pending", limit: 100, offset: 0 },
-    { staleTime: 30_000, refetchInterval: 60_000, retry: false, enabled: missedCallsOpen }
-  );
   // ── Unanswered CS SMS count (202-888-5362 line only) ─────────────────────────
   const { data: csUnansweredData } = trpc.leads.getUnansweredCsCount.useQuery(undefined, {
     staleTime: 0, refetchInterval: 60_000, retry: false,
@@ -2739,12 +2651,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
     },
     onMissedCall: () => {
+      // Bump the today count immediately when a new missed call comes in
       refetchMissedCallsToday();
-      refetchMissedCallsList();
     },
     onMissedCallResolved: () => {
+      // Decrement the today count immediately when an agent marks a call as called back (or undoes it)
       refetchMissedCallsToday();
-      refetchMissedCallsList();
     },
     onTaskUpdate: () => {
       utils.tasks.list.invalidate();
@@ -4829,16 +4741,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              {/* Missed Calls pill */}
+              {/* Missed Calls pill — always visible, today's pending count */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { setMissedCallsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (tasksOpen) setTasksOpen(false); }}
-                className={cn(
-                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
-                  missedCallsOpen
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                )}
+                onClick={() => { window.location.href = "/admin/missed-calls"; }}
+                className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
                 <PhoneMissed className="h-3.5 w-3.5" />
                 Missed
@@ -4852,7 +4759,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); }}
+                onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   csSmsOpen
@@ -4883,7 +4790,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Tasks pill */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); }}
+                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   tasksOpen
@@ -6552,81 +6459,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
-      {/* Missed Calls slide-in panel */}
-      {missedCallsOpen && (() => {
-        const LINE_COLORS: Record<string, string> = {
-          Main: "bg-blue-100 text-blue-700",
-          CS: "bg-purple-100 text-purple-700",
-          Bark: "bg-orange-100 text-orange-700",
-          Unknown: "bg-gray-100 text-gray-600",
-        };
-        function fmtPhone(phone: string) {
-          const d = phone.replace(/\D/g, "");
-          if (d.length === 11 && d[0] === "1") return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
-          if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
-          return phone;
-        }
-        function tAgo(date: Date) {
-          const mins = Math.floor((Date.now() - new Date(date).getTime()) / 60_000);
-          if (mins < 1) return "just now";
-          if (mins < 60) return `${mins}m ago`;
-          const hrs = Math.floor(mins / 60);
-          if (hrs < 24) return `${hrs}h ago`;
-          return `${Math.floor(hrs / 24)}d ago`;
-        }
-        return (
-          <div
-            className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-white shadow-2xl border-l border-slate-200 animate-in slide-in-from-right-2 duration-200"
-            style={{ width: "360px", maxWidth: "90vw" }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
-              <div className="flex items-center gap-2">
-                <PhoneMissed className="h-4 w-4 text-red-500" />
-                <span className="text-sm font-semibold text-slate-900">Missed Calls</span>
-                {missedCallsTodayCount > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
-                    {missedCallsTodayCount} pending
-                  </span>
-                )}
-              </div>
-              <button
-                onClick={() => setMissedCallsOpen(false)}
-                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {/* Body */}
-            <div className="flex-1 min-h-0 overflow-y-auto">
-              {(missedCallsListData as any[]).length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-16">
-                  <PhoneMissed className="h-8 w-8 opacity-30" />
-                  <p className="text-sm font-medium">No pending missed calls</p>
-                  <p className="text-xs text-slate-400">All caught up!</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {(missedCallsListData as any[]).map((row: any) => {
-                    const lineColor = LINE_COLORS[row.phoneNumberLabel as string] ?? LINE_COLORS.Unknown;
-                    return (
-                      <MissedCallPanelRow
-                        key={row.id}
-                        row={row}
-                        lineColor={lineColor}
-                        fmtPhone={fmtPhone}
-                        tAgo={tAgo}
-                        agentName={callerName}
-                        onResolved={() => { refetchMissedCallsToday(); refetchMissedCallsList(); }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
       {/* Tasks slide-in panel */}
       <TasksPanel
         open={tasksOpen}
