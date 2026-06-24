@@ -814,21 +814,42 @@ Write the reply now:`;
 
   /**
    * List unread inbox threads for the CommandChat email panel.
+   * Uses a single Gmail API call with format=metadata — no per-thread fetches.
    * Excludes Thumbtack (same as the unread count badge).
    */
   listUnread: agentProcedure.query(async () => {
-    await requireGmailConnected();
-    const { threads } = await listInboxThreads({
+    const gmail = await (await import('./gmailService')).getGmailClient();
+    const listRes = await gmail.users.threads.list({
+      userId: 'me',
       maxResults: 50,
-      query: "is:unread -from:thumbtack.com",
+      q: 'in:inbox is:unread -from:thumbtack.com',
     });
-    return threads.map((t) => ({
-      threadId: t.id,
-      subject: t.subject ?? "(no subject)",
-      from: t.from ?? "",
-      snippet: t.snippet ?? "",
-      date: t.date,
-    }));
+    const threadItems = listRes.data.threads ?? [];
+    if (threadItems.length === 0) return [];
+    // Fetch metadata for all threads in one batch using format=metadata
+    const details = await Promise.all(
+      threadItems.map(async (t) => {
+        try {
+          const res = await gmail.users.threads.get({
+            userId: 'me',
+            id: t.id!,
+            format: 'metadata',
+            metadataHeaders: ['Subject', 'From', 'Date'],
+          });
+          const msg = res.data.messages?.[res.data.messages.length - 1];
+          const headers = msg?.payload?.headers ?? [];
+          const get = (name: string) => headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value ?? '';
+          return {
+            threadId: t.id!,
+            subject: get('Subject') || '(no subject)',
+            from: get('From'),
+            snippet: res.data.snippet ?? '',
+            date: msg?.internalDate ? Number(msg.internalDate) : Date.now(),
+          };
+        } catch { return null; }
+      })
+    );
+    return details.filter(Boolean);
   }),
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {
