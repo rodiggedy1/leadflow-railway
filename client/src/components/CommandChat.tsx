@@ -4697,7 +4697,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 )}
               >
                 <MessageCircle className="h-3 w-3" />
-                lead replies
+                Lead Chats
                 <span className={cn(
                   "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none",
                   leadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
@@ -4712,7 +4712,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
               >
                 <Mail className="h-3 w-3" />
-                Inbox
+                Email
                 {emailUnreadCount > 0 && (
                   <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
                     {emailUnreadCount}
@@ -4726,7 +4726,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-red-100 text-red-700 hover:bg-red-200"
               >
                 <PhoneMissed className="h-3 w-3" />
-                Missed Call
+                Missed
                 <span className={`ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none ${missedCallsTodayCount > 0 ? "bg-red-500 text-white animate-pulse" : "bg-red-200 text-red-600"}`}>
                   {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
                 </span>
@@ -4738,7 +4738,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-violet-100 text-violet-700 hover:bg-violet-200"
               >
                 <Bot className="h-3 w-3" />
-                Call with AI
+                Make Call
               </button>
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
@@ -4761,7 +4761,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 }
               >
                 <Smartphone className="h-3 w-3" />
-                CS SMS
+                CS
                 <span className={[
                   "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none",
                   csUnansweredUrgent > 0
