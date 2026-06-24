@@ -2,7 +2,7 @@
  * gmailRoutes.ts — Gmail OAuth callback + Pub/Sub push webhook
  */
 import type { Express } from "express";
-import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch, clearListCache } from "./gmailService";
+import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
 import { enqueueThread } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -109,7 +109,6 @@ export function registerGmailRoutes(app: Express) {
 
       if (newMessages.length > 0) {
         console.log(`[Gmail] ${newMessages.length} new message(s) received`);
-        clearListCache(); // new email arrived — invalidate list cache
         broadcastOpsUpdate("gmail_new_messages");
         // Enqueue affected threads for AI re-processing (non-blocking)
         const affectedThreadIds = Array.from(new Set(newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
