@@ -75,8 +75,9 @@ function _snapshotQueueMax() {
 
 function _logMinuteSummary() {
   const elapsed = ((Date.now() - _minuteWindowStart) / 1000).toFixed(1);
+  const quotaUsage = _threadsGetCount + _threadsListCount;
   console.log(
-    `[GlanceWorker][Metrics] window=${elapsed}s | threads.get=${_threadsGetCount} | threads.list=${_threadsListCount} | 429s=${_count429} | cacheHit=${_cacheHitCount} | cacheMiss=${_cacheMissCount} | enqueued=${_enqueueTotal} | duplicates=${_enqueueDuplicates} | fromPubSub=${_enqueueFromPubSub} | fromBackfill=${_enqueueFromBackfill} | fromManual=${_enqueueFromManual} | uniqueThreads=${_uniqueThreadsProcessed.size} | queueStart=${_queueSizeAtWindowStart} | queueEnd=${_queue.size} | maxQueue=${_maxQueueSizeInWindow}`
+    `[GlanceWorker][Metrics] window=${elapsed}s | quotaUsage=${quotaUsage} (threads.get=${_threadsGetCount} threads.list=${_threadsListCount} labels.get=0) | 429s=${_count429} | cacheHit=${_cacheHitCount} | cacheMiss=${_cacheMissCount} | enqueued=${_enqueueTotal} | duplicates=${_enqueueDuplicates} | fromPubSub=${_enqueueFromPubSub} | fromBackfill=${_enqueueFromBackfill} | fromManual=${_enqueueFromManual} | uniqueThreads=${_uniqueThreadsProcessed.size} | queueStart=${_queueSizeAtWindowStart} | queueEnd=${_queue.size} | maxQueue=${_maxQueueSizeInWindow}`
   );
   // Reset all counters
   _threadsGetCount = 0;
@@ -98,20 +99,30 @@ function _logMinuteSummary() {
 // ── Enqueue with source tagging ───────────────────────────────────────────────
 export type EnqueueSource = "pubsub" | "backfill" | "manual";
 
+// Track which threadId is currently being processed by the worker loop
+let _currentlyProcessing: string | null = null;
+
 export function enqueueThread(threadId: string, source: EnqueueSource = "manual") {
   _enqueueTotal++;
   if (source === "pubsub") _enqueueFromPubSub++;
   else if (source === "backfill") _enqueueFromBackfill++;
   else _enqueueFromManual++;
 
+  // Determine skip reason before mutating the set
+  if (_currentlyProcessing === threadId) {
+    _enqueueDuplicates++;
+    console.log(`[GlanceWorker][Enqueue][SKIP_ALREADY_PROCESSING] source=${source} threadId=${threadId} queueSize=${_queue.size}`);
+    return;
+  }
+
   const sizeBefore = _queue.size;
   _queue.add(threadId);
   _snapshotQueueMax();
 
   if (_queue.size === sizeBefore) {
-    // Duplicate — Set.add was a no-op
+    // Duplicate — Set.add was a no-op (already in queue)
     _enqueueDuplicates++;
-    console.log(`[GlanceWorker][Enqueue][${source.toUpperCase()}] DUPLICATE threadId=${threadId} queueSize=${_queue.size}`);
+    console.log(`[GlanceWorker][Enqueue][SKIP_ALREADY_QUEUED] source=${source} threadId=${threadId} queueSize=${_queue.size}`);
   } else {
     console.log(`[GlanceWorker][Enqueue][${source.toUpperCase()}] threadId=${threadId} queueSize=${_queue.size}`);
   }
@@ -150,6 +161,7 @@ export async function processThread(threadId: string): Promise<void> {
     // Fetch thread from Gmail — minimal format to get historyId + messages
     _threadsGetCount++;
     _uniqueThreadsProcessed.add(threadId);
+    _currentlyProcessing = threadId;
     const t0 = Date.now();
     console.log(`[GlanceWorker][API] threads.get threadId=${threadId} queueSize=${_queue.size}`);
 
@@ -157,17 +169,23 @@ export async function processThread(threadId: string): Promise<void> {
     try {
       res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
     } catch (apiErr: any) {
+      _currentlyProcessing = null;
       const status = apiErr?.response?.status ?? apiErr?.code;
       const durationMs = Date.now() - t0;
       if (status === 429) {
         _count429++;
-        console.error(`[GlanceWorker][429] threads.get threadId=${threadId} duration=${durationMs}ms`);
+        // Extract Google's error details — reason distinguishes userRateLimitExceeded vs quotaExceeded
+        const errors = apiErr?.response?.data?.error?.errors ?? [];
+        const reason = errors[0]?.reason ?? "unknown";
+        const retryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? "none";
+        console.error(`[GlanceWorker][429] threads.get threadId=${threadId} reason=${reason} retryAfter=${retryAfter} duration=${durationMs}ms`);
       } else {
         console.error(`[GlanceWorker][APIError] threads.get threadId=${threadId} status=${status} duration=${durationMs}ms`, apiErr?.message);
       }
       return;
     }
 
+    _currentlyProcessing = null;
     const durationMs = Date.now() - t0;
     console.log(`[GlanceWorker][API] threads.get OK threadId=${threadId} duration=${durationMs}ms`);
 
@@ -181,9 +199,9 @@ export async function processThread(threadId: string): Promise<void> {
       .where(eq(gmailThreadMeta.threadId, threadId));
 
     if (existing?.aiHistoryId && existing.aiHistoryId === currentHistoryId) {
-      // Cache hit — nothing changed
+      // Cache hit — nothing changed; log as SKIP_ALREADY_UP_TO_DATE
       _cacheHitCount++;
-      console.log(`[GlanceWorker][CacheHit] threadId=${threadId} historyId=${currentHistoryId}`);
+      console.log(`[GlanceWorker][SKIP_ALREADY_UP_TO_DATE] threadId=${threadId} historyId=${currentHistoryId}`);
       return;
     }
 
@@ -345,7 +363,9 @@ function startWorkerLoop() {
     _snapshotQueueMax();
     const threadId = _queue.values().next().value as string;
     _queue.delete(threadId);
+    _currentlyProcessing = threadId;
     await processThread(threadId);
+    _currentlyProcessing = null;
   }, 600);
 }
 
@@ -380,7 +400,10 @@ export async function backfillGlanceQueue(): Promise<void> {
       const durationMs = Date.now() - t0;
       if (status === 429) {
         _count429++;
-        console.error(`[GlanceWorker][429] threads.list (backfill) duration=${durationMs}ms`);
+        const errors = apiErr?.response?.data?.error?.errors ?? [];
+        const reason = errors[0]?.reason ?? "unknown";
+        const retryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? "none";
+        console.error(`[GlanceWorker][429] threads.list reason=${reason} retryAfter=${retryAfter} duration=${durationMs}ms`);
       } else {
         console.error(`[GlanceWorker][APIError] threads.list status=${status} duration=${durationMs}ms`, apiErr?.message);
       }
