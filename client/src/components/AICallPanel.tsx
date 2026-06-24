@@ -284,7 +284,14 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   // ── Smart Pick on open ──
   useEffect(() => {
     if (!open) return;
-    setStep("person");
+    // Only reset UI/navigation state — never reset call state mid-call
+    // Call state (callStatus, activeVapiCallId, etc.) persists across open/close
+    // If a call is active or just ended, jump straight to script step so user sees status
+    if (callStatus !== "idle") {
+      setStep("script");
+    } else {
+      setStep("person");
+    }
     setPersonSearch("");
     setScenarioSearch("");
     setDbSearchQuery("");
@@ -292,15 +299,8 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
     setShowCustomNumber(false);
     setCustomName("");
     setCustomPhone("");
-    setCallStatus("idle");
-    setActiveVapiCallId(null);
-    setCallSummary(null);
-    setCallTranscript(null);
-    setCallRecordingUrl(null);
-    setCallEndedReason(null);
-    setShowTranscript(false);
     setFlash(null);
-  }, [open]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-smart-pick once data loads
   useEffect(() => {
