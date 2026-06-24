@@ -15,8 +15,8 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import {
   X, Plus, CheckCircle2, Clock, AlertTriangle, ChevronDown, ChevronLeft, ChevronRight,
-  Trash2, Pencil, CalendarDays, User, Flag, MoreHorizontal,
-  CheckCheck, Circle, Loader2, ClipboardList, Search,
+  Trash2, CalendarDays, User, Flag,
+  CheckCheck, Loader2, ClipboardList, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,9 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -58,6 +56,43 @@ interface AgentEntry {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const BUSINESS_TZ = "America/New_York";
+
+/** Convert a UTC epoch ms timestamp to HH:MM (24h) in the business timezone */
+function epochToTimeInBizTz(epochMs: number): string {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: BUSINESS_TZ,
+  }).format(new Date(epochMs));
+}
+
+/**
+ * Build a UTC epoch ms from a YYYY-MM-DD date string + HH:MM time string
+ * interpreted in the business timezone. If no time given, defaults to 12:00.
+ */
+function buildDueAtMs(dateStr: string, timeStr: string): number {
+  const time = timeStr || "12:00";
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const roughUtc = Date.UTC(year, month - 1, day, hour, minute);
+  const offsetMs = getUtcOffsetMs(roughUtc, BUSINESS_TZ);
+  return roughUtc - offsetMs;
+}
+
+/** Returns the UTC offset in ms for a given UTC timestamp in a timezone */
+function getUtcOffsetMs(utcMs: number, tz: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false, timeZone: tz,
+  }).formatToParts(new Date(utcMs));
+  const get = (t: string) => Number(parts.find(p => p.type === t)?.value ?? 0);
+  const localMs = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"), get("second"));
+  return localMs - utcMs;
+}
 
 const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; dot: string; bg: string }> = {
   urgent: { label: "Urgent", color: "text-red-700",    dot: "bg-red-500",    bg: "bg-red-50 border border-red-200" },
@@ -105,7 +140,16 @@ function formatDue(dueAt: number | null): { label: string; overdue: boolean; dat
   else if (hours >= 1) label = `${overdue ? "" : "in "}${hours}h${overdue ? " ago" : ""}`;
   else if (mins >= 1) label = `${overdue ? "" : "in "}${mins}m${overdue ? " ago" : ""}`;
   else label = overdue ? "just now" : "< 1m";
-  const dateStr = new Date(dueAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  // Format date in business timezone
+  const d = new Date(dueAt);
+  const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TZ });
+  // Show time only if it's not exactly 12:00 PM ET (i.e. a time was explicitly set)
+  const timeInBizTz = epochToTimeInBizTz(dueAt);
+  const isDefaultNoon = timeInBizTz === "12:00";
+  const timePart = !isDefaultNoon
+    ? " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: BUSINESS_TZ })
+    : "";
+  const dateStr = datePart + timePart;
   return { label, overdue, dateStr };
 }
 
@@ -250,7 +294,8 @@ interface TaskFormData {
   status: Status;
   assigneeAgentId: number | null;
   assigneeAgentName: string | null;
-  dueAt: string;
+  dueAt: string;   // YYYY-MM-DD
+  dueTime: string; // HH:MM (24h), empty = no time set
 }
 
 function defaultForm(): TaskFormData {
@@ -262,8 +307,11 @@ function defaultForm(): TaskFormData {
     assigneeAgentId: null,
     assigneeAgentName: null,
     dueAt: "",
+    dueTime: "",
   };
 }
+
+
 
 interface TaskModalProps {
   open: boolean;
@@ -277,9 +325,16 @@ function TaskModal({ open, onClose, editTask, agentList, onSaved }: TaskModalPro
   const utils = trpc.useUtils();
   const [form, setForm] = useState<TaskFormData>(() => {
     if (editTask) {
-      const dueDate = editTask.dueAt
-        ? new Date(editTask.dueAt).toISOString().split("T")[0]
-        : "";
+      let dueDate = "";
+      let dueTime = "";
+      if (editTask.dueAt) {
+        // Format date in business timezone
+        dueDate = new Intl.DateTimeFormat("en-CA", {
+          year: "numeric", month: "2-digit", day: "2-digit",
+          timeZone: BUSINESS_TZ,
+        }).format(new Date(editTask.dueAt)); // en-CA gives YYYY-MM-DD
+        dueTime = epochToTimeInBizTz(editTask.dueAt);
+      }
       return {
         title: editTask.title,
         description: editTask.description ?? "",
@@ -288,6 +343,7 @@ function TaskModal({ open, onClose, editTask, agentList, onSaved }: TaskModalPro
         assigneeAgentId: editTask.assigneeAgentId,
         assigneeAgentName: editTask.assigneeAgentName,
         dueAt: dueDate,
+        dueTime,
       };
     }
     return defaultForm();
@@ -304,7 +360,7 @@ function TaskModal({ open, onClose, editTask, agentList, onSaved }: TaskModalPro
 
   function handleSubmit() {
     const dueAt = form.dueAt
-      ? new Date(form.dueAt + "T09:00:00").getTime()
+      ? buildDueAtMs(form.dueAt, form.dueTime)
       : undefined;
     if (editTask) {
       updateTask.mutate({
@@ -420,9 +476,28 @@ function TaskModal({ open, onClose, editTask, agentList, onSaved }: TaskModalPro
               <Input
                 type="date"
                 value={form.dueAt}
-                onChange={e => setForm(f => ({ ...f, dueAt: e.target.value }))}
+                onChange={e => setForm(f => ({ ...f, dueAt: e.target.value, dueTime: f.dueTime }))}
                 className="h-10"
               />
+              {form.dueAt && (
+                <div className="flex items-center gap-2 mt-1">
+                  <Input
+                    type="time"
+                    value={form.dueTime}
+                    onChange={e => setForm(f => ({ ...f, dueTime: e.target.value }))}
+                    className="h-8 text-xs w-32"
+                    placeholder="12:00"
+                  />
+                  <span className="text-[11px] text-slate-400">ET (optional)</span>
+                  {form.dueTime && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, dueTime: "" }))}
+                      className="text-[11px] text-slate-400 hover:text-slate-600"
+                    >clear</button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700">Status</label>
@@ -740,7 +815,6 @@ export default function TasksPanel({ open, onClose, isAdmin, agentList, refetchT
                   <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-28">Priority</th>
                   <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-36">Due Date</th>
                   <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-32">Status</th>
-                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider w-16">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -820,33 +894,7 @@ export default function TasksPanel({ open, onClose, isAdmin, agentList, refetchT
                         <StatusBadgeWithOverdue status={task.status} dueAt={task.dueAt} />
                       </td>
 
-                      {/* Actions */}
-                      <td className="px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="opacity-0 group-hover:opacity-100 h-7 w-7 flex items-center justify-center rounded-md hover:bg-slate-200 transition-all">
-                              <MoreHorizontal className="h-4 w-4 text-slate-500" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="text-xs">
-                            <DropdownMenuItem onClick={() => setEditTask(task)}>
-                              <Pencil className="h-3 w-3 mr-1.5" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => updateStatus.mutate({ id: task.id, status: isDone ? "todo" : "done" })}
-                            >
-                              <CheckCircle2 className="h-3 w-3 mr-1.5" />
-                              {isDone ? "Mark To Do" : "Mark Done"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-600"
-                              onClick={() => deleteTask.mutate({ id: task.id })}
-                            >
-                              <Trash2 className="h-3 w-3 mr-1.5" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </td>
+
                     </tr>
                   );
                 })}
