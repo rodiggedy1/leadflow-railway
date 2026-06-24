@@ -2499,6 +2499,9 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-sky-100 text-sky-700">SMS sent</span>
               )}
             </div>
+            {row.customerName && (
+              <p className="text-xs font-medium text-slate-700 mt-0.5">{row.customerName}</p>
+            )}
             <div className="flex items-center gap-1 mt-0.5 text-xs text-slate-400">
               <Clock className="h-3 w-3" />
               <span>{tAgo(row.calledAt)}</span>
