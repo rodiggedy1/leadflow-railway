@@ -266,7 +266,8 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   }, [allScenarios, scenarioSearch]);
 
   const selectedPerson = useMemo(() => {
-    if (selectedId === "custom-0" && customPersonItem) return customPersonItem;
+    // customPersonItem covers: DB search results (job-X, lead-X, cleaner-X) AND manual entry (custom-0)
+    if (customPersonItem && selectedId === customPersonItem.id) return customPersonItem;
     return allItems.find(p => p.id === selectedId) ?? null;
   }, [allItems, selectedId, customPersonItem]);
 
