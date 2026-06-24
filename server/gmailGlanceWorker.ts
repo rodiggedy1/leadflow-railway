@@ -54,10 +54,11 @@ const _queue = new Set<string>();
 let _workerStarted = false;
 
 // ── Backfill cooldown ─────────────────────────────────────────────────────────
-// If threads.list gets a 429, skip backfill for 6 hours so we don't keep
-// burning quota on every deploy while Gmail is already rate-limited.
-const BACKFILL_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
-let _backfillCooldownUntil = 0;
+// If threads.list gets a 429, persist a cooldown timestamp in gmail_state so
+// it survives server restarts and Railway redeploys. Backfill is skipped until
+// Date.now() exceeds gmailBackfillCooldownUntil. Does NOT affect Pub/Sub or
+// manual inbox actions — only the automatic startup backfill.
+const BACKFILL_DEFAULT_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours fallback if no Retry-After
 
 // ── Instrumentation counters (reset every 60s) ────────────────────────────────
 let _threadsGetCount = 0;        // gmail.users.threads.get calls
@@ -384,17 +385,20 @@ export function startGlanceWorker() {
 
 // ── Backfill: enqueue last 100 inbox threads that haven't been processed ──────
 export async function backfillGlanceQueue(): Promise<void> {
-  // Skip if we're in cooldown from a previous 429
-  if (Date.now() < _backfillCooldownUntil) {
-    const remainingMin = Math.ceil((_backfillCooldownUntil - Date.now()) / 60_000);
-    console.log(`[GlanceWorker] Backfill skipped — cooldown active (${remainingMin}m remaining, last threads.list got 429)`);
-    return;
-  }
-
   try {
-    const gmail = await getGmailClient();
     const db = await getDb();
     if (!db) return;
+
+    // Read persistent cooldown from DB — survives redeploys
+    const [stateRow] = await db.select({ gmailBackfillCooldownUntil: gmailState.gmailBackfillCooldownUntil }).from(gmailState).where(eq(gmailState.id, 1));
+    const cooldownUntil = stateRow?.gmailBackfillCooldownUntil ?? 0;
+    if (Date.now() < cooldownUntil) {
+      const remainingMin = Math.ceil((cooldownUntil - Date.now()) / 60_000);
+      console.log(`[GlanceWorker] Backfill skipped — cooldown active (${remainingMin}m remaining, last threads.list got 429)`);
+      return;
+    }
+
+    const gmail = await getGmailClient();
 
     // Fetch last 100 non-Thumbtack inbox threads (list only — no full fetch)
     _threadsListCount++;
@@ -415,11 +419,19 @@ export async function backfillGlanceQueue(): Promise<void> {
         _count429++;
         const errors = apiErr?.response?.data?.error?.errors ?? [];
         const reason = errors[0]?.reason ?? "unknown";
-        const retryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? "none";
-        // Engage cooldown — don't retry backfill for 6 hours
-        _backfillCooldownUntil = Date.now() + BACKFILL_COOLDOWN_MS;
-        const cooldownUntilStr = new Date(_backfillCooldownUntil).toISOString();
-        console.error(`[GlanceWorker][429] threads.list reason=${reason} retryAfter=${retryAfter} duration=${durationMs}ms — backfill cooldown until ${cooldownUntilStr}`);
+        const rawRetryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? null;
+        // Use Google's Retry-After header if present (seconds); otherwise default to 6 hours
+        const cooldownMs = rawRetryAfter
+          ? parseInt(String(rawRetryAfter), 10) * 1000
+          : BACKFILL_DEFAULT_COOLDOWN_MS;
+        const newCooldownUntil = Date.now() + cooldownMs;
+        const cooldownUntilStr = new Date(newCooldownUntil).toISOString();
+        // Persist to DB so the cooldown survives Railway redeploys
+        db.update(gmailState)
+          .set({ gmailBackfillCooldownUntil: newCooldownUntil })
+          .where(eq(gmailState.id, 1))
+          .catch((e) => console.error("[GlanceWorker] Failed to persist backfill cooldown:", e));
+        console.error(`[GlanceWorker][429] threads.list reason=${reason} retryAfter=${rawRetryAfter ?? "none"} cooldownMs=${cooldownMs} duration=${durationMs}ms — backfill cooldown persisted until ${cooldownUntilStr}`);
       } else {
         console.error(`[GlanceWorker][APIError] threads.list status=${status} duration=${durationMs}ms`, apiErr?.message);
       }

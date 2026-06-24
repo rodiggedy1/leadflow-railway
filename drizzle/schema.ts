@@ -2781,6 +2781,10 @@ export const gmailState = mysqlTable("gmail_state", {
   refreshToken: text("refreshToken").notNull(),
   historyId: varchar("historyId", { length: 50 }).notNull().default("0"),
   watchExpiration: bigint("watchExpiration", { mode: "number" }).notNull().default(0),
+  // Persistent cooldown for startup backfill only — set when threads.list gets a 429.
+  // Unix timestamp (ms). Backfill is skipped until Date.now() exceeds this value.
+  // Does NOT affect Pub/Sub processing or manual inbox actions.
+  gmailBackfillCooldownUntil: bigint("gmailBackfillCooldownUntil", { mode: "number" }).notNull().default(0),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type GmailState = typeof gmailState.$inferSelect;
