@@ -24,6 +24,7 @@ import {
   setupGmailWatch,
   getAttachmentData,
   getConversationsUnreadCount,
+  clearListCache,
 } from "./gmailService";
 import { ENV } from "./_core/env";
 
@@ -166,10 +167,10 @@ export const gmailRouter = router({
             agentPhotoUrl: agentRow?.profilePhotoUrl ?? null,
           }).onDuplicateKeyUpdate({ set: { agentName: ctx.agent.agentName ?? "Agent" } });
         }
-      } catch (logErr) {
+            } catch (logErr) {
         console.error("[sendReply] Failed to log agent attribution (non-fatal):", logErr);
       }
-
+      clearListCache();
       return result;
     }),
 
@@ -182,20 +183,22 @@ export const gmailRouter = router({
         bodyHtml: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+        .mutation(async ({ input }) => {
       await requireGmailConnected();
-      return sendNewGmailEmail({
+      const result = await sendNewGmailEmail({
         to: input.to,
         subject: input.subject,
         bodyHtml: input.bodyHtml,
       });
+      clearListCache();
+      return result;
     }),
-
   /** Mark a thread as read */
   markRead: agentProcedure
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await markThreadRead(input.threadId);
+      clearListCache();
       return { success: true };
     }),
 
@@ -204,6 +207,7 @@ export const gmailRouter = router({
     .input(z.object({ threadId: z.string() }))
     .mutation(async ({ input }) => {
       await markThreadUnread(input.threadId);
+      clearListCache();
       return { success: true };
     }),
 
@@ -213,6 +217,7 @@ export const gmailRouter = router({
     .mutation(async ({ input }) => {
       const { db } = await requireGmailConnected();
       await archiveThread(input.threadId);
+      clearListCache();
       // Mark as no longer in inbox so glance counts update immediately
       if (db) {
         await db.insert(gmailThreadMeta)

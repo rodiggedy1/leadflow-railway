@@ -120,8 +120,17 @@ export interface GmailThread {
   isUnread: boolean;
   messageCount: number;
   messages: GmailMessage[];
-  /** The authenticated inbox email address — used by clients to identify outbound messages */
+    /** The authenticated inbox email address — used by clients to identify outbound messages */
   inboxEmail: string | null;
+}
+
+// ── Thread list cache ────────────────────────────────────────────────────────
+// Keyed by "query|pageToken|maxResults". No TTL — cleared explicitly on any
+// mutation that changes the inbox (send, markRead, archive, webhook, etc.).
+const _listCache = new Map<string, { threads: GmailThread[]; nextPageToken?: string }>();
+
+export function clearListCache(): void {
+  _listCache.clear();
 }
 
 function decodeBase64(data: string): string {
@@ -171,25 +180,104 @@ function parseMessage(msg: any): GmailMessage {
 export async function listInboxThreads(opts: {
   pageToken?: string; maxResults?: number; query?: string;
 }): Promise<{ threads: GmailThread[]; nextPageToken?: string }> {
+  const cacheKey = `${opts.query ?? ""}|${opts.pageToken ?? ""}|${opts.maxResults ?? 30}`;
+  const cached = _listCache.get(cacheKey);
+  if (cached) return cached;
+
   const gmail = await getGmailClient();
+  const inboxEmail = await getInboxEmailAddress();
+
+  // Single call with format=metadata — returns subject, from, snippet, date,
+  // labels, and unread status without fetching each thread individually.
   const listRes = await gmail.users.threads.list({
     userId: "me",
     maxResults: opts.maxResults ?? 30,
     pageToken: opts.pageToken,
     q: opts.query ? `in:inbox ${opts.query}` : "in:inbox",
+    fields: "threads(id,snippet),nextPageToken",
   });
   const threadItems = listRes.data.threads ?? [];
   const nextPageToken = listRes.data.nextPageToken ?? undefined;
-  if (threadItems.length === 0) return { threads: [], nextPageToken };
-  const threads = await Promise.all(
+  if (threadItems.length === 0) {
+    const result = { threads: [], nextPageToken };
+    _listCache.set(cacheKey, result);
+    return result;
+  }
+
+  // Fetch each thread with format=metadata — one batch, no body fetching.
+  const threadDetails = await Promise.all(
     threadItems.map(async (t) => {
-      try { return await getThreadDetail(t.id!); } catch { return null; }
+      try {
+        const res = await gmail.users.threads.get({
+          userId: "me",
+          id: t.id!,
+          format: "metadata",
+          metadataHeaders: ["From", "To", "Subject", "Date"],
+        });
+        const msgs = res.data.messages ?? [];
+        if (msgs.length === 0) return null;
+
+        // Parse headers from each message
+        const parseHeaders = (msg: any): Record<string, string> => {
+          const h: Record<string, string> = {};
+          (msg.payload?.headers ?? []).forEach((hdr: any) => {
+            h[hdr.name.toLowerCase()] = hdr.value;
+          });
+          return h;
+        };
+
+        const firstMsg = msgs[0];
+        const latestMsg = msgs[msgs.length - 1];
+        const firstHeaders = parseHeaders(firstMsg);
+        const latestHeaders = parseHeaders(latestMsg);
+
+        // Determine the "other party" — not the inbox address
+        const otherMsg = inboxEmail
+          ? [...msgs].reverse().find((m) => {
+              const h = parseHeaders(m);
+              const fromRaw = h["from"] ?? "";
+              const emailMatch = fromRaw.match(/<(.+?)>/) ?? fromRaw.match(/(\S+@\S+)/);
+              const email = emailMatch?.[1] ?? fromRaw;
+              return email.toLowerCase() !== inboxEmail.toLowerCase();
+            })
+          : null;
+        const contactMsg = otherMsg ?? firstMsg;
+        const contactHeaders = parseHeaders(contactMsg);
+        const fromRaw = contactHeaders["from"] ?? "";
+        const fromEmailMatch = fromRaw.match(/<(.+?)>/) ?? fromRaw.match(/(\S+@\S+)/);
+        const fromEmail = fromEmailMatch?.[1] ?? fromRaw;
+        const fromName = fromRaw.replace(/<.+?>/, "").trim() || fromEmail;
+
+        // Date from latest message
+        const dateStr = latestHeaders["date"] ?? "";
+        const date = dateStr ? new Date(dateStr).getTime() : parseInt(latestMsg.internalDate ?? "0");
+
+        const isUnread = msgs.some((m: any) => (m.labelIds ?? []).includes("UNREAD"));
+        const subject = firstHeaders["subject"] ?? "(no subject)";
+        const snippet = res.data.snippet ?? latestMsg.snippet ?? "";
+
+        return {
+          id: t.id!,
+          subject,
+          snippet,
+          from: fromName,
+          fromEmail,
+          date: isNaN(date) ? 0 : date,
+          isUnread,
+          messageCount: msgs.length,
+          messages: [], // list view doesn't need message bodies; getThreadDetail fetches them
+          inboxEmail,
+        } as GmailThread;
+      } catch {
+        return null;
+      }
     })
   );
-  // Sort by latest message date descending — Gmail's list order is not purely
-  // chronological and Promise.all doesn't preserve input order.
-  const sorted = (threads.filter(Boolean) as GmailThread[]).sort((a, b) => b.date - a.date);
-  return { threads: sorted, nextPageToken };
+
+  const sorted = (threadDetails.filter(Boolean) as GmailThread[]).sort((a, b) => b.date - a.date);
+  const result = { threads: sorted, nextPageToken };
+  _listCache.set(cacheKey, result);
+  return result;
 }
 
 export async function getThreadDetail(threadId: string): Promise<GmailThread> {
