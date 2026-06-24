@@ -2849,6 +2849,8 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   aiResolvedAt: timestamp("aiResolvedAt"),
   /** Whether this thread is currently in the INBOX label (not archived). Updated by listThreads. */
   isInInbox: int("isInInbox").default(1).notNull(),
+  /** Whether this thread has unread messages. 1 = unread, 0 = read. Updated by glance worker and Pub/Sub webhook. */
+  isUnread: int("isUnread").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
