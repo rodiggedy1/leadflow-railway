@@ -328,6 +328,7 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
       try {
         const result = await utils.callMatrix.pollCall.fetch({ vapiCallId });
         const s = result.status as CallStatus;
+        console.log("[AICallPanel] poll result:", { status: s, endedReason: result.endedReason, hasSummary: !!result.summary });
         setCallStatus(s);
         if (result.summary) setCallSummary(result.summary);
         if (result.transcript) setCallTranscript(result.transcript);
