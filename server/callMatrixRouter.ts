@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, sql, inArray, desc, like } from "drizzle-orm";
+import { eq, and, sql, inArray, desc, like, or } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -24,6 +24,8 @@ import {
   callLog,
   fieldMgmtCalls,
   aiCallTemplates,
+  completedJobs,
+  quoteLeads,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -235,6 +237,66 @@ export const callMatrixRouter = router({
       });
 
       return { customers, cleaners };
+    }),
+
+  /**
+   * searchContacts — search completedJobs + quoteLeads + cleanerProfiles by name or phone.
+   * Returns up to 10 deduplicated results.
+   */
+  searchContacts: agentProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const q = `%${input.query.replace(/[%_]/g, "\\$&")}%`;
+      const results: Array<{
+        id: string;
+        source: "customer" | "lead" | "cleaner";
+        name: string;
+        phone: string | null;
+        context: string;
+      }> = [];
+      const seenPhones = new Set<string>();
+
+      // 1. completedJobs — past customers
+      const jobs = await db
+        .select({ id: completedJobs.id, name: completedJobs.name, phone: completedJobs.phone, address: completedJobs.address, serviceType: completedJobs.serviceType, jobDate: completedJobs.jobDate })
+        .from(completedJobs)
+        .where(or(like(completedJobs.name, q), like(completedJobs.phone, q)))
+        .orderBy(desc(completedJobs.createdAt))
+        .limit(8);
+      for (const j of jobs) {
+        if (j.phone && seenPhones.has(j.phone)) continue;
+        if (j.phone) seenPhones.add(j.phone);
+        results.push({ id: `job-${j.id}`, source: "customer", name: j.name ?? "Unknown", phone: j.phone, context: [j.serviceType, j.address, j.jobDate].filter(Boolean).join(" · ") });
+      }
+
+      // 2. quoteLeads — recent leads
+      const leads = await db
+        .select({ id: quoteLeads.id, name: quoteLeads.name, phone: quoteLeads.phone, serviceType: quoteLeads.serviceType })
+        .from(quoteLeads)
+        .where(or(like(quoteLeads.name, q), like(quoteLeads.phone, q)))
+        .orderBy(desc(quoteLeads.createdAt))
+        .limit(5);
+      for (const l of leads) {
+        if (l.phone && seenPhones.has(l.phone)) continue;
+        if (l.phone) seenPhones.add(l.phone);
+        results.push({ id: `lead-${l.id}`, source: "lead", name: l.name, phone: l.phone, context: `Lead · ${l.serviceType}` });
+      }
+
+      // 3. cleanerProfiles
+      const cleaners = await db
+        .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
+        .from(cleanerProfiles)
+        .where(or(like(cleanerProfiles.name, q), like(cleanerProfiles.phone, q)))
+        .limit(5);
+      for (const c of cleaners) {
+        if (c.phone && seenPhones.has(c.phone)) continue;
+        if (c.phone) seenPhones.add(c.phone);
+        results.push({ id: `cleaner-${c.id}`, source: "cleaner", name: c.name, phone: c.phone, context: "Cleaner" });
+      }
+
+      return results.slice(0, 10);
     }),
 
   /**

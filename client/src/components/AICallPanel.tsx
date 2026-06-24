@@ -205,11 +205,22 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   const [flash, setFlash] = useState<string | null>(null);
   const [scenarioAiQuery, setScenarioAiQuery] = useState("");
   const [scenarioAiSearching, setScenarioAiSearching] = useState(false);
+  // DB search state
+  const [dbSearchQuery, setDbSearchQuery] = useState("");
+  const [dbSearchActive, setDbSearchActive] = useState(false);
+  const [showCustomNumber, setShowCustomNumber] = useState(false);
+  const [customName, setCustomName] = useState("");
+  const [customPhone, setCustomPhone] = useState("");
+  const [customPersonItem, setCustomPersonItem] = useState<PersonItem | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Data ──
   const { data, isLoading } = trpc.callMatrix.getPeople.useQuery({ date }, { staleTime: 60_000, enabled: open });
   const { data: templates } = trpc.callMatrix.getTemplates.useQuery(undefined, { staleTime: 30_000, enabled: open });
+  const { data: dbSearchResults = [], isFetching: dbSearchFetching } = trpc.callMatrix.searchContacts.useQuery(
+    { query: dbSearchQuery },
+    { enabled: dbSearchActive && dbSearchQuery.trim().length >= 2, staleTime: 10_000 }
+  );
   const matchScenarioMutation = trpc.callMatrix.matchScenario.useMutation();
   const startCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
@@ -254,7 +265,10 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
     return allScenarios.filter(s => (s.title + s.description + s.tag).toLowerCase().includes(q));
   }, [allScenarios, scenarioSearch]);
 
-  const selectedPerson = useMemo(() => allItems.find(p => p.id === selectedId) ?? null, [allItems, selectedId]);
+  const selectedPerson = useMemo(() => {
+    if (selectedId === "custom-0" && customPersonItem) return customPersonItem;
+    return allItems.find(p => p.id === selectedId) ?? null;
+  }, [allItems, selectedId, customPersonItem]);
 
   // ── Script builder ──
   function scriptFromTemplate(person: PersonItem, scenarioTitle: string, aud: Audience): string {
@@ -270,6 +284,11 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
     setStep("person");
     setPersonSearch("");
     setScenarioSearch("");
+    setDbSearchQuery("");
+    setDbSearchActive(false);
+    setShowCustomNumber(false);
+    setCustomName("");
+    setCustomPhone("");
     setCallStatus("idle");
     setActiveVapiCallId(null);
     setCallSummary(null);
@@ -325,6 +344,29 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   function selectPerson(item: PersonItem) {
     setSelectedId(item.id);
     setScript(scriptFromTemplate(item, selectedScenario, audience));
+    setStep("scenario");
+  }
+
+  function selectCustomPerson() {
+    if (!customPhone.trim() || customPhone.trim().length < 7) return showFlash("Enter a valid phone number (min 7 digits).");
+    const name = customName.trim() || "Custom Contact";
+    const customItem: PersonItem = {
+      id: "custom-0",
+      cleanerJobId: 0,
+      name,
+      phone: customPhone.trim(),
+      meta: "Manual entry",
+      jobTime: "N/A",
+      eta: "N/A",
+      pay: "N/A",
+      access: "N/A",
+      risk: "Manual",
+    };
+    // Inject into allItems temporarily via selectedId trick
+    setSelectedId("custom-0");
+    // Store custom item so script builder can use it
+    setCustomPersonItem(customItem);
+    setScript(scriptFromTemplate(customItem, selectedScenario, audience));
     setStep("scenario");
   }
 
@@ -562,6 +604,116 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
                   </div>
                 )}
               </div>
+
+              {/* ── DB Search divider ── */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0" }}>
+                <div style={{ flex: 1, height: 1, background: s.line }} />
+                <span style={{ fontSize: 10, color: s.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", whiteSpace: "nowrap" }}>or search all contacts</span>
+                <div style={{ flex: 1, height: 1, background: s.line }} />
+              </div>
+
+              {/* DB search box */}
+              <div style={{ position: "relative" }}>
+                <Search size={13} color={s.muted} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
+                <input
+                  value={dbSearchQuery}
+                  onChange={e => { setDbSearchQuery(e.target.value); setDbSearchActive(true); }}
+                  placeholder="Search past customers, leads, cleaners…"
+                  style={{ width: "100%", paddingLeft: 30, paddingRight: 12, paddingTop: 9, paddingBottom: 9, background: s.dark, border: `1px solid ${s.line}`, borderRadius: 10, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
+                />
+              </div>
+
+              {/* DB search results */}
+              {dbSearchActive && dbSearchQuery.trim().length >= 2 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  {dbSearchFetching && <div style={{ color: s.muted, fontSize: 12, padding: "6px 0" }}>Searching…</div>}
+                  {!dbSearchFetching && dbSearchResults.length === 0 && (
+                    <div style={{ color: s.muted, fontSize: 12, padding: "6px 0" }}>No contacts found for "{dbSearchQuery}"</div>
+                  )}
+                  {dbSearchResults.map(r => {
+                    const sourceColors: Record<string, string> = { customer: "#7bb7ff", lead: "#a78bfa", cleaner: "#34d399" };
+                    const sc = sourceColors[r.source] ?? s.muted;
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => {
+                          const item: PersonItem = {
+                            id: r.id,
+                            cleanerJobId: 0,
+                            name: r.name,
+                            phone: r.phone,
+                            meta: r.context,
+                            jobTime: "N/A",
+                            eta: "N/A",
+                            pay: "N/A",
+                            access: "N/A",
+                            risk: r.source === "cleaner" ? "Cleaner" : r.source === "lead" ? "Lead" : "Past customer",
+                          };
+                          setCustomPersonItem(item);
+                          setSelectedId(r.id);
+                          setScript(scriptFromTemplate(item, selectedScenario, audience));
+                          setStep("scenario");
+                          setDbSearchQuery("");
+                          setDbSearchActive(false);
+                        }}
+                        style={{
+                          display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 10, alignItems: "center",
+                          padding: "10px 12px", border: `1px solid ${s.line}`,
+                          borderRadius: 12, background: s.dark, cursor: "pointer", textAlign: "left", width: "100%",
+                        }}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: 10, background: sc + "18", border: `1px solid ${sc}40`, display: "grid", placeItems: "center", fontWeight: 900, fontSize: 13, color: sc }}>
+                          {initials(r.name)}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: s.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
+                          <div style={{ fontSize: 11, color: s.muted, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.context}</div>
+                        </div>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: sc, background: sc + "18", border: `1px solid ${sc}40`, borderRadius: 6, padding: "3px 7px", whiteSpace: "nowrap" }}>
+                          {r.source}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* ── Custom number divider ── */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0" }}>
+                <div style={{ flex: 1, height: 1, background: s.line }} />
+                <button
+                  onClick={() => setShowCustomNumber(v => !v)}
+                  style={{ fontSize: 10, color: showCustomNumber ? s.accent : s.muted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", background: "none", border: "none", cursor: "pointer", whiteSpace: "nowrap", padding: "0 4px" }}
+                >
+                  {showCustomNumber ? "▲ hide" : "▼ enter number manually"}
+                </button>
+                <div style={{ flex: 1, height: 1, background: s.line }} />
+              </div>
+
+              {/* Custom number form */}
+              {showCustomNumber && (
+                <div style={{ background: s.dark, border: `1px solid ${s.line}`, borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <input
+                    value={customName}
+                    onChange={e => setCustomName(e.target.value)}
+                    placeholder="Name (optional)"
+                    style={{ width: "100%", padding: "8px 10px", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 8, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
+                  />
+                  <input
+                    value={customPhone}
+                    onChange={e => setCustomPhone(e.target.value)}
+                    placeholder="Phone number (required)"
+                    type="tel"
+                    style={{ width: "100%", padding: "8px 10px", background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 8, color: s.text, outline: "none", fontSize: 13, boxSizing: "border-box" }}
+                  />
+                  <button
+                    onClick={selectCustomPerson}
+                    style={{ padding: "9px 0", background: "#1d1b14", border: `1px solid ${s.accent}`, borderRadius: 8, color: s.accent, fontWeight: 800, fontSize: 13, cursor: "pointer" }}
+                  >
+                    Use this number →
+                  </button>
+                </div>
+              )}
             </>
           )}
 
