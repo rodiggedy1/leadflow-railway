@@ -840,59 +840,43 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
                 </button>
               </div>
 
-                            {/* ── Call status pill (active only) ── */}
-              {callStatus !== "idle" && callActive && (
-                <div style={{ padding: "10px 12px", background: "#0d1520", border: `1px solid ${STATUS_COLORS[callStatus]}33`, borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], animation: "aicall-pulse 1.2s infinite", flexShrink: 0 }} />
+                                          {/* Call status indicator — exact copy from AICallMatrix */}
+              {callStatus !== "idle" && (
+                <div style={{ marginTop: 10, padding: "10px 12px", background: "#0d1520", border: `1px solid ${STATUS_COLORS[callStatus]}33`, borderRadius: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  {callActive && (
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], animation: "aicall-pulse 1.2s infinite" }} />
+                  )}
                   <span style={{ fontSize: 13, color: STATUS_COLORS[callStatus], fontWeight: 700 }}>{STATUS_LABELS[callStatus]}</span>
                 </div>
               )}
-
-              {/* ── Post-call result card ── */}
-              {(callStatus === "completed" || callStatus === "voicemail" || callStatus === "no_answer" || callStatus === "failed") && (
-                <div style={{ background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 12, overflow: "hidden" }}>
-                  {/* Header */}
-                  <div style={{ padding: "10px 14px", borderBottom: "1px solid #1a3a22", display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: STATUS_COLORS[callStatus], fontWeight: 800 }}>{STATUS_LABELS[callStatus]}</span>
-                    {callEndedReason && callEndedReason !== "customer-ended-call" && callEndedReason !== "assistant-ended-call" && (
-                      <span style={{ fontSize: 10, color: s.muted, marginLeft: "auto", background: "#1a2a1a", padding: "2px 7px", borderRadius: 5, border: "1px solid #285b3a" }}>{callEndedReason}</span>
-                    )}
-                  </div>
-                  {/* Summary */}
-                  {callSummary && (
-                    <div style={{ padding: "10px 14px", borderBottom: callTranscript || callRecordingUrl ? "1px solid #1a3a22" : undefined }}>
-                      <div style={{ fontSize: 10, color: "#4a9a6a", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 800 }}>Summary</div>
-                      <div style={{ fontSize: 13, color: "#b9ffd4", lineHeight: 1.5 }}>{callSummary}</div>
+              {/* Call summary after completion — exact copy from AICallMatrix */}
+              {callSummary && (
+                <div style={{ marginTop: 10, padding: "10px 12px", background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 12 }}>
+                  <div style={{ fontSize: 11, color: s.muted, marginBottom: 4 }}>Call summary</div>
+                  <div style={{ fontSize: 13, color: "#b9ffd4", lineHeight: 1.4 }}>{callSummary}</div>
+                </div>
+              )}
+              {/* Recording */}
+              {callRecordingUrl && (
+                <div style={{ marginTop: 8, padding: "10px 12px", background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, color: s.muted, flexShrink: 0 }}>Recording</span>
+                  <audio controls src={callRecordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+                </div>
+              )}
+              {/* Transcript after completion — exact copy from AICallMatrix */}
+              {callTranscript && (
+                <div style={{ marginTop: 8, background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 12 }}>
+                  <button
+                    onClick={() => setShowTranscript(v => !v)}
+                    style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: s.muted, fontSize: 12, padding: "10px 12px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>Transcript</span>
+                    <span>{showTranscript ? "▲ Hide" : "▼ Show"}</span>
+                  </button>
+                  {showTranscript && (
+                    <div style={{ fontSize: 12, color: s.muted, padding: "0 12px 12px", maxHeight: 200, overflowY: "auto", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
+                      {callTranscript}
                     </div>
-                  )}
-                  {/* Recording */}
-                  {callRecordingUrl && (
-                    <div style={{ padding: "10px 14px", borderBottom: callTranscript ? "1px solid #1a3a22" : undefined, display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ fontSize: 10, color: "#4a9a6a", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 800, flexShrink: 0 }}>Recording</div>
-                      <audio controls src={callRecordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
-                    </div>
-                  )}
-                  {/* Transcript */}
-                  {callTranscript && (
-                    <div>
-                      <button
-                        onClick={() => setShowTranscript(v => !v)}
-                        style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: "#4a9a6a", fontSize: 11, padding: "9px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em" }}
-                      >
-                        <span>Transcript</span>
-                        {showTranscript ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                      </button>
-                      {showTranscript && (
-                        <div style={{ fontSize: 12, color: s.muted, padding: "0 14px 12px", maxHeight: 200, overflowY: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-                          {callTranscript}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {/* No data yet */}
-                  {!callSummary && !callRecordingUrl && !callTranscript && (
-                    <div style={{ padding: "10px 14px", fontSize: 12, color: s.muted }}>Processing call data… check back in a moment.</div>
                   )}
                 </div>
               )}
