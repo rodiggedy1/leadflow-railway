@@ -200,6 +200,8 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   const [activeVapiCallId, setActiveVapiCallId] = useState<string | null>(null);
   const [callSummary, setCallSummary] = useState<string | null>(null);
   const [callTranscript, setCallTranscript] = useState<string | null>(null);
+  const [callRecordingUrl, setCallRecordingUrl] = useState<string | null>(null);
+  const [callEndedReason, setCallEndedReason] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
@@ -294,6 +296,8 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
     setActiveVapiCallId(null);
     setCallSummary(null);
     setCallTranscript(null);
+    setCallRecordingUrl(null);
+    setCallEndedReason(null);
     setShowTranscript(false);
     setFlash(null);
   }, [open]);
@@ -320,13 +324,36 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
   // ── Polling ──
   function startPolling(vapiCallId: string) {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    let stuckInProgressCount = 0;
     pollIntervalRef.current = setInterval(async () => {
       try {
         const result = await utils.callMatrix.pollCall.fetch({ vapiCallId });
-        if (result.status) setCallStatus(result.status as CallStatus);
+        let status = result.status as CallStatus;
+        // If Vapi has an endedReason but status is still in_progress, force completed
+        if (result.endedReason && status === "in_progress") {
+          if (result.endedReason.includes("voicemail") || result.endedReason === "machine_end_beep" || result.endedReason === "machine_end_silence") {
+            status = "voicemail";
+          } else if (result.endedReason === "no-answer" || result.endedReason === "silence-timed-out") {
+            status = "no_answer";
+          } else if (result.endedReason.includes("fail") || result.endedReason.includes("error")) {
+            status = "failed";
+          } else {
+            status = "completed";
+          }
+        }
+        // Safety: if stuck in_progress for 5+ polls (25s), force completed
+        if (status === "in_progress") {
+          stuckInProgressCount++;
+          if (stuckInProgressCount >= 5) status = "completed";
+        } else {
+          stuckInProgressCount = 0;
+        }
+        setCallStatus(status);
         if (result.summary) setCallSummary(result.summary);
         if (result.transcript) setCallTranscript(result.transcript);
-        const done = ["completed", "voicemail", "no_answer", "failed"].includes(result.status ?? "");
+        if (result.recordingUrl) setCallRecordingUrl(result.recordingUrl);
+        if (result.endedReason) setCallEndedReason(result.endedReason);
+        const done = ["completed", "voicemail", "no_answer", "failed"].includes(status);
         if (done) {
           if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
           pollIntervalRef.current = null;
@@ -833,36 +860,59 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
                 </button>
               </div>
 
-              {/* Call status */}
-              {callStatus !== "idle" && (
+                            {/* ── Call status pill (active only) ── */}
+              {callStatus !== "idle" && callActive && (
                 <div style={{ padding: "10px 12px", background: "#0d1520", border: `1px solid ${STATUS_COLORS[callStatus]}33`, borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                  {callActive && <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], animation: "aicall-pulse 1.2s infinite", flexShrink: 0 }} />}
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], animation: "aicall-pulse 1.2s infinite", flexShrink: 0 }} />
                   <span style={{ fontSize: 13, color: STATUS_COLORS[callStatus], fontWeight: 700 }}>{STATUS_LABELS[callStatus]}</span>
                 </div>
               )}
 
-              {/* Summary */}
-              {callSummary && (
-                <div style={{ padding: "10px 12px", background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 10 }}>
-                  <div style={{ fontSize: 10, color: s.muted, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Call summary</div>
-                  <div style={{ fontSize: 13, color: "#b9ffd4", lineHeight: 1.4 }}>{callSummary}</div>
-                </div>
-              )}
-
-              {/* Transcript */}
-              {callTranscript && (
-                <div style={{ background: s.dark, border: `1px solid ${s.line}`, borderRadius: 10 }}>
-                  <button
-                    onClick={() => setShowTranscript(v => !v)}
-                    style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: s.muted, fontSize: 12, padding: "10px 12px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <span>Transcript</span>
-                    {showTranscript ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                  </button>
-                  {showTranscript && (
-                    <div style={{ fontSize: 12, color: s.muted, padding: "0 12px 12px", maxHeight: 180, overflowY: "auto", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                      {callTranscript}
+              {/* ── Post-call result card ── */}
+              {(callStatus === "completed" || callStatus === "voicemail" || callStatus === "no_answer" || callStatus === "failed") && (
+                <div style={{ background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 12, overflow: "hidden" }}>
+                  {/* Header */}
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid #1a3a22", display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLORS[callStatus], flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: STATUS_COLORS[callStatus], fontWeight: 800 }}>{STATUS_LABELS[callStatus]}</span>
+                    {callEndedReason && callEndedReason !== "customer-ended-call" && callEndedReason !== "assistant-ended-call" && (
+                      <span style={{ fontSize: 10, color: s.muted, marginLeft: "auto", background: "#1a2a1a", padding: "2px 7px", borderRadius: 5, border: "1px solid #285b3a" }}>{callEndedReason}</span>
+                    )}
+                  </div>
+                  {/* Summary */}
+                  {callSummary && (
+                    <div style={{ padding: "10px 14px", borderBottom: callTranscript || callRecordingUrl ? "1px solid #1a3a22" : undefined }}>
+                      <div style={{ fontSize: 10, color: "#4a9a6a", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 800 }}>Summary</div>
+                      <div style={{ fontSize: 13, color: "#b9ffd4", lineHeight: 1.5 }}>{callSummary}</div>
                     </div>
+                  )}
+                  {/* Recording */}
+                  {callRecordingUrl && (
+                    <div style={{ padding: "10px 14px", borderBottom: callTranscript ? "1px solid #1a3a22" : undefined, display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ fontSize: 10, color: "#4a9a6a", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 800, flexShrink: 0 }}>Recording</div>
+                      <audio controls src={callRecordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+                    </div>
+                  )}
+                  {/* Transcript */}
+                  {callTranscript && (
+                    <div>
+                      <button
+                        onClick={() => setShowTranscript(v => !v)}
+                        style={{ width: "100%", background: "none", border: "none", cursor: "pointer", color: "#4a9a6a", fontSize: 11, padding: "9px 14px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em" }}
+                      >
+                        <span>Transcript</span>
+                        {showTranscript ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+                      {showTranscript && (
+                        <div style={{ fontSize: 12, color: s.muted, padding: "0 14px 12px", maxHeight: 200, overflowY: "auto", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                          {callTranscript}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* No data yet */}
+                  {!callSummary && !callRecordingUrl && !callTranscript && (
+                    <div style={{ padding: "10px 14px", fontSize: 12, color: s.muted }}>Processing call data… check back in a moment.</div>
                   )}
                 </div>
               )}
@@ -882,7 +932,7 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
           <div style={{ padding: "12px 18px", borderTop: `1px solid ${s.line}`, flexShrink: 0, display: "flex", gap: 8 }}>
             {(callStatus === "completed" || callStatus === "voicemail" || callStatus === "no_answer" || callStatus === "failed") ? (
               <button
-                onClick={() => { setCallStatus("idle"); setActiveVapiCallId(null); setCallSummary(null); setCallTranscript(null); setShowTranscript(false); }}
+                onClick={() => { setCallStatus("idle"); setActiveVapiCallId(null); setCallSummary(null); setCallTranscript(null); setCallRecordingUrl(null); setCallEndedReason(null); setShowTranscript(false); }}
                 style={{ flex: 1, padding: "12px 0", background: s.panel2, border: `1px solid ${s.line}`, borderRadius: 12, color: s.text, fontWeight: 800, fontSize: 14, cursor: "pointer" }}
               >
                 New Call
