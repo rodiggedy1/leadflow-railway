@@ -657,7 +657,9 @@ export const callMatrixRouter = router({
         summary: r.summary,
         endedReason: r.endedReason,
         recordingUrl: r.recordingUrl,
-        createdAt: r.createdAt,
+        createdAt: r.createdAt
+          ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }).format(r.createdAt) + " EST"
+          : null,
         vapiCallId: r.vapiCallId,
       }));
     }),

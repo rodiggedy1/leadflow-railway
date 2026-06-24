@@ -176,17 +176,9 @@ function initials(name: string): string {
 }
 
 // ─── History row card (needs own component for useState hook) ───────────────────
-function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | null; outcome: string; durationSeconds: number | null; summary: string | null; recordingUrl: string | null; transcript: string | null; createdAt: Date | number | null }; s: Record<string, string> }) {
+function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | null; outcome: string; durationSeconds: number | null; summary: string | null; recordingUrl: string | null; transcript: string | null; createdAt: string | null }; s: Record<string, string> }) {
   const [showTx, setShowTx] = useState(false);
-  const time = (() => {
-    if (!row.createdAt) return "—";
-    console.log("[history createdAt]", row.createdAt, typeof row.createdAt, row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt);
-    const utcMs = row.createdAt instanceof Date ? row.createdAt.getTime() : Number(row.createdAt);
-    // Hardcode EDT offset (-4h). Covers EST (-5h) Nov-Mar but EDT is current.
-    const estMs = utcMs - 4 * 60 * 60 * 1000;
-    const d = new Date(estMs);
-    return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true }) + " EST";
-  })();
+  const time = row.createdAt ?? "—";
   const duration = row.durationSeconds ? (row.durationSeconds < 60 ? `${row.durationSeconds}s` : `${Math.floor(row.durationSeconds / 60)}m ${row.durationSeconds % 60}s`) : null;
   const outcomeMap: Record<string, { label: string; color: string; bg: string }> = {
     answered:  { label: "Answered",  color: "#b9ffd4", bg: "#0d2a1a" },
