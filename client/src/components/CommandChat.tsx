@@ -4733,15 +4733,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              {/* AI Call pill — links to AI Call Matrix */}
-              <span className="text-slate-300 text-xs">|</span>
-              <button
-                onClick={() => { window.location.href = "/admin/ai-calls"; }}
-                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-              >
-                <Bot className="h-3.5 w-3.5" />
-                Make Call
-              </button>
+
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
               <button
@@ -4792,6 +4784,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     {visibleDueTasks.length > 99 ? "99+" : visibleDueTasks.length}
                   </span>
                 )}
+              </button>
+              {/* Make Call button — pushed to far right */}
+              <button
+                onClick={() => { window.location.href = "/admin/ai-calls"; }}
+                className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition shrink-0"
+              >
+                <Bot className="h-3.5 w-3.5" />
+                + Make Call
               </button>
             </div>
           )}
