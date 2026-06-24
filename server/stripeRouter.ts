@@ -71,7 +71,10 @@ export const stripeRouter = router({
         expiresAt,
       });
 
-      const baseUrl = ENV.quoteAppUrl ?? "";
+      // NOTE: The /pay/:token route lives on THIS app (quote.maidinblack.com), NOT on the
+      // external quote app. ENV.quoteAppUrl points to the external quote app API and must
+      // NOT be used here — changing it would break SMS quote links sent to leads.
+      const baseUrl = "https://quote.maidinblack.com";
       const params = new URLSearchParams();
       if (input.customerName) params.set("name", input.customerName);
       if (input.jobDate) params.set("date", input.jobDate);
