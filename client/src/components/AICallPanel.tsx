@@ -178,7 +178,7 @@ function initials(name: string): string {
 // ─── History row card (needs own component for useState hook) ───────────────────
 function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | null; outcome: string; durationSeconds: number | null; summary: string | null; recordingUrl: string | null; transcript: string | null; createdAt: Date | number | null }; s: Record<string, string> }) {
   const [showTx, setShowTx] = useState(false);
-  const time = row.createdAt ? new Date(row.createdAt instanceof Date ? row.createdAt.getTime() : row.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }) : "—";
+  const time = row.createdAt ? new Date(row.createdAt instanceof Date ? row.createdAt.getTime() : row.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York", timeZoneName: "short" }) : "—";
   const duration = row.durationSeconds ? (row.durationSeconds < 60 ? `${row.durationSeconds}s` : `${Math.floor(row.durationSeconds / 60)}m ${row.durationSeconds % 60}s`) : null;
   const outcomeMap: Record<string, { label: string; color: string; bg: string }> = {
     answered:  { label: "Answered",  color: "#b9ffd4", bg: "#0d2a1a" },
