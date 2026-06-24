@@ -44,6 +44,7 @@ import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
+import AICallPanel from "@/components/AICallPanel";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -3373,6 +3374,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [unreadTagIds, setUnreadTagIds] = useState<number[]>(() => []);
   // Mention history drawer state
   const [showMentionHistory, setShowMentionHistory] = useState(false);
+  const [showCallPanel, setShowCallPanel] = useState(false);
   // Live floating pill: shown when a new @mention arrives while the panel IS visible
   const [livePill, setLivePill] = useState<{ from: string; body: string } | null>(null);
   const livePillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -4901,7 +4903,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
               {/* Make Call button — pushed to far right */}
               <button
-                onClick={() => { window.location.href = "/admin/ai-calls"; }}
+                onClick={() => setShowCallPanel(true)}
                 className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition shrink-0"
               >
                 <Bot className="h-3.5 w-3.5" />
@@ -4909,6 +4911,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
             </div>
           )}
+
+          {/* AI Call Panel — slide-in from right */}
+          <AICallPanel open={showCallPanel} onClose={() => setShowCallPanel(false)} />
 
           {/* Mention History Drawer — slide-in from right */}
           {showMentionHistory && (
