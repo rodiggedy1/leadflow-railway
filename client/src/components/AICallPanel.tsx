@@ -11,7 +11,7 @@
  */
 import { useState, useMemo, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { X, Bot, Phone, Search, Zap, ChevronDown, ChevronUp, Copy, RefreshCw, PhoneOff } from "lucide-react";
+import { X, Bot, Phone, Search, Zap, ChevronDown, ChevronUp, Copy, RefreshCw, PhoneOff, History, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─── Types (mirrored from AICallMatrix) ───────────────────────────────────────
@@ -173,6 +173,52 @@ function riskColor(risk: string): string {
 
 function initials(name: string): string {
   return name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
+}
+
+// ─── History row card (needs own component for useState hook) ───────────────────
+function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | null; outcome: string; durationSeconds: number | null; summary: string | null; recordingUrl: string | null; transcript: string | null; createdAt: Date | number | null }; s: Record<string, string> }) {
+  const [showTx, setShowTx] = useState(false);
+  const time = row.createdAt ? new Date(row.createdAt instanceof Date ? row.createdAt.getTime() : row.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }) : "—";
+  const duration = row.durationSeconds ? (row.durationSeconds < 60 ? `${row.durationSeconds}s` : `${Math.floor(row.durationSeconds / 60)}m ${row.durationSeconds % 60}s`) : null;
+  const outcomeMap: Record<string, { label: string; color: string; bg: string }> = {
+    answered:  { label: "Answered",  color: "#b9ffd4", bg: "#0d2a1a" },
+    voicemail: { label: "Voicemail", color: "#f3c96b", bg: "#2a1e00" },
+    no_answer: { label: "No Answer", color: "#ffb4b4", bg: "#2a0d0d" },
+    failed:    { label: "Failed",    color: "#ff6b6b", bg: "#2a0d0d" },
+  };
+  const om = outcomeMap[row.outcome] ?? { label: row.outcome, color: "#8f98aa", bg: "#1f2430" };
+  return (
+    <div style={{ background: "#0d1117", border: `1px solid ${s.line}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: s.text }}>{row.calledPhone ?? "Unknown"}</div>
+          <div style={{ fontSize: 11, color: s.muted, marginTop: 2 }}>{time}{duration ? ` · ${duration}` : ""}</div>
+        </div>
+        <span style={{ fontSize: 11, borderRadius: 999, padding: "3px 8px", background: om.bg, color: om.color, border: `1px solid ${om.color}33`, whiteSpace: "nowrap" }}>{om.label}</span>
+      </div>
+      {row.summary && (
+        <div style={{ fontSize: 12, color: "#b9ffd4", background: "#0d2a1a", border: "1px solid #1a4a2a", borderRadius: 10, padding: "8px 10px", lineHeight: 1.4 }}>{row.summary}</div>
+      )}
+      {row.recordingUrl && (
+        <div style={{ background: "#0d1a12", border: "1px solid #1a4a2a", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 11, color: s.muted, flexShrink: 0 }}>Recording</span>
+          <audio controls src={row.recordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+        </div>
+      )}
+      {row.transcript && (
+        <>
+          <button onClick={() => setShowTx(v => !v)} style={{ background: "none", border: "none", cursor: "pointer", color: s.muted, fontSize: 12, textAlign: "left", padding: 0 }}>
+            {showTx ? "▲ Hide transcript" : "▼ Show transcript"}
+          </button>
+          {showTx && (
+            <div style={{ fontSize: 12, color: s.muted, background: "#0f1115", border: `1px solid ${s.line}`, borderRadius: 10, padding: "8px 10px", maxHeight: 160, overflowY: "auto", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+              {row.transcript}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -448,7 +494,13 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
     blue: "#7bb7ff", dark: "#121620",
   };
 
-  if (!open) return null;
+  const [showHistory, setShowHistory] = useState(false);
+  const { data: historyData, isLoading: historyLoading } = trpc.callMatrix.getCallHistory.useQuery(
+    { limit: 50 },
+    { enabled: showHistory, staleTime: 10_000 }
+  );
+
+  if (!open) return <></>;  // keep mounted so call state + poll persist after close
 
   return (
     <>
@@ -503,6 +555,20 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
             ))}
           </div>
 
+          <a
+            href="/admin/ai-calls"
+            title="Full AI calls page"
+            style={{ background: "none", border: "none", cursor: "pointer", color: s.muted, padding: 4, borderRadius: 8, display: "flex", alignItems: "center", textDecoration: "none" }}
+          >
+            <ExternalLink size={15} />
+          </a>
+          <button
+            onClick={() => setShowHistory(true)}
+            title="Call history"
+            style={{ background: "none", border: "none", cursor: "pointer", color: s.muted, padding: 4, borderRadius: 8, display: "flex", alignItems: "center" }}
+          >
+            <History size={15} />
+          </button>
           <button
             onClick={onClose}
             style={{ background: "none", border: "none", cursor: "pointer", color: s.muted, padding: 4, borderRadius: 8, display: "flex", alignItems: "center" }}
@@ -999,6 +1065,39 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
         )}
 
         <style>{`@keyframes aicall-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+        {/* ── Call History Sub-Panel ── */}
+        {showHistory && (
+          <div
+            style={{
+              position: "absolute", inset: 0, zIndex: 10,
+              background: s.bg,
+              display: "flex", flexDirection: "column",
+              fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, sans-serif",
+            }}
+          >
+            {/* History header */}
+            <div style={{ padding: "16px 18px 14px", borderBottom: `1px solid ${s.line}`, display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: "linear-gradient(135deg,#1a1f2e,#2a3040)", display: "grid", placeItems: "center", border: `1px solid ${s.line}`, flexShrink: 0 }}>
+                <History size={16} color={s.accent} />
+              </div>
+              <div style={{ flex: 1, fontWeight: 800, fontSize: 15 }}>Call History</div>
+              <button
+                onClick={() => setShowHistory(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: s.muted, padding: 4, borderRadius: 8, display: "flex", alignItems: "center" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {/* History body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+              {historyLoading && <div style={{ color: s.muted, fontSize: 13 }}>Loading…</div>}
+              {!historyLoading && (!historyData || historyData.length === 0) && (
+                <div style={{ color: s.muted, fontSize: 13 }}>No calls yet.</div>
+              )}
+              {(historyData ?? []).map(row => (<HistoryRowCard key={row.id} row={row} s={s} />))}
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
