@@ -53,6 +53,12 @@ export const GLANCE_CATEGORY_META: Record<GlanceCategory, { label: string; emoji
 const _queue = new Set<string>();
 let _workerStarted = false;
 
+// ── Backfill cooldown ─────────────────────────────────────────────────────────
+// If threads.list gets a 429, skip backfill for 6 hours so we don't keep
+// burning quota on every deploy while Gmail is already rate-limited.
+const BACKFILL_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
+let _backfillCooldownUntil = 0;
+
 // ── Instrumentation counters (reset every 60s) ────────────────────────────────
 let _threadsGetCount = 0;        // gmail.users.threads.get calls
 let _threadsListCount = 0;       // gmail.users.threads.list calls (backfill)
@@ -378,6 +384,13 @@ export function startGlanceWorker() {
 
 // ── Backfill: enqueue last 100 inbox threads that haven't been processed ──────
 export async function backfillGlanceQueue(): Promise<void> {
+  // Skip if we're in cooldown from a previous 429
+  if (Date.now() < _backfillCooldownUntil) {
+    const remainingMin = Math.ceil((_backfillCooldownUntil - Date.now()) / 60_000);
+    console.log(`[GlanceWorker] Backfill skipped — cooldown active (${remainingMin}m remaining, last threads.list got 429)`);
+    return;
+  }
+
   try {
     const gmail = await getGmailClient();
     const db = await getDb();
@@ -403,7 +416,10 @@ export async function backfillGlanceQueue(): Promise<void> {
         const errors = apiErr?.response?.data?.error?.errors ?? [];
         const reason = errors[0]?.reason ?? "unknown";
         const retryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? "none";
-        console.error(`[GlanceWorker][429] threads.list reason=${reason} retryAfter=${retryAfter} duration=${durationMs}ms`);
+        // Engage cooldown — don't retry backfill for 6 hours
+        _backfillCooldownUntil = Date.now() + BACKFILL_COOLDOWN_MS;
+        const cooldownUntilStr = new Date(_backfillCooldownUntil).toISOString();
+        console.error(`[GlanceWorker][429] threads.list reason=${reason} retryAfter=${retryAfter} duration=${durationMs}ms — backfill cooldown until ${cooldownUntilStr}`);
       } else {
         console.error(`[GlanceWorker][APIError] threads.list status=${status} duration=${durationMs}ms`, apiErr?.message);
       }
