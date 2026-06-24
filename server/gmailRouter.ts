@@ -812,6 +812,24 @@ Write the reply now:`;
     return { agents: result };
   }),
 
+  /**
+   * List unread inbox threads for the CommandChat email panel.
+   * Excludes Thumbtack (same as the unread count badge).
+   */
+  listUnread: agentProcedure.query(async () => {
+    await requireGmailConnected();
+    const { threads } = await listInboxThreads({
+      maxResults: 50,
+      query: "is:unread -from:thumbtack.com",
+    });
+    return threads.map((t) => ({
+      threadId: t.id,
+      subject: t.subject ?? "(no subject)",
+      from: t.from ?? "",
+      snippet: t.snippet ?? "",
+      date: t.date,
+    }));
+  }),
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {
     const topicName = ENV.gmailPubsubTopic;

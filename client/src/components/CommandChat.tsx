@@ -2472,6 +2472,48 @@ const MessageList = memo(function MessageList({
 
 // Module-level variable: persists across CommandChat unmount/remount cycles
 // (unlike useRef which resets to its initial value on each mount).
+function EmailPanelRow({ thread, senderName, tAgo, onOpen, onMarkRead }: {
+  thread: any;
+  senderName: string;
+  tAgo: (ts: number) => string;
+  onOpen: () => void;
+  onMarkRead: () => void;
+}) {
+  const markReadMutation = trpc.gmail.markRead.useMutation({
+    onSuccess: onMarkRead,
+  });
+  const [done, setDone] = useState(false);
+  if (done) return null;
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-colors">
+      <div className="mt-0.5 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
+        <Mail className="h-4 w-4 text-blue-500" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <button
+          onClick={onOpen}
+          className="text-left w-full group"
+        >
+          <p className="text-sm font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">{senderName}</p>
+          <p className="text-xs font-medium text-slate-700 truncate">{thread.subject}</p>
+          {thread.snippet && (
+            <p className="text-xs text-slate-400 truncate mt-0.5">{thread.snippet}</p>
+          )}
+          <p className="text-xs text-slate-400 mt-0.5">{tAgo(thread.date)}</p>
+        </button>
+      </div>
+      <button
+        onClick={() => { setDone(true); markReadMutation.mutate({ threadId: thread.threadId }); }}
+        disabled={markReadMutation.isPending}
+        className="shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500 hover:bg-emerald-600 text-white transition-colors disabled:opacity-50"
+      >
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        Done
+      </button>
+    </div>
+  );
+}
+
 function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResolved }: {
   row: any; lineColor: string;
   fmtPhone: (p: string) => string;
@@ -2614,6 +2656,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [csSmsOpen, setCsSmsOpen] = useState(false);
   const [missedCallsOpen, setMissedCallsOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
   const { data: dueTasks = [] } = trpc.tasks.getDue.useQuery(undefined, {
@@ -2634,12 +2677,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const leadRepliesCount = leadReplies.length;
   const unreadLeadRepliesCount = (leadReplies as any[]).filter((l: any) => l.isUnread).length;
   // ── Email inbox unread count ─────────────────────────────────────────────────
-  const { data: emailUnreadData } = trpc.gmail.getUnreadCount.useQuery(undefined, {
+  const { data: emailUnreadData, refetch: refetchEmailUnread } = trpc.gmail.getUnreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
     retry: false,
     staleTime: 0, // Always refetch when cache is invalidated (e.g. after marking email read in inbox)
   });
   const emailUnreadCount = emailUnreadData?.count ?? 0;
+  // ── Unread email threads for the slide-in panel ─────────────────────────────
+  const { data: unreadEmailThreads = [], refetch: refetchUnreadEmailThreads } = trpc.gmail.listUnread.useQuery(undefined, {
+    staleTime: 30_000, refetchInterval: 60_000, retry: false, enabled: emailOpen,
+  });
   // ── Missed Calls today count (pending only) ─────────────────────────────────
   const { data: missedCallsTodayData, refetch: refetchMissedCallsToday } = trpc.missedCalls.getPendingCount.useQuery(
     { todayOnly: true },
@@ -4814,11 +4861,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              {/* Email Inbox pill — always visible */}
+              {/* Email Inbox pill */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { window.location.href = "/admin/inbox"; }}
-                className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                onClick={() => { setEmailOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (tasksOpen) setTasksOpen(false); }}
+                className={cn(
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
+                  emailOpen
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
               >
                 <Mail className="h-3.5 w-3.5" />
                 Email
@@ -4831,7 +4883,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Missed Calls pill */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { setMissedCallsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (tasksOpen) setTasksOpen(false); }}
+                onClick={() => { setMissedCallsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (tasksOpen) setTasksOpen(false); if (emailOpen) setEmailOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   missedCallsOpen
@@ -4851,7 +4903,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); }}
+                onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailOpen) setEmailOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   csSmsOpen
@@ -4882,7 +4934,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Tasks pill */}
               <span className="text-slate-300 text-xs">|</span>
               <button
-                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); }}
+                onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailOpen) setEmailOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   tasksOpen
@@ -6544,6 +6596,72 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0 mt-1" />
                       </div>
                     </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Email slide-in panel */}
+      {emailOpen && (
+        <div
+          className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-white shadow-2xl border-l border-slate-200 animate-in slide-in-from-right-2 duration-200"
+          style={{ width: "380px", maxWidth: "90vw" }}
+        >
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-blue-500" />
+              <span className="text-sm font-semibold text-slate-900">Unread Email</span>
+              {emailUnreadCount > 0 && (
+                <span className="bg-slate-800 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 leading-none">
+                  {emailUnreadCount} unread
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => { window.location.href = "/admin/inbox"; }}
+                className="text-xs text-blue-600 hover:text-blue-700 font-medium px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+              >
+                Open inbox
+              </button>
+              <button
+                onClick={() => setEmailOpen(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {(unreadEmailThreads as any[]).length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-16">
+                <Mail className="h-8 w-8 opacity-30" />
+                <p className="text-sm font-medium">No unread emails</p>
+                <p className="text-xs text-slate-400">All caught up!</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {(unreadEmailThreads as any[]).map((thread: any) => {
+                  function tAgo(ts: number) {
+                    const mins = Math.floor((Date.now() - ts) / 60_000);
+                    if (mins < 1) return "just now";
+                    if (mins < 60) return `${mins}m ago`;
+                    const hrs = Math.floor(mins / 60);
+                    if (hrs < 24) return `${hrs}h ago`;
+                    return `${Math.floor(hrs / 24)}d ago`;
+                  }
+                  const senderName = thread.from?.replace(/<[^>]+>/, "").trim() || thread.from;
+                  return (
+                    <EmailPanelRow
+                      key={thread.threadId}
+                      thread={thread}
+                      senderName={senderName}
+                      tAgo={tAgo}
+                      onOpen={() => { window.location.href = `/admin/inbox?thread=${thread.threadId}`; }}
+                      onMarkRead={() => { refetchEmailUnread(); refetchUnreadEmailThreads(); }}
+                    />
                   );
                 })}
               </div>
