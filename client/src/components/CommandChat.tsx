@@ -4215,35 +4215,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="text-base font-semibold text-slate-900 leading-none">MIB Command Chat</h2>
-                  {agentList && agentList.length > 0 && (() => {
-                    const MAX_SHOW = 8;
-                    const visible = agentList.slice(0, MAX_SHOW);
-                    const overflow = agentList.length - MAX_SHOW;
-                    return (
-                      <div className="flex items-center" style={{ gap: 0 }}>
-                        {visible.map((ag, idx) => {
-                          const status = senderStatusMap?.[ag.name] ?? "offline";
-                          const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
-                          const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                          const hue = (ag.name.charCodeAt(0) * 37) % 360;
-                          const isOnCall = Boolean(ag.onCallSince);
-                          return (
-                            <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 6 : -4, zIndex: visible.length - idx }}>
-                              {ag.photoUrl ? (
-                                <img src={ag.photoUrl} alt={ag.name} className={cn("w-7 h-7 rounded-full object-cover border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} />
-                              ) : (
-                                <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold border border-white shadow-sm", isOnCall && "ring-1 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
-                              )}
-                              <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
-                            </div>
-                          );
-                        })}
-                        {overflow > 0 && (
-                          <div className="w-7 h-7 rounded-full bg-slate-100 border border-white flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -4 }}>+{overflow}</div>
-                        )}
-                      </div>
-                    );
-                  })()}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <button
@@ -4353,6 +4324,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </Tooltip>
                 </div>
             </div>
+            {/* Agent presence circles — far right */}
+            {agentList && agentList.length > 0 && (() => {
+              const MAX_SHOW = 8;
+              const visible = agentList.slice(0, MAX_SHOW);
+              const overflow = agentList.length - MAX_SHOW;
+              return (
+                <div className="flex items-center shrink-0" style={{ gap: 0 }}>
+                  {visible.map((ag, idx) => {
+                    const status = senderStatusMap?.[ag.name] ?? "offline";
+                    const dotColor = status === "online" ? "bg-emerald-400" : status === "away" ? "bg-amber-400" : "bg-slate-300";
+                    const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = (ag.name.charCodeAt(0) * 37) % 360;
+                    const isOnCall = Boolean(ag.onCallSince);
+                    return (
+                      <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
+                        {ag.photoUrl ? (
+                          <img src={ag.photoUrl} alt={ag.name} className={cn("w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400")} />
+                        ) : (
+                          <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+                        )}
+                        <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
+                      </div>
+                    );
+                  })}
+                  {overflow > 0 && (
+                    <div className="w-8 h-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-slate-500 shadow-sm" style={{ marginLeft: -6 }}>+{overflow}</div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
