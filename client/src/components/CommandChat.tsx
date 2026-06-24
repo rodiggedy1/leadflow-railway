@@ -4249,7 +4249,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       <button
                         onClick={() => onSwitchToLeadOps?.()}
                         title="Open Lead Ops"
-                        className="inline-flex items-center gap-1 text-[10px] font-bold bg-violet-50 text-violet-700 border border-violet-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-violet-100 transition-colors cursor-pointer"
+                        className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
                       >
                         🔗 {todayStats?.total ?? 0} new lead{(todayStats?.total ?? 0) !== 1 ? 's' : ''}
                       </button>
@@ -4279,7 +4279,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     <button
                       onClick={() => setShowMyLeads(v => !v)}
                       title="My assigned leads today"
-                      className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-amber-100 transition-colors cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap hover:bg-slate-50 hover:border-slate-300 transition-colors cursor-pointer"
                     >
                       📋 My leads: {myAssignedLeads.length}
                     </button>
@@ -4295,7 +4295,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
                             ✓ {todayBookingCount} booked
                           </span>
                         </TooltipTrigger>
@@ -4317,13 +4317,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   })()}
                   {/* Conversion rate badge */}
                   {(todayStats?.total ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 rounded-full px-2 py-0.5 whitespace-nowrap">
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-slate-600 border border-slate-200 rounded-full px-2 py-0.5 whitespace-nowrap">
                       {Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}% CVR
                     </span>
                   )}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-white text-emerald-700 border border-emerald-200 rounded-full px-2 py-0.5 whitespace-nowrap cursor-default">
                         ${todayRevenue.toLocaleString()} today
                       </span>
                     </TooltipTrigger>
@@ -4639,27 +4639,28 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
-                  {unreadTagIds.length > 0 && (
-                    <>
-                      <button
-                        onClick={jumpToNextMention}
-                        className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 hover:bg-amber-200 transition"
-                      >
-                        🔔 {unreadTagIds.length} mention{unreadTagIds.length > 1 ? "s" : ""}
-                      </button>
-                      <button
-                        onClick={markTagsSeen}
-                        className="text-amber-400 hover:text-amber-600 transition"
-                        title="Dismiss"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </>
-                  )}
                   <button
-                    onClick={() => setShowMentionHistory(true)}
-                    className="text-[10px] text-amber-600 hover:text-amber-800 transition"
+                    onClick={unreadTagIds.length > 0 ? jumpToNextMention : () => setShowMentionHistory(true)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition",
+                      unreadTagIds.length > 0
+                        ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                        : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
+                    )}
                   >
+                    <Bell className="h-3 w-3" />
+                    {unreadTagIds.length > 0 ? (
+                      <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                        {unreadTagIds.length > 99 ? "99+" : unreadTagIds.length}
+                      </span>
+                    ) : null}
+                  </button>
+                  {unreadTagIds.length > 0 && (
+                    <button onClick={markTagsSeen} className="text-slate-300 hover:text-slate-500 transition" title="Dismiss">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                  <button onClick={() => setShowMentionHistory(true)} className="text-[10px] text-slate-400 hover:text-slate-600 transition font-medium">
                     See all
                   </button>
                 </div>
@@ -4672,12 +4673,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {activeThreadCount > 0 && (
                 <button
                   onClick={() => setAllThreadsOpen(true)}
-                  className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold bg-violet-100 text-violet-700 hover:bg-violet-200 transition"
+                  className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition"
                 >
-                  <MessageSquare className="h-3 w-3" />
-                  threads
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Threads
                   {unreadThreadCount > 0 && (
-                    <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                    <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center leading-none">
                       {unreadThreadCount > 9 ? "9+" : unreadThreadCount}
                     </span>
                   )}
@@ -4690,31 +4691,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   leadRepliesOpen
-                    ? "bg-emerald-200 text-emerald-800"
-                    : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
                 )}
               >
-                <MessageCircle className="h-3 w-3" />
+                <MessageCircle className="h-3.5 w-3.5" />
                 Lead Chats
-                <span className={cn(
-                  "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-white text-[9px] font-bold flex items-center justify-center leading-none",
-                  leadRepliesCount > 0 ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                )}>
-                  {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
-                </span>
+                {leadRepliesCount > 0 && (
+                  <span className="min-w-[16px] h-[16px] px-1 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {leadRepliesCount > 9 ? "9+" : leadRepliesCount}
+                  </span>
+                )}
               </button>
               {/* Email Inbox pill — always visible */}
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { window.location.href = "/admin/inbox"; }}
-                className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-sky-100 text-sky-700 hover:bg-sky-200"
+                className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
-                <Mail className="h-3 w-3" />
+                <Mail className="h-3.5 w-3.5" />
                 Email
                 {emailUnreadCount > 0 && (
-                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-sky-500 text-white text-[9px] font-bold flex items-center justify-center leading-none animate-pulse">
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-slate-800 text-white text-[9px] font-bold flex items-center justify-center leading-none">
                     {emailUnreadCount}
                   </span>
                 )}
@@ -4723,35 +4723,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { window.location.href = "/admin/missed-calls"; }}
-                className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-red-100 text-red-700 hover:bg-red-200"
+                className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
-                <PhoneMissed className="h-3 w-3" />
+                <PhoneMissed className="h-3.5 w-3.5" />
                 Missed
-                <span className={`ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none ${missedCallsTodayCount > 0 ? "bg-red-500 text-white animate-pulse" : "bg-red-200 text-red-600"}`}>
-                  {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
-                </span>
+                {missedCallsTodayCount > 0 && (
+                  <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                    {missedCallsTodayCount > 99 ? "99+" : missedCallsTodayCount}
+                  </span>
+                )}
               </button>
               {/* AI Call pill — links to AI Call Matrix */}
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { window.location.href = "/admin/ai-calls"; }}
-                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition bg-violet-100 text-violet-700 hover:bg-violet-200"
+                className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               >
-                <Bot className="h-3 w-3" />
+                <Bot className="h-3.5 w-3.5" />
                 Make Call
               </button>
               {/* CS SMS unanswered pill — 202-888-5362 line */}
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
-                className={[
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
-                  csUnansweredUrgent > 0
-                    ? "bg-red-100 text-red-700 hover:bg-red-200"
-                    : csUnansweredWarning > 0
-                    ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                ].join(" ")}
+                className={cn(
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
+                  csSmsOpen
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : csUnansweredUrgent > 0
+                    ? "bg-white text-red-600 border-red-200 hover:bg-red-50"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
                 title={
                   csUnansweredUrgent > 0
                     ? `${csUnansweredUrgent} waiting 1h+`
@@ -4760,34 +4762,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     : "All CS SMS caught up"
                 }
               >
-                <Smartphone className="h-3 w-3" />
+                <Smartphone className="h-3.5 w-3.5" />
                 CS
-                <span className={[
-                  "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none",
-                  csUnansweredUrgent > 0
-                    ? "bg-red-500 text-white animate-pulse"
-                    : csUnansweredWarning > 0
-                    ? "bg-amber-500 text-white animate-pulse"
-                    : "bg-slate-400 text-white"
-                ].join(" ")}>
-                  {csUnansweredCount > 99 ? "99+" : csUnansweredCount}
-                </span>
+                {csUnansweredCount > 0 && (
+                  <span className={cn(
+                    "ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none",
+                    csUnansweredUrgent > 0 ? "bg-red-500 text-white" : "bg-slate-700 text-white"
+                  )}>
+                    {csUnansweredCount > 99 ? "99+" : csUnansweredCount}
+                  </span>
+                )}
               </button>
               {/* Tasks pill */}
               <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); }}
-                className={[
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold transition",
+                className={cn(
+                  "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   tasksOpen
-                    ? "bg-indigo-200 text-indigo-800"
-                    : visibleDueTasks.length > 0
-                    ? "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                ].join(" ")}
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                )}
                 title="Tasks"
               >
-                <ClipboardList className="h-3 w-3" />
+                <ClipboardList className="h-3.5 w-3.5" />
                 Tasks
                 {visibleDueTasks.length > 0 && (
                   <span className="ml-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center leading-none bg-indigo-500 text-white animate-pulse">
