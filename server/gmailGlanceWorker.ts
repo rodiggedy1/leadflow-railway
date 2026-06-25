@@ -170,11 +170,15 @@ export async function processThread(threadId: string): Promise<void> {
     _uniqueThreadsProcessed.add(threadId);
     _currentlyProcessing = threadId;
     const t0 = Date.now();
+    const _gid_w1 = Math.random().toString(36).slice(2, 10);
+    const _gt_w1 = Date.now();
+    console.log(`[GmailAPI] id=${_gid_w1} method=users.threads.get caller=processThread threadId=${threadId}`);
     console.log(`[GlanceWorker][API] threads.get threadId=${threadId} queueSize=${_queue.size}`);
 
     let res: Awaited<ReturnType<typeof gmail.users.threads.get>>;
     try {
       res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
+      console.log(`[GmailAPI] id=${_gid_w1} SUCCESS duration=${Date.now() - _gt_w1}ms`);
     } catch (apiErr: any) {
       _currentlyProcessing = null;
       const status = apiErr?.response?.status ?? apiErr?.code;
@@ -190,6 +194,7 @@ export async function processThread(threadId: string): Promise<void> {
         // All response headers — includes Retry-After, X-RateLimit-*, X-Quota-*
         const responseHeaders = apiErr?.response?.headers ?? {};
         const retryAfter = responseHeaders["retry-after"] ?? responseHeaders["x-ratelimit-reset"] ?? "(none)";
+        console.error(`[GmailAPI] id=${_gid_w1} ERROR status=429 reason=${googleErrors?.[0]?.reason ?? "rateLimitExceeded"} duration=${durationMs}ms`);
         console.error(`[GlanceWorker][429][threads.get] threadId=${threadId} duration=${durationMs}ms`);
         console.error(`[GlanceWorker][429][threads.get] HTTP status=${status} google.status=${googleStatus}`);
         console.error(`[GlanceWorker][429][threads.get] google.message=${googleMessage}`);
@@ -476,6 +481,9 @@ export async function backfillGlanceQueue(): Promise<void> {
     // Fetch last 100 non-Thumbtack inbox threads (list only — no full fetch)
     _threadsListCount++;
     const t0 = Date.now();
+    const _gid_w2 = Math.random().toString(36).slice(2, 10);
+    const _gt_w2 = Date.now();
+    console.log(`[GmailAPI] id=${_gid_w2} method=users.threads.list caller=backfillGlanceQueue`);
     console.log(`[GlanceWorker][API] threads.list (backfill start)`);
 
     let listRes: Awaited<ReturnType<typeof gmail.users.threads.list>>;
@@ -485,6 +493,7 @@ export async function backfillGlanceQueue(): Promise<void> {
         maxResults: 100,
         q: "in:inbox -from:thumbtack.com",
       });
+      console.log(`[GmailAPI] id=${_gid_w2} SUCCESS duration=${Date.now() - _gt_w2}ms`);
     } catch (apiErr: any) {
       const status = apiErr?.response?.status ?? apiErr?.code;
       const durationMs = Date.now() - t0;
@@ -510,6 +519,7 @@ export async function backfillGlanceQueue(): Promise<void> {
           .set({ gmailBackfillCooldownUntil: newCooldownUntil })
           .where(eq(gmailState.id, 1))
           .catch((e) => console.error("[GlanceWorker] Failed to persist backfill cooldown:", e));
+        console.error(`[GmailAPI] id=${_gid_w2} ERROR status=429 reason=${googleErrors?.[0]?.reason ?? "rateLimitExceeded"} duration=${durationMs}ms`);
         console.error(`[GlanceWorker][429][threads.list] duration=${durationMs}ms — backfill cooldown persisted until ${cooldownUntilStr}`);
         console.error(`[GlanceWorker][429][threads.list] HTTP status=${status} google.status=${googleStatus}`);
         console.error(`[GlanceWorker][429][threads.list] google.message=${googleMessage}`);

@@ -29,13 +29,24 @@ export async function getInboxEmailAddress(): Promise<string | null> {
   if (_cachedInboxEmail) return _cachedInboxEmail;
   try {
     const gmail = await getGmailClient();
-    const profile = await gmail.users.getProfile({ userId: "me" });
+    const _gid0 = Math.random().toString(36).slice(2, 10);
+    const _gt0 = Date.now();
+    console.log(`[GmailAPI] id=${_gid0} method=users.getProfile caller=getInboxEmailAddress`);
+    let profile: any;
+    try {
+      profile = await gmail.users.getProfile({ userId: "me" });
+      console.log(`[GmailAPI] id=${_gid0} SUCCESS duration=${Date.now() - _gt0}ms`);
+    } catch (_ge0: any) {
+      console.error(`[GmailAPI] id=${_gid0} ERROR status=${_ge0?.response?.status ?? _ge0?.code} reason=${_ge0?.response?.data?.error?.errors?.[0]?.reason ?? _ge0?.message} duration=${Date.now() - _gt0}ms`);
+      throw _ge0;
+    }
     _cachedInboxEmail = profile.data.emailAddress ?? null;
     return _cachedInboxEmail;
   } catch {
     return null;
   }
 }
+
 
 async function getRefreshToken(): Promise<string | null> {
   if (ENV.gmailRefreshToken) return ENV.gmailRefreshToken;
@@ -178,12 +189,22 @@ export async function listInboxThreads(opts: {
 }): Promise<{ threads: GmailThread[]; nextPageToken?: string }> {
   const t0 = Date.now();
   const gmail = await getGmailClient();
-  const listRes = await gmail.users.threads.list({
-    userId: "me",
-    maxResults: opts.maxResults ?? 30,
-    pageToken: opts.pageToken,
-    q: opts.query ? `in:inbox ${opts.query}` : "in:inbox",
-  });
+  const _gid1 = Math.random().toString(36).slice(2, 10);
+  const _gt1 = Date.now();
+  console.log(`[GmailAPI] id=${_gid1} method=users.threads.list caller=listInboxThreads`);
+  let listRes: any;
+  try {
+    listRes = await gmail.users.threads.list({
+      userId: "me",
+      maxResults: opts.maxResults ?? 30,
+      pageToken: opts.pageToken,
+      q: opts.query ? `in:inbox ${opts.query}` : "in:inbox",
+    });
+    console.log(`[GmailAPI] id=${_gid1} SUCCESS duration=${Date.now() - _gt1}ms`);
+  } catch (_ge1: any) {
+    console.error(`[GmailAPI] id=${_gid1} ERROR status=${_ge1?.response?.status ?? _ge1?.code} reason=${_ge1?.response?.data?.error?.errors?.[0]?.reason ?? _ge1?.message} duration=${Date.now() - _gt1}ms`);
+    throw _ge1;
+  }
   const threadItems = listRes.data.threads ?? [];
   const nextPageToken = listRes.data.nextPageToken ?? undefined;
   if (threadItems.length === 0) return { threads: [], nextPageToken };
@@ -213,7 +234,17 @@ export async function listInboxThreads(opts: {
 
 export async function getThreadDetail(threadId: string): Promise<GmailThread> {
   const gmail = await getGmailClient();
-  const res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
+  const _gid2 = Math.random().toString(36).slice(2, 10);
+  const _gt2 = Date.now();
+  console.log(`[GmailAPI] id=${_gid2} method=users.threads.get caller=getThreadDetail threadId=${threadId}`);
+  let res: any;
+  try {
+    res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
+    console.log(`[GmailAPI] id=${_gid2} SUCCESS duration=${Date.now() - _gt2}ms`);
+  } catch (_ge2: any) {
+    console.error(`[GmailAPI] id=${_gid2} ERROR status=${_ge2?.response?.status ?? _ge2?.code} reason=${_ge2?.response?.data?.error?.errors?.[0]?.reason ?? _ge2?.message} duration=${Date.now() - _gt2}ms`);
+    throw _ge2;
+  }
   const messages = (res.data.messages ?? []).map(parseMessage);
   const latest = messages[messages.length - 1];
   const first = messages[0];
@@ -258,7 +289,17 @@ export async function sendGmailReply(opts: {
       : []),
   ].join("\r\n");
   const raw = Buffer.from(`${headers}\r\n\r\n${opts.bodyHtml}`).toString("base64url");
-  const res = await gmail.users.messages.send({ userId: "me", requestBody: { raw, threadId: opts.threadId } });
+  const _gid3 = Math.random().toString(36).slice(2, 10);
+  const _gt3 = Date.now();
+  console.log(`[GmailAPI] id=${_gid3} method=users.messages.send caller=sendGmailReply`);
+  let res: any;
+  try {
+    res = await gmail.users.messages.send({ userId: "me", requestBody: { raw, threadId: opts.threadId } });
+    console.log(`[GmailAPI] id=${_gid3} SUCCESS duration=${Date.now() - _gt3}ms`);
+  } catch (_ge3: any) {
+    console.error(`[GmailAPI] id=${_gid3} ERROR status=${_ge3?.response?.status ?? _ge3?.code} reason=${_ge3?.response?.data?.error?.errors?.[0]?.reason ?? _ge3?.message} duration=${Date.now() - _gt3}ms`);
+    throw _ge3;
+  }
   return { messageId: res.data.id!, threadId: res.data.threadId! };
 }
 
@@ -324,10 +365,20 @@ export async function sendGmailReplyWithAttachments(opts: {
   const rawBody = `${headers}\r\n\r\n${bodyPart}${attachmentParts.join("")}\r\n--${boundary}--`;
   const raw = Buffer.from(rawBody).toString("base64url");
 
-  const res = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: { raw, threadId: opts.threadId },
-  });
+  const _gid4 = Math.random().toString(36).slice(2, 10);
+  const _gt4 = Date.now();
+  console.log(`[GmailAPI] id=${_gid4} method=users.messages.send caller=sendGmailReplyWithAttachments`);
+  let res: any;
+  try {
+    res = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw, threadId: opts.threadId },
+    });
+    console.log(`[GmailAPI] id=${_gid4} SUCCESS duration=${Date.now() - _gt4}ms`);
+  } catch (_ge4: any) {
+    console.error(`[GmailAPI] id=${_gid4} ERROR status=${_ge4?.response?.status ?? _ge4?.code} reason=${_ge4?.response?.data?.error?.errors?.[0]?.reason ?? _ge4?.message} duration=${Date.now() - _gt4}ms`);
+    throw _ge4;
+  }
   return { messageId: res.data.id!, threadId: res.data.threadId! };
 }
 
@@ -340,37 +391,94 @@ export async function sendNewGmailEmail(opts: {
     `Content-Type: text/html; charset=utf-8`, `MIME-Version: 1.0`,
   ].join("\r\n");
   const raw = Buffer.from(`${headers}\r\n\r\n${opts.bodyHtml}`).toString("base64url");
-  const res = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+  const _gid5 = Math.random().toString(36).slice(2, 10);
+  const _gt5 = Date.now();
+  console.log(`[GmailAPI] id=${_gid5} method=users.messages.send caller=sendNewGmailEmail`);
+  let res: any;
+  try {
+    res = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+    console.log(`[GmailAPI] id=${_gid5} SUCCESS duration=${Date.now() - _gt5}ms`);
+  } catch (_ge5: any) {
+    console.error(`[GmailAPI] id=${_gid5} ERROR status=${_ge5?.response?.status ?? _ge5?.code} reason=${_ge5?.response?.data?.error?.errors?.[0]?.reason ?? _ge5?.message} duration=${Date.now() - _gt5}ms`);
+    throw _ge5;
+  }
   return { messageId: res.data.id!, threadId: res.data.threadId! };
 }
 
 export async function markThreadRead(threadId: string): Promise<void> {
   const gmail = await getGmailClient();
-  await gmail.users.threads.modify({ userId: "me", id: threadId, requestBody: { removeLabelIds: ["UNREAD"] } });
+  const _gid6 = Math.random().toString(36).slice(2, 10);
+  const _gt6 = Date.now();
+  console.log(`[GmailAPI] id=${_gid6} method=users.threads.modify caller=markThreadRead threadId=${threadId}`);
+  try {
+    await gmail.users.threads.modify({ userId: "me", id: threadId, requestBody: { removeLabelIds: ["UNREAD"] } });
+    console.log(`[GmailAPI] id=${_gid6} SUCCESS duration=${Date.now() - _gt6}ms`);
+  } catch (_ge6: any) {
+    console.error(`[GmailAPI] id=${_gid6} ERROR status=${_ge6?.response?.status ?? _ge6?.code} reason=${_ge6?.response?.data?.error?.errors?.[0]?.reason ?? _ge6?.message} duration=${Date.now() - _gt6}ms`);
+    throw _ge6;
+  }
 }
 
 export async function markThreadUnread(threadId: string): Promise<void> {
   const gmail = await getGmailClient();
-  await gmail.users.threads.modify({ userId: "me", id: threadId, requestBody: { addLabelIds: ["UNREAD"] } });
+  const _gid7 = Math.random().toString(36).slice(2, 10);
+  const _gt7 = Date.now();
+  console.log(`[GmailAPI] id=${_gid7} method=users.threads.modify caller=markThreadUnread threadId=${threadId}`);
+  try {
+    await gmail.users.threads.modify({ userId: "me", id: threadId, requestBody: { addLabelIds: ["UNREAD"] } });
+    console.log(`[GmailAPI] id=${_gid7} SUCCESS duration=${Date.now() - _gt7}ms`);
+  } catch (_ge7: any) {
+    console.error(`[GmailAPI] id=${_gid7} ERROR status=${_ge7?.response?.status ?? _ge7?.code} reason=${_ge7?.response?.data?.error?.errors?.[0]?.reason ?? _ge7?.message} duration=${Date.now() - _gt7}ms`);
+    throw _ge7;
+  }
 }
 
 export async function archiveThread(threadId: string): Promise<void> {
   const gmail = await getGmailClient();
-  await gmail.users.threads.modify({ userId: "me", id: threadId, requestBody: { removeLabelIds: ["INBOX"] } });
+  const _gid8 = Math.random().toString(36).slice(2, 10);
+  const _gt8 = Date.now();
+  console.log(`[GmailAPI] id=${_gid8} method=users.threads.modify caller=archiveThread threadId=${threadId}`);
+  try {
+    await gmail.users.threads.modify({ userId: "me", id: threadId, requestBody: { removeLabelIds: ["INBOX"] } });
+    console.log(`[GmailAPI] id=${_gid8} SUCCESS duration=${Date.now() - _gt8}ms`);
+  } catch (_ge8: any) {
+    console.error(`[GmailAPI] id=${_gid8} ERROR status=${_ge8?.response?.status ?? _ge8?.code} reason=${_ge8?.response?.data?.error?.errors?.[0]?.reason ?? _ge8?.message} duration=${Date.now() - _gt8}ms`);
+    throw _ge8;
+  }
 }
 
 export async function setupGmailWatch(topicName: string): Promise<{ historyId: string; expiration: string }> {
   const gmail = await getGmailClient();
-  const res = await gmail.users.watch({ userId: "me", requestBody: { topicName, labelIds: ["INBOX"] } });
+  const _gid9 = Math.random().toString(36).slice(2, 10);
+  const _gt9 = Date.now();
+  console.log(`[GmailAPI] id=${_gid9} method=users.watch caller=setupGmailWatch`);
+  let res: any;
+  try {
+    res = await gmail.users.watch({ userId: "me", requestBody: { topicName, labelIds: ["INBOX"] } });
+    console.log(`[GmailAPI] id=${_gid9} SUCCESS duration=${Date.now() - _gt9}ms`);
+  } catch (_ge9: any) {
+    console.error(`[GmailAPI] id=${_gid9} ERROR status=${_ge9?.response?.status ?? _ge9?.code} reason=${_ge9?.response?.data?.error?.errors?.[0]?.reason ?? _ge9?.message} duration=${Date.now() - _gt9}ms`);
+    throw _ge9;
+  }
   return { historyId: res.data.historyId!, expiration: res.data.expiration! };
 }
 
 export async function getNewMessagesSince(startHistoryId: string): Promise<GmailMessage[]> {
   const gmail = await getGmailClient();
   try {
-    const res = await gmail.users.history.list({
-      userId: "me", startHistoryId, historyTypes: ["messageAdded"], labelId: "INBOX",
-    });
+    const _gid10 = Math.random().toString(36).slice(2, 10);
+    const _gt10 = Date.now();
+    console.log(`[GmailAPI] id=${_gid10} method=users.history.list caller=getNewMessagesSince`);
+    let res: any;
+    try {
+      res = await gmail.users.history.list({
+        userId: "me", startHistoryId, historyTypes: ["messageAdded"], labelId: "INBOX",
+      });
+      console.log(`[GmailAPI] id=${_gid10} SUCCESS duration=${Date.now() - _gt10}ms`);
+    } catch (_ge10: any) {
+      console.error(`[GmailAPI] id=${_gid10} ERROR status=${_ge10?.response?.status ?? _ge10?.code} reason=${_ge10?.response?.data?.error?.errors?.[0]?.reason ?? _ge10?.message} duration=${Date.now() - _gt10}ms`);
+      throw _ge10;
+    }
     const history = res.data.history ?? [];
     const messageIds = new Set<string>();
     for (const h of history) {
@@ -382,7 +490,17 @@ export async function getNewMessagesSince(startHistoryId: string): Promise<Gmail
     const messages = await Promise.all(
       Array.from(messageIds).map(async (id) => {
         try {
-          const msgRes = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+          const _gid11 = Math.random().toString(36).slice(2, 10);
+          const _gt11 = Date.now();
+          console.log(`[GmailAPI] id=${_gid11} method=users.messages.get caller=getNewMessagesSince msgId=${id}`);
+          let msgRes: any;
+          try {
+            msgRes = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+            console.log(`[GmailAPI] id=${_gid11} SUCCESS duration=${Date.now() - _gt11}ms`);
+          } catch (_ge11: any) {
+            console.error(`[GmailAPI] id=${_gid11} ERROR status=${_ge11?.response?.status ?? _ge11?.code} reason=${_ge11?.response?.data?.error?.errors?.[0]?.reason ?? _ge11?.message} duration=${Date.now() - _gt11}ms`);
+            throw _ge11;
+          }
           return parseMessage(msgRes.data);
         } catch { return null; }
       })
@@ -400,11 +518,21 @@ export async function getAttachmentData(
   attachmentId: string
 ): Promise<{ data: string; size: number }> {
   const gmail = await getGmailClient();
-  const res = await gmail.users.messages.attachments.get({
-    userId: "me",
-    messageId,
-    id: attachmentId,
-  });
+  const _gid12 = Math.random().toString(36).slice(2, 10);
+  const _gt12 = Date.now();
+  console.log(`[GmailAPI] id=${_gid12} method=users.messages.attachments.get caller=getAttachmentData msgId=${messageId} attachmentId=${attachmentId}`);
+  let res: any;
+  try {
+    res = await gmail.users.messages.attachments.get({
+      userId: "me",
+      messageId,
+      id: attachmentId,
+    });
+    console.log(`[GmailAPI] id=${_gid12} SUCCESS duration=${Date.now() - _gt12}ms`);
+  } catch (_ge12: any) {
+    console.error(`[GmailAPI] id=${_gid12} ERROR status=${_ge12?.response?.status ?? _ge12?.code} reason=${_ge12?.response?.data?.error?.errors?.[0]?.reason ?? _ge12?.message} duration=${Date.now() - _gt12}ms`);
+    throw _ge12;
+  }
   // Gmail returns base64url — convert to standard base64 for data URLs
   const data = (res.data.data ?? "").replace(/-/g, "+").replace(/_/g, "/");
   const size = res.data.size ?? 0;
