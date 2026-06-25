@@ -3335,7 +3335,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceNeedsSearch, setVoiceNeedsSearch] = useState(false);
   const { data: voiceSearchResults = [] } = trpc.opsChat.searchClients.useQuery(
     { query: voiceSearchQuery },
-    { enabled: voiceNeedsSearch && voiceSearchQuery.trim().length >= 2 }
+    { enabled: !!voiceConfirm && voiceSearchQuery.trim().length >= 2 }
   );
 
   const startRecording = useCallback(async () => {
@@ -5401,46 +5401,47 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </button>
               </div>
 
-              {/* Search mode — shown when no client was found by name */}
-              {voiceNeedsSearch && (
-                <div className="px-5 pb-3">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Search for contact</p>
-                  <input
-                    autoFocus
-                    type="text"
-                    placeholder="Type a name..."
-                    value={voiceSearchQuery}
-                    onChange={e => setVoiceSearchQuery(e.target.value)}
-                    className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
-                  />
-                  {voiceSearchQuery.trim().length >= 2 && (
-                    <div className="mt-2 flex flex-col gap-1">
-                      {voiceSearchResults.length === 0 && (
-                        <p className="text-xs text-slate-400 py-1 px-1">No contacts found</p>
-                      )}
-                      {voiceSearchResults.map(m => (
-                        <button
-                          key={m.sessionId}
-                          onClick={() => {
-                            setVoiceNeedsSearch(false);
-                            setVoiceSearchQuery("");
-                            setVoiceConfirm(prev => prev ? { ...prev, selected: m, matches: [m] } : null);
-                          }}
-                          className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-50 hover:bg-violet-50 border border-transparent hover:border-violet-200 transition text-left"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shrink-0">
-                            <span className="text-white font-bold text-xs">{m.name[0].toUpperCase()}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-900 truncate">{m.name}</p>
-                            <p className="text-xs text-slate-400 truncate">{m.phone}</p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Search bar — always visible so user can correct a misheard name */}
+              <div className="px-5 pb-3">
+                <input
+                  type="text"
+                  placeholder="Search or correct contact name..."
+                  value={voiceSearchQuery}
+                  onChange={e => setVoiceSearchQuery(e.target.value)}
+                  className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+                />
+                {voiceSearchQuery.trim().length >= 2 && (
+                  <div className="mt-2 flex flex-col gap-1">
+                    {voiceSearchResults.length === 0 && (
+                      <p className="text-xs text-slate-400 py-1 px-1">No contacts found</p>
+                    )}
+                    {voiceSearchResults.map(m => (
+                      <button
+                        key={m.sessionId}
+                        onClick={() => {
+                          setVoiceNeedsSearch(false);
+                          setVoiceSearchQuery("");
+                          setVoiceConfirm(prev => prev ? { ...prev, selected: m, matches: [m] } : null);
+                        }}
+                        className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-50 hover:bg-violet-50 border border-transparent hover:border-violet-200 transition text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shrink-0">
+                          <span className="text-white font-bold text-xs">{m.name[0].toUpperCase()}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{m.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{m.phone}</p>
+                          {(m as any).lastJobTime && (
+                            <p className="text-[10px] text-violet-500 font-semibold truncate">
+                              {(() => { try { const dt = new Date((m as any).lastJobTime); return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" }) + " · " + dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" }); } catch { return ""; } })()}
+                            </p>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Contact picker — only shown when multiple matches AND none selected yet */}
               {!voiceNeedsSearch && voiceConfirm.matches.length > 1 && !voiceConfirm.selected && (

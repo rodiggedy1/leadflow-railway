@@ -3845,8 +3845,12 @@ Examples:
       const filteredSessions = sessions.filter(s => s.leadPhone);
 
       // Step 3: For each match, look up their most recent job (serviceDateTime + teamName)
+      // Use REGEXP_REPLACE to strip non-digits for matching — leadPhone is E.164 (+1XXXXXXXXXX)
+      // while customerPhone in cleaner_jobs may be stored in different formats
       const matchesWithJob = await Promise.all(
         filteredSessions.map(async s => {
+          // Strip to last 10 digits for a format-agnostic match
+          const p10 = s.leadPhone!.replace(/\D/g, "").slice(-10);
           const recentJobs = await db
             .select({
               serviceDateTime: cleanerJobs.serviceDateTime,
@@ -3854,7 +3858,7 @@ Examples:
               jobDate: cleanerJobs.jobDate,
             })
             .from(cleanerJobs)
-            .where(eq(cleanerJobs.customerPhone, s.leadPhone!))
+            .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + p10}`)
             .orderBy(desc(cleanerJobs.jobDate))
             .limit(1);
           const job = recentJobs[0] ?? null;
@@ -3970,6 +3974,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
       const filtered = sessions.filter(s => s.leadPhone);
       return Promise.all(
         filtered.map(async s => {
+          const p10 = s.leadPhone!.replace(/\D/g, "").slice(-10);
           const recentJobs = await db
             .select({
               serviceDateTime: cleanerJobs.serviceDateTime,
@@ -3977,7 +3982,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
               jobDate: cleanerJobs.jobDate,
             })
             .from(cleanerJobs)
-            .where(eq(cleanerJobs.customerPhone, s.leadPhone!))
+            .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') LIKE ${'%' + p10}`)
             .orderBy(desc(cleanerJobs.jobDate))
             .limit(1);
           const job = recentJobs[0] ?? null;
