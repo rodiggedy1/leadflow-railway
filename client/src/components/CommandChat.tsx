@@ -5463,25 +5463,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
               {/* iMessage-style tap-to-edit bubble */}
               {!voiceNeedsSearch && (
-                <div className="px-5 pb-3">
-                  <div className="flex justify-end">
+                <div className="px-5 pb-5">
+                  <div className="flex justify-end min-h-[140px] items-start pt-1">
                     {voiceBubbleEditing ? (
                       <textarea
                         autoFocus
                         value={voiceConfirmMsg}
                         onChange={e => setVoiceConfirmMsg(e.target.value)}
                         onBlur={() => setVoiceBubbleEditing(false)}
-                        rows={4}
-                        className="w-full max-w-[85%] text-[14px] leading-snug bg-[#007AFF] text-white rounded-[20px] rounded-br-[6px] px-4 py-3 resize-none focus:outline-none shadow-sm placeholder:text-blue-200 caret-white"
+                        rows={6}
+                        className="w-full max-w-[90%] text-[15px] leading-relaxed bg-[#007AFF] text-white rounded-[20px] rounded-br-[6px] px-5 py-4 resize-none focus:outline-none shadow-sm placeholder:text-blue-200 caret-white"
                         style={{colorScheme: "dark"}}
                       />
                     ) : (
                       <button
                         onClick={() => setVoiceBubbleEditing(true)}
-                        className="max-w-[85%] bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-4 py-3 shadow-sm text-left group relative"
+                        className="max-w-[90%] bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-5 py-4 shadow-sm text-left group relative"
                         title="Tap to edit"
                       >
-                        <p className="text-white text-[14px] leading-snug whitespace-pre-wrap">{voiceConfirmMsg || "…"}</p>
+                        <p className="text-white text-[15px] leading-relaxed whitespace-pre-wrap">{voiceConfirmMsg || "\u2026"}</p>
                         <span className="absolute -top-5 right-0 text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition">Tap to edit</span>
                       </button>
                     )}

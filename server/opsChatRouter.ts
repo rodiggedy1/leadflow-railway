@@ -3882,7 +3882,7 @@ Examples:
       const { MAIDS_IN_BLACK_KNOWLEDGE_BASE } = await import("./knowledgeBase");
       const { invokeLLM } = await import("./_core/llm");
       const toneInstructions: Record<string, string> = {
-        friendly: "Warm, personal, emoji-friendly (1\u20132 emojis max). Like a real person texting who genuinely cares. Use the customer's name. Upbeat and reassuring.",
+        friendly: "Warm, personal, emoji-required. You MUST include at least 1 emoji (1\u20132 max) placed naturally in the message — e.g. \uD83D\uDE0A \uD83D\uDC4B \uD83C\uDF1F \uD83D\uDE4F \uD83D\uDCAB. Like a real person texting who genuinely cares. Use the customer's name. Upbeat and reassuring.",
         professional: "Polished and clear. No emoji. Formal but not cold. Concise. Sounds like a well-run business communicating professionally.",
         casual: "Short, conversational, like a quick text from a friend. 1\u20132 sentences max. No corporate language. Natural and relaxed.",
       };
@@ -3896,7 +3896,7 @@ Never be defensive. Never make excuses. Own the experience.
 Sound like a real person, not a brand. No corporate buzzwords, no "we strive to...", no "rest assured".
 Do NOT say "make your home sparkle" or similar cheesy lines.
 === EMOJI RULES ===
-- For friendly tone: 1\u20132 emojis max, placed naturally.
+- For friendly tone: MUST include at least 1 emoji (1\u20132 max), placed naturally. A message with zero emoji for friendly tone is WRONG.
 - For professional tone: no emoji.
 - For casual tone: 0\u20131 emoji max.
 === WHAT NOT TO WRITE ===
