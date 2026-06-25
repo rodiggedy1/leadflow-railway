@@ -3328,6 +3328,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmState | null>(null);
   const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
   const [voiceSending, setVoiceSending] = useState(false);
+  const [voiceSearchQuery, setVoiceSearchQuery] = useState("");
+  const [voiceNeedsSearch, setVoiceNeedsSearch] = useState(false);
+  const { data: voiceSearchResults = [] } = trpc.opsChat.searchClients.useQuery(
+    { query: voiceSearchQuery },
+    { enabled: voiceNeedsSearch && voiceSearchQuery.trim().length >= 2 }
+  );
 
   const startRecording = useCallback(async () => {
     try {
@@ -3414,10 +3420,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           matches: result.matches,
           selected: result.matches.length === 1 ? result.matches[0] : null,
         });
-      } else if (result.action === "text" && result.matches.length === 0 && result.message) {
-        // No client found — fall back to posting in chat
-        toast.warning("No client found — posting to chat instead");
-        onSendMessage(text.trim());
+      } else if (result.action === "text" && result.needsSearch && result.message) {
+        // No client found — show search card so user can find the contact manually
+        setVoiceNeedsSearch(true);
+        setVoiceSearchQuery("");
+        setVoiceConfirmMsg(result.message);
+        setVoiceConfirm({
+          message: result.message,
+          matches: [],
+          selected: null,
+        });
       } else {
         // Unknown action — post as normal chat message
         onSendMessage(text.trim());
@@ -5363,15 +5375,49 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </div>
                 <button
-                  onClick={() => setVoiceConfirm(null)}
+                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); }}
                   className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
 
+              {/* Search mode — shown when no client was found by name */}
+              {voiceNeedsSearch && (
+                <div className="px-4 py-2 border-b border-slate-100">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Search for contact</p>
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Type a name..."
+                    value={voiceSearchQuery}
+                    onChange={e => setVoiceSearchQuery(e.target.value)}
+                    className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+                  />
+                  {voiceSearchQuery.trim().length >= 2 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {voiceSearchResults.length === 0 && (
+                        <p className="text-xs text-slate-400 py-1">No contacts found</p>
+                      )}
+                      {voiceSearchResults.map(m => (
+                        <button
+                          key={m.sessionId}
+                          onClick={() => {
+                            setVoiceNeedsSearch(false);
+                            setVoiceSearchQuery("");
+                            setVoiceConfirm(prev => prev ? { ...prev, selected: m, matches: [m] } : null);
+                          }}
+                          className="px-3 py-1.5 rounded-full text-sm font-medium border bg-white text-slate-700 border-slate-200 hover:border-violet-400 hover:text-violet-700 transition"
+                        >
+                          {m.name} &middot; <span className="text-slate-400">{m.phone}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Contact picker — only shown when multiple matches */}
-              {voiceConfirm.matches.length > 1 && (
+              {!voiceNeedsSearch && voiceConfirm.matches.length > 1 && (
                 <div className="px-4 py-2 border-b border-slate-100">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Who did you mean?</p>
                   <div className="flex flex-wrap gap-1.5">
@@ -5407,7 +5453,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Action buttons */}
               <div className="flex items-center gap-2 px-4 pb-3">
                 <button
-                  onClick={() => setVoiceConfirm(null)}
+                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); }}
                   className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancel
@@ -5426,6 +5472,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
                       setVoiceConfirm(null);
                       setVoiceConfirmMsg("");
+                      setVoiceNeedsSearch(false);
+                      setVoiceSearchQuery("");
                     } catch {
                       toast.error("Failed to send — please try again");
                     } finally {

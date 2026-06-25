@@ -3755,8 +3755,10 @@ Respond ONLY with valid JSON, no markdown:
 
   /**
    * voiceCommand — parse a voice transcript into a structured command.
-   * Currently supports: action="text" (send SMS to a client via CS chat).
+   * Supports: action="text" (send SMS to a client via CS chat).
    * Falls back to action="chat" for unrecognized commands.
+   * When action="text": polishes the message with LLM and looks up the client.
+   * needsSearch=true when the client name wasn't found — frontend shows a search box.
    */
   voiceCommand: opsChatProcedure
     .input(z.object({
@@ -3767,12 +3769,31 @@ Respond ONLY with valid JSON, no markdown:
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      // Step 1: Extract intent from transcript
+      // Step 1: Extract intent + polish message in a single LLM call
       const intentResult = await invokeLLM({
         messages: [
           {
             role: "system",
-            content: `You are a voice command parser for a cleaning business operations app.\nExtract the intent from the voice command transcript.\nReturn JSON only, no explanation.\nSupported actions:\n- "text": user wants to send a text/SMS to a client. Extract name and message.\n- "chat": anything else (post to ops chat, general commands, etc.)\n\nExamples:\n- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"We're running late, be there in 20 minutes."}\n- "Send a message to John Smith telling him we need to reschedule" → {"action":"text","name":"John Smith","message":"Hi, we need to reschedule your appointment. Please let us know your availability."}\n- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null}\n- "Show me today's jobs" → {"action":"chat","name":null,"message":null}`,
+            content: `You are a voice command parser for a cleaning business operations app.
+Extract the intent from the voice command transcript.
+Return JSON only, no explanation.
+Supported actions:
+- "text": user wants to send a text/SMS to a client. Extract name and write a polished, professional, warm, brief SMS message.
+- "chat": anything else (post to ops chat, general commands, etc.)
+
+For "text" action, rewrite the raw message into a polished SMS:
+- Professional but warm and friendly tone
+- Brief (1-3 sentences max)
+- Written from the perspective of a cleaning business
+- Do NOT add generic filler like "Thank you for your patience" unless it fits naturally
+- Keep the core meaning exactly as intended
+
+Examples:
+- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"Hi Maria! Just a quick heads up — we're running a bit behind schedule but will be there in about 20 minutes. See you soon!"}
+- "Send a message to John Smith telling him we need to reschedule" → {"action":"text","name":"John Smith","message":"Hi John, we need to reschedule your upcoming appointment. Please let us know your availability and we'll get you sorted right away!"}
+- "Text Sarah the job is done" → {"action":"text","name":"Sarah","message":"Hi Sarah, just letting you know we've finished up — everything looks great! Let us know if you need anything."}
+- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null}
+- "Show me today's jobs" → {"action":"chat","name":null,"message":null}`,
           },
           { role: "user", content: input.transcript },
         ],
@@ -3799,11 +3820,11 @@ Respond ONLY with valid JSON, no markdown:
       try {
         parsed = JSON.parse(intentResult.choices[0].message.content as string);
       } catch {
-        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null };
+        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null, needsSearch: false, detectedName: null };
       }
 
       if (parsed.action !== "text" || !parsed.name) {
-        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: parsed.message };
+        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: parsed.message, needsSearch: false, detectedName: null };
       }
 
       // Step 2: Look up client by name in conversation_sessions
@@ -3826,11 +3847,51 @@ Respond ONLY with valid JSON, no markdown:
           phone: s.leadPhone!,
         }));
 
+      // If no matches found, return needsSearch=true so frontend shows a search box
+      if (matches.length === 0) {
+        return {
+          action: "text" as const,
+          matches: [] as Array<{ sessionId: number; name: string; phone: string }>,
+          message: parsed.message,
+          needsSearch: true,
+          detectedName: parsed.name,
+        };
+      }
+
       return {
         action: "text" as const,
         matches,
         message: parsed.message,
+        needsSearch: false,
+        detectedName: parsed.name,
       };
+    }),
+
+  /**
+   * searchClients — search conversation_sessions by name for the voice command contact picker.
+   */
+  searchClients: opsChatProcedure
+    .input(z.object({ query: z.string().min(1).max(100) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const nameLike = `%${input.query.trim()}%`;
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+        })
+        .from(conversationSessions)
+        .where(like(conversationSessions.leadName, nameLike))
+        .limit(8);
+      return sessions
+        .filter(s => s.leadPhone)
+        .map(s => ({
+          sessionId: s.id,
+          name: s.leadName ?? "Unknown",
+          phone: s.leadPhone!,
+        }));
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
