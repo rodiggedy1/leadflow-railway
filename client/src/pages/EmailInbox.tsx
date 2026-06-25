@@ -1035,19 +1035,15 @@ export default function EmailInbox() {
   // Resets to server truth every 30s. `readTick` forces re-render after local reads.
   const effectiveUnreadCount = Math.max(0, trueUnreadCount - (readTick >= 0 ? localReadSet.current.size : 0));
 
-  // Build the Gmail search query by composing tab filter + user search
-  const TAB_QUERIES: Record<string, string> = {
-    conversations: "-from:thumbtack.com",
-    unread: "-from:thumbtack.com is:unread",
-    leads: "from:thumbtack.com",
-    all: "",
-    mine: "-from:thumbtack.com", // same base as conversations, filtered client-side by assignedToId
-  };
-  const tabQuery = TAB_QUERIES[activeTab] ?? "";
-  const composedQuery = [tabQuery, debouncedQuery].filter(Boolean).join(" ") || undefined;
+  // Build the Gmail search query — only the user's free-text search is passed to the server.
+  // Tab filtering (unread, leads, mine) is done client-side after the server returns all threads.
+  // showIgnored controls whether ignored-sender threads are included.
+  const composedQuery = debouncedQuery || undefined;
+  // Leads tab shows ignored-sender threads — must pass showIgnored=true to the server
+  const effectiveShowIgnored = showIgnored || activeTab === "leads";
 
   const threadsQuery = trpc.gmail.listThreads.useQuery(
-    { maxResults: 100, query: composedQuery, showIgnored },
+    { maxResults: 100, query: composedQuery, showIgnored: effectiveShowIgnored },
     { enabled: statusQuery.data?.connected === true, staleTime: 30_000, retry: false, refetchOnWindowFocus: false }
   );
 
@@ -1069,8 +1065,8 @@ export default function EmailInbox() {
       const result = await utils.gmail.listThreads.fetch({
         maxResults: 100,
         pageToken: nextToken,
-        query: composedQuery,
-        showIgnored,
+        query: debouncedQuery || undefined,
+        showIgnored: effectiveShowIgnored,
       });
       setExtraThreads((prev) => {
         const existingIds = new Set(prev.map((t) => t.id));
@@ -1339,6 +1335,15 @@ export default function EmailInbox() {
           const meta = metaMap.get(t.id);
           return meta?.assignedToId !== null && meta?.assignedToId !== undefined && meta.assignedToId === currentAgentId;
         })
+      : activeTab === "unread"
+      ? sortedThreads.filter((t) => t.isUnread)
+      : activeTab === "leads"
+      ? sortedThreads.filter((t) => {
+          // Leads = threads from ignored senders (e.g. Thumbtack) visible when showIgnored=true
+          // When showIgnored=false the server already excludes them, so leads tab auto-enables showIgnored
+          const meta = metaMap.get(t.id);
+          return (meta?.isActionable ?? 1) === 0;
+        })
       : sortedThreads;
     if (activeCategoryFilter) {
       const cat = glanceQuery.data?.categories.find((c) => c.category === activeCategoryFilter);
@@ -1493,7 +1498,7 @@ export default function EmailInbox() {
                   </span>
                 )}
               </button>
-            )            )}
+            ))}
           </div>
           {/* Actionable-only toggle + policies link */}
           <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">

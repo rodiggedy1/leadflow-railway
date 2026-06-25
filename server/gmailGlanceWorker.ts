@@ -439,6 +439,9 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     // AI fields (aiCategory, aiSummary, aiUrgency, aiHistoryId, aiProcessedAt) are
     // only included when historyChanged — spreading {} adds no keys, so existing
     // AI values are preserved untouched when we're only repairing display fields.
+    // Resolve sender policy (pure DB lookup — no AI, no Gmail API calls)
+    const { isActionable, actionableReason } = await resolveIsActionable(senderEmail);
+
     await db
       .insert(gmailThreadMeta)
       .values({
@@ -452,6 +455,8 @@ Return ONLY valid JSON. No markdown, no explanation.`,
         snippet,
         lastMessageAt,
         messageCount,
+        isActionable,
+        actionableReason,
         ...aiFields,
       })
       .onDuplicateKeyUpdate({
@@ -465,6 +470,8 @@ Return ONLY valid JSON. No markdown, no explanation.`,
           snippet,
           lastMessageAt,
           messageCount,
+          isActionable,
+          actionableReason,
           ...aiFields,
           updatedAt: new Date(),
         },
