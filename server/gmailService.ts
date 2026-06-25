@@ -216,7 +216,7 @@ export async function listInboxThreads(opts: {
     const batch = threadItems.slice(i, i + GMAIL_THREAD_FETCH_CONCURRENCY);
     const batchResults = await Promise.all(
       batch.map(async (t) => {
-        try { return await getThreadDetail(t.id!); } catch { return null; }
+        try { return await getThreadDetail(t.id!, "listThreads"); } catch { return null; }
       })
     );
     for (let j = 0; j < batchResults.length; j++) {
@@ -232,17 +232,17 @@ export async function listInboxThreads(opts: {
   return { threads: sorted, nextPageToken };
 }
 
-export async function getThreadDetail(threadId: string): Promise<GmailThread> {
+export async function getThreadDetail(threadId: string, parent = "unknown"): Promise<GmailThread> {
   const gmail = await getGmailClient();
   const _gid2 = Math.random().toString(36).slice(2, 10);
   const _gt2 = Date.now();
-  console.log(`[GmailAPI] id=${_gid2} method=users.threads.get caller=getThreadDetail threadId=${threadId}`);
+  console.log(`[GmailAPI] id=${_gid2} parent=${parent} method=users.threads.get caller=getThreadDetail threadId=${threadId}`);
   let res: any;
   try {
     res = await gmail.users.threads.get({ userId: "me", id: threadId, format: "full" });
-    console.log(`[GmailAPI] id=${_gid2} SUCCESS duration=${Date.now() - _gt2}ms`);
+      console.log(`[GmailAPI] id=${_gid2} parent=${parent} SUCCESS duration=${Date.now() - _gt2}ms`);
   } catch (_ge2: any) {
-    console.error(`[GmailAPI] id=${_gid2} ERROR status=${_ge2?.response?.status ?? _ge2?.code} reason=${_ge2?.response?.data?.error?.errors?.[0]?.reason ?? _ge2?.message} duration=${Date.now() - _gt2}ms`);
+      console.error(`[GmailAPI] id=${_gid2} parent=${parent} ERROR status=${_ge2?.response?.status ?? _ge2?.code} reason=${_ge2?.response?.data?.error?.errors?.[0]?.reason ?? _ge2?.message} duration=${Date.now() - _gt2}ms`);
     throw _ge2;
   }
   const messages = (res.data.messages ?? []).map(parseMessage);

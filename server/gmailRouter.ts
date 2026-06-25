@@ -160,7 +160,7 @@ export const gmailRouter = router({
     .input(z.object({ threadId: z.string() }))
     .query(async ({ input }) => {
       const { db } = await requireGmailConnected();
-      const thread = await getThreadDetail(input.threadId);
+      const thread = await getThreadDetail(input.threadId, "getThread");
 
       // Fetch agent log entries for this thread
       const sentLogs = await db
@@ -691,13 +691,15 @@ Write the reply now:`;
     // Fetch in parallel (max 20 concurrent to avoid rate limits)
     const BATCH = 20;
     const threadMap = new Map<string, any>();
+    const _glanceT0 = Date.now();
     for (let i = 0; i < uniqueIds.length; i += BATCH) {
       const batch = uniqueIds.slice(i, i + BATCH);
-      const results = await Promise.allSettled(batch.map((id) => getThreadDetail(id)));
+      const results = await Promise.allSettled(batch.map((id) => getThreadDetail(id, "getGlance")));
       results.forEach((r, idx) => {
         if (r.status === "fulfilled") threadMap.set(batch[idx], r.value);
       });
     }
+    console.log(`[GmailAPI] parent=getGlance completed count=${uniqueIds.length} duration=${Date.now() - _glanceT0}ms`);
 
     // Build final categories using only threads that actually exist in Gmail
     const categories = allCategories
@@ -871,13 +873,15 @@ Write the reply now:`;
     const allThreadIds = Array.from(new Set(openRows.map((r) => r.threadId)));
     const BATCH = 20;
     const threadMap = new Map<string, any>();
+    const _assignT0 = Date.now();
     for (let i = 0; i < allThreadIds.length; i += BATCH) {
       const batch = allThreadIds.slice(i, i + BATCH);
-      const results = await Promise.allSettled(batch.map((id) => getThreadDetail(id)));
+      const results = await Promise.allSettled(batch.map((id) => getThreadDetail(id, "getAgentAssignments")));
       results.forEach((r, idx) => {
         if (r.status === "fulfilled") threadMap.set(batch[idx], r.value);
       });
     }
+    console.log(`[GmailAPI] parent=getAgentAssignments completed count=${allThreadIds.length} duration=${Date.now() - _assignT0}ms`);
 
     // 5. Build per-agent result — include ALL active agents (0-count ones too)
     const result = agentRows.map((agent) => {
