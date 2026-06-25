@@ -89,6 +89,7 @@ async function main() {
   let inboxChanged = 0;
   let alreadyCorrect = 0;
   let errors = 0;
+  let firstErrorLogged = false;
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
@@ -138,7 +139,20 @@ async function main() {
           }
         } catch (err: any) {
           const status = err?.response?.status ?? err?.code ?? "?";
-          console.error(`[Recon] ERROR threadId=${row.threadId} status=${status}`);
+          if (!firstErrorLogged) {
+            firstErrorLogged = true;
+            const data = err?.response?.data ?? {};
+            const apiErrors = data?.error?.errors ?? [];
+            const firstApiError = apiErrors[0] ?? {};
+            console.error(`[Recon] FIRST ERROR — full payload:`);
+            console.error(`  threadId:          ${row.threadId}`);
+            console.error(`  response.status:   ${status}`);
+            console.error(`  response.data:     ${JSON.stringify(data, null, 2)}`);
+            console.error(`  errors[0].reason:  ${firstApiError.reason ?? "(none)"}`);
+            console.error(`  errors[0].message: ${firstApiError.message ?? "(none)"}`);
+          } else {
+            // Suppress duplicate error logs — only count them
+          }
           errors++;
         }
       })
