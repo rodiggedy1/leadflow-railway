@@ -158,6 +158,9 @@ async function main() {
       })
     );
 
+    // Throttle: 200ms between batches → ~100 req/s → ~6,000/min, well under the 15,000/min/user limit
+    await new Promise((r) => setTimeout(r, 200));
+
     // Progress indicator every 100 rows
     const processed = Math.min(i + BATCH, rows.length);
     if (processed % 100 === 0 || processed === rows.length) {
