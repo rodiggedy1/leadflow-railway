@@ -5426,10 +5426,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
           {voiceConfirm && voiceCardMinimized && (
-            /* Minimized pill */
+            /* Minimized pill — fixed bottom-right, floats above chat */
             <div
-              className="mb-2 mx-auto w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition"
-              style={{boxShadow: "0 4px 20px rgba(0,0,0,0.10)"}}
+              className="fixed bottom-6 right-6 z-50 rounded-2xl border border-slate-200 bg-white shadow-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition w-72"
+              style={{boxShadow: "0 8px 32px rgba(0,0,0,0.15)"}}
               onClick={() => setVoiceCardMinimized(false)}
             >
               <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
