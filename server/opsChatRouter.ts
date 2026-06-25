@@ -3782,12 +3782,12 @@ Respond ONLY with valid JSON, no markdown:
             content: `You are a voice command parser for a cleaning business operations app.
 Extract the intent from the voice command transcript.
 Return JSON only, no explanation.
-Supported actions — ALL are EXPLICIT. Only use an action if the transcript clearly matches it:
-- "text": user explicitly says "text", "send a text", "message", or "send message" to a client. Extract the client name and write the SMS message.
-- "call": user explicitly says "call" a client. Extract the client name and write the opening script Ava (the AI voice) will say.
-- "remind": user explicitly says "remind", "reminder", or "set a reminder". Extract the name (or null if no specific person) and the time expression (e.g. "30 minutes", "1 hour", "3pm"). Put the time expression in the "scenario" field. Write a short reminder note in "message".
+Supported actions:
+- "text": user wants to send a text/SMS to a client. Extract the client name and write the SMS message.
+- "call": user wants to make a phone call to a client. Extract the client name and write the opening script Ava (the AI voice) will say.
+- "remind": user wants to set a reminder about a client or task. Extract the name (or null if no specific person) and the time expression (e.g. "30 minutes", "1 hour", "3pm"). Put the time expression in the "scenario" field. Write a short reminder note in "message".
 - "chat": user explicitly says "post in chat", "send chat", "post to chat", or "ops chat". This is for posting a message to the internal ops chat channel.
-- "unknown": the transcript does not clearly match any of the above actions. Use this when the intent is ambiguous or the command is not recognized.
+- "unknown": the transcript does not match text/call/remind AND does not explicitly mention posting to chat. Use this when the intent is ambiguous or unrecognized.
 
 For "text" action, write the SMS message using this EXACT quality standard:
 ${csPrompt}
