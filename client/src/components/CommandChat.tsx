@@ -3359,7 +3359,69 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     } finally {
       setIsTranscribing(false);
     }
-  }, [transcribeVoice]);
+    }, [transcribeVoice]);
+
+  // ── Push-to-talk (PTT) — Ctrl+Shift+Space or hold mic button ─────────────────
+  const [isPttActive, setIsPttActive] = useState(false);
+  const isPttActiveRef = useRef(false); // ref for stale-closure-safe keyup handler
+
+  // Like stopRecording but auto-submits the transcript instead of filling the composer
+  const stopRecordingAndSend = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    setIsRecording(false);
+    setIsPttActive(false);
+    isPttActiveRef.current = false;
+    setIsTranscribing(true);
+    await new Promise<void>(resolve => {
+      mr.onstop = () => resolve();
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+    });
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text } = await transcribeVoice.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      if (text.trim()) {
+        onSendMessage(text.trim());
+        toast.success("Sent via voice");
+      }
+    } catch {
+      toast.error("Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [transcribeVoice, onSendMessage]);
+
+  // Global keyboard shortcut: hold Ctrl+Shift+Space to record, release to send
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.code === "Space" && e.ctrlKey && e.shiftKey && !e.repeat && !isPttActiveRef.current) {
+        e.preventDefault();
+        isPttActiveRef.current = true;
+        setIsPttActive(true);
+        startRecording();
+      }
+    }
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.code === "Space" && isPttActiveRef.current) {
+        e.preventDefault();
+        stopRecordingAndSend();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keyup", onKeyUp);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+  }, [startRecording, stopRecordingAndSend]);
 
     // ── Scroll behaviour ─────────────────────────────────────────────────────────
   // Guard: when OpsChat overlay is display:none, scrollHeight = 0.
@@ -5469,6 +5531,30 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               onBlur={onCmdBlur}
             />
             {/* WhatsApp-style bottom bar: + menu | emoji */}
+              {/* PTT mic button — hold to talk, release to send */}
+              <button
+                className={cn(
+                  "shrink-0 h-9 w-9 rounded-full border-2 flex items-center justify-center transition-all select-none",
+                  isPttActive
+                    ? "border-red-500 bg-red-500 text-white animate-pulse"
+                    : isTranscribing
+                    ? "border-violet-300 bg-violet-50 text-violet-400 cursor-wait"
+                    : "border-slate-200 bg-white hover:border-violet-400 hover:text-violet-600 text-slate-500"
+                )}
+                onMouseDown={(e) => { e.preventDefault(); if (!isPttActiveRef.current && !isTranscribing) { isPttActiveRef.current = true; setIsPttActive(true); startRecording(); } }}
+                onMouseUp={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
+                onMouseLeave={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
+                title="Hold to talk (or hold Ctrl+Shift+Space)"
+                disabled={isTranscribing}
+              >
+                {isPttActive ? (
+                  <span className="w-2.5 h-2.5 rounded-full bg-white" />
+                ) : isTranscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </button>
               {/* Emoji picker */}
               <div ref={emojiRef} className="relative shrink-0">
                 <button
