@@ -1306,6 +1306,7 @@ export const appRouter = router({
         sessionId: z.number().int().positive(),
         message: z.string().min(1).max(1600),
         fromNumberId: z.string().optional(), // Optional override for CS line replies
+        isVoiceCommand: z.boolean().optional(), // Set true when triggered from voice command card
       }))
       .mutation(async ({ input, ctx }) => {
         const agentSession = await getAgentSessionFromCtx(ctx);
@@ -1359,6 +1360,29 @@ export const appRouter = router({
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastSend } = await import("./sseBroadcast");
         bcastSend("lead_update");
+
+        // ── Voice command card: post to ops command channel ───────────────────────
+        if (input.isVoiceCommand && agentSession.agentName) {
+          try {
+            await db.insert(opsChatMessages).values({
+              channel: "command",
+              authorName: "📱 Text Sent",
+              authorRole: "system",
+              body: `📱 ${session.leadName ?? 'Client'} texted via voice command`,
+              quickAction: "voice_text_sent",
+              metadata: JSON.stringify({
+                contactName: session.leadName ?? "Client",
+                contactPhone: session.leadPhone,
+                message: input.message,
+                triggeredBy: agentSession.agentName,
+              }),
+            });
+            bcastSend("ops_chat_message");
+          } catch (e) {
+            console.warn("[sendMessage] Failed to post voice card:", e);
+          }
+        }
+
         return { success: true, smsSent: smsResult.success };
       }),
 

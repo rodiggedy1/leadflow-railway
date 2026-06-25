@@ -4011,6 +4011,44 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         })
       );
     }),
+
+  /**
+   * postVoiceCallCard — insert a voice_call_completed card into the ops command channel.
+   * Called from the client when the call poll resolves to a terminal state.
+   */
+  postVoiceCallCard: opsChatProcedure
+    .input(z.object({
+      contactName: z.string(),
+      contactPhone: z.string().optional(),
+      script: z.string().optional(),
+      outcome: z.enum(["completed", "voicemail", "no_answer", "failed"]),
+      summary: z.string().optional(),
+      durationSeconds: z.number().optional(),
+      triggeredBy: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("DB unavailable");
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        authorName: "📞 Call",
+        authorRole: "system",
+        body: `📞 ${input.contactName} called via voice command — ${input.outcome}`,
+        quickAction: "voice_call_completed",
+        metadata: JSON.stringify({
+          contactName: input.contactName,
+          contactPhone: input.contactPhone ?? "",
+          script: input.script ?? "",
+          outcome: input.outcome,
+          summary: input.summary ?? "",
+          durationSeconds: input.durationSeconds ?? null,
+          triggeredBy: input.triggeredBy,
+        }),
+      });
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("ops_chat_message");
+      return { success: true };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

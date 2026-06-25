@@ -3382,6 +3382,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
   const voiceCommandMutation = trpc.opsChat.voiceCommand.useMutation();
     const sendVoiceText = trpc.leads.sendMessage.useMutation();
+  const postVoiceCallCard = trpc.opsChat.postVoiceCallCard.useMutation();
   const rewriteVoiceMsg = trpc.opsChat.rewriteVoiceMessage.useMutation();
   const [voiceTone, setVoiceTone] = useState<"friendly" | "professional" | "casual">("friendly");
   const [voiceRewriting, setVoiceRewriting] = useState(false);
@@ -3433,22 +3434,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
               if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
               voiceCallPollRef.current = null;
-              // Post voice_call_completed card to ops chat
-              onSendMessage(
-                `📞 ${voiceCallContactNameRef.current ?? "Client"} called via voice command`,
-                undefined, undefined,
-                "voice_call_completed",
-                JSON.stringify({
-                  contactName: voiceCallContactNameRef.current ?? "Client",
-                  contactPhone: voiceCallContactPhoneRef.current ?? "",
-                  triggeredBy: callerName,
-                  script: voiceCallScriptRef.current ?? "",
-                  outcome: s,
-                  summary: poll.summary ?? null,
-                  durationSeconds: poll.durationSeconds ?? null,
-                  recordingUrl: poll.recordingUrl ?? null,
-                })
-              );
+              // Post voice_call_completed card server-side
+              postVoiceCallCard.mutate({
+                contactName: voiceCallContactNameRef.current ?? "Client",
+                contactPhone: voiceCallContactPhoneRef.current ?? "",
+                triggeredBy: callerName,
+                script: voiceCallScriptRef.current ?? "",
+                outcome: s as "completed" | "voicemail" | "no_answer" | "failed",
+                summary: poll.summary ?? undefined,
+                durationSeconds: poll.durationSeconds ?? undefined,
+              });
             }
           } catch { /* ignore */ }
         }, 5000);
@@ -5825,20 +5820,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           sessionId: voiceConfirm.selected.sessionId,
                           message: voiceConfirmMsg.trim(),
                           fromNumberId: "PN0wVLcpCq",
+                          isVoiceCommand: true,
                         });
                         toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
-                        // Post voice_text_sent card to ops chat
-                        onSendMessage(
-                          `📱 ${voiceConfirm.selected.name} texted via voice command`,
-                          undefined, undefined,
-                          "voice_text_sent",
-                          JSON.stringify({
-                            contactName: voiceConfirm.selected.name,
-                            contactPhone: voiceConfirm.selected.phone,
-                            message: voiceConfirmMsg.trim(),
-                            triggeredBy: callerName,
-                          })
-                        );
                         setVoiceConfirm(null);
                         setVoiceConfirmMsg("");
                         setVoiceNeedsSearch(false);
