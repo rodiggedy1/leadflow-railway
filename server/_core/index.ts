@@ -350,11 +350,29 @@ async function startServer() {
       // Start the AI glance worker (600ms interval) and backfill last 100 inbox threads.
       // Purely additive — never touches existing inbox/SMS/webhook flows.
       startGlanceWorker();
-      // Clear any persisted 429 cooldown so a fresh deploy always runs backfill
-      setTimeout(() => {
-        clearBackfillCooldown()
-          .then(() => backfillGlanceQueue())
-          .catch(console.error);
+      // Only run backfill if the inbox hasn't been seeded yet (hydratedRows < 50).
+      // This prevents every deploy from burning Gmail API quota.
+      setTimeout(async () => {
+        try {
+          const db = await getDb();
+          if (!db) return;
+          const { gmailThreadMeta } = await import("../drizzle/schema");
+          const { isNotNull, count } = await import("drizzle-orm");
+          const [row] = await db
+            .select({ hydratedRows: count() })
+            .from(gmailThreadMeta)
+            .where(isNotNull(gmailThreadMeta.senderName));
+          const hydratedRows = Number(row?.hydratedRows ?? 0);
+          if (hydratedRows >= 50) {
+            console.log(`[GlanceWorker] Backfill skipped on startup — inbox already seeded (${hydratedRows} hydrated rows).`);
+            return;
+          }
+          console.log(`[GlanceWorker] Inbox not yet seeded (${hydratedRows} hydrated rows) — running backfill.`);
+          await clearBackfillCooldown();
+          await backfillGlanceQueue();
+        } catch (e) {
+          console.error("[GlanceWorker] Startup backfill guard failed:", e);
+        }
       }, 15_000);
       startInternalCron();
       // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
