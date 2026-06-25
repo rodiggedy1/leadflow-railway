@@ -4,20 +4,11 @@
  * Quota health check — makes exactly ONE Gmail API call:
  *   threads.list({ userId: "me", q: "in:inbox", maxResults: 1 })
  *
- * Prints:
- *   - HTTP status
- *   - Success or failure
- *   - If 429: Retry-After value (if present in response headers)
- *
- * Does NOT start the backfill. Read-only, single call.
+ * Prints auth identity (client ID prefix, token prefix) before calling,
+ * then on failure dumps the full error response.
  *
  * Usage:
  *   node scripts/check-gmail-quota.mjs
- *
- * Requires env vars:
- *   DATABASE_URL          — to read the refresh token from gmail_state
- *   GMAIL_CLIENT_ID
- *   GMAIL_CLIENT_SECRET
  */
 
 import { createConnection } from "mysql2/promise";
@@ -36,22 +27,29 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
 }
 
 async function main() {
-  // Read refresh token from DB (same source the worker uses)
-  const conn = await createConnection(DB_URL);
-  const [rows] = await conn.execute("SELECT refreshToken FROM gmail_state WHERE id = 1");
-  await conn.end();
-
-  const refreshToken = rows[0]?.refreshToken;
+  // Read refresh token — env var first, then DB (mirrors production logic)
+  let refreshToken = process.env.GMAIL_REFRESH_TOKEN || null;
   if (!refreshToken) {
-    console.error("ERROR: No refresh token found in gmail_state");
+    const conn = await createConnection(DB_URL);
+    const [rows] = await conn.execute("SELECT refreshToken FROM gmail_state WHERE id = 1");
+    await conn.end();
+    refreshToken = rows[0]?.refreshToken ?? null;
+  }
+
+  if (!refreshToken) {
+    console.error("ERROR: No refresh token found in env or gmail_state DB");
     process.exit(1);
   }
+
+  // Print identity so we know exactly which OAuth credentials are being used
+  console.log("Client ID:", CLIENT_ID.slice(0, 20) + "...");
+  console.log("Refresh token:", refreshToken.slice(0, 12) + "...");
 
   const auth = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
   auth.setCredentials({ refresh_token: refreshToken });
   const gmail = google.gmail({ version: "v1", auth });
 
-  console.log("Making single threads.list call (maxResults: 1)...");
+  console.log("\nMaking single threads.list call (maxResults: 1)...");
 
   try {
     const res = await gmail.users.threads.list({
@@ -60,26 +58,22 @@ async function main() {
       maxResults: 1,
     });
 
-    const status = res.status;
-    const threadCount = res.data.threads?.length ?? 0;
-    console.log(`\nStatus: ${status}`);
-    console.log(`Result: SUCCESS`);
-    console.log(`Threads returned: ${threadCount}`);
-    console.log("\nQuota is healthy — Gmail API is accepting requests.");
+    console.log("\nStatus:", res.status);
+    console.log("Result: SUCCESS");
+    console.log("Threads returned:", res.data.threads?.length ?? 0);
+    console.log("\nQuota is healthy — safe to enable backfill.");
   } catch (err) {
-    const status = err?.response?.status ?? err?.code ?? "unknown";
-    const retryAfter = err?.response?.headers?.["retry-after"] ?? "not provided";
-    const message = err?.response?.data?.error?.message ?? err?.message ?? "unknown error";
+    console.log("\nStatus:", err?.response?.status ?? err?.code ?? "unknown");
+    console.log("Result: FAILURE");
+    console.log("\n--- response.data ---");
+    console.dir(err?.response?.data, { depth: null });
+    console.log("\n--- response.headers ---");
+    console.dir(err?.response?.headers, { depth: null });
+    console.log("\n--- full error ---");
+    console.dir(err, { depth: null });
 
-    console.log(`\nStatus: ${status}`);
-    console.log(`Result: FAILURE`);
-    console.log(`Error: ${message}`);
-
-    if (status === 429) {
-      console.log(`Retry-After: ${retryAfter}`);
-      console.log("\nQuota is still exhausted. Do not start the backfill yet.");
-    } else {
-      console.log("\nUnexpected error — not a quota issue.");
+    if (err?.response?.status === 429) {
+      console.log("\nQuota still exhausted. Do not enable backfill yet.");
     }
 
     process.exit(1);

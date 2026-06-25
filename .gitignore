@@ -115,5 +115,4 @@ temp/
 # Drizzle migration snapshots — only needed locally, not for deployment
 drizzle/meta/
 
-# Local utility/backfill scripts — not part of the deployed application
-scripts/
+
