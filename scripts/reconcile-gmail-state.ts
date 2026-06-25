@@ -146,6 +146,10 @@ async function main() {
   let rateLimitRetries = 0;
   let firstErrorLogged = false;
 
+  // Track expected post-apply state for in-memory verification
+  // key: threadId, value: { isUnread, isInInbox } as they should be after apply
+  const expectedState = new Map<string, { isUnread: number; isInInbox: number }>();
+
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
 
@@ -185,6 +189,11 @@ async function main() {
               .update(gmailThreadMeta)
               .set(updates)
               .where(eq(gmailThreadMeta.threadId, row.threadId));
+            // Record expected post-apply state for verification
+            expectedState.set(row.threadId, {
+              isUnread: gmailUnread ? 1 : 0,
+              isInInbox: gmailInbox ? 1 : 0,
+            });
           }
         } catch (err: any) {
           const status = err?.response?.status ?? err?.code ?? "?";
@@ -227,20 +236,52 @@ async function main() {
       ? `${(durationMs / 1000).toFixed(1)}s`
       : `${Math.floor(durationMs / 60_000)}m${Math.floor((durationMs % 60_000) / 1000)}s`;
 
+  // ── Post-apply verification ─────────────────────────────────────────────────
+  let remainingUnreadMismatches = 0;
+  let remainingInboxMismatches = 0;
+
+  if (isApply && expectedState.size > 0) {
+    const threadIds = Array.from(expectedState.keys());
+    // Re-query DB for the rows we just updated
+    const verifyRows: { threadId: string; isUnread: number; isInInbox: number }[] = await db
+      .select({
+        threadId: gmailThreadMeta.threadId,
+        isUnread: gmailThreadMeta.isUnread,
+        isInInbox: gmailThreadMeta.isInInbox,
+      })
+      .from(gmailThreadMeta)
+      .where(eq(gmailThreadMeta.isInInbox, 1));
+
+    const verifyMap = new Map(verifyRows.map((r) => [r.threadId, r]));
+    for (const [tid, expected] of expectedState) {
+      const actual = verifyMap.get(tid);
+      if (!actual) continue;
+      if (actual.isUnread !== expected.isUnread) remainingUnreadMismatches++;
+      if (actual.isInInbox !== expected.isInInbox) remainingInboxMismatches++;
+    }
+  }
+
   console.log(`
 [Recon] ─────────────────────────────────────────
 [Recon] ${isDryRun ? "DRY RUN complete — no changes written" : "APPLY complete"}
 [Recon]
-[Recon] Total inbox rows in DB: ${allRows.length}
-[Recon] Rows in this pass:      ${rows.length} (offset=${offset})
-[Recon] Updates:
-[Recon]   isUnread:        ${unreadChanged} changed
-[Recon]   isInInbox:       ${inboxChanged} changed
-[Recon]   Already correct: ${alreadyCorrect}
-[Recon]   Errors:          ${errors}${rateLimitRetries > 0 ? ` (${rateLimitRetries} rate-limit retries)` : ""}
-[Recon] Duration:          ${durationStr}
+[Recon] Rows scanned:    ${allRows.length} total (${rows.length} in this pass, offset=${offset})
+[Recon] Updated unread:  ${unreadChanged}
+[Recon] Updated inbox:   ${inboxChanged}
+[Recon] Already correct: ${alreadyCorrect}
+[Recon] Errors:          ${errors}
+[Recon] Rate-limit pauses: ${rateLimitRetries}
+[Recon] Duration:        ${durationStr}${
+    isApply && expectedState.size > 0
+      ? `\n[Recon]\n[Recon] Verification:\n[Recon]   Remaining unread mismatches: ${remainingUnreadMismatches}\n[Recon]   Remaining inbox mismatches:  ${remainingInboxMismatches}`
+      : ""
+  }
 [Recon] ─────────────────────────────────────────
 `);
+
+  if (isApply && (remainingUnreadMismatches > 0 || remainingInboxMismatches > 0)) {
+    console.warn(`[Recon] WARNING: ${remainingUnreadMismatches + remainingInboxMismatches} rows still mismatched after apply. Re-run --apply to retry.`);
+  }
 
   process.exit(0);
 }
