@@ -3770,7 +3770,8 @@ Respond ONLY with valid JSON, no markdown:
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      // Step 1: Extract intent + polish message in a single LLM call
+      // Step 1: Extract intent + write message in full CS-chat friendly quality from the start
+      const csPrompt = buildSystemPrompt();
       const intentResult = await invokeLLM({
         messages: [
           {
@@ -3779,20 +3780,21 @@ Respond ONLY with valid JSON, no markdown:
 Extract the intent from the voice command transcript.
 Return JSON only, no explanation.
 Supported actions:
-- "text": user wants to send a text/SMS to a client. Extract name and write a polished, professional, warm, brief SMS message.
+- "text": user wants to send a text/SMS to a client. Extract the client name and write the SMS message.
 - "chat": anything else (post to ops chat, general commands, etc.)
 
-For "text" action, rewrite the raw message into a polished SMS:
-- Professional but warm and friendly tone
-- Brief (1-3 sentences max)
-- Written from the perspective of a cleaning business
-- Do NOT add generic filler like "Thank you for your patience" unless it fits naturally
-- Keep the core meaning exactly as intended
+For "text" action, write the SMS message using this EXACT quality standard:
+${csPrompt}
+
+=== TONE OVERRIDE FOR VOICE COMMANDS ===
+This is a FRIENDLY message. Be warm, personal, and upbeat. Use the customer's name.
+You MUST include at least 1 emoji (1–2 max) placed naturally — e.g. 😊 👋 🙏 💛 ✨ 💪.
+A message with ZERO emoji is WRONG.
+Write until the message feels complete and warm.
 
 Examples:
-- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"Hi Maria! Just a quick heads up — we're running a bit behind schedule but will be there in about 20 minutes. See you soon!"}
-- "Send a message to John Smith telling him we need to reschedule" → {"action":"text","name":"John Smith","message":"Hi John, we need to reschedule your upcoming appointment. Please let us know your availability and we'll get you sorted right away!"}
-- "Text Sarah the job is done" → {"action":"text","name":"Sarah","message":"Hi Sarah, just letting you know we've finished up — everything looks great! Let us know if you need anything."}
+- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"Hey Maria! Just wanted to give you a heads up — we're running a little behind but we'll be there in about 20 minutes. Hang tight! 😊"}
+- "Text Sarah the job is done" → {"action":"text","name":"Sarah","message":"Hi Sarah! Just finished up and everything looks great! 🏡 Let us know if there's anything you'd like us to touch up."}
 - "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null}
 - "Show me today's jobs" → {"action":"chat","name":null,"message":null}`,
           },
