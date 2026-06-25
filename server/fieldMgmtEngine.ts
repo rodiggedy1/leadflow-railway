@@ -2053,38 +2053,17 @@ export async function runCheckinCalls(): Promise<{ checked: number; called: numb
     const staggerMs = jobIndex * 30 * 1000;
     jobIndex++;
 
-    // Fire all 3 attempts asynchronously (non-blocking, staggered)
+    // Single attempt only — one call per window, no retry
     sleep(staggerMs)
       .then(async () => {
-        // ── Attempt 1 ──
         const claimed1 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_attempt_1", recipientPhone: cleanerPhoneForCall });
         if (!claimed1) return;
         await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_attempt_1");
         called++;
-
-        // Wait 2 minutes, re-check status
-        await sleep(2 * 60 * 1000);
-        const stillNeeded1 = await isCheckinStillNeeded(jobIdForCall);
-        if (!stillNeeded1) return;
-
-        // ── Attempt 2 ──
-        const claimed2 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_attempt_2", recipientPhone: cleanerPhoneForCall });
-        if (!claimed2) return;
-        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_attempt_2");
-
-        // Wait 2 more minutes, re-check status
-        await sleep(2 * 60 * 1000);
-        const stillNeeded2 = await isCheckinStillNeeded(jobIdForCall);
-        if (!stillNeeded2) return;
-
-        // ── Attempt 3 ──
-        const claimed3 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_attempt_3", recipientPhone: cleanerPhoneForCall });
-        if (!claimed3) return;
-        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_attempt_3");
       })
       .catch((err) => {
         errors++;
-        console.error(`[FieldMgmt] T-58 check-in call chain failed for job ${jobIdForCall}:`, err);
+        console.error(`[FieldMgmt] T-58 check-in call failed for job ${jobIdForCall}:`, err);
       });
   }
 
@@ -2256,38 +2235,17 @@ export async function runCheckinCallsT30(): Promise<{ checked: number; called: n
     const staggerMs = jobIndex * 30 * 1000;
     jobIndex++;
 
-    // Fire all 3 attempts asynchronously (non-blocking, staggered)
+    // Single attempt only — one call per window, no retry
     sleep(staggerMs)
       .then(async () => {
-        // ── Attempt 1 ──
         const claimed1 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_t30_attempt_1", recipientPhone: cleanerPhoneForCall });
         if (!claimed1) return;
         await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_t30_attempt_1");
         called++;
-
-        // Wait 2 minutes, re-check status
-        await sleep(2 * 60 * 1000);
-        const stillNeeded1 = await isCheckinStillNeeded(jobIdForCall);
-        if (!stillNeeded1) return;
-
-        // ── Attempt 2 ──
-        const claimed2 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_t30_attempt_2", recipientPhone: cleanerPhoneForCall });
-        if (!claimed2) return;
-        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_t30_attempt_2");
-
-        // Wait 2 more minutes, re-check status
-        await sleep(2 * 60 * 1000);
-        const stillNeeded2 = await isCheckinStillNeeded(jobIdForCall);
-        if (!stillNeeded2) return;
-
-        // ── Attempt 3 ──
-        const claimed3 = await tryClaimStep({ cleanerJobId: jobIdForCall, step: "checkin_call_t30_attempt_3", recipientPhone: cleanerPhoneForCall });
-        if (!claimed3) return;
-        await placeCheckinCall(jobIdForCall, cleanerNameForCall, cleanerPhoneForCall, script, "checkin_call_t30_attempt_3");
       })
       .catch((err) => {
         errors++;
-        console.error(`[FieldMgmt] T-30 check-in call chain failed for job ${jobIdForCall}:`, err);
+        console.error(`[FieldMgmt] T-30 check-in call failed for job ${jobIdForCall}:`, err);
       });
   }
 
