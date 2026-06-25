@@ -21,7 +21,7 @@
 
 import { getDb } from "./db";
 import { gmailThreadMeta } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, isNull, isNotNull, and, or } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { google } from "googleapis";
@@ -591,6 +591,46 @@ export async function backfillGlanceQueue(): Promise<void> {
     }
 
     console.log(`[GlanceWorker] Backfill: ${enqueued} threads enqueued (${threadIds.length - enqueued} already processed) totalInbox=${threadIds.length} totalInDB=${existingRows.length} processedInDB=${processedSet.size}`);
+
+    // ── Self-healing repair pass ────────────────────────────────────────────
+    // Enqueue inbox rows that are classified (aiHistoryId IS NOT NULL) but
+    // missing any display field. Covers legacy rows written before display
+    // columns existed, and any future partial-write failures.
+    // processThread() will repair metadata without re-running AI when
+    // historyId is unchanged (the common case for these rows).
+    const enqueuedSet = new Set<string>(threadIds);
+    const repairRows = await db
+      .select({ threadId: gmailThreadMeta.threadId })
+      .from(gmailThreadMeta)
+      .where(
+        and(
+          isNotNull(gmailThreadMeta.aiHistoryId),
+          eq(gmailThreadMeta.isInInbox, 1),
+          or(
+            isNull(gmailThreadMeta.senderName),
+            isNull(gmailThreadMeta.senderEmail),
+            isNull(gmailThreadMeta.subject),
+            isNull(gmailThreadMeta.snippet),
+            isNull(gmailThreadMeta.lastMessageAt),
+            isNull(gmailThreadMeta.messageCount),
+          )
+        )
+      );
+
+    let repairEnqueued = 0;
+    for (const row of repairRows) {
+      if (!enqueuedSet.has(row.threadId)) {
+        enqueueThread(row.threadId, "backfill");
+        enqueuedSet.add(row.threadId); // prevent double-enqueue within this pass
+        repairEnqueued++;
+      }
+    }
+
+    if (repairEnqueued > 0) {
+      console.log(`[GlanceWorker] Repair pass: ${repairEnqueued} partially-hydrated inbox rows enqueued`);
+    } else {
+      console.log(`[GlanceWorker] Repair pass: 0 rows need repair`);
+    }
   } catch (err) {
     console.error("[GlanceWorker] Backfill error:", err);
   }
