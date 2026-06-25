@@ -3343,6 +3343,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceCallTranscript, setVoiceCallTranscript] = useState<string | null>(null);
   const [voiceCallRecordingUrl, setVoiceCallRecordingUrl] = useState<string | null>(null);
   const [voiceCallShowTranscript, setVoiceCallShowTranscript] = useState(false);
+  const [voiceCardMinimized, setVoiceCardMinimized] = useState(false);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const voiceCallUtils = trpc.useUtils();
   // startCall mutation — verbatim from AICallPanel
@@ -5424,7 +5425,43 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     <TypingBubble typers={cmdTypers} />
 
           {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
-          {voiceConfirm && (
+          {voiceConfirm && voiceCardMinimized && (
+            /* Minimized pill */
+            <div
+              className="mb-2 mx-auto w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition"
+              style={{boxShadow: "0 4px 20px rgba(0,0,0,0.10)"}}
+              onClick={() => setVoiceCardMinimized(false)}
+            >
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
+                <span className="text-white font-bold text-sm">{(voiceConfirm.selected?.name ?? "?")[0].toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{voiceConfirmAction === "call" ? "AI Call" : "Send Text"}</p>
+                <p className="text-sm font-semibold text-slate-800 truncate">
+                  {voiceConfirmAction === "call" && voiceCallStatus !== "idle"
+                    ? (voiceCallStatus === "firing" ? "Placing call…" :
+                       voiceCallStatus === "queued" ? "Call queued…" :
+                       voiceCallStatus === "ringing" ? `📞 Ringing… ${voiceConfirm.selected?.name ?? ""}` :
+                       voiceCallStatus === "in_progress" ? `🟢 In progress — ${voiceConfirm.selected?.name ?? ""}` :
+                       voiceCallStatus === "completed" ? `✅ Done — ${voiceConfirm.selected?.name ?? ""}` :
+                       voiceCallStatus === "voicemail" ? `📩 Voicemail — ${voiceConfirm.selected?.name ?? ""}` :
+                       voiceCallStatus === "no_answer" ? `🔇 No answer — ${voiceConfirm.selected?.name ?? ""}` :
+                       `❌ Failed — ${voiceConfirm.selected?.name ?? ""}`)
+                    : (voiceConfirm.selected?.name ?? "Select contact")}
+                </p>
+              </div>
+              {(voiceCallStatus === "firing" || voiceCallStatus === "queued" || voiceCallStatus === "ringing" || voiceCallStatus === "in_progress") && (
+                <Loader2 className="h-4 w-4 animate-spin text-violet-500 shrink-0" />
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current); setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); setVoiceCallStatus("idle"); setVoiceCallVapiId(null); setVoiceCallSummary(null); setVoiceCallTranscript(null); setVoiceCallRecordingUrl(null); setVoiceCardMinimized(false); }}
+                className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          {voiceConfirm && !voiceCardMinimized && (
             <div className="mb-2 mx-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[480px] flex flex-col" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
               {/* Header — contact identity */}
               <div className="flex items-start gap-4 px-5 pt-5 pb-4">
@@ -5461,13 +5498,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   })()}
                 </div>
 
-                {/* Close button */}
-                <button
-                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
-                  className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition -mt-0.5"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                {/* Minimize + Close buttons */}
+                <div className="flex items-center gap-1 -mt-0.5">
+                  <button
+                    onClick={() => setVoiceCardMinimized(true)}
+                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                    title="Minimize"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  </button>
+                  <button
+                    onClick={() => { if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current); setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); setVoiceCallStatus("idle"); setVoiceCallVapiId(null); setVoiceCallSummary(null); setVoiceCallTranscript(null); setVoiceCallRecordingUrl(null); setVoiceCardMinimized(false); }}
+                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                    title="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               {/* Search bar — always visible so user can correct a misheard name */}
@@ -5723,7 +5770,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       if (!voiceConfirm.selected) return;
                       setVoiceCallStatus("firing");
                       voiceStartCallMutation.mutate({
-                        cleanerJobId: 0,
+                        cleanerJobId: 1,
                         jobDate: "",
                         personName: voiceConfirm.selected.name,
                         phone: voiceConfirm.selected.phone,
