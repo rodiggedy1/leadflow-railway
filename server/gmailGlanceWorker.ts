@@ -20,7 +20,7 @@
  */
 
 import { getDb } from "./db";
-import { gmailThreadMeta } from "../drizzle/schema";
+import { gmailThreadMeta, gmailSenderPolicies } from "../drizzle/schema";
 import { eq, isNull, isNotNull, and, or } from "drizzle-orm";
 import { invokeLLM } from "./_core/llm";
 import { ENV } from "./_core/env";
@@ -48,6 +48,50 @@ export const GLANCE_CATEGORY_META: Record<GlanceCategory, { label: string; emoji
   revenue_opportunity:   { label: "Revenue opportunity",     emoji: "📈", color: "text-blue-600" },
   general:               { label: "General",                 emoji: "📧", color: "text-slate-500" },
 };
+
+// ── Sender policy resolution ─────────────────────────────────────────────────
+/**
+ * Resolve whether a thread from the given senderEmail is actionable.
+ * Priority:
+ *   1. Exact email rule in gmail_sender_policies
+ *   2. Domain rule in gmail_sender_policies
+ *   3. Default → { isActionable: 1, actionableReason: 'DEFAULT' }
+ *
+ * No AI, no Gmail API calls — pure DB lookup.
+ */
+export async function resolveIsActionable(
+  senderEmail: string
+): Promise<{ isActionable: number; actionableReason: string }> {
+  const db = await getDb();
+  if (!db) return { isActionable: 1, actionableReason: "DEFAULT" };
+  const emailLower = senderEmail.toLowerCase().trim();
+  const domainMatch = emailLower.split("@")[1] ?? "";
+
+  // 1. Exact email rule
+  const [emailRule] = await db
+    .select({ isActionable: gmailSenderPolicies.isActionable })
+    .from(gmailSenderPolicies)
+    .where(eq(gmailSenderPolicies.senderEmail, emailLower))
+    .limit(1);
+  if (emailRule !== undefined) {
+    return { isActionable: emailRule.isActionable, actionableReason: "EMAIL_RULE" };
+  }
+
+  // 2. Domain rule
+  if (domainMatch) {
+    const [domainRule] = await db
+      .select({ isActionable: gmailSenderPolicies.isActionable })
+      .from(gmailSenderPolicies)
+      .where(eq(gmailSenderPolicies.senderDomain, domainMatch))
+      .limit(1);
+    if (domainRule !== undefined) {
+      return { isActionable: domainRule.isActionable, actionableReason: "DOMAIN_RULE" };
+    }
+  }
+
+  // 3. Default
+  return { isActionable: 1, actionableReason: "DEFAULT" };
+}
 
 // ── In-memory queue (deduped by threadId) ─────────────────────────────────────
 const _queue = new Set<string>();

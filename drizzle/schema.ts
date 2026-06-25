@@ -2867,6 +2867,17 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   lastMessageAt: bigint("lastMessageAt", { mode: "number" }),
   /** Total number of messages in the thread. Written by worker on every processThread. */
   messageCount: int("messageCount"),
+  /**
+   * Whether this thread is actionable (1) or should be hidden from the default inbox view (0).
+   * Resolved by the worker against gmail_sender_policies: email rule > domain rule > default (1).
+   */
+  isActionable: int("isActionable").default(1).notNull(),
+  /**
+   * Why isActionable was set to its current value.
+   * Values: 'DEFAULT' | 'EMAIL_RULE' | 'DOMAIN_RULE'
+   * Application-validated varchar — not a DB enum so new sources can be added without migrations.
+   */
+  actionableReason: varchar("actionableReason", { length: 20 }).default("DEFAULT").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -3185,3 +3196,32 @@ export const inboundSms = mysqlTable("inbound_sms", {
 }));
 export type InboundSms = typeof inboundSms.$inferSelect;
 export type InsertInboundSms = typeof inboundSms.$inferInsert;
+
+// ── Gmail Sender Policies ─────────────────────────────────────────────────────
+/**
+ * gmail_sender_policies — per-sender or per-domain rules that control whether
+ * threads from a given sender are treated as "actionable" (shown in inbox) or
+ * "ignored" (hidden from default view, excluded from unread badge).
+ *
+ * Priority order when resolving a thread's isActionable:
+ *   1. Exact senderEmail match
+ *   2. senderDomain match
+ *   3. Default → isActionable = 1
+ *
+ * Only one of senderEmail or senderDomain should be set per row.
+ */
+export const gmailSenderPolicies = mysqlTable("gmail_sender_policies", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Exact sender email address to match, e.g. "notifications@thumbtack.com" */
+  senderEmail: varchar("senderEmail", { length: 255 }),
+  /** Domain to match, e.g. "thumbtack.com" */
+  senderDomain: varchar("senderDomain", { length: 255 }),
+  /** 1 = actionable (show in inbox), 0 = ignored (hide from inbox) */
+  isActionable: int("isActionable").default(1).notNull(),
+  /** Human-readable label, e.g. "Thumbtack notifications" */
+  label: varchar("label", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GmailSenderPolicy = typeof gmailSenderPolicies.$inferSelect;
+export type InsertGmailSenderPolicy = typeof gmailSenderPolicies.$inferInsert;

@@ -47,6 +47,7 @@ const Performance = lazy(() => import("./pages/Performance"));
 const Metrics = lazy(() => import("./pages/Metrics"));
 const LeadNurturing = lazy(() => import("./pages/LeadNurturing"));
 const EmailInbox = lazy(() => import("./pages/EmailInbox"));
+const SenderPoliciesPage = lazy(() => import("./pages/SenderPoliciesPage"));
 const AICallMatrix = lazy(() => import("./pages/AICallMatrix"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
@@ -115,6 +116,7 @@ function Router() {
         <Route path={"/admin/metrics"} component={Metrics} />
         <Route path={"/admin/lead-nurturing"} component={LeadNurturing} />
         <Route path={"/admin/inbox"} component={EmailInbox} />
+        <Route path={"/admin/inbox/sender-policies"} component={SenderPoliciesPage} />
         <Route path={"/admin/ai-calls"} component={AICallMatrix} />
         <Route path={"/admin/cleaner-calls"} component={CleanerCalls} />
         <Route path={"/pay/:token"} component={CardAuth} />

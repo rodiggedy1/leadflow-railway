@@ -9,9 +9,9 @@ import { router, agentProcedure } from "./_core/trpc";
 import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
-import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents } from "../drizzle/schema";
+import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents, gmailSenderPolicies } from "../drizzle/schema";
 import { eq, or, inArray, desc, isNotNull, isNull, and, like, sql } from "drizzle-orm";
-import { processThread, enqueueThread, GLANCE_CATEGORY_META, type GlanceCategory } from "./gmailGlanceWorker";
+import { processThread, enqueueThread, GLANCE_CATEGORY_META, type GlanceCategory, resolveIsActionable } from "./gmailGlanceWorker";
 import {
   getInboxEmailAddress,
   getThreadDetail,
@@ -65,6 +65,7 @@ export const gmailRouter = router({
         pageToken: z.string().optional(),
         maxResults: z.number().min(1).max(500).default(100),
         query: z.string().optional(),
+        showIgnored: z.boolean().optional().default(false),
       })
     )
     .query(async ({ input }) => {
@@ -77,6 +78,10 @@ export const gmailRouter = router({
 
       // Build WHERE clause: inbox only + only rows the worker has processed (senderName IS NOT NULL)
       const conditions = [eq(gmailThreadMeta.isInInbox, 1), isNotNull(gmailThreadMeta.senderName)];
+      // When showIgnored=false (default), only show actionable threads
+      if (!input.showIgnored) {
+        conditions.push(eq(gmailThreadMeta.isActionable, 1));
+      }
       if (cursorAt && !isNaN(cursorAt)) {
         conditions.push(sql`${gmailThreadMeta.lastMessageAt} < ${cursorAt}`);
       }
@@ -889,6 +894,145 @@ Write the reply now:`;
 
     return { agents: result };
   }),
+
+  // ── Sender Policy procedures ─────────────────────────────────────────────────
+
+  /** List all sender policies */
+  listSenderPolicies: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) return { policies: [] };
+    const rows = await db
+      .select()
+      .from(gmailSenderPolicies)
+      .orderBy(desc(gmailSenderPolicies.createdAt));
+    return { policies: rows };
+  }),
+
+  /**
+   * Create or update a sender policy.
+   * After saving, bulk-re-resolves all affected threads (no blind reset).
+   */
+  upsertSenderPolicy: agentProcedure
+    .input(
+      z.object({
+        id: z.number().int().positive().optional(), // present = update
+        senderEmail: z.string().max(255).optional(),
+        senderDomain: z.string().max(255).optional(),
+        isActionable: z.number().int().min(0).max(1),
+        label: z.string().max(100).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available." });
+
+      if (!input.senderEmail && !input.senderDomain) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "senderEmail or senderDomain required." });
+      }
+
+      if (input.id) {
+        // Update existing
+        await db
+          .update(gmailSenderPolicies)
+          .set({
+            senderEmail: input.senderEmail ?? null,
+            senderDomain: input.senderDomain ?? null,
+            isActionable: input.isActionable,
+            label: input.label ?? null,
+            updatedAt: new Date(),
+          })
+          .where(eq(gmailSenderPolicies.id, input.id));
+      } else {
+        // Insert new
+        await db.insert(gmailSenderPolicies).values({
+          senderEmail: input.senderEmail ?? null,
+          senderDomain: input.senderDomain ?? null,
+          isActionable: input.isActionable,
+          label: input.label ?? null,
+        });
+      }
+
+      // Re-resolve all affected threads (email match or domain match)
+      const emailLower = (input.senderEmail ?? "").toLowerCase().trim();
+      const domainLower = (input.senderDomain ?? "").toLowerCase().trim();
+
+      const affectedRows = await db
+        .select({ threadId: gmailThreadMeta.threadId, senderEmail: gmailThreadMeta.senderEmail })
+        .from(gmailThreadMeta)
+        .where(
+          or(
+            emailLower ? like(gmailThreadMeta.senderEmail, emailLower) : sql`FALSE`,
+            domainLower ? sql`${gmailThreadMeta.senderEmail} LIKE ${`%@${domainLower}`}` : sql`FALSE`
+          )!
+        );
+
+      let updated = 0;
+      for (const row of affectedRows) {
+        const { isActionable: newActionable, actionableReason: newReason } = await resolveIsActionable(
+          row.senderEmail ?? ""
+        );
+        await db
+          .update(gmailThreadMeta)
+          .set({ isActionable: newActionable, actionableReason: newReason, updatedAt: new Date() })
+          .where(eq(gmailThreadMeta.threadId, row.threadId));
+        updated++;
+      }
+
+      console.log(`[SenderPolicy] upsert senderEmail=${emailLower || null} senderDomain=${domainLower || null} isActionable=${input.isActionable} threadsUpdated=${updated}`);
+      return { success: true, threadsUpdated: updated };
+    }),
+
+  /**
+   * Delete a sender policy.
+   * After deleting, re-resolves affected threads against remaining policies
+   * (a deleted email rule may fall back to a domain rule — NOT a blind DEFAULT reset).
+   */
+  deleteSenderPolicy: agentProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB not available." });
+
+      // Fetch the policy before deleting so we know which threads to re-resolve
+      const [policy] = await db
+        .select()
+        .from(gmailSenderPolicies)
+        .where(eq(gmailSenderPolicies.id, input.id))
+        .limit(1);
+      if (!policy) throw new TRPCError({ code: "NOT_FOUND", message: "Policy not found." });
+
+      // Delete the policy
+      await db.delete(gmailSenderPolicies).where(eq(gmailSenderPolicies.id, input.id));
+
+      // Re-resolve affected threads (policy is now gone — remaining rules apply)
+      const emailLower = (policy.senderEmail ?? "").toLowerCase().trim();
+      const domainLower = (policy.senderDomain ?? "").toLowerCase().trim();
+
+      const affectedRows = await db
+        .select({ threadId: gmailThreadMeta.threadId, senderEmail: gmailThreadMeta.senderEmail })
+        .from(gmailThreadMeta)
+        .where(
+          or(
+            emailLower ? like(gmailThreadMeta.senderEmail, emailLower) : sql`FALSE`,
+            domainLower ? sql`${gmailThreadMeta.senderEmail} LIKE ${`%@${domainLower}`}` : sql`FALSE`
+          )!
+        );
+
+      let updated = 0;
+      for (const row of affectedRows) {
+        const { isActionable: newActionable, actionableReason: newReason } = await resolveIsActionable(
+          row.senderEmail ?? ""
+        );
+        await db
+          .update(gmailThreadMeta)
+          .set({ isActionable: newActionable, actionableReason: newReason, updatedAt: new Date() })
+          .where(eq(gmailThreadMeta.threadId, row.threadId));
+        updated++;
+      }
+
+      console.log(`[SenderPolicy] deleted id=${input.id} senderEmail=${emailLower || null} senderDomain=${domainLower || null} threadsReResolved=${updated}`);
+      return { success: true, threadsReResolved: updated };
+    }),
 
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {

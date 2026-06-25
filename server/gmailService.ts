@@ -657,7 +657,8 @@ export async function getConversationsUnreadCount(): Promise<number> {
     .where(
       and(
         eq(gmailThreadMeta.isUnread, 1),
-        sql`COALESCE(${gmailThreadMeta.aiCategory}, '') != 'thumbtack'`
+        eq(gmailThreadMeta.isInInbox, 1),
+        eq(gmailThreadMeta.isActionable, 1)
       )
     );
   return Number(row?.count ?? 0);
