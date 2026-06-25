@@ -3842,19 +3842,38 @@ Examples:
         .where(like(conversationSessions.leadName, nameLike))
         .limit(5);
 
-      const matches = sessions
-        .filter(s => s.leadPhone)
-        .map(s => ({
-          sessionId: s.id,
-          name: s.leadName ?? "Unknown",
-          phone: s.leadPhone!,
-        }));
+      const filteredSessions = sessions.filter(s => s.leadPhone);
+
+      // Step 3: For each match, look up their most recent job (serviceDateTime + teamName)
+      const matchesWithJob = await Promise.all(
+        filteredSessions.map(async s => {
+          const recentJobs = await db
+            .select({
+              serviceDateTime: cleanerJobs.serviceDateTime,
+              teamName: cleanerJobs.teamName,
+              jobDate: cleanerJobs.jobDate,
+            })
+            .from(cleanerJobs)
+            .where(eq(cleanerJobs.customerPhone, s.leadPhone!))
+            .orderBy(desc(cleanerJobs.jobDate))
+            .limit(1);
+          const job = recentJobs[0] ?? null;
+          return {
+            sessionId: s.id,
+            name: s.leadName ?? "Unknown",
+            phone: s.leadPhone!,
+            lastJobDate: job?.jobDate ?? null,
+            lastJobTime: job?.serviceDateTime ?? null,
+            lastJobTeam: job?.teamName ?? null,
+          };
+        })
+      );
 
       // If no matches found, return needsSearch=true so frontend shows a search box
-      if (matches.length === 0) {
+      if (matchesWithJob.length === 0) {
         return {
           action: "text" as const,
-          matches: [] as Array<{ sessionId: number; name: string; phone: string }>,
+          matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>,
           message: parsed.message,
           needsSearch: true,
           detectedName: parsed.name,
@@ -3863,7 +3882,7 @@ Examples:
 
       return {
         action: "text" as const,
-        matches,
+        matches: matchesWithJob,
         message: parsed.message,
         needsSearch: false,
         detectedName: parsed.name,
@@ -3948,13 +3967,30 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         .from(conversationSessions)
         .where(like(conversationSessions.leadName, nameLike))
         .limit(8);
-      return sessions
-        .filter(s => s.leadPhone)
-        .map(s => ({
-          sessionId: s.id,
-          name: s.leadName ?? "Unknown",
-          phone: s.leadPhone!,
-        }));
+      const filtered = sessions.filter(s => s.leadPhone);
+      return Promise.all(
+        filtered.map(async s => {
+          const recentJobs = await db
+            .select({
+              serviceDateTime: cleanerJobs.serviceDateTime,
+              teamName: cleanerJobs.teamName,
+              jobDate: cleanerJobs.jobDate,
+            })
+            .from(cleanerJobs)
+            .where(eq(cleanerJobs.customerPhone, s.leadPhone!))
+            .orderBy(desc(cleanerJobs.jobDate))
+            .limit(1);
+          const job = recentJobs[0] ?? null;
+          return {
+            sessionId: s.id,
+            name: s.leadName ?? "Unknown",
+            phone: s.leadPhone!,
+            lastJobDate: job?.jobDate ?? null,
+            lastJobTime: job?.serviceDateTime ?? null,
+            lastJobTeam: job?.teamName ?? null,
+          };
+        })
+      );
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */

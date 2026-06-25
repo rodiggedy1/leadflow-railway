@@ -5380,6 +5380,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {voiceConfirm.selected && (
                     <p className="text-xs text-slate-400 truncate">{voiceConfirm.selected.phone}</p>
                   )}
+                  {voiceConfirm.selected && (voiceConfirm.selected as any).lastJobTime && (
+                    <p className="text-[11px] text-violet-500 font-semibold mt-0.5 truncate">
+                      {(() => {
+                        try {
+                          const dt = new Date((voiceConfirm.selected as any).lastJobTime);
+                          return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })
+                            + " · "
+                            + dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+                        } catch { return ""; }
+                      })()}
+                    </p>
+                  )}
                 </div>
                 <button
                   onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
