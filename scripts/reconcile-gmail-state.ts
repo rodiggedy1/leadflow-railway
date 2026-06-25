@@ -142,6 +142,7 @@ async function main() {
   let unreadChanged = 0;
   let inboxChanged = 0;
   let alreadyCorrect = 0;
+  let successfullyChecked = 0;
   let errors = 0;
   let rateLimitRetries = 0;
   let firstErrorLogged = false;
@@ -167,6 +168,8 @@ async function main() {
 
           const unreadDiffers = gmailUnread !== dbUnread;
           const inboxDiffers = gmailInbox !== dbInbox;
+
+          successfullyChecked++;
 
           if (!unreadDiffers && !inboxDiffers) {
             alreadyCorrect++;
@@ -265,15 +268,19 @@ async function main() {
 [Recon] ─────────────────────────────────────────
 [Recon] ${isDryRun ? "DRY RUN complete — no changes written" : "APPLY complete"}
 [Recon]
-[Recon] Rows scanned:    ${allRows.length} total (${rows.length} in this pass, offset=${offset})
-[Recon] Updated unread:  ${unreadChanged}
-[Recon] Updated inbox:   ${inboxChanged}
-[Recon] Already correct: ${alreadyCorrect}
-[Recon] Errors:          ${errors}
-[Recon] Rate-limit pauses: ${rateLimitRetries}
-[Recon] Duration:        ${durationStr}${
+[Recon] Reconciliation Summary
+[Recon]
+[Recon]   Rows scanned:               ${rows.length} (of ${allRows.length} total inbox rows, offset=${offset})
+[Recon]   Rows successfully checked:  ${successfullyChecked}
+[Recon]   Rows skipped/errors:        ${errors}
+[Recon]
+[Recon]   Unread updates:             ${unreadChanged}
+[Recon]   Inbox updates:              ${inboxChanged}
+[Recon]
+[Recon]   Rate-limit pauses:          ${rateLimitRetries}
+[Recon]   Duration:                   ${durationStr}${
     isApply && expectedState.size > 0
-      ? `\n[Recon]\n[Recon] Verification:\n[Recon]   Remaining unread mismatches: ${remainingUnreadMismatches}\n[Recon]   Remaining inbox mismatches:  ${remainingInboxMismatches}`
+      ? `\n[Recon]\n[Recon] Verification (processed rows only):\n[Recon]   Remaining unread mismatches: ${remainingUnreadMismatches}\n[Recon]   Remaining inbox mismatches:  ${remainingInboxMismatches}`
       : ""
   }
 [Recon] ─────────────────────────────────────────
