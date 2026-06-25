@@ -226,12 +226,46 @@ export async function processThread(threadId: string): Promise<void> {
       return `From: ${from}\n${text}`;
     }).join("\n\n---\n\n");
 
+    // ── Extract inbox display fields from thread data ─────────────────────────
+    // These are written to DB so listThreads can read from DB with zero Gmail calls.
     const subject = (() => {
       const first = messages[0];
       const headers: Record<string, string> = {};
       (first?.payload?.headers ?? []).forEach((h: any) => { headers[h.name.toLowerCase()] = h.value; });
       return headers["subject"] ?? "(no subject)";
     })();
+
+    // snippet: latest message's snippet (Gmail's pre-computed preview)
+    const latestMsg = messages[messages.length - 1];
+    const snippet = latestMsg?.snippet ?? "";
+
+    // lastMessageAt: internalDate of the latest message (Unix ms)
+    const lastMessageAt = parseInt(latestMsg?.internalDate ?? "0") || 0;
+
+    // messageCount: total messages in thread
+    const messageCount = messages.length;
+
+    // senderName / senderEmail: the OTHER party (not the inbox)
+    // We don't have the inbox email in the worker, so we use a heuristic:
+    // find the last message whose From header doesn't look like a sent-by-us address.
+    // The worker stores both so the router can display the correct contact.
+    // We parse all From headers and pick the last non-empty one from a non-noreply address.
+    const allFromHeaders: Array<{ name: string; email: string }> = messages.map((msg: any) => {
+      const hdrs: Record<string, string> = {};
+      (msg.payload?.headers ?? []).forEach((h: any) => { hdrs[h.name.toLowerCase()] = h.value; });
+      const raw = hdrs["from"] ?? "";
+      const emailMatch = raw.match(/<(.+?)>/) ?? raw.match(/(\S+@\S+)/);
+      const email = emailMatch?.[1] ?? raw;
+      const name = raw.replace(/<.+?>/, "").trim() || email;
+      return { name, email };
+    });
+    // Pick the last message from a non-inbox-looking sender as the display contact.
+    // If we can't determine, fall back to the first message's From.
+    const displayContact = [...allFromHeaders].reverse().find(
+      (f) => f.email && !f.email.toLowerCase().includes("noreply") && !f.email.toLowerCase().includes("no-reply")
+    ) ?? allFromHeaders[0] ?? { name: "", email: "" };
+    const senderName = displayContact.name;
+    const senderEmail = displayContact.email;
 
     // Single LLM call — category + summary + urgency
     const result = await invokeLLM({
@@ -308,13 +342,22 @@ Return ONLY valid JSON. No markdown, no explanation.`,
       (m.labelIds ?? []).includes("UNREAD")
     ) ? 1 : 0;
 
-    // Upsert into gmail_thread_meta — purely additive, never overwrites isIssue/assignment
+    // Upsert into gmail_thread_meta — purely additive, never overwrites isIssue/assignment.
+    // Inbox display fields (senderName, subject, snippet, lastMessageAt, messageCount) are
+    // written here so listThreads can serve the inbox entirely from DB with zero Gmail calls.
     await db
       .insert(gmailThreadMeta)
       .values({
         threadId,
         isIssue: 0,
         isUnread,
+        isInInbox: 1,
+        senderName,
+        senderEmail,
+        subject,
+        snippet,
+        lastMessageAt,
+        messageCount,
         aiCategory: category,
         aiSummary: summary,
         aiUrgency: urgency,
@@ -324,6 +367,14 @@ Return ONLY valid JSON. No markdown, no explanation.`,
       .onDuplicateKeyUpdate({
         set: {
           isUnread,
+          // isInInbox: intentionally NOT updated here — archiveThread sets it to 0.
+          // Worker only sets it to 1 on insert (new thread). Existing rows keep their value.
+          senderName,
+          senderEmail,
+          subject,
+          snippet,
+          lastMessageAt,
+          messageCount,
           aiCategory: category,
           aiSummary: summary,
           aiUrgency: urgency,

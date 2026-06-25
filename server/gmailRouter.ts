@@ -10,10 +10,10 @@ import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { gmailState, quoteLeads, conversationSessions, completedJobs, gmailSentLog, users, gmailThreadMeta, agents } from "../drizzle/schema";
-import { eq, or, inArray, desc, isNotNull, isNull } from "drizzle-orm";
+import { eq, or, inArray, desc, isNotNull, isNull, and, like, sql } from "drizzle-orm";
 import { processThread, enqueueThread, GLANCE_CATEGORY_META, type GlanceCategory } from "./gmailGlanceWorker";
 import {
-  listInboxThreads,
+  getInboxEmailAddress,
   getThreadDetail,
   sendGmailReply,
   sendGmailReplyWithAttachments,
@@ -53,7 +53,12 @@ export const gmailRouter = router({
     };
   }),
 
-  /** List inbox threads with optional pagination and search */
+  /** List inbox threads — DB-backed, zero Gmail API calls.
+   * The worker (processThread) is the canonical source for all display fields.
+   * If no rows exist yet, returns { threads: [], syncing: true } so the UI
+   * can show an "Inbox syncing..." banner instead of a blank or error state.
+   * NEVER falls back to Gmail — the DB is the single source of truth.
+   */
   listThreads: agentProcedure
     .input(
       z.object({
@@ -64,25 +69,75 @@ export const gmailRouter = router({
     )
     .query(async ({ input }) => {
       const { db } = await requireGmailConnected();
-      const result = await listInboxThreads({
-        pageToken: input.pageToken,
-        maxResults: input.maxResults,
-        query: input.query,
-      });
-      // Mark all returned threads as isInInbox=1 (they came from in:inbox query)
-      // This keeps glance counts accurate — only inbox threads count
-      if (result.threads.length > 0 && db) {
-        const threadIds = result.threads.map((t) => t.id);
-        await Promise.all(
-          threadIds.map((tid) =>
-            db.insert(gmailThreadMeta)
-              .values({ threadId: tid, isInInbox: 1 })
-              .onDuplicateKeyUpdate({ set: { isInInbox: 1 } })
-              .catch(() => {}) // non-fatal
-          )
+      const t0 = Date.now();
+      const limit = Math.min(input.maxResults, 500);
+
+      // Cursor-based pagination: pageToken encodes lastMessageAt of the last row
+      const cursorAt = input.pageToken ? parseInt(input.pageToken, 10) : null;
+
+      // Build WHERE clause: inbox only + optional search
+      const conditions = [eq(gmailThreadMeta.isInInbox, 1)];
+      if (cursorAt && !isNaN(cursorAt)) {
+        conditions.push(sql`${gmailThreadMeta.lastMessageAt} < ${cursorAt}`);
+      }
+      if (input.query) {
+        const q = `%${input.query}%`;
+        conditions.push(
+          or(
+            like(gmailThreadMeta.subject, q),
+            like(gmailThreadMeta.senderName, q),
+            like(gmailThreadMeta.senderEmail, q),
+            like(gmailThreadMeta.snippet, q)
+          )!
         );
       }
-      return result;
+
+      const rows = await db
+        .select()
+        .from(gmailThreadMeta)
+        .where(and(...conditions))
+        .orderBy(desc(gmailThreadMeta.lastMessageAt))
+        .limit(limit + 1); // fetch one extra to detect next page
+
+      const hasMore = rows.length > limit;
+      const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+      // Determine syncing state: no rows at all (worker hasn't processed anything yet)
+      const syncing = pageRows.length === 0 && !input.query && !cursorAt;
+
+      // Compute stale rows for health logging
+      const staleThreshold = Date.now() - 24 * 60 * 60 * 1000;
+      const staleRows = pageRows.filter(
+        (r) => !r.aiHistoryId || (r.aiProcessedAt && r.aiProcessedAt.getTime() < staleThreshold)
+      ).length;
+
+      // Get inbox email for correct contact display (cached after first call)
+      const inboxEmail = await getInboxEmailAddress().catch(() => null);
+
+      // Map DB rows to GmailThread shape (no messages — those load on thread open)
+      const threads = pageRows.map((row) => ({
+        id: row.threadId,
+        subject: row.subject ?? "(no subject)",
+        snippet: row.snippet ?? "",
+        from: row.senderName ?? "",
+        fromEmail: row.senderEmail ?? "",
+        date: row.lastMessageAt ?? 0,
+        isUnread: row.isUnread === 1,
+        messageCount: row.messageCount ?? 0,
+        messages: [], // not loaded for list view — fetched on thread open via getThread
+        inboxEmail,
+      }));
+
+      const nextPageToken = hasMore
+        ? String(pageRows[pageRows.length - 1].lastMessageAt ?? 0)
+        : undefined;
+
+      const durationMs = Date.now() - t0;
+      console.log(
+        `[InboxDB] rowsReturned=${threads.length} duration=${durationMs}ms gmailCalls=0 staleRows=${staleRows} syncing=${syncing}`
+      );
+
+      return { threads, nextPageToken, syncing };
     }),
 
   /** Get full thread detail including all messages, with agent sentBy info */

@@ -2785,6 +2785,9 @@ export const gmailState = mysqlTable("gmail_state", {
   // Unix timestamp (ms). Backfill is skipped until Date.now() exceeds this value.
   // Does NOT affect Pub/Sub processing or manual inbox actions.
   gmailBackfillCooldownUntil: bigint("gmailBackfillCooldownUntil", { mode: "number" }).notNull().default(0),
+  // Resumable inbox backfill page token — stored by backfill-inbox-db.mjs so the script
+  // can resume from where it left off if interrupted by a 429 or manual stop.
+  backfillPageToken: varchar("backfillPageToken", { length: 500 }),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type GmailState = typeof gmailState.$inferSelect;
@@ -2851,6 +2854,19 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
   isInInbox: int("isInInbox").default(1).notNull(),
   /** Whether this thread has unread messages. 1 = unread, 0 = read. Updated by glance worker and Pub/Sub webhook. */
   isUnread: int("isUnread").default(0).notNull(),
+  // ── Inbox display fields (written by worker, canonical source for listThreads) ──
+  /** Display name of the other party. Written by worker on every processThread. */
+  senderName: varchar("senderName", { length: 255 }),
+  /** Email address of the other party. Written by worker on every processThread. */
+  senderEmail: varchar("senderEmail", { length: 255 }),
+  /** Thread subject line. Written by worker on every processThread. */
+  subject: varchar("subject", { length: 500 }),
+  /** Latest message snippet. Written by worker on every processThread. */
+  snippet: text("snippet"),
+  /** Unix ms timestamp of the latest message. Written by worker on every processThread. */
+  lastMessageAt: bigint("lastMessageAt", { mode: "number" }),
+  /** Total number of messages in the thread. Written by worker on every processThread. */
+  messageCount: int("messageCount"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -1720,6 +1720,14 @@ export default function EmailInbox() {
               <p className="text-xs text-red-500">{threadsQuery.error.message}</p>
             </div>
           )}
+          {/* Syncing banner: shown when DB has no rows yet (worker hasn't processed any threads) */}
+          {!threadsQuery.isLoading && threadsQuery.data?.syncing && (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-400 mb-3" />
+              <p className="text-xs font-semibold text-slate-500 mb-1">Inbox syncing…</p>
+              <p className="text-xs text-slate-400">Your emails are being indexed. This usually takes less than a minute.</p>
+            </div>
+          )}
           {threads
             // On the Unread tab, hide threads the user has already opened this session
             // (effectiveIsUnread = false). On all other tabs, show everything.
