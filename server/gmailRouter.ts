@@ -116,7 +116,9 @@ export const gmailRouter = router({
 
       // syncing = worker hasn't hydrated any rows yet but rows exist in DB
       // (i.e. the worker simply hasn't run since the new columns were added)
-      const syncing = hydratedRows === 0 && totalInboxRows > 0 && !input.query && !cursorAt;
+      // Note: do NOT gate on input.query or cursorAt — hydration state is global,
+      // not dependent on what filter is active
+      const syncing = hydratedRows === 0 && totalInboxRows > 0;
 
       // Compute stale rows for health logging
       const staleThreshold = Date.now() - 24 * 60 * 60 * 1000;
