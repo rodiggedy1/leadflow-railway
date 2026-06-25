@@ -102,9 +102,21 @@ export const gmailRouter = router({
       const hasMore = rows.length > limit;
       const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-      // Determine syncing state: worker hasn't processed any inbox threads yet
-      // (rows exist in DB but senderName is NULL — they haven't been fetched by the worker)
-      const syncing = pageRows.length === 0 && !input.query && !cursorAt;
+      // Explicit hydration check: count total inbox rows vs worker-processed rows
+      // This gives an accurate syncing signal and progress metric
+      const [hydrationRow] = await db
+        .select({
+          totalInboxRows: sql<number>`COUNT(*)`,
+          hydratedRows: sql<number>`COUNT(${gmailThreadMeta.senderName})`,
+        })
+        .from(gmailThreadMeta)
+        .where(eq(gmailThreadMeta.isInInbox, 1));
+      const totalInboxRows = Number(hydrationRow?.totalInboxRows ?? 0);
+      const hydratedRows = Number(hydrationRow?.hydratedRows ?? 0);
+
+      // syncing = worker hasn't hydrated any rows yet but rows exist in DB
+      // (i.e. the worker simply hasn't run since the new columns were added)
+      const syncing = hydratedRows === 0 && totalInboxRows > 0 && !input.query && !cursorAt;
 
       // Compute stale rows for health logging
       const staleThreshold = Date.now() - 24 * 60 * 60 * 1000;
@@ -135,7 +147,7 @@ export const gmailRouter = router({
 
       const durationMs = Date.now() - t0;
       console.log(
-        `[InboxDB] rowsReturned=${threads.length} duration=${durationMs}ms gmailCalls=0 staleRows=${staleRows} syncing=${syncing}`
+        `[InboxDB] totalInboxRows=${totalInboxRows} hydratedRows=${hydratedRows} rowsReturned=${threads.length} duration=${durationMs}ms gmailCalls=0 staleRows=${staleRows} syncing=${syncing}`
       );
 
       return { threads, nextPageToken, syncing };
