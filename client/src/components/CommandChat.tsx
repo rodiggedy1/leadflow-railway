@@ -5366,36 +5366,44 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {voiceConfirm && (
             <div className="mb-2 mx-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[480px] flex flex-col" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
               {/* Header — contact identity */}
-              <div className="flex items-center gap-3 px-5 pt-5 pb-3">
-                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
-                  <span className="text-white font-bold text-base">{(voiceConfirm.selected?.name ?? "?")[0].toUpperCase()}</span>
+              <div className="flex items-start gap-4 px-5 pt-5 pb-4">
+                {/* Avatar */}
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md mt-0.5">
+                  <span className="text-white font-bold text-lg">{(voiceConfirm.selected?.name ?? "?")[0].toUpperCase()}</span>
                 </div>
-                                <div className="flex-1 min-w-0">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Send Text</p>
+
+                {/* Identity block */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em] mb-0.5">Send Text</p>
                   {voiceConfirm.selected ? (
-                    <p className="text-[15px] font-bold text-slate-900 truncate leading-tight">{voiceConfirm.selected.name}</p>
+                    <p className="text-[17px] font-bold text-slate-900 truncate leading-snug">{voiceConfirm.selected.name}</p>
                   ) : (
-                    <p className="text-sm text-slate-400">Select a contact below</p>
+                    <p className="text-sm text-slate-400 italic">Select a contact below</p>
                   )}
-                  {voiceConfirm.selected && (
-                    <p className="text-xs text-slate-400 truncate">{voiceConfirm.selected.phone}</p>
-                  )}
-                  {voiceConfirm.selected && (voiceConfirm.selected as any).lastJobTime && (
-                    <p className="text-[11px] text-violet-500 font-semibold mt-0.5 truncate">
-                      {(() => {
-                        try {
-                          const dt = new Date((voiceConfirm.selected as any).lastJobTime);
-                          return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })
-                            + " · "
-                            + dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
-                        } catch { return ""; }
-                      })()}
-                    </p>
-                  )}
+
+                  {/* Last service pill */}
+                  {voiceConfirm.selected && (voiceConfirm.selected as any).lastJobTime && (() => {
+                    try {
+                      const dt = new Date((voiceConfirm.selected as any).lastJobTime);
+                      const day = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" });
+                      const time = dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+                      return (
+                        <div className="flex items-center gap-1.5 mt-2">
+                          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">Last service</span>
+                          <span className="inline-flex items-center gap-1 bg-violet-50 border border-violet-200 text-violet-600 text-[11px] font-semibold px-2.5 py-0.5 rounded-full">
+                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0" />
+                            {day} · {time}
+                          </span>
+                        </div>
+                      );
+                    } catch { return null; }
+                  })()}
                 </div>
+
+                {/* Close button */}
                 <button
                   onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
-                  className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition -mt-0.5"
                 >
                   <X className="h-4 w-4" />
                 </button>
