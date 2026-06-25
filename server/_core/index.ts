@@ -350,8 +350,13 @@ async function startServer() {
       // Start the AI glance worker (600ms interval) and backfill last 100 inbox threads.
       // Purely additive — never touches existing inbox/SMS/webhook flows.
       startGlanceWorker();
-      // Only run backfill if the inbox hasn't been seeded yet (hydratedRows < 50).
-      // This prevents every deploy from burning Gmail API quota.
+      // Startup backfill is disabled by default.
+      // Set GMAIL_BACKFILL_ENABLED=true in Railway env vars ONLY after the Gmail health check
+      // (node scripts/check-gmail-quota.mjs) returns 200 OK.
+      // After backfill completes, remove or set GMAIL_BACKFILL_ENABLED=false to prevent re-runs.
+      if (process.env.GMAIL_BACKFILL_ENABLED !== "true") {
+        console.log("[GlanceWorker] Startup backfill disabled — set GMAIL_BACKFILL_ENABLED=true to enable.");
+      } else
       setTimeout(async () => {
         try {
           const db = await getDb();
