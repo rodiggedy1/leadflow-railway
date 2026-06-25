@@ -181,11 +181,22 @@ export async function processThread(threadId: string): Promise<void> {
       const durationMs = Date.now() - t0;
       if (status === 429) {
         _count429++;
-        // Extract Google's error details — reason distinguishes userRateLimitExceeded vs quotaExceeded
-        const errors = apiErr?.response?.data?.error?.errors ?? [];
-        const reason = errors[0]?.reason ?? "unknown";
-        const retryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? "none";
-        console.error(`[GlanceWorker][429] threads.get threadId=${threadId} reason=${reason} retryAfter=${retryAfter} duration=${durationMs}ms`);
+        // ── Full 429 diagnostic dump ──────────────────────────────────────────
+        // Google error body: contains domain, reason, message for each error
+        const errorBody = apiErr?.response?.data ?? null;
+        const googleErrors = errorBody?.error?.errors ?? [];
+        const googleStatus = errorBody?.error?.status ?? "(none)";
+        const googleMessage = errorBody?.error?.message ?? apiErr?.message ?? "(none)";
+        // All response headers — includes Retry-After, X-RateLimit-*, X-Quota-*
+        const responseHeaders = apiErr?.response?.headers ?? {};
+        const retryAfter = responseHeaders["retry-after"] ?? responseHeaders["x-ratelimit-reset"] ?? "(none)";
+        console.error(`[GlanceWorker][429][threads.get] threadId=${threadId} duration=${durationMs}ms`);
+        console.error(`[GlanceWorker][429][threads.get] HTTP status=${status} google.status=${googleStatus}`);
+        console.error(`[GlanceWorker][429][threads.get] google.message=${googleMessage}`);
+        console.error(`[GlanceWorker][429][threads.get] retry-after=${retryAfter}`);
+        console.error(`[GlanceWorker][429][threads.get] google.errors=${JSON.stringify(googleErrors)}`);
+        console.error(`[GlanceWorker][429][threads.get] response.headers=${JSON.stringify(responseHeaders)}`);
+        console.error(`[GlanceWorker][429][threads.get] full.error.body=${JSON.stringify(errorBody)}`);
       } else {
         console.error(`[GlanceWorker][APIError] threads.get threadId=${threadId} status=${status} duration=${durationMs}ms`, apiErr?.message);
       }
@@ -479,9 +490,15 @@ export async function backfillGlanceQueue(): Promise<void> {
       const durationMs = Date.now() - t0;
       if (status === 429) {
         _count429++;
-        const errors = apiErr?.response?.data?.error?.errors ?? [];
-        const reason = errors[0]?.reason ?? "unknown";
-        const rawRetryAfter = apiErr?.response?.headers?.["retry-after"] ?? apiErr?.response?.headers?.["x-ratelimit-reset"] ?? null;
+        // ── Full 429 diagnostic dump ──────────────────────────────────────────
+        // Google error body: contains domain, reason, message for each error
+        const errorBody = apiErr?.response?.data ?? null;
+        const googleErrors = errorBody?.error?.errors ?? [];
+        const googleStatus = errorBody?.error?.status ?? "(none)";
+        const googleMessage = errorBody?.error?.message ?? apiErr?.message ?? "(none)";
+        // All response headers — includes Retry-After, X-RateLimit-*, X-Quota-*
+        const responseHeaders = apiErr?.response?.headers ?? {};
+        const rawRetryAfter = responseHeaders["retry-after"] ?? responseHeaders["x-ratelimit-reset"] ?? null;
         // Use Google's Retry-After header if present (seconds); otherwise default to 6 hours
         const cooldownMs = rawRetryAfter
           ? parseInt(String(rawRetryAfter), 10) * 1000
@@ -493,7 +510,13 @@ export async function backfillGlanceQueue(): Promise<void> {
           .set({ gmailBackfillCooldownUntil: newCooldownUntil })
           .where(eq(gmailState.id, 1))
           .catch((e) => console.error("[GlanceWorker] Failed to persist backfill cooldown:", e));
-        console.error(`[GlanceWorker][429] threads.list reason=${reason} retryAfter=${rawRetryAfter ?? "none"} cooldownMs=${cooldownMs} duration=${durationMs}ms — backfill cooldown persisted until ${cooldownUntilStr}`);
+        console.error(`[GlanceWorker][429][threads.list] duration=${durationMs}ms — backfill cooldown persisted until ${cooldownUntilStr}`);
+        console.error(`[GlanceWorker][429][threads.list] HTTP status=${status} google.status=${googleStatus}`);
+        console.error(`[GlanceWorker][429][threads.list] google.message=${googleMessage}`);
+        console.error(`[GlanceWorker][429][threads.list] retry-after=${rawRetryAfter ?? "(none)"}`);
+        console.error(`[GlanceWorker][429][threads.list] google.errors=${JSON.stringify(googleErrors)}`);
+        console.error(`[GlanceWorker][429][threads.list] response.headers=${JSON.stringify(responseHeaders)}`);
+        console.error(`[GlanceWorker][429][threads.list] full.error.body=${JSON.stringify(errorBody)}`);
       } else {
         console.error(`[GlanceWorker][APIError] threads.list status=${status} duration=${durationMs}ms`, apiErr?.message);
       }
