@@ -4046,7 +4046,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         }),
       });
       const { broadcastOpsUpdate } = await import("./sseBroadcast");
-      broadcastOpsUpdate("ops_chat_message");
+      broadcastOpsUpdate("new_message", { channel: "command" });
       return { success: true };
     }),
 });

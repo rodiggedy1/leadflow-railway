@@ -1377,7 +1377,7 @@ export const appRouter = router({
                 triggeredBy: agentSession.agentName,
               }),
             });
-            bcastSend("ops_chat_message");
+            bcastSend("new_message", { channel: "command" });
           } catch (e) {
             console.warn("[sendMessage] Failed to post voice card:", e);
           }
