@@ -215,35 +215,10 @@ export async function processThread(threadId: string): Promise<void> {
     const currentHistoryId = String(res.data.historyId ?? "");
     const messages = res.data.messages ?? [];
 
-    // Check cache — skip if historyId unchanged
-    const [existing] = await db
-      .select({ aiHistoryId: gmailThreadMeta.aiHistoryId, aiCategory: gmailThreadMeta.aiCategory })
-      .from(gmailThreadMeta)
-      .where(eq(gmailThreadMeta.threadId, threadId));
-
-    if (existing?.aiHistoryId && existing.aiHistoryId === currentHistoryId) {
-      // Cache hit — nothing changed; log as SKIP_ALREADY_UP_TO_DATE
-      _cacheHitCount++;
-      console.log(`[GlanceWorker][SKIP_ALREADY_UP_TO_DATE] threadId=${threadId} historyId=${currentHistoryId}`);
-      return;
-    }
-
-    _cacheMissCount++;
-    console.log(`[GlanceWorker][CacheMiss] threadId=${threadId} oldHistoryId=${existing?.aiHistoryId ?? "none"} newHistoryId=${currentHistoryId}`);
-
-    // Extract last 3 messages for LLM (cost control)
-    const lastMsgs = messages.slice(-3);
-    const transcript = lastMsgs.map((msg) => {
-      const headers: Record<string, string> = {};
-      (msg.payload?.headers ?? []).forEach((h: any) => { headers[h.name.toLowerCase()] = h.value; });
-      const from = headers["from"] ?? "Unknown";
-      const bodyData = findTextBody(msg.payload);
-      const text = bodyData.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
-      return `From: ${from}\n${text}`;
-    }).join("\n\n---\n\n");
-
     // ── Extract inbox display fields from thread data ─────────────────────────
-    // These are written to DB so listThreads can read from DB with zero Gmail calls.
+    // Done before the cache check so the values are available on all paths
+    // (full re-process, metadata-only repair, and fast-path skip).
+    // These fields come from the threads.get response already in memory — no extra API call.
     const subject = (() => {
       const first = messages[0];
       const headers: Record<string, string> = {};
@@ -262,10 +237,6 @@ export async function processThread(threadId: string): Promise<void> {
     const messageCount = messages.length;
 
     // senderName / senderEmail: the OTHER party (not the inbox)
-    // We don't have the inbox email in the worker, so we use a heuristic:
-    // find the last message whose From header doesn't look like a sent-by-us address.
-    // The worker stores both so the router can display the correct contact.
-    // We parse all From headers and pick the last non-empty one from a non-noreply address.
     const allFromHeaders: Array<{ name: string; email: string }> = messages.map((msg: any) => {
       const hdrs: Record<string, string> = {};
       (msg.payload?.headers ?? []).forEach((h: any) => { hdrs[h.name.toLowerCase()] = h.value; });
@@ -275,16 +246,69 @@ export async function processThread(threadId: string): Promise<void> {
       const name = raw.replace(/<.+?>/, "").trim() || email;
       return { name, email };
     });
-    // Pick the last message from a non-inbox-looking sender as the display contact.
-    // If we can't determine, fall back to the first message's From.
     const displayContact = [...allFromHeaders].reverse().find(
       (f) => f.email && !f.email.toLowerCase().includes("noreply") && !f.email.toLowerCase().includes("no-reply")
     ) ?? allFromHeaders[0] ?? { name: "", email: "" };
     const senderName = displayContact.name;
     const senderEmail = displayContact.email;
 
+    // Compute isUnread from Gmail labels — authoritative, always overwrites
+    const isUnread = messages.some((m) =>
+      (m.labelIds ?? []).includes("UNREAD")
+    ) ? 1 : 0;
+
+    // ── Cache check ───────────────────────────────────────────────────────────
+    // Fetch existing row, including display fields so we can detect legacy rows
+    // that have aiHistoryId but are missing display metadata (written by an older
+    // worker version before the display columns existed).
+    const [existing] = await db
+      .select({
+        aiHistoryId: gmailThreadMeta.aiHistoryId,
+        aiCategory: gmailThreadMeta.aiCategory,
+        senderName: gmailThreadMeta.senderName,
+        senderEmail: gmailThreadMeta.senderEmail,
+        subject: gmailThreadMeta.subject,
+        snippet: gmailThreadMeta.snippet,
+        lastMessageAt: gmailThreadMeta.lastMessageAt,
+        messageCount: gmailThreadMeta.messageCount,
+      })
+      .from(gmailThreadMeta)
+      .where(eq(gmailThreadMeta.threadId, threadId));
+
+    const historyChanged = !existing?.aiHistoryId || existing.aiHistoryId !== currentHistoryId;
+    const metadataComplete = !!(existing?.senderName && existing?.senderEmail &&
+      existing?.subject && existing?.snippet &&
+      existing?.lastMessageAt && existing?.messageCount);
+
+    if (!historyChanged && metadataComplete) {
+      // Full cache hit — history unchanged and display fields populated
+      _cacheHitCount++;
+      console.log(`[GlanceWorker][SKIP_ALREADY_UP_TO_DATE] threadId=${threadId} historyId=${currentHistoryId}`);
+      return;
+    }
+
+    if (!historyChanged) {
+      // History unchanged but display fields missing — legacy row needing repair
+      console.log(`[GlanceWorker][METADATA_REPAIRED] threadId=${threadId} historyId=${currentHistoryId}`);
+    } else {
+      _cacheMissCount++;
+      console.log(`[GlanceWorker][CacheMiss] threadId=${threadId} oldHistoryId=${existing?.aiHistoryId ?? "none"} newHistoryId=${currentHistoryId}`);
+    }
+
+    // ── AI classification (only when history changed) ─────────────────────────
+    // Extract last 3 messages for LLM (cost control)
+    const lastMsgs = messages.slice(-3);
+    const transcript = lastMsgs.map((msg) => {
+      const headers: Record<string, string> = {};
+      (msg.payload?.headers ?? []).forEach((h: any) => { headers[h.name.toLowerCase()] = h.value; });
+      const from = headers["from"] ?? "Unknown";
+      const bodyData = findTextBody(msg.payload);
+      const text = bodyData.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+      return `From: ${from}\n${text}`;
+    }).join("\n\n---\n\n");
+
     // Single LLM call — category + summary + urgency
-    const result = await invokeLLM({
+    const result = historyChanged ? await invokeLLM({
       messages: [
         {
           role: "system",
@@ -338,29 +362,39 @@ Return ONLY valid JSON. No markdown, no explanation.`,
           },
         },
       },
-    });
+    }) : null;
 
-    const raw = result.choices[0]?.message?.content as string ?? "{}";
-    let parsed: { category: GlanceCategory; summary: string[]; urgency: string };
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      console.error(`[GlanceWorker] Failed to parse LLM response for ${threadId}:`, raw);
-      return;
+    let aiFields: {
+      aiCategory?: GlanceCategory;
+      aiSummary?: string;
+      aiUrgency?: string;
+      aiHistoryId?: string;
+      aiProcessedAt?: Date;
+    } = {};
+
+    if (historyChanged && result) {
+      const raw = result.choices[0]?.message?.content as string ?? "{}";
+      let parsed: { category: GlanceCategory; summary: string[]; urgency: string };
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        console.error(`[GlanceWorker] Failed to parse LLM response for ${threadId}:`, raw);
+        return;
+      }
+      aiFields = {
+        aiCategory: parsed.category as GlanceCategory,
+        aiSummary: JSON.stringify(parsed.summary ?? []),
+        aiUrgency: parsed.urgency ?? "medium",
+        aiHistoryId: currentHistoryId,
+        aiProcessedAt: new Date(),
+      };
     }
 
-    const category = parsed.category as GlanceCategory;
-    const summary = JSON.stringify(parsed.summary ?? []);
-    const urgency = parsed.urgency ?? "medium";
-
-    // Compute isUnread from Gmail labels — authoritative, always overwrites
-    const isUnread = messages.some((m) =>
-      (m.labelIds ?? []).includes("UNREAD")
-    ) ? 1 : 0;
-
-    // Upsert into gmail_thread_meta — purely additive, never overwrites isIssue/assignment.
-    // Inbox display fields (senderName, subject, snippet, lastMessageAt, messageCount) are
-    // written here so listThreads can serve the inbox entirely from DB with zero Gmail calls.
+    // ── Single canonical upsert ───────────────────────────────────────────────
+    // Always writes display/metadata fields.
+    // AI fields (aiCategory, aiSummary, aiUrgency, aiHistoryId, aiProcessedAt) are
+    // only included when historyChanged — spreading {} adds no keys, so existing
+    // AI values are preserved untouched when we're only repairing display fields.
     await db
       .insert(gmailThreadMeta)
       .values({
@@ -374,11 +408,7 @@ Return ONLY valid JSON. No markdown, no explanation.`,
         snippet,
         lastMessageAt,
         messageCount,
-        aiCategory: category,
-        aiSummary: summary,
-        aiUrgency: urgency,
-        aiHistoryId: currentHistoryId,
-        aiProcessedAt: new Date(),
+        ...aiFields,
       })
       .onDuplicateKeyUpdate({
         set: {
@@ -391,16 +421,16 @@ Return ONLY valid JSON. No markdown, no explanation.`,
           snippet,
           lastMessageAt,
           messageCount,
-          aiCategory: category,
-          aiSummary: summary,
-          aiUrgency: urgency,
-          aiHistoryId: currentHistoryId,
-          aiProcessedAt: new Date(),
+          ...aiFields,
           updatedAt: new Date(),
         },
       });
 
-    console.log(`[GlanceWorker] Processed ${threadId} → ${category} (${urgency})`);
+    if (historyChanged) {
+      console.log(`[GlanceWorker] Processed ${threadId} → ${aiFields.aiCategory} (${aiFields.aiUrgency})`);
+    } else {
+      console.log(`[GlanceWorker] Metadata repaired ${threadId}`);
+    }
   } catch (err) {
     // Never let errors bubble — purely additive
     console.error(`[GlanceWorker] Error processing ${threadId}:`, err);
