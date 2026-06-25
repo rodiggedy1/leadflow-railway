@@ -3320,6 +3320,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const rewriteVoiceMsg = trpc.opsChat.rewriteVoiceMessage.useMutation();
   const [voiceTone, setVoiceTone] = useState<"friendly" | "professional" | "casual">("friendly");
   const [voiceRewriting, setVoiceRewriting] = useState(false);
+  const [voiceBubbleEditing, setVoiceBubbleEditing] = useState(false);
   // Voice command confirmation card state
   type VoiceMatch = { sessionId: number; name: string; phone: string };
   type VoiceConfirmState = {
@@ -5380,7 +5381,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </div>
                 <button
-                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); }}
+                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
                   className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
                 >
                   <X className="h-4 w-4" />
@@ -5428,8 +5429,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               )}
 
-              {/* Contact picker — only shown when multiple matches */}
-              {!voiceNeedsSearch && voiceConfirm.matches.length > 1 && (
+              {/* Contact picker — only shown when multiple matches AND none selected yet */}
+              {!voiceNeedsSearch && voiceConfirm.matches.length > 1 && !voiceConfirm.selected && (
                 <div className="px-5 pb-3">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Who did you mean?</p>
                   <div className="flex flex-col gap-1">
@@ -5460,22 +5461,31 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               )}
 
-              {/* iMessage-style message bubble preview */}
+              {/* iMessage-style tap-to-edit bubble */}
               {!voiceNeedsSearch && (
                 <div className="px-5 pb-3">
-                  <div className="flex justify-end mb-2">
-                    <div className="max-w-[85%] bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-4 py-3 shadow-sm">
-                      <p className="text-white text-[14px] leading-snug whitespace-pre-wrap">{voiceConfirmMsg || "…"}</p>
-                    </div>
+                  <div className="flex justify-end">
+                    {voiceBubbleEditing ? (
+                      <textarea
+                        autoFocus
+                        value={voiceConfirmMsg}
+                        onChange={e => setVoiceConfirmMsg(e.target.value)}
+                        onBlur={() => setVoiceBubbleEditing(false)}
+                        rows={4}
+                        className="w-full max-w-[85%] text-[14px] leading-snug bg-[#007AFF] text-white rounded-[20px] rounded-br-[6px] px-4 py-3 resize-none focus:outline-none shadow-sm placeholder:text-blue-200 caret-white"
+                        style={{colorScheme: "dark"}}
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setVoiceBubbleEditing(true)}
+                        className="max-w-[85%] bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-4 py-3 shadow-sm text-left group relative"
+                        title="Tap to edit"
+                      >
+                        <p className="text-white text-[14px] leading-snug whitespace-pre-wrap">{voiceConfirmMsg || "…"}</p>
+                        <span className="absolute -top-5 right-0 text-[10px] text-slate-400 opacity-0 group-hover:opacity-100 transition">Tap to edit</span>
+                      </button>
+                    )}
                   </div>
-                  {/* Editable textarea below the bubble */}
-                  <textarea
-                    value={voiceConfirmMsg}
-                    onChange={e => setVoiceConfirmMsg(e.target.value)}
-                    rows={3}
-                    placeholder="Edit message..."
-                    className="w-full text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 mt-1"
-                  />
                 </div>
               )}
 
@@ -5529,7 +5539,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Action buttons */}
               <div className="flex items-center gap-2 px-5 py-4">
                 <button
-                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); }}
+                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancel
@@ -5551,6 +5561,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       setVoiceNeedsSearch(false);
                       setVoiceSearchQuery("");
                       setVoiceTone("friendly");
+                      setVoiceBubbleEditing(false);
                     } catch {
                       toast.error("Failed to send — please try again");
                     } finally {
