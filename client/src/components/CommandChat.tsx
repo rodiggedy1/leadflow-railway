@@ -3396,7 +3396,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   };
   const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmState | null>(null);
   const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
-  const [voiceConfirmAction, setVoiceConfirmAction] = useState<"text" | "call">("text");
+  const [voiceConfirmAction, setVoiceConfirmAction] = useState<"text" | "call" | "remind">("text");
+  const [voiceRemindTime, setVoiceRemindTime] = useState<string>(""); // time expression from LLM e.g. "30 minutes"
   const [voiceConfirmScenario, setVoiceConfirmScenario] = useState<string | null>(null);
   const [voiceSending, setVoiceSending] = useState(false);
   const [voiceSearchQuery, setVoiceSearchQuery] = useState("");
@@ -3540,6 +3541,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
       // Route through voice command intent detection
       const result = await voiceCommandMutation.mutateAsync({ transcript: text.trim() });
+
+      if (result.action === "remind") {
+        // Show reminder confirmation card — no contact lookup needed
+        setVoiceConfirmAction("remind");
+        setVoiceConfirmMsg(result.message ?? "");
+        setVoiceRemindTime((result as any).scenario ?? "30 minutes");
+        setVoiceConfirm({
+          message: result.message ?? "",
+          matches: [],
+          selected: null,
+        });
+        setVoiceNeedsSearch(false);
+        setVoiceCallStatus("idle");
+        setVoiceCallVapiId(null);
+        return;
+      }
 
       if ((result.action === "text" || result.action === "call") && result.matches.length > 0 && result.message) {
         // Show confirmation card — message is already written in friendly quality by the server
@@ -5515,7 +5532,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 <span className="text-white font-bold text-sm">{(voiceConfirm.selected?.name ?? "?")[0].toUpperCase()}</span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{voiceConfirmAction === "call" ? "AI Call" : "Send Text"}</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{voiceConfirmAction === "call" ? "AI Call" : voiceConfirmAction === "remind" ? "Set Reminder" : "Send Text"}</p>
                 <p className="text-sm font-semibold text-slate-800 truncate">
                   {voiceConfirmAction === "call" && voiceCallStatus !== "idle"
                     ? (voiceCallStatus === "firing" ? "Placing call…" :
@@ -5698,6 +5715,29 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               )}
 
+              {/* Reminder details — only for remind action */}
+              {voiceConfirmAction === "remind" && (
+                <div className="px-5 pb-3">
+                  <div className="rounded-2xl bg-violet-50 border border-violet-200 px-4 py-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">⏰</span>
+                      <p className="text-xs font-bold text-violet-700 uppercase tracking-wide">Reminder</p>
+                    </div>
+                    <p className="text-sm text-slate-700 font-medium mb-3">{voiceConfirmMsg || "Reminder"}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">Fire in:</span>
+                      <input
+                        type="text"
+                        value={voiceRemindTime}
+                        onChange={e => setVoiceRemindTime(e.target.value)}
+                        className="flex-1 text-sm font-semibold text-violet-700 bg-white border border-violet-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                        placeholder="e.g. 30 minutes, 1 hour, 3pm"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Tone rewrite buttons — only for text action */}
               {!voiceNeedsSearch && voiceConfirmAction === "text" && (
                 <div className="px-5 pb-3">
@@ -5839,6 +5879,61 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   >
                     {voiceSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     {voiceSending ? "Sending…" : "Send"}
+                  </button>
+                )}
+
+                {/* REMIND action button */}
+                {voiceConfirmAction === "remind" && (
+                  <button
+                    disabled={!voiceRemindTime.trim() || voiceSending}
+                    onClick={async () => {
+                      if (!voiceRemindTime.trim()) return;
+                      setVoiceSending(true);
+                      try {
+                        // Parse the time expression into a UTC epoch ms timestamp
+                        const timeStr = voiceRemindTime.trim().toLowerCase();
+                        let triggerAt: number;
+                        const now = Date.now();
+                        const minMatch = timeStr.match(/(\d+)\s*min/);
+                        const hrMatch = timeStr.match(/(\d+)\s*h/);
+                        const clockMatch = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+                        if (minMatch) {
+                          triggerAt = now + parseInt(minMatch[1]) * 60_000;
+                        } else if (hrMatch) {
+                          triggerAt = now + parseInt(hrMatch[1]) * 3_600_000;
+                        } else if (clockMatch) {
+                          const d = new Date();
+                          let h = parseInt(clockMatch[1]);
+                          const m = clockMatch[2] ? parseInt(clockMatch[2]) : 0;
+                          const ampm = clockMatch[3];
+                          if (ampm === "pm" && h < 12) h += 12;
+                          if (ampm === "am" && h === 12) h = 0;
+                          d.setHours(h, m, 0, 0);
+                          if (d.getTime() <= now) d.setDate(d.getDate() + 1); // next occurrence
+                          triggerAt = d.getTime();
+                        } else {
+                          triggerAt = now + 30 * 60_000; // fallback 30 min
+                        }
+                        await setReminderMutation.mutateAsync({
+                          channel: "command",
+                          body: voiceConfirmMsg.trim() || "Voice reminder",
+                          authorName: callerName,
+                          triggerAt,
+                        });
+                        toast.success(`⏰ Reminder set for ${voiceRemindTime}`);
+                        setVoiceConfirm(null);
+                        setVoiceConfirmMsg("");
+                        setVoiceRemindTime("");
+                      } catch {
+                        toast.error("Failed to set reminder");
+                      } finally {
+                        setVoiceSending(false);
+                      }
+                    }}
+                    className="flex-1 rounded-2xl bg-violet-600 text-white px-4 py-3 text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 transition flex items-center justify-center gap-2"
+                  >
+                    {voiceSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>⏰</span>}
+                    {voiceSending ? "Setting…" : "Set Reminder"}
                   </button>
                 )}
 

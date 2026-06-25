@@ -3785,6 +3785,7 @@ Return JSON only, no explanation.
 Supported actions:
 - "text": user wants to send a text/SMS to a client. Extract the client name and write the SMS message.
 - "call": user wants to make a phone call to a client. Extract the client name and write the opening script Ava (the AI voice) will say.
+- "remind": user wants to set a reminder about a client or task. Extract the name (or null if no specific person) and the time expression (e.g. "30 minutes", "1 hour", "3pm"). Put the time expression in the "scenario" field. Write a short reminder note in "message".
 - "chat": anything else (post to ops chat, general commands, etc.)
 
 For "text" action, write the SMS message using this EXACT quality standard:
@@ -3804,6 +3805,9 @@ Examples:
 - "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"Hey Maria! Just wanted to give you a heads up — we're running a little behind but we'll be there in about 20 minutes. Hang tight! 😊","scenario":null}
 - "Call Rohan and tell him we're running late, be there in 20" → {"action":"call","name":"Rohan","message":"Hi Rohan, this is Ava calling from Maids in Black. I wanted to let you know our team is running a little behind today but we'll be there in about 20 minutes. Thank you so much for your patience!","scenario":"running late, arriving in 20 minutes"}
 - "Text Sarah the job is done" → {"action":"text","name":"Sarah","message":"Hi Sarah! Just finished up and everything looks great! 🏡 Let us know if there's anything you'd like us to touch up.","scenario":null}
+- "Remind me about Maria in 30 minutes" → {"action":"remind","name":"Maria","message":"Follow up with Maria","scenario":"30 minutes"}
+- "Set a reminder for Rohan in 1 hour" → {"action":"remind","name":"Rohan","message":"Check in with Rohan","scenario":"1 hour"}
+- "Remind me to call Sarah at 3pm" → {"action":"remind","name":"Sarah","message":"Call Sarah","scenario":"3pm"}
 - "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null,"scenario":null}
 - "Show me today's jobs" → {"action":"chat","name":null,"message":null,"scenario":null}`,
           },
@@ -3817,7 +3821,7 @@ Examples:
             schema: {
               type: "object",
               properties: {
-                action: { type: "string", enum: ["text", "call", "chat"] },
+                action: { type: "string", enum: ["text", "call", "remind", "chat"] },
                 name: { type: ["string", "null"] },
                 message: { type: ["string", "null"] },
                 scenario: { type: ["string", "null"] },
@@ -3834,6 +3838,17 @@ Examples:
         parsed = JSON.parse(intentResult.choices[0].message.content as string);
       } catch {
         return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null, needsSearch: false, detectedName: null };
+      }
+
+      if (parsed.action === "remind") {
+        return {
+          action: "remind" as const,
+          matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>,
+          message: parsed.message,
+          needsSearch: false,
+          detectedName: parsed.name,
+          scenario: parsed.scenario, // time expression e.g. "30 minutes"
+        };
       }
 
       if ((parsed.action !== "text" && parsed.action !== "call") || !parsed.name) {
@@ -3883,7 +3898,7 @@ Examples:
         })
       );
 
-      const actionType = parsed.action as "text" | "call";
+      const actionType = parsed.action as "text" | "call" | "remind";
 
       // If no matches found, return needsSearch=true so frontend shows a search box
       if (matchesWithJob.length === 0) {
