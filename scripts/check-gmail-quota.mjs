@@ -47,7 +47,9 @@ async function main() {
 
   const auth = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
   auth.setCredentials({ refresh_token: refreshToken });
-  const gmail = google.gmail({ version: "v1", auth });
+  // Disable Gaxios auto-retry so this health check is exactly ONE HTTP request.
+  // Without this, Gaxios retries 429s up to 3 times, burning 4 quota units per check.
+  const gmail = google.gmail({ version: "v1", auth, retry: false });
 
   console.log("\nMaking single threads.list call (maxResults: 1)...");
 
