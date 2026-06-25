@@ -30,7 +30,7 @@ import { registerGmailRoutes } from "../gmailRoutes";
 import { registerGmailWatchRenewCron } from "../gmailWatchRenewCron";
 import { registerGbpRoutes } from "../gbpRoutes";
 import { backfillTeamGeocodesOnStartup } from "../schedulingUtils";
-import { startGlanceWorker, backfillGlanceQueue } from "../gmailGlanceWorker";
+import { startGlanceWorker, backfillGlanceQueue, clearBackfillCooldown } from "../gmailGlanceWorker";
 import { registerEmergencyAgentLoginRoute } from "../emergencyAgentLoginRoute";
 import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
@@ -350,7 +350,12 @@ async function startServer() {
       // Start the AI glance worker (600ms interval) and backfill last 100 inbox threads.
       // Purely additive — never touches existing inbox/SMS/webhook flows.
       startGlanceWorker();
-      setTimeout(() => { backfillGlanceQueue().catch(console.error); }, 15_000);
+      // Clear any persisted 429 cooldown so a fresh deploy always runs backfill
+      setTimeout(() => {
+        clearBackfillCooldown()
+          .then(() => backfillGlanceQueue())
+          .catch(console.error);
+      }, 15_000);
       startInternalCron();
       // Bootstrap Vapi assistant after a 30s startup delay so health checks pass first.
       // Always use the production domain so Vapi tool calls reach the live server.

@@ -435,6 +435,17 @@ export function startGlanceWorker() {
 }
 
 // ── Backfill: enqueue last 100 inbox threads that haven't been processed ──────
+export async function clearBackfillCooldown(): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.update(gmailState).set({ gmailBackfillCooldownUntil: 0 }).where(eq(gmailState.id, 1));
+    console.log("[GlanceWorker] Backfill cooldown cleared on startup.");
+  } catch (e) {
+    console.error("[GlanceWorker] Failed to clear backfill cooldown:", e);
+  }
+}
+
 export async function backfillGlanceQueue(): Promise<void> {
   try {
     const db = await getDb();

@@ -5613,8 +5613,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               </div>
 
-              {/* Search bar — always visible so user can correct a misheard name */}
-              <div className="px-5 pb-3">
+              {/* Search bar — hidden for remind action, always visible for text/call */}
+              {voiceConfirmAction !== "remind" && <div className="px-5 pb-3">
                 <input
                   type="text"
                   placeholder="Search or correct contact name..."
@@ -5653,10 +5653,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     ))}
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* Contact picker — only shown when multiple matches AND none selected yet */}
-              {!voiceNeedsSearch && voiceConfirm.matches.length > 1 && !voiceConfirm.selected && (
+              {voiceConfirmAction !== "remind" && !voiceNeedsSearch && voiceConfirm.matches.length > 1 && !voiceConfirm.selected && (
                 <div className="px-5 pb-3">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Who did you mean?</p>
                   <div className="flex flex-col gap-1">
@@ -5688,7 +5688,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               )}
 
               {/* iMessage-style tap-to-edit bubble */}
-              {!voiceNeedsSearch && (
+              {voiceConfirmAction !== "remind" && !voiceNeedsSearch && (
                 <div className="px-5 pb-5">
                   <div className="flex justify-end min-h-[180px] items-start pt-1">
                     {voiceBubbleEditing ? (
