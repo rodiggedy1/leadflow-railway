@@ -75,8 +75,8 @@ export const gmailRouter = router({
       // Cursor-based pagination: pageToken encodes lastMessageAt of the last row
       const cursorAt = input.pageToken ? parseInt(input.pageToken, 10) : null;
 
-      // Build WHERE clause: inbox only + optional search
-      const conditions = [eq(gmailThreadMeta.isInInbox, 1)];
+      // Build WHERE clause: inbox only + only rows the worker has processed (senderName IS NOT NULL)
+      const conditions = [eq(gmailThreadMeta.isInInbox, 1), isNotNull(gmailThreadMeta.senderName)];
       if (cursorAt && !isNaN(cursorAt)) {
         conditions.push(sql`${gmailThreadMeta.lastMessageAt} < ${cursorAt}`);
       }
@@ -102,7 +102,8 @@ export const gmailRouter = router({
       const hasMore = rows.length > limit;
       const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-      // Determine syncing state: no rows at all (worker hasn't processed anything yet)
+      // Determine syncing state: worker hasn't processed any inbox threads yet
+      // (rows exist in DB but senderName is NULL — they haven't been fetched by the worker)
       const syncing = pageRows.length === 0 && !input.query && !cursorAt;
 
       // Compute stale rows for health logging

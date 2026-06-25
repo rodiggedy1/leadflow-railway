@@ -1752,7 +1752,7 @@ export default function EmailInbox() {
               />
             );
           })}
-          {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && (
+          {threads.length === 0 && !threadsQuery.isLoading && statusQuery.data?.connected && !threadsQuery.data?.syncing && (
             <div className="text-center py-12 px-4">
               {activeCategoryFilter ? (
                 <>
