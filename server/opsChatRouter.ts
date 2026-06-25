@@ -3781,6 +3781,7 @@ Extract the intent from the voice command transcript.
 Return JSON only, no explanation.
 Supported actions:
 - "text": user wants to send a text/SMS to a client. Extract the client name and write the SMS message.
+- "call": user wants to make a phone call to a client. Extract the client name and write the opening script Ava (the AI voice) will say.
 - "chat": anything else (post to ops chat, general commands, etc.)
 
 For "text" action, write the SMS message using this EXACT quality standard:
@@ -3792,11 +3793,16 @@ You MUST include at least 1 emoji (1–2 max) placed naturally — e.g. 😊 �
 A message with ZERO emoji is WRONG.
 Write until the message feels complete and warm.
 
+For "call" action, write a short natural opening script (2-3 sentences) that Ava will say when the client picks up.
+Be warm and professional. State the reason for the call clearly. No emoji (it's spoken).
+Example: "Hi Maria, this is Ava calling from Maids in Black. I just wanted to let you know that our team is running about 20 minutes behind schedule today. We'll be there as soon as possible — thank you so much for your patience!"
+
 Examples:
-- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"Hey Maria! Just wanted to give you a heads up — we're running a little behind but we'll be there in about 20 minutes. Hang tight! 😊"}
-- "Text Sarah the job is done" → {"action":"text","name":"Sarah","message":"Hi Sarah! Just finished up and everything looks great! 🏡 Let us know if there's anything you'd like us to touch up."}
-- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null}
-- "Show me today's jobs" → {"action":"chat","name":null,"message":null}`,
+- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"Hey Maria! Just wanted to give you a heads up — we're running a little behind but we'll be there in about 20 minutes. Hang tight! 😊","scenario":null}
+- "Call Rohan and tell him we're running late, be there in 20" → {"action":"call","name":"Rohan","message":"Hi Rohan, this is Ava calling from Maids in Black. I wanted to let you know our team is running a little behind today but we'll be there in about 20 minutes. Thank you so much for your patience!","scenario":"running late, arriving in 20 minutes"}
+- "Text Sarah the job is done" → {"action":"text","name":"Sarah","message":"Hi Sarah! Just finished up and everything looks great! 🏡 Let us know if there's anything you'd like us to touch up.","scenario":null}
+- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null,"scenario":null}
+- "Show me today's jobs" → {"action":"chat","name":null,"message":null,"scenario":null}`,
           },
           { role: "user", content: input.transcript },
         ],
@@ -3808,26 +3814,27 @@ Examples:
             schema: {
               type: "object",
               properties: {
-                action: { type: "string", enum: ["text", "chat"] },
+                action: { type: "string", enum: ["text", "call", "chat"] },
                 name: { type: ["string", "null"] },
                 message: { type: ["string", "null"] },
+                scenario: { type: ["string", "null"] },
               },
-              required: ["action", "name", "message"],
+              required: ["action", "name", "message", "scenario"],
               additionalProperties: false,
             },
           },
         },
       });
 
-      let parsed: { action: string; name: string | null; message: string | null };
+      let parsed: { action: string; name: string | null; message: string | null; scenario: string | null };
       try {
         parsed = JSON.parse(intentResult.choices[0].message.content as string);
       } catch {
         return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null, needsSearch: false, detectedName: null };
       }
 
-      if (parsed.action !== "text" || !parsed.name) {
-        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: parsed.message, needsSearch: false, detectedName: null };
+      if ((parsed.action !== "text" && parsed.action !== "call") || !parsed.name) {
+        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>, message: parsed.message, needsSearch: false, detectedName: null, scenario: null };
       }
 
       // Step 2: Look up client by name in conversation_sessions
@@ -3873,23 +3880,27 @@ Examples:
         })
       );
 
+      const actionType = parsed.action as "text" | "call";
+
       // If no matches found, return needsSearch=true so frontend shows a search box
       if (matchesWithJob.length === 0) {
         return {
-          action: "text" as const,
+          action: actionType,
           matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>,
           message: parsed.message,
           needsSearch: true,
           detectedName: parsed.name,
+          scenario: parsed.scenario,
         };
       }
 
       return {
-        action: "text" as const,
+        action: actionType,
         matches: matchesWithJob,
         message: parsed.message,
         needsSearch: false,
         detectedName: parsed.name,
+        scenario: parsed.scenario,
       };
     }),
 

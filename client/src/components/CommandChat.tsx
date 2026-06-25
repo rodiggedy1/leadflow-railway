@@ -3330,9 +3330,55 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   };
   const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmState | null>(null);
   const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
+  const [voiceConfirmAction, setVoiceConfirmAction] = useState<"text" | "call">("text");
+  const [voiceConfirmScenario, setVoiceConfirmScenario] = useState<string | null>(null);
   const [voiceSending, setVoiceSending] = useState(false);
   const [voiceSearchQuery, setVoiceSearchQuery] = useState("");
   const [voiceNeedsSearch, setVoiceNeedsSearch] = useState(false);
+  // Voice call state (mirrors AICallPanel exactly)
+  type VoiceCallStatus = "idle" | "firing" | "queued" | "ringing" | "in_progress" | "completed" | "voicemail" | "no_answer" | "failed";
+  const [voiceCallStatus, setVoiceCallStatus] = useState<VoiceCallStatus>("idle");
+  const [voiceCallVapiId, setVoiceCallVapiId] = useState<string | null>(null);
+  const [voiceCallSummary, setVoiceCallSummary] = useState<string | null>(null);
+  const [voiceCallTranscript, setVoiceCallTranscript] = useState<string | null>(null);
+  const [voiceCallRecordingUrl, setVoiceCallRecordingUrl] = useState<string | null>(null);
+  const [voiceCallShowTranscript, setVoiceCallShowTranscript] = useState(false);
+  const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceCallUtils = trpc.useUtils();
+  // startCall mutation — verbatim from AICallPanel
+  const voiceStartCallMutation = trpc.callMatrix.startCall.useMutation({
+    onSuccess: (result) => {
+      if (result.vapiCallId) {
+        setVoiceCallVapiId(result.vapiCallId);
+        setVoiceCallStatus("queued");
+        // Start polling — verbatim from AICallPanel.startPolling
+        if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
+        voiceCallPollRef.current = setInterval(async () => {
+          try {
+            const poll = await voiceCallUtils.callMatrix.pollCall.fetch({ vapiCallId: result.vapiCallId! });
+            const s = poll.status as VoiceCallStatus;
+            setVoiceCallStatus(s);
+            if (poll.summary) setVoiceCallSummary(poll.summary);
+            if (poll.transcript) setVoiceCallTranscript(poll.transcript);
+            if (poll.recordingUrl) setVoiceCallRecordingUrl(poll.recordingUrl);
+            if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
+              if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
+              voiceCallPollRef.current = null;
+            }
+          } catch { /* ignore */ }
+        }, 5000);
+      } else {
+        setVoiceCallStatus("failed");
+        toast.error("Call failed to start");
+      }
+    },
+    onError: (err) => {
+      setVoiceCallStatus("failed");
+      toast.error(`Call error: ${err.message}`);
+    },
+  });
+  // Cleanup poll on unmount
+  useEffect(() => () => { if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current); }, []);
   const { data: voiceSearchResults = [] } = trpc.opsChat.searchClients.useQuery(
     { query: voiceSearchQuery },
     { enabled: !!voiceConfirm && voiceSearchQuery.trim().length >= 2 }
@@ -3415,25 +3461,40 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Route through voice command intent detection
       const result = await voiceCommandMutation.mutateAsync({ transcript: text.trim() });
 
-      if (result.action === "text" && result.matches.length > 0 && result.message) {
+      if ((result.action === "text" || result.action === "call") && result.matches.length > 0 && result.message) {
         // Show confirmation card — message is already written in friendly quality by the server
         setVoiceConfirmMsg(result.message);
+        setVoiceConfirmAction(result.action as "text" | "call");
+        setVoiceConfirmScenario((result as any).scenario ?? null);
         setVoiceConfirm({
           message: result.message,
           matches: result.matches,
           selected: result.matches.length === 1 ? result.matches[0] : null,
         });
         setVoiceTone("friendly");
-      } else if (result.action === "text" && result.needsSearch && result.message) {
+        // Reset call state for new card
+        setVoiceCallStatus("idle");
+        setVoiceCallVapiId(null);
+        setVoiceCallSummary(null);
+        setVoiceCallTranscript(null);
+        setVoiceCallRecordingUrl(null);
+      } else if ((result.action === "text" || result.action === "call") && result.needsSearch && result.message) {
         // No client found — show search card so user can find the contact manually
         setVoiceNeedsSearch(true);
         setVoiceSearchQuery("");
         setVoiceConfirmMsg(result.message);
+        setVoiceConfirmAction(result.action as "text" | "call");
+        setVoiceConfirmScenario((result as any).scenario ?? null);
         setVoiceConfirm({
           message: result.message,
           matches: [],
           selected: null,
         });
+        setVoiceCallStatus("idle");
+        setVoiceCallVapiId(null);
+        setVoiceCallSummary(null);
+        setVoiceCallTranscript(null);
+        setVoiceCallRecordingUrl(null);
       } else {
         // Unknown action — post as normal chat message
         onSendMessage(text.trim());
@@ -5374,7 +5435,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
                 {/* Identity block */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em] mb-0.5">Send Text</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.12em] mb-0.5">{voiceConfirmAction === "call" ? "AI Call" : "Send Text"}</p>
                   {voiceConfirm.selected ? (
                     <p className="text-[17px] font-bold text-slate-900 truncate leading-snug">{voiceConfirm.selected.name}</p>
                   ) : (
@@ -5511,8 +5572,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               )}
 
-              {/* Tone rewrite buttons */}
-              {!voiceNeedsSearch && (
+              {/* Tone rewrite buttons — only for text action */}
+              {!voiceNeedsSearch && voiceConfirmAction === "text" && (
                 <div className="px-5 pb-3">
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Rewrite tone</p>
                   <div className="flex gap-2">
@@ -5555,46 +5616,127 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </div>
               )}
 
+              {/* Live call status — only for call action */}
+              {voiceConfirmAction === "call" && voiceCallStatus !== "idle" && (
+                <div className="px-5 pb-3">
+                  <div className={cn(
+                    "rounded-2xl px-4 py-3 text-sm font-semibold flex items-center gap-2",
+                    voiceCallStatus === "firing" || voiceCallStatus === "queued" ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                    voiceCallStatus === "ringing" ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                    voiceCallStatus === "in_progress" ? "bg-green-50 text-green-700 border border-green-200" :
+                    voiceCallStatus === "completed" ? "bg-slate-50 text-slate-700 border border-slate-200" :
+                    voiceCallStatus === "voicemail" ? "bg-purple-50 text-purple-700 border border-purple-200" :
+                    "bg-red-50 text-red-700 border border-red-200"
+                  )}>
+                    {(voiceCallStatus === "firing" || voiceCallStatus === "queued" || voiceCallStatus === "ringing" || voiceCallStatus === "in_progress") && (
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                    )}
+                    <span>
+                      {voiceCallStatus === "firing" ? "Placing call…" :
+                       voiceCallStatus === "queued" ? "Call queued…" :
+                       voiceCallStatus === "ringing" ? "📞 Ringing…" :
+                       voiceCallStatus === "in_progress" ? "🟢 In progress" :
+                       voiceCallStatus === "completed" ? "✅ Call completed" :
+                       voiceCallStatus === "voicemail" ? "📩 Voicemail left" :
+                       voiceCallStatus === "no_answer" ? "🔇 No answer" :
+                       "❌ Call failed"}
+                    </span>
+                  </div>
+                  {voiceCallSummary && (
+                    <p className="mt-2 text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">{voiceCallSummary}</p>
+                  )}
+                  {voiceCallTranscript && (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => setVoiceCallShowTranscript(v => !v)}
+                        className="text-[11px] text-violet-600 font-semibold hover:underline"
+                      >
+                        {voiceCallShowTranscript ? "Hide transcript" : "Show transcript"}
+                      </button>
+                      {voiceCallShowTranscript && (
+                        <pre className="mt-1 text-[11px] text-slate-600 whitespace-pre-wrap bg-slate-50 rounded-xl px-3 py-2 border border-slate-100 max-h-32 overflow-y-auto">{voiceCallTranscript}</pre>
+                      )}
+                    </div>
+                  )}
+                  {voiceCallRecordingUrl && (
+                    <audio controls src={voiceCallRecordingUrl} className="w-full mt-2 h-8" />
+                  )}
+                </div>
+              )}
+
               {/* Divider */}
               <div className="h-px bg-slate-100 mx-5" />
 
               {/* Action buttons */}
               <div className="flex items-center gap-2 px-5 py-4 mt-auto">
                 <button
-                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
+                  onClick={() => {
+                    if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
+                    setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery("");
+                    setVoiceTone("friendly"); setVoiceBubbleEditing(false);
+                    setVoiceCallStatus("idle"); setVoiceCallVapiId(null);
+                    setVoiceCallSummary(null); setVoiceCallTranscript(null); setVoiceCallRecordingUrl(null);
+                  }}
                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
-                  Cancel
+                  {voiceConfirmAction === "call" && (voiceCallStatus === "completed" || voiceCallStatus === "voicemail" || voiceCallStatus === "no_answer") ? "Done" : "Cancel"}
                 </button>
-                <button
-                  disabled={!voiceConfirm.selected || !voiceConfirmMsg.trim() || voiceSending}
-                  onClick={async () => {
-                    if (!voiceConfirm.selected || !voiceConfirmMsg.trim()) return;
-                    setVoiceSending(true);
-                    try {
-                      await sendVoiceText.mutateAsync({
-                        sessionId: voiceConfirm.selected.sessionId,
-                        message: voiceConfirmMsg.trim(),
-                        fromNumberId: "PN0wVLcpCq",
+
+                {/* TEXT action send button */}
+                {voiceConfirmAction === "text" && (
+                  <button
+                    disabled={!voiceConfirm.selected || !voiceConfirmMsg.trim() || voiceSending}
+                    onClick={async () => {
+                      if (!voiceConfirm.selected || !voiceConfirmMsg.trim()) return;
+                      setVoiceSending(true);
+                      try {
+                        await sendVoiceText.mutateAsync({
+                          sessionId: voiceConfirm.selected.sessionId,
+                          message: voiceConfirmMsg.trim(),
+                          fromNumberId: "PN0wVLcpCq",
+                        });
+                        toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
+                        setVoiceConfirm(null);
+                        setVoiceConfirmMsg("");
+                        setVoiceNeedsSearch(false);
+                        setVoiceSearchQuery("");
+                        setVoiceTone("friendly");
+                        setVoiceBubbleEditing(false);
+                      } catch {
+                        toast.error("Failed to send — please try again");
+                      } finally {
+                        setVoiceSending(false);
+                      }
+                    }}
+                    className="flex-1 rounded-2xl bg-[#007AFF] text-white px-4 py-3 text-sm font-semibold hover:bg-blue-600 disabled:opacity-40 transition flex items-center justify-center gap-2"
+                  >
+                    {voiceSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {voiceSending ? "Sending…" : "Send"}
+                  </button>
+                )}
+
+                {/* CALL action button */}
+                {voiceConfirmAction === "call" && voiceCallStatus === "idle" && (
+                  <button
+                    disabled={!voiceConfirm.selected || !voiceConfirmMsg.trim()}
+                    onClick={() => {
+                      if (!voiceConfirm.selected) return;
+                      setVoiceCallStatus("firing");
+                      voiceStartCallMutation.mutate({
+                        cleanerJobId: 0,
+                        jobDate: "",
+                        personName: voiceConfirm.selected.name,
+                        phone: voiceConfirm.selected.phone,
+                        scenario: voiceConfirmScenario ?? voiceConfirmMsg.slice(0, 80),
+                        script: voiceConfirmMsg.trim(),
+                        audience: "customer",
                       });
-                      toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
-                      setVoiceConfirm(null);
-                      setVoiceConfirmMsg("");
-                      setVoiceNeedsSearch(false);
-                      setVoiceSearchQuery("");
-                      setVoiceTone("friendly");
-                      setVoiceBubbleEditing(false);
-                    } catch {
-                      toast.error("Failed to send — please try again");
-                    } finally {
-                      setVoiceSending(false);
-                    }
-                  }}
-                  className="flex-1 rounded-2xl bg-[#007AFF] text-white px-4 py-3 text-sm font-semibold hover:bg-blue-600 disabled:opacity-40 transition flex items-center justify-center gap-2"
-                >
-                  {voiceSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {voiceSending ? "Sending…" : "Send"}
-                </button>
+                    }}
+                    className="flex-1 rounded-2xl bg-green-600 text-white px-4 py-3 text-sm font-semibold hover:bg-green-700 disabled:opacity-40 transition flex items-center justify-center gap-2"
+                  >
+                    📞 Call {voiceConfirm.selected?.name?.split(" ")[0] ?? ""}
+                  </button>
+                )}
               </div>
             </div>
           )}
