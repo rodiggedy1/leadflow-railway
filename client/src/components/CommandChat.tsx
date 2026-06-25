@@ -3316,8 +3316,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
     const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
   const voiceCommandMutation = trpc.opsChat.voiceCommand.useMutation();
-  const sendVoiceText = trpc.leads.sendMessage.useMutation();
-
+    const sendVoiceText = trpc.leads.sendMessage.useMutation();
+  const rewriteVoiceMsg = trpc.opsChat.rewriteVoiceMessage.useMutation();
+  const [voiceTone, setVoiceTone] = useState<"friendly" | "professional" | "casual">("friendly");
+  const [voiceRewriting, setVoiceRewriting] = useState(false);
   // Voice command confirmation card state
   type VoiceMatch = { sessionId: number; name: string; phone: string };
   type VoiceConfirmState = {
@@ -5360,23 +5362,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
           {voiceConfirm && (
-            <div className="mb-2 rounded-2xl border border-violet-200 bg-white shadow-lg overflow-hidden">
-              {/* Header */}
-              <div className="flex items-center gap-2.5 px-4 py-3 bg-violet-50 border-b border-violet-100">
-                <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
-                  <Mic className="h-4 w-4 text-white" />
+            <div className="mb-2 mx-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
+              {/* Header — contact identity */}
+              <div className="flex items-center gap-3 px-5 pt-5 pb-3">
+                <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
+                  <span className="text-white font-bold text-base">{(voiceConfirm.selected?.name ?? "?")[0].toUpperCase()}</span>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Voice Command — Send Text</p>
+                                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest">Send Text</p>
                   {voiceConfirm.selected ? (
-                    <p className="text-sm font-semibold text-slate-900 truncate">{voiceConfirm.selected.name} &middot; {voiceConfirm.selected.phone}</p>
+                    <p className="text-[15px] font-bold text-slate-900 truncate leading-tight">{voiceConfirm.selected.name}</p>
                   ) : (
-                    <p className="text-sm text-slate-500">Select a contact below</p>
+                    <p className="text-sm text-slate-400">Select a contact below</p>
+                  )}
+                  {voiceConfirm.selected && (
+                    <p className="text-xs text-slate-400 truncate">{voiceConfirm.selected.phone}</p>
                   )}
                 </div>
                 <button
-                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); }}
-                  className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); }}
+                  className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -5384,20 +5389,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
               {/* Search mode — shown when no client was found by name */}
               {voiceNeedsSearch && (
-                <div className="px-4 py-2 border-b border-slate-100">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Search for contact</p>
+                <div className="px-5 pb-3">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Search for contact</p>
                   <input
                     autoFocus
                     type="text"
                     placeholder="Type a name..."
                     value={voiceSearchQuery}
                     onChange={e => setVoiceSearchQuery(e.target.value)}
-                    className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+                    className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
                   />
                   {voiceSearchQuery.trim().length >= 2 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <div className="mt-2 flex flex-col gap-1">
                       {voiceSearchResults.length === 0 && (
-                        <p className="text-xs text-slate-400 py-1">No contacts found</p>
+                        <p className="text-xs text-slate-400 py-1 px-1">No contacts found</p>
                       )}
                       {voiceSearchResults.map(m => (
                         <button
@@ -5407,54 +5412,125 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             setVoiceSearchQuery("");
                             setVoiceConfirm(prev => prev ? { ...prev, selected: m, matches: [m] } : null);
                           }}
-                          className="px-3 py-1.5 rounded-full text-sm font-medium border bg-white text-slate-700 border-slate-200 hover:border-violet-400 hover:text-violet-700 transition"
+                          className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-slate-50 hover:bg-violet-50 border border-transparent hover:border-violet-200 transition text-left"
                         >
-                          {m.name} &middot; <span className="text-slate-400">{m.phone}</span>
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shrink-0">
+                            <span className="text-white font-bold text-xs">{m.name[0].toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{m.name}</p>
+                            <p className="text-xs text-slate-400 truncate">{m.phone}</p>
+                          </div>
                         </button>
                       ))}
                     </div>
                   )}
                 </div>
               )}
+
               {/* Contact picker — only shown when multiple matches */}
               {!voiceNeedsSearch && voiceConfirm.matches.length > 1 && (
-                <div className="px-4 py-2 border-b border-slate-100">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Who did you mean?</p>
-                  <div className="flex flex-wrap gap-1.5">
+                <div className="px-5 pb-3">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Who did you mean?</p>
+                  <div className="flex flex-col gap-1">
                     {voiceConfirm.matches.map(m => (
                       <button
                         key={m.sessionId}
                         onClick={() => setVoiceConfirm(prev => prev ? { ...prev, selected: m } : null)}
                         className={cn(
-                          "px-3 py-1.5 rounded-full text-sm font-medium border transition",
+                          "flex items-center gap-3 px-4 py-2.5 rounded-2xl border transition text-left",
                           voiceConfirm.selected?.sessionId === m.sessionId
-                            ? "bg-violet-600 text-white border-violet-600"
-                            : "bg-white text-slate-700 border-slate-200 hover:border-violet-400 hover:text-violet-700"
+                            ? "bg-violet-50 border-violet-300"
+                            : "bg-slate-50 border-transparent hover:border-violet-200 hover:bg-violet-50"
                         )}
                       >
-                        {m.name}
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center shrink-0">
+                          <span className="text-white font-bold text-xs">{m.name[0].toUpperCase()}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{m.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{m.phone}</p>
+                        </div>
+                        {voiceConfirm.selected?.sessionId === m.sessionId && (
+                          <CheckCircle2 className="h-4 w-4 text-violet-600 ml-auto shrink-0" />
+                        )}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Message editor */}
-              <div className="px-4 py-3">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Message</p>
-                <textarea
-                  value={voiceConfirmMsg}
-                  onChange={e => setVoiceConfirmMsg(e.target.value)}
-                  rows={2}
-                  className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
-                />
-              </div>
+              {/* iMessage-style message bubble preview */}
+              {!voiceNeedsSearch && (
+                <div className="px-5 pb-3">
+                  <div className="flex justify-end mb-2">
+                    <div className="max-w-[85%] bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-4 py-3 shadow-sm">
+                      <p className="text-white text-[14px] leading-snug whitespace-pre-wrap">{voiceConfirmMsg || "…"}</p>
+                    </div>
+                  </div>
+                  {/* Editable textarea below the bubble */}
+                  <textarea
+                    value={voiceConfirmMsg}
+                    onChange={e => setVoiceConfirmMsg(e.target.value)}
+                    rows={3}
+                    placeholder="Edit message..."
+                    className="w-full text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400 mt-1"
+                  />
+                </div>
+              )}
+
+              {/* Tone rewrite buttons */}
+              {!voiceNeedsSearch && (
+                <div className="px-5 pb-3">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-2">Rewrite tone</p>
+                  <div className="flex gap-2">
+                    {(["friendly", "professional", "casual"] as const).map(tone => (
+                      <button
+                        key={tone}
+                        disabled={voiceRewriting}
+                        onClick={async () => {
+                          if (!voiceConfirmMsg.trim() || voiceRewriting) return;
+                          setVoiceTone(tone);
+                          setVoiceRewriting(true);
+                          try {
+                            const result = await rewriteVoiceMsg.mutateAsync({
+                              rawMessage: voiceConfirmMsg,
+                              customerName: voiceConfirm.selected?.name ?? "Customer",
+                              tone,
+                            });
+                            setVoiceConfirmMsg(result.message);
+                          } catch {
+                            toast.error("Rewrite failed");
+                          } finally {
+                            setVoiceRewriting(false);
+                          }
+                        }}
+                        className={cn(
+                          "flex-1 rounded-xl py-2 text-xs font-semibold transition border",
+                          voiceTone === tone && !voiceRewriting
+                            ? "bg-slate-900 text-white border-slate-900"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900"
+                        )}
+                      >
+                        {voiceRewriting && voiceTone === tone ? (
+                          <span className="flex items-center justify-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Rewriting…</span>
+                        ) : (
+                          tone === "friendly" ? "😊 Friendly" : tone === "professional" ? "👔 Professional" : "💬 Casual"
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <div className="h-px bg-slate-100 mx-5" />
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2 px-4 pb-3">
+              <div className="flex items-center gap-2 px-5 py-4">
                 <button
-                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); }}
-                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+                  onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); }}
+                  className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
                 >
                   Cancel
                 </button>
@@ -5474,16 +5550,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       setVoiceConfirmMsg("");
                       setVoiceNeedsSearch(false);
                       setVoiceSearchQuery("");
+                      setVoiceTone("friendly");
                     } catch {
                       toast.error("Failed to send — please try again");
                     } finally {
                       setVoiceSending(false);
                     }
                   }}
-                  className="flex-1 rounded-xl bg-violet-600 text-white px-4 py-2.5 text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 transition flex items-center justify-center gap-2"
+                  className="flex-1 rounded-2xl bg-[#007AFF] text-white px-4 py-3 text-sm font-semibold hover:bg-blue-600 disabled:opacity-40 transition flex items-center justify-center gap-2"
                 >
                   {voiceSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {voiceSending ? "Sending…" : "Send Text"}
+                  {voiceSending ? "Sending…" : "Send"}
                 </button>
               </div>
             </div>

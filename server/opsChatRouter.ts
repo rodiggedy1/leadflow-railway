@@ -3868,6 +3868,56 @@ Examples:
     }),
 
   /**
+   * rewriteVoiceMessage — rewrite a voice command message with a specific tone.
+   * Uses the same CS chat system prompt quality.
+   */
+  rewriteVoiceMessage: opsChatProcedure
+    .input(z.object({
+      rawMessage: z.string().min(1).max(500),
+      customerName: z.string().min(1).max(100),
+      tone: z.enum(["friendly", "professional", "casual"]),
+      context: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { MAIDS_IN_BLACK_KNOWLEDGE_BASE } = await import("./knowledgeBase");
+      const { invokeLLM } = await import("./_core/llm");
+      const toneInstructions: Record<string, string> = {
+        friendly: "Warm, personal, emoji-friendly (1\u20132 emojis max). Like a real person texting who genuinely cares. Use the customer's name. Upbeat and reassuring.",
+        professional: "Polished and clear. No emoji. Formal but not cold. Concise. Sounds like a well-run business communicating professionally.",
+        casual: "Short, conversational, like a quick text from a friend. 1\u20132 sentences max. No corporate language. Natural and relaxed.",
+      };
+      const systemPrompt = `You are a customer service agent for Maids in Black, a residential cleaning company in Washington DC. Your job is to write the exact SMS the agent should send \u2014 not advice, the actual text message.
+=== TONE FOR THIS MESSAGE ===
+${toneInstructions[input.tone]}
+=== GENERAL TONE RULES ===
+Warm, direct, and genuinely human. Think: a real person texting, not a corporate script. Short sentences. Conversational. Like you actually care \u2014 because you do.
+Be SPECIFIC. Use the customer's actual name. Generic messages feel hollow.
+Never be defensive. Never make excuses. Own the experience.
+Sound like a real person, not a brand. No corporate buzzwords, no "we strive to...", no "rest assured".
+Do NOT say "make your home sparkle" or similar cheesy lines.
+=== EMOJI RULES ===
+- For friendly tone: 1\u20132 emojis max, placed naturally.
+- For professional tone: no emoji.
+- For casual tone: 0\u20131 emoji max.
+=== WHAT NOT TO WRITE ===
+- "Got it! Thanks for confirming. Our team will take care of that." \u2190 Too short. No warmth.
+- "Hi Sarah! We've received your request and will handle it accordingly." \u2190 Corporate, cold.
+- "Thank you for your patience." \u2190 Filler. Means nothing.
+=== MAIDS IN BLACK KNOWLEDGE BASE ===
+${MAIDS_IN_BLACK_KNOWLEDGE_BASE}
+Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
+      const userPrompt = `Customer name: ${input.customerName}\n${input.context ? `Context: ${input.context}` : ""}\nOriginal message to rewrite: ${input.rawMessage}\nTone: ${input.tone}`;
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+      const rewritten = ((result.choices[0].message.content as string) ?? "").trim();
+      return { message: rewritten };
+    }),
+
+  /**
    * searchClients — search conversation_sessions by name for the voice command contact picker.
    */
   searchClients: opsChatProcedure
