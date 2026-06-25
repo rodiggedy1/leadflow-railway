@@ -15,7 +15,7 @@
  *   4. On success: confirms session is active by calling cleaner.me, then redirects to /cleaner
  *   5. On failure: shows error message with a link back to the login page
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,8 @@ export default function CleanerAuthCallback() {
   const [errorMsg, setErrorMsg] = useState<string>(
     token ? "" : "No login token found in URL. Please use the link from your SMS."
   );
+
+  const hasRedirected = useRef(false);
 
   const verifyMutation = trpc.cleaner.verifyMagicLink.useMutation();
   const meQuery = trpc.cleaner.me.useQuery(undefined, {
@@ -63,12 +65,14 @@ export default function CleanerAuthCallback() {
     if (meQuery.isLoading) return;
 
     if (meQuery.data) {
-      // Session confirmed — redirect to portal
-      setState("success");
-      // Small delay so user sees the success state briefly
-      setTimeout(() => {
+      // Session confirmed — redirect immediately.
+      // No setState("success") or setTimeout: avoiding a pending React state update
+      // during page unload, which caused a removeChild crash in the commit phase.
+      // hasRedirected ref ensures this fires at most once even if the effect re-runs.
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
         window.location.replace("/cleaner");
-      }, 800);
+      }
     } else if (meQuery.isError || (!meQuery.isLoading && !meQuery.data)) {
       // Session not found even after verification — something went wrong
       setErrorMsg("Session could not be confirmed. Please try the link again or contact your manager.");
