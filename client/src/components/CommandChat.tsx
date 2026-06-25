@@ -3416,13 +3416,31 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       const result = await voiceCommandMutation.mutateAsync({ transcript: text.trim() });
 
       if (result.action === "text" && result.matches.length > 0 && result.message) {
-        // Show confirmation card
+        // Show confirmation card — auto-rewrite to friendly immediately
+        const selectedContact = result.matches.length === 1 ? result.matches[0] : null;
         setVoiceConfirmMsg(result.message);
         setVoiceConfirm({
           message: result.message,
           matches: result.matches,
-          selected: result.matches.length === 1 ? result.matches[0] : null,
+          selected: selectedContact,
         });
+        setVoiceTone("friendly");
+        // Auto-rewrite to friendly tone right away so the card shows a polished message
+        if (selectedContact) {
+          setVoiceRewriting(true);
+          try {
+            const rewritten = await rewriteVoiceMsg.mutateAsync({
+              rawMessage: result.message,
+              customerName: selectedContact.name,
+              tone: "friendly",
+            });
+            setVoiceConfirmMsg(rewritten.message);
+          } catch {
+            // silently fall back to raw message
+          } finally {
+            setVoiceRewriting(false);
+          }
+        }
       } else if (result.action === "text" && result.needsSearch && result.message) {
         // No client found — show search card so user can find the contact manually
         setVoiceNeedsSearch(true);
