@@ -73,7 +73,7 @@ interface CommandChatProps {
   channelLoading: boolean;
   callerName: string;
   /** Called when user hits Send in the composer */
-  onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }, quickAction?: string) => void;
+  onSendMessage: (body: string, mediaUrl?: string, replyTo?: { id: number; body: string; author: string }, quickAction?: string, metadata?: string) => void;
   /** Called when user clicks "Jump to Job Thread" */
   onJumpToJob: (jobId: number) => void;
   /** Called when user sends a reply in a thread panel */
@@ -2166,6 +2166,71 @@ const MessageList = memo(function MessageList({
                   );
                 }
 
+                // ── Voice Text Sent card ────────────────────────────────────────────────
+                if (msg.quickAction === "voice_text_sent") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const vtName = (meta.contactName as string) ?? "Client";
+                  const vtMsg = (meta.message as string) ?? "";
+                  const vtBy = (meta.triggeredBy as string) ?? msg.from ?? "";
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-blue-200 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF]">
+                          <MessageSquare className="h-3 w-3 text-blue-100" />
+                          <span className="text-[10px] font-semibold text-blue-100 uppercase tracking-widest">Text Sent</span>
+                          <span className="ml-auto text-[10px] text-blue-200">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2.5 bg-blue-50">
+                          <p className="text-sm font-semibold text-slate-900">{vtName}</p>
+                          {vtMsg && (
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed border-l-2 border-blue-300 pl-2">&ldquo;{vtMsg}&rdquo;</p>
+                          )}
+                          {vtBy && <p className="text-[10px] text-slate-400 mt-1.5">via voice command by {vtBy}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // ── Voice Call Completed card ───────────────────────────────────────────
+                if (msg.quickAction === "voice_call_completed") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const vcName = (meta.contactName as string) ?? "Client";
+                  const vcOutcome = (meta.outcome as string) ?? "completed";
+                  const vcSummary = (meta.summary as string | null) ?? null;
+                  const vcDuration = (meta.durationSeconds as number | null) ?? null;
+                  const vcBy = (meta.triggeredBy as string) ?? msg.from ?? "";
+                  const vcScript = (meta.script as string | null) ?? null;
+                  const outcomeLabel = vcOutcome === "completed" ? "✅ Call Completed" : vcOutcome === "voicemail" ? "📬 Voicemail Left" : vcOutcome === "no_answer" ? "📵 No Answer" : "❌ Call Failed";
+                  const outcomeColor = vcOutcome === "completed" ? "bg-emerald-500" : vcOutcome === "voicemail" ? "bg-violet-500" : vcOutcome === "no_answer" ? "bg-amber-500" : "bg-red-500";
+                  const outcomeBorder = vcOutcome === "completed" ? "border-emerald-200" : vcOutcome === "voicemail" ? "border-violet-200" : vcOutcome === "no_answer" ? "border-amber-200" : "border-red-200";
+                  const outcomeBg = vcOutcome === "completed" ? "bg-emerald-50" : vcOutcome === "voicemail" ? "bg-violet-50" : vcOutcome === "no_answer" ? "bg-amber-50" : "bg-red-50";
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className={`max-w-[80%] rounded-xl overflow-hidden border ${outcomeBorder} shadow-sm`}>
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 ${outcomeColor}`}>
+                          <Phone className="h-3 w-3 text-white/80" />
+                          <span className="text-[10px] font-semibold text-white/90 uppercase tracking-widest">{outcomeLabel}</span>
+                          {vcDuration && <span className="text-[10px] text-white/70 ml-1">· {vcDuration}s</span>}
+                          <span className="ml-auto text-[10px] text-white/70">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className={`px-3 py-2.5 ${outcomeBg}`}>
+                          <p className="text-sm font-semibold text-slate-900">{vcName}</p>
+                          {vcScript && (
+                            <p className="text-xs text-slate-600 mt-1 leading-relaxed border-l-2 border-slate-300 pl-2 italic">&ldquo;{vcScript}&rdquo;</p>
+                          )}
+                          {vcSummary && (
+                            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{vcSummary}</p>
+                          )}
+                          {vcBy && <p className="text-[10px] text-slate-400 mt-1.5">via voice command by {vcBy}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -3345,6 +3410,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceCallShowTranscript, setVoiceCallShowTranscript] = useState(false);
   const [voiceCardMinimized, setVoiceCardMinimized] = useState(false);
   const voiceCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceCallContactNameRef = useRef<string | null>(null);
+  const voiceCallContactPhoneRef = useRef<string | null>(null);
+  const voiceCallScriptRef = useRef<string | null>(null);
   const voiceCallUtils = trpc.useUtils();
   // startCall mutation — verbatim from AICallPanel
   const voiceStartCallMutation = trpc.callMatrix.startCall.useMutation({
@@ -3365,6 +3433,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
               if (voiceCallPollRef.current) clearInterval(voiceCallPollRef.current);
               voiceCallPollRef.current = null;
+              // Post voice_call_completed card to ops chat
+              onSendMessage(
+                `📞 ${voiceCallContactNameRef.current ?? "Client"} called via voice command`,
+                undefined, undefined,
+                "voice_call_completed",
+                JSON.stringify({
+                  contactName: voiceCallContactNameRef.current ?? "Client",
+                  contactPhone: voiceCallContactPhoneRef.current ?? "",
+                  triggeredBy: callerName,
+                  script: voiceCallScriptRef.current ?? "",
+                  outcome: s,
+                  summary: poll.summary ?? null,
+                  durationSeconds: poll.durationSeconds ?? null,
+                  recordingUrl: poll.recordingUrl ?? null,
+                })
+              );
             }
           } catch { /* ignore */ }
         }, 5000);
@@ -5743,6 +5827,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           fromNumberId: "PN0wVLcpCq",
                         });
                         toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
+                        // Post voice_text_sent card to ops chat
+                        onSendMessage(
+                          `📱 ${voiceConfirm.selected.name} texted via voice command`,
+                          undefined, undefined,
+                          "voice_text_sent",
+                          JSON.stringify({
+                            contactName: voiceConfirm.selected.name,
+                            contactPhone: voiceConfirm.selected.phone,
+                            message: voiceConfirmMsg.trim(),
+                            triggeredBy: callerName,
+                          })
+                        );
                         setVoiceConfirm(null);
                         setVoiceConfirmMsg("");
                         setVoiceNeedsSearch(false);
@@ -5768,6 +5864,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     disabled={!voiceConfirm.selected || !voiceConfirmMsg.trim()}
                     onClick={() => {
                       if (!voiceConfirm.selected) return;
+                      voiceCallContactNameRef.current = voiceConfirm.selected.name;
+                      voiceCallContactPhoneRef.current = voiceConfirm.selected.phone;
+                      voiceCallScriptRef.current = voiceConfirmMsg.trim();
                       setVoiceCallStatus("firing");
                       voiceStartCallMutation.mutate({
                         cleanerJobId: 1,

@@ -2714,13 +2714,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, threadParentBody: (m as any).threadParentBody ?? null, threadParentFrom: (m as any).threadParentFrom ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
             callerName={callerName}
-            onSendMessage={(body, mediaUrl, replyTo, quickAction) => {
+            onSendMessage={(body, mediaUrl, replyTo, quickAction, metadata) => {
               sendMsg.mutate({
                 body,
                 channel: "command",
                 authorName: callerName,
                 mediaUrl,
                 quickAction: quickAction ?? undefined,
+                metadata: metadata ?? undefined,
                 replyToId: replyTo?.id,
                 replyToBody: replyTo?.body ? replyTo.body.slice(0, 512) : undefined,
                 replyToAuthor: replyTo?.author,

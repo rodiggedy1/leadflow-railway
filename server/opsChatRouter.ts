@@ -452,6 +452,8 @@ export const opsChatRouter = router({
         replyToAuthor: z.string().max(128).optional(),
         /** Slack-style thread: ID of the parent message this is a reply to */
         threadParentId: z.number().int().positive().optional(),
+        /** Arbitrary JSON metadata for card rendering */
+        metadata: z.string().max(4000).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -488,6 +490,7 @@ export const opsChatRouter = router({
         body: input.body,
         mediaUrl: input.mediaUrl ?? null,
         quickAction: input.quickAction ?? null,
+        metadata: input.metadata ?? null,
         replyToId: input.replyToId ?? null,
         replyToBody: input.replyToBody ?? null,
         replyToAuthor: input.replyToAuthor ?? null,
