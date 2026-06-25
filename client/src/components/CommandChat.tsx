@@ -3398,6 +3398,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
   const [voiceConfirmAction, setVoiceConfirmAction] = useState<"text" | "call" | "remind" | "chat">("text");
   const [voiceUnknown, setVoiceUnknown] = useState<string | null>(null); // non-null = show "didn't understand" error
+  type VoiceStatusJob = {
+    id: number;
+    customerName: string;
+    teamName: string;
+    jobStatus: string | null;
+    serviceDateTime: string | null;
+    jobAddress: string | null;
+    etaTimestamp: number | null;
+    delayMinutes: number | null;
+    updatedAt: string;
+    jobDate: string;
+  };
+  const [voiceStatusJob, setVoiceStatusJob] = useState<VoiceStatusJob | null>(null);
+  const [voiceStatusNotFound, setVoiceStatusNotFound] = useState<string | null>(null); // client name when no job found today
   const [voiceRemindTime, setVoiceRemindTime] = useState<string>(""); // time expression from LLM e.g. "30 minutes"
   const [voiceConfirmScenario, setVoiceConfirmScenario] = useState<string | null>(null);
   const [voiceSending, setVoiceSending] = useState(false);
@@ -3543,8 +3557,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Route through voice command intent detection
       const result = await voiceCommandMutation.mutateAsync({ transcript: text.trim() });
 
-      // Clear any previous unknown error
+      // Clear any previous unknown/status state
       setVoiceUnknown(null);
+      setVoiceStatusJob(null);
+      setVoiceStatusNotFound(null);
 
       if (result.action === "remind") {
         // Show reminder confirmation card — no contact lookup needed
@@ -3600,6 +3616,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         // Explicit chat post — send to ops chat channel
         onSendMessage(result.message ?? text.trim());
         toast.success("Posted to chat");
+      } else if (result.action === "status") {
+        const r = result as any;
+        if (r.statusNotFound) {
+          setVoiceStatusNotFound(r.detectedName ?? text.trim());
+        } else {
+          setVoiceStatusJob(r.statusJob);
+        }
       } else {
         // Unknown / unrecognized command — show inline error, do NOT post anything
         setVoiceUnknown(text.trim());
@@ -5546,6 +5569,111 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
             </div>
           )}
+
+          {/* ── Voice Command Status Card ───────────────────────────────────── */}
+          {voiceStatusNotFound && (
+            <div className="mb-2 mx-auto w-full max-w-sm rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 flex items-start gap-3">
+              <div className="shrink-0 w-7 h-7 rounded-xl bg-slate-200 flex items-center justify-center mt-0.5">
+                <span className="text-slate-500 text-sm">📍</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-0.5">No job today</p>
+                <p className="text-sm text-slate-700">No job found for <span className="font-semibold">{voiceStatusNotFound}</span> today.</p>
+              </div>
+              <button onClick={() => setVoiceStatusNotFound(null)} className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition mt-0.5">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+          {voiceStatusJob && (() => {
+            const job = voiceStatusJob;
+            const statusLabels: Record<string, { label: string; color: string; dot: string }> = {
+              on_the_way:        { label: "On the way",       color: "bg-blue-100 text-blue-700",   dot: "bg-blue-500" },
+              arrived:           { label: "Arrived",          color: "bg-green-100 text-green-700", dot: "bg-green-500" },
+              running_late:      { label: "Running late",     color: "bg-red-100 text-red-700",     dot: "bg-red-500" },
+              in_progress:       { label: "In progress",      color: "bg-violet-100 text-violet-700", dot: "bg-violet-500" },
+              finishing_up:      { label: "Finishing up",     color: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-500" },
+              wrapping_up:       { label: "Wrapping up",      color: "bg-indigo-100 text-indigo-700", dot: "bg-indigo-500" },
+              completed:         { label: "Completed",        color: "bg-emerald-100 text-emerald-700", dot: "bg-emerald-500" },
+              issue_at_property: { label: "Issue at property", color: "bg-orange-100 text-orange-700", dot: "bg-orange-500" },
+            };
+            const statusMeta = job.jobStatus ? (statusLabels[job.jobStatus] ?? { label: job.jobStatus, color: "bg-slate-100 text-slate-600", dot: "bg-slate-400" }) : null;
+            const updatedAgo = (() => {
+              const diffMs = Date.now() - new Date(job.updatedAt).getTime();
+              const mins = Math.floor(diffMs / 60_000);
+              if (mins < 1) return "just now";
+              if (mins < 60) return `${mins}m ago`;
+              return `${Math.floor(mins / 60)}h ago`;
+            })();
+            const scheduledTime = job.serviceDateTime ? (() => {
+              const d = new Date(job.serviceDateTime);
+              return isNaN(d.getTime()) ? job.serviceDateTime : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+            })() : null;
+            const etaTime = job.etaTimestamp ? (() => {
+              const d = new Date(job.etaTimestamp);
+              return isNaN(d.getTime()) ? null : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+            })() : null;
+            return (
+              <div className="mb-2 mx-auto w-full max-w-sm rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center gap-3 px-4 pt-4 pb-3 border-b border-slate-100">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center shrink-0">
+                    <span className="text-white font-bold text-sm">{job.customerName[0].toUpperCase()}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Job Status</p>
+                    <p className="text-[15px] font-bold text-slate-900 truncate leading-snug">{job.customerName}</p>
+                  </div>
+                  <button onClick={() => setVoiceStatusJob(null)} className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {/* Body */}
+                <div className="px-4 py-3 space-y-2.5">
+                  {/* Team */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Team</span>
+                    <span className="text-sm font-semibold text-slate-800">{job.teamName}</span>
+                  </div>
+                  {/* Status badge */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Status</span>
+                    {statusMeta ? (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusMeta.color}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusMeta.dot}`} />
+                        {statusMeta.label}
+                      </span>
+                    ) : (
+                      <span className="text-sm text-slate-400 italic">No update yet</span>
+                    )}
+                  </div>
+                  {/* Delay if running late */}
+                  {job.jobStatus === "running_late" && job.delayMinutes && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">Delay</span>
+                      <span className="text-sm font-semibold text-red-600">{job.delayMinutes} min late</span>
+                    </div>
+                  )}
+                  {/* ETA or scheduled time */}
+                  {(etaTime || scheduledTime) && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{etaTime ? "ETA" : "Scheduled"}</span>
+                      <span className="text-sm font-semibold text-slate-800">{etaTime ?? scheduledTime}</span>
+                    </div>
+                  )}
+                  {/* Address */}
+                  {job.jobAddress && (
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide shrink-0 mt-0.5">Address</span>
+                      <span className="text-xs text-slate-600 text-right leading-snug">{job.jobAddress}</span>
+                    </div>
+                  )}
+                  {/* Last update */}
+                  <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-100">Last updated {updatedAgo}</p>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
           {voiceConfirm && voiceCardMinimized && (

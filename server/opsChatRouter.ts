@@ -3787,7 +3787,8 @@ Supported actions:
 - "call": user wants to make a phone call to a client. Extract the client name and write the opening script Ava (the AI voice) will say.
 - "remind": user wants to set a reminder about a client or task. Extract the name (or null if no specific person) and the time expression (e.g. "30 minutes", "1 hour", "3pm"). Put the time expression in the "scenario" field. Write a short reminder note in "message".
 - "chat": user explicitly says "post in chat", "send chat", "post to chat", or "ops chat". This is for posting a message to the internal ops chat channel.
-- "unknown": the transcript does not match text/call/remind AND does not explicitly mention posting to chat. Use this when the intent is ambiguous or unrecognized.
+- "status": user wants to know the current job status or location of a client's team. Phrases like "where is", "status of", "what's the status", "where are they". Extract the client name.
+- "unknown": the transcript does not match text/call/remind/chat/status. Use this when the intent is ambiguous or unrecognized.
 
 For "text" action, write the SMS message using this EXACT quality standard:
 ${csPrompt}
@@ -3811,6 +3812,8 @@ Examples:
 - "Remind me to call Sarah at 3pm" → {"action":"remind","name":"Sarah","message":"Call Sarah","scenario":"3pm"}
 - "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":"anyone available for a pickup?","scenario":null}
 - "Send chat: team meeting at 2pm" → {"action":"chat","name":null,"message":"team meeting at 2pm","scenario":null}
+- "Where is Maria's team?" → {"action":"status","name":"Maria","message":null,"scenario":null}
+- "What's the status on Rohan?" → {"action":"status","name":"Rohan","message":null,"scenario":null}
 - "Show me today's jobs" → {"action":"unknown","name":null,"message":null,"scenario":null}
 - "What time is it?" → {"action":"unknown","name":null,"message":null,"scenario":null}`,
           },
@@ -3824,7 +3827,7 @@ Examples:
             schema: {
               type: "object",
               properties: {
-                action: { type: "string", enum: ["text", "call", "remind", "chat", "unknown"] },
+                action: { type: "string", enum: ["text", "call", "remind", "chat", "status", "unknown"] },
                 name: { type: ["string", "null"] },
                 message: { type: ["string", "null"] },
                 scenario: { type: ["string", "null"] },
@@ -3856,6 +3859,68 @@ Examples:
 
       if (parsed.action === "chat") {
         return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>, message: parsed.message, needsSearch: false, detectedName: null, scenario: null };
+      }
+
+      if (parsed.action === "status" && parsed.name) {
+        // Look up today's job for this client by name
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const nameLikeStatus = `%${parsed.name.trim()}%`;
+        const statusJobs = await db
+          .select({
+            id: cleanerJobs.id,
+            customerName: cleanerJobs.customerName,
+            teamName: cleanerJobs.teamName,
+            jobStatus: cleanerJobs.jobStatus,
+            serviceDateTime: cleanerJobs.serviceDateTime,
+            jobAddress: cleanerJobs.jobAddress,
+            etaTimestamp: cleanerJobs.etaTimestamp,
+            delayMinutes: cleanerJobs.delayMinutes,
+            updatedAt: cleanerJobs.updatedAt,
+            jobDate: cleanerJobs.jobDate,
+          })
+          .from(cleanerJobs)
+          .where(and(
+            eq(cleanerJobs.jobDate, today),
+            like(cleanerJobs.customerName, nameLikeStatus),
+          ))
+          .orderBy(desc(cleanerJobs.serviceDateTime))
+          .limit(3);
+
+        if (statusJobs.length === 0) {
+          return {
+            action: "status" as const,
+            matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>,
+            message: null,
+            needsSearch: false,
+            detectedName: parsed.name,
+            scenario: null,
+            statusJob: null,
+            statusNotFound: true,
+          };
+        }
+
+        const job = statusJobs[0];
+        return {
+          action: "status" as const,
+          matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>,
+          message: null,
+          needsSearch: false,
+          detectedName: parsed.name,
+          scenario: null,
+          statusJob: {
+            id: job.id,
+            customerName: job.customerName ?? parsed.name,
+            teamName: job.teamName ?? "Unknown team",
+            jobStatus: job.jobStatus ?? null,
+            serviceDateTime: job.serviceDateTime ?? null,
+            jobAddress: job.jobAddress ?? null,
+            etaTimestamp: job.etaTimestamp ?? null,
+            delayMinutes: job.delayMinutes ?? null,
+            updatedAt: job.updatedAt.toISOString(),
+            jobDate: job.jobDate,
+          },
+          statusNotFound: false,
+        };
       }
 
       if (parsed.action === "unknown" || (parsed.action !== "text" && parsed.action !== "call") || !parsed.name) {
