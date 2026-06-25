@@ -41,6 +41,7 @@ import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql 
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
+import { buildSystemPrompt } from "./csReplyStream";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -3879,41 +3880,51 @@ Examples:
       context: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
-      const { MAIDS_IN_BLACK_KNOWLEDGE_BASE } = await import("./knowledgeBase");
       const { invokeLLM } = await import("./_core/llm");
-      const toneInstructions: Record<string, string> = {
-        friendly: "Warm, personal, emoji-required. You MUST include at least 1 emoji (1\u20132 max) placed naturally in the message — e.g. \uD83D\uDE0A \uD83D\uDC4B \uD83C\uDF1F \uD83D\uDE4F \uD83D\uDCAB. Like a real person texting who genuinely cares. Use the customer's name. Upbeat and reassuring.",
-        professional: "Polished and clear. No emoji. Formal but not cold. Concise. Sounds like a well-run business communicating professionally.",
-        casual: "Short, conversational, like a quick text from a friend. 1\u20132 sentences max. No corporate language. Natural and relaxed.",
+
+      // Use the verbatim CS chat system prompt (same gold-standard used in the inbox auto-draft)
+      const csSystemPrompt = buildSystemPrompt();
+
+      // Append tone-specific override instructions on top of the CS chat prompt
+      const toneOverride: Record<string, string> = {
+        friendly: `=== TONE OVERRIDE FOR THIS REWRITE ===
+This is a FRIENDLY rewrite. Be warm, personal, and upbeat. Use the customer's name.
+You MUST include at least 1 emoji (1–2 max) placed naturally — e.g. 😊 👋 🙏 💛 ✨ 💪.
+A friendly message with ZERO emoji is WRONG. Do not skip the emoji.
+Write until the message feels complete and warm — not like a ticket being closed.`,
+        professional: `=== TONE OVERRIDE FOR THIS REWRITE ===
+This is a PROFESSIONAL rewrite. Polished and clear. No emoji. Formal but not cold.
+Concise. Sounds like a well-run business communicating professionally.`,
+        casual: `=== TONE OVERRIDE FOR THIS REWRITE ===
+This is a CASUAL rewrite. Short, conversational, like a quick text from a friend.
+1–2 sentences max. No corporate language. Natural and relaxed. 0–1 emoji max.`,
       };
-      const systemPrompt = `You are a customer service agent for Maids in Black, a residential cleaning company in Washington DC. Your job is to write the exact SMS the agent should send \u2014 not advice, the actual text message.
-=== TONE FOR THIS MESSAGE ===
-${toneInstructions[input.tone]}
-=== GENERAL TONE RULES ===
-Warm, direct, and genuinely human. Think: a real person texting, not a corporate script. Short sentences. Conversational. Like you actually care \u2014 because you do.
-Be SPECIFIC. Use the customer's actual name. Generic messages feel hollow.
-Never be defensive. Never make excuses. Own the experience.
-Sound like a real person, not a brand. No corporate buzzwords, no "we strive to...", no "rest assured".
-Do NOT say "make your home sparkle" or similar cheesy lines.
-=== EMOJI RULES ===
-- For friendly tone: MUST include at least 1 emoji (1\u20132 max), placed naturally. A message with zero emoji for friendly tone is WRONG.
-- For professional tone: no emoji.
-- For casual tone: 0\u20131 emoji max.
-=== WHAT NOT TO WRITE ===
-- "Got it! Thanks for confirming. Our team will take care of that." \u2190 Too short. No warmth.
-- "Hi Sarah! We've received your request and will handle it accordingly." \u2190 Corporate, cold.
-- "Thank you for your patience." \u2190 Filler. Means nothing.
-=== MAIDS IN BLACK KNOWLEDGE BASE ===
-${MAIDS_IN_BLACK_KNOWLEDGE_BASE}
+
+      const systemPrompt = `${csSystemPrompt}
+
+${toneOverride[input.tone]}
+
 Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
+
       const userPrompt = `Customer name: ${input.customerName}\n${input.context ? `Context: ${input.context}` : ""}\nOriginal message to rewrite: ${input.rawMessage}\nTone: ${input.tone}`;
+
       const result = await invokeLLM({
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
       });
-      const rewritten = ((result.choices[0].message.content as string) ?? "").trim();
+
+      let rewritten = ((result.choices[0].message.content as string) ?? "").trim();
+
+      // Post-processing guarantee: if friendly tone has no emoji, append one
+      if (input.tone === "friendly") {
+        const emojiRegex = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/u;
+        if (!emojiRegex.test(rewritten)) {
+          rewritten = rewritten + " 😊";
+        }
+      }
+
       return { message: rewritten };
     }),
 

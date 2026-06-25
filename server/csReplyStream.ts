@@ -38,7 +38,7 @@ async function isAuthorizedOpsUser(req: Request): Promise<boolean> {
 }
 
 /** Exact same system prompt as the tRPC csReply procedure */
-function buildSystemPrompt(): string {
+export function buildSystemPrompt(): string {
   return `You are a customer service agent for Maids in Black, a residential cleaning company in Washington DC. Your job is to write the exact SMS the agent should send — not advice, the actual text message.
 
 === TONE ===

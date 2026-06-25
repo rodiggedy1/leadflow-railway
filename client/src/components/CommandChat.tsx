@@ -5363,7 +5363,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
           {voiceConfirm && (
-            <div className="mb-2 mx-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
+            <div className="mb-2 mx-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[480px] flex flex-col" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
               {/* Header — contact identity */}
               <div className="flex items-center gap-3 px-5 pt-5 pb-3">
                 <div className="w-11 h-11 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
@@ -5464,7 +5464,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* iMessage-style tap-to-edit bubble */}
               {!voiceNeedsSearch && (
                 <div className="px-5 pb-5">
-                  <div className="flex justify-end min-h-[140px] items-start pt-1">
+                  <div className="flex justify-end min-h-[180px] items-start pt-1">
                     {voiceBubbleEditing ? (
                       <textarea
                         autoFocus
@@ -5537,7 +5537,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <div className="h-px bg-slate-100 mx-5" />
 
               {/* Action buttons */}
-              <div className="flex items-center gap-2 px-5 py-4">
+              <div className="flex items-center gap-2 px-5 py-4 mt-auto">
                 <button
                   onClick={() => { setVoiceConfirm(null); setVoiceNeedsSearch(false); setVoiceSearchQuery(""); setVoiceTone("friendly"); setVoiceBubbleEditing(false); }}
                   className="flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
