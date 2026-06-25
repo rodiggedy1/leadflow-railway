@@ -2,7 +2,7 @@
  * gmailRoutes.ts — Gmail OAuth callback + Pub/Sub push webhook
  */
 import type { Express } from "express";
-import { getGmailAuthUrl, exchangeCodeForTokens, getNewMessagesSince, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
+import { getGmailAuthUrl, exchangeCodeForTokens, getHistoryEvents, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
 import { enqueueThread, type EnqueueSource } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
@@ -101,17 +101,18 @@ export function registerGmailRoutes(app: Express) {
         return res.status(200).send("ok");
       }
 
-      // Fetch new messages since last historyId
-      const newMessages = await getNewMessagesSince(lastHistoryId);
+      // Fetch history events (new messages + label changes) since last historyId
+      const events = await getHistoryEvents(lastHistoryId);
 
       // Update historyId
       await db.update(gmailState).set({ historyId: newHistoryId }).where(eq(gmailState.id, 1));
 
-      if (newMessages.length > 0) {
-        console.log(`[Gmail] ${newMessages.length} new message(s) received`);
+      // ── Handle new messages ────────────────────────────────────────────────
+      if (events.newMessages.length > 0) {
+        console.log(`[Gmail] ${events.newMessages.length} new message(s) received`);
         broadcastOpsUpdate("gmail_new_messages");
         // Enqueue affected threads for AI re-processing (non-blocking)
-        const affectedThreadIds = Array.from(new Set(newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
+        const affectedThreadIds = Array.from(new Set(events.newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
         for (const tid of affectedThreadIds) {
           enqueueThread(tid, "pubsub" as EnqueueSource);
           // Optimistic isUnread=1 — UPDATE only (never INSERT to avoid partial rows)
@@ -120,6 +121,46 @@ export function registerGmailRoutes(app: Express) {
             .set({ isUnread: 1 })
             .where(eq(gmailThreadMeta.threadId, tid))
             .catch(() => {});
+        }
+      }
+
+      // ── Handle label changes — no threads.get, no AI rerun ────────────────
+      const readCount = events.markRead.size;
+      const unreadCount = events.markUnread.size;
+      const archivedCount = events.markArchived.size;
+      const inboxedCount = events.markInboxed.size;
+
+      if (readCount + unreadCount + archivedCount + inboxedCount > 0) {
+        console.log(`[GmailWebhook] labelChanges read=${readCount} unread=${unreadCount} archived=${archivedCount} inboxed=${inboxedCount}`);
+
+        const labelUpdates: Promise<any>[] = [];
+
+        for (const tid of events.markRead) {
+          labelUpdates.push(
+            db.update(gmailThreadMeta).set({ isUnread: 0 }).where(eq(gmailThreadMeta.threadId, tid)).catch(() => {})
+          );
+        }
+        for (const tid of events.markUnread) {
+          labelUpdates.push(
+            db.update(gmailThreadMeta).set({ isUnread: 1 }).where(eq(gmailThreadMeta.threadId, tid)).catch(() => {})
+          );
+        }
+        for (const tid of events.markArchived) {
+          labelUpdates.push(
+            db.update(gmailThreadMeta).set({ isInInbox: 0 }).where(eq(gmailThreadMeta.threadId, tid)).catch(() => {})
+          );
+        }
+        for (const tid of events.markInboxed) {
+          labelUpdates.push(
+            db.update(gmailThreadMeta).set({ isInInbox: 1 }).where(eq(gmailThreadMeta.threadId, tid)).catch(() => {})
+          );
+        }
+
+        await Promise.all(labelUpdates);
+
+        if (archivedCount > 0 || inboxedCount > 0) {
+          // Inbox composition changed — broadcast so the UI refreshes
+          broadcastOpsUpdate("gmail_new_messages");
         }
       }
 

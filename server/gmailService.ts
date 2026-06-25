@@ -509,6 +509,110 @@ export async function getNewMessagesSince(startHistoryId: string): Promise<Gmail
   } catch { return []; }
 }
 
+export interface HistoryEvents {
+  /** Full GmailMessage objects for newly added inbox messages (requires messages.get) */
+  newMessages: GmailMessage[];
+  /** Thread IDs where UNREAD label was removed (user read the thread) */
+  markRead: Set<string>;
+  /** Thread IDs where UNREAD label was added */
+  markUnread: Set<string>;
+  /** Thread IDs where INBOX label was removed (archived) */
+  markArchived: Set<string>;
+  /** Thread IDs where INBOX label was added (moved back to inbox) */
+  markInboxed: Set<string>;
+}
+
+/**
+ * Fetch all history events since startHistoryId.
+ * Returns new messages AND label changes (UNREAD / INBOX) in one call.
+ * Label changes are returned as Sets of threadIds — no threads.get needed.
+ */
+export async function getHistoryEvents(startHistoryId: string): Promise<HistoryEvents> {
+  const empty: HistoryEvents = {
+    newMessages: [],
+    markRead: new Set(),
+    markUnread: new Set(),
+    markArchived: new Set(),
+    markInboxed: new Set(),
+  };
+
+  const gmail = await getGmailClient();
+  const _gid = Math.random().toString(36).slice(2, 10);
+  const _gt = Date.now();
+  console.log(`[GmailAPI] id=${_gid} method=users.history.list caller=getHistoryEvents startHistoryId=${startHistoryId}`);
+
+  let res: any;
+  try {
+    res = await gmail.users.history.list({
+      userId: "me",
+      startHistoryId,
+      // Request all three event types in one call
+      historyTypes: ["messageAdded", "labelAdded", "labelRemoved"],
+      labelId: "INBOX",
+    });
+    console.log(`[GmailAPI] id=${_gid} SUCCESS duration=${Date.now() - _gt}ms`);
+  } catch (_ge: any) {
+    console.error(`[GmailAPI] id=${_gid} ERROR status=${_ge?.response?.status ?? _ge?.code} reason=${_ge?.response?.data?.error?.errors?.[0]?.reason ?? _ge?.message} duration=${Date.now() - _gt}ms`);
+    return empty;
+  }
+
+  const history = res.data.history ?? [];
+  const newMessageIds = new Set<string>();
+  const markRead = new Set<string>();
+  const markUnread = new Set<string>();
+  const markArchived = new Set<string>();
+  const markInboxed = new Set<string>();
+
+  for (const h of history) {
+    // New messages added to inbox
+    for (const m of h.messagesAdded ?? []) {
+      if (m.message?.id) newMessageIds.add(m.message.id);
+    }
+    // Labels removed
+    for (const m of h.labelsRemoved ?? []) {
+      const labels: string[] = m.labelIds ?? [];
+      const tid = m.message?.threadId;
+      if (!tid) continue;
+      if (labels.includes("UNREAD")) markRead.add(tid);
+      if (labels.includes("INBOX")) markArchived.add(tid);
+    }
+    // Labels added
+    for (const m of h.labelsAdded ?? []) {
+      const labels: string[] = m.labelIds ?? [];
+      const tid = m.message?.threadId;
+      if (!tid) continue;
+      if (labels.includes("UNREAD")) markUnread.add(tid);
+      if (labels.includes("INBOX")) markInboxed.add(tid);
+    }
+  }
+
+  // Fetch full message objects only for newly added messages
+  let newMessages: GmailMessage[] = [];
+  if (newMessageIds.size > 0) {
+    const results = await Promise.all(
+      Array.from(newMessageIds).map(async (id) => {
+        try {
+          const _gid2 = Math.random().toString(36).slice(2, 10);
+          const _gt2 = Date.now();
+          console.log(`[GmailAPI] id=${_gid2} method=users.messages.get caller=getHistoryEvents msgId=${id}`);
+          let msgRes: any;
+          try {
+            msgRes = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+            console.log(`[GmailAPI] id=${_gid2} SUCCESS duration=${Date.now() - _gt2}ms`);
+          } catch (_ge2: any) {
+            console.error(`[GmailAPI] id=${_gid2} ERROR status=${_ge2?.response?.status ?? _ge2?.code} reason=${_ge2?.response?.data?.error?.errors?.[0]?.reason ?? _ge2?.message} duration=${Date.now() - _gt2}ms`);
+            throw _ge2;
+          }
+          return parseMessage(msgRes.data);
+        } catch { return null; }
+      })
+    );
+    newMessages = results.filter(Boolean) as GmailMessage[];
+  }
+
+  return { newMessages, markRead, markUnread, markArchived, markInboxed };
+}
+
 /**
  * Fetch a single attachment's raw bytes from Gmail API.
  * Returns base64url-encoded data (convert to standard base64 for data URLs).
