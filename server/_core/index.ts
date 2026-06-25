@@ -37,7 +37,7 @@ import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getAgentByEmail, getDb } from "../db";
 import { sql, isNotNull, count } from "drizzle-orm";
-import { gmailThreadMeta } from "../drizzle/schema";
+import { gmailThreadMeta } from "../../drizzle/schema";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
