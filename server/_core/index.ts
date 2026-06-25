@@ -36,7 +36,8 @@ import { signAgentSession } from "./agentAuth";
 import { getSessionCookieOptions } from "./cookies";
 import { AGENT_COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { getAgentByEmail, getDb } from "../db";
-import { sql } from "drizzle-orm";
+import { sql, isNotNull, count } from "drizzle-orm";
+import { gmailThreadMeta } from "../drizzle/schema";
 
 // Allowed origins for cross-origin requests (widget on maidsinblack.com)
 const ALLOWED_ORIGINS = [
@@ -361,8 +362,6 @@ async function startServer() {
         try {
           const db = await getDb();
           if (!db) return;
-          const { gmailThreadMeta } = await import("../drizzle/schema");
-          const { isNotNull, count } = await import("drizzle-orm");
           const [row] = await db
             .select({ hydratedRows: count() })
             .from(gmailThreadMeta)
