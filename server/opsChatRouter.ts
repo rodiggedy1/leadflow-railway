@@ -3759,8 +3759,8 @@ Respond ONLY with valid JSON, no markdown:
 
   /**
    * voiceCommand — parse a voice transcript into a structured command.
-   * Supports: action="text" (send SMS to a client via CS chat).
-   * Falls back to action="chat" for unrecognized commands.
+   * Supports: action="text", "call", "remind", "chat" (all explicit).
+   * Returns action="unknown" for anything that doesn't clearly match a supported command.
    * When action="text": polishes the message with LLM and looks up the client.
    * needsSearch=true when the client name wasn't found — frontend shows a search box.
    */
@@ -3782,11 +3782,12 @@ Respond ONLY with valid JSON, no markdown:
             content: `You are a voice command parser for a cleaning business operations app.
 Extract the intent from the voice command transcript.
 Return JSON only, no explanation.
-Supported actions:
-- "text": user wants to send a text/SMS to a client. Extract the client name and write the SMS message.
-- "call": user wants to make a phone call to a client. Extract the client name and write the opening script Ava (the AI voice) will say.
-- "remind": user wants to set a reminder about a client or task. Extract the name (or null if no specific person) and the time expression (e.g. "30 minutes", "1 hour", "3pm"). Put the time expression in the "scenario" field. Write a short reminder note in "message".
-- "chat": anything else (post to ops chat, general commands, etc.)
+Supported actions — ALL are EXPLICIT. Only use an action if the transcript clearly matches it:
+- "text": user explicitly says "text", "send a text", "message", or "send message" to a client. Extract the client name and write the SMS message.
+- "call": user explicitly says "call" a client. Extract the client name and write the opening script Ava (the AI voice) will say.
+- "remind": user explicitly says "remind", "reminder", or "set a reminder". Extract the name (or null if no specific person) and the time expression (e.g. "30 minutes", "1 hour", "3pm"). Put the time expression in the "scenario" field. Write a short reminder note in "message".
+- "chat": user explicitly says "post in chat", "send chat", "post to chat", or "ops chat". This is for posting a message to the internal ops chat channel.
+- "unknown": the transcript does not clearly match any of the above actions. Use this when the intent is ambiguous or the command is not recognized.
 
 For "text" action, write the SMS message using this EXACT quality standard:
 ${csPrompt}
@@ -3808,8 +3809,10 @@ Examples:
 - "Remind me about Maria in 30 minutes" → {"action":"remind","name":"Maria","message":"Follow up with Maria","scenario":"30 minutes"}
 - "Set a reminder for Rohan in 1 hour" → {"action":"remind","name":"Rohan","message":"Check in with Rohan","scenario":"1 hour"}
 - "Remind me to call Sarah at 3pm" → {"action":"remind","name":"Sarah","message":"Call Sarah","scenario":"3pm"}
-- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null,"scenario":null}
-- "Show me today's jobs" → {"action":"chat","name":null,"message":null,"scenario":null}`,
+- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":"anyone available for a pickup?","scenario":null}
+- "Send chat: team meeting at 2pm" → {"action":"chat","name":null,"message":"team meeting at 2pm","scenario":null}
+- "Show me today's jobs" → {"action":"unknown","name":null,"message":null,"scenario":null}
+- "What time is it?" → {"action":"unknown","name":null,"message":null,"scenario":null}`,
           },
           { role: "user", content: input.transcript },
         ],
@@ -3821,7 +3824,7 @@ Examples:
             schema: {
               type: "object",
               properties: {
-                action: { type: "string", enum: ["text", "call", "remind", "chat"] },
+                action: { type: "string", enum: ["text", "call", "remind", "chat", "unknown"] },
                 name: { type: ["string", "null"] },
                 message: { type: ["string", "null"] },
                 scenario: { type: ["string", "null"] },
@@ -3837,7 +3840,7 @@ Examples:
       try {
         parsed = JSON.parse(intentResult.choices[0].message.content as string);
       } catch {
-        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null, needsSearch: false, detectedName: null };
+        return { action: "unknown" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null, needsSearch: false, detectedName: null };
       }
 
       if (parsed.action === "remind") {
@@ -3851,8 +3854,12 @@ Examples:
         };
       }
 
-      if ((parsed.action !== "text" && parsed.action !== "call") || !parsed.name) {
+      if (parsed.action === "chat") {
         return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>, message: parsed.message, needsSearch: false, detectedName: null, scenario: null };
+      }
+
+      if (parsed.action === "unknown" || (parsed.action !== "text" && parsed.action !== "call") || !parsed.name) {
+        return { action: "unknown" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>, message: null, needsSearch: false, detectedName: null, scenario: null };
       }
 
       // Step 2: Look up client by name in conversation_sessions

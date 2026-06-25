@@ -3396,7 +3396,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   };
   const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmState | null>(null);
   const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
-  const [voiceConfirmAction, setVoiceConfirmAction] = useState<"text" | "call" | "remind">("text");
+  const [voiceConfirmAction, setVoiceConfirmAction] = useState<"text" | "call" | "remind" | "chat">("text");
+  const [voiceUnknown, setVoiceUnknown] = useState<string | null>(null); // non-null = show "didn't understand" error
   const [voiceRemindTime, setVoiceRemindTime] = useState<string>(""); // time expression from LLM e.g. "30 minutes"
   const [voiceConfirmScenario, setVoiceConfirmScenario] = useState<string | null>(null);
   const [voiceSending, setVoiceSending] = useState(false);
@@ -3542,6 +3543,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       // Route through voice command intent detection
       const result = await voiceCommandMutation.mutateAsync({ transcript: text.trim() });
 
+      // Clear any previous unknown error
+      setVoiceUnknown(null);
+
       if (result.action === "remind") {
         // Show reminder confirmation card — no contact lookup needed
         setVoiceConfirmAction("remind");
@@ -3592,10 +3596,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         setVoiceCallSummary(null);
         setVoiceCallTranscript(null);
         setVoiceCallRecordingUrl(null);
+      } else if (result.action === "chat") {
+        // Explicit chat post — send to ops chat channel
+        onSendMessage(result.message ?? text.trim());
+        toast.success("Posted to chat");
       } else {
-        // Unknown action — post as normal chat message
-        onSendMessage(text.trim());
-        toast.success("Sent via voice");
+        // Unknown / unrecognized command — show inline error, do NOT post anything
+        setVoiceUnknown(text.trim());
       }
     } catch {
       toast.error("Transcription failed");
@@ -5519,6 +5526,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
           {/* Typing indicator */}
                     <TypingBubble typers={cmdTypers} />
+
+          {/* ── Voice Command Unknown Error */}
+          {voiceUnknown && (
+            <div className="mb-2 mx-auto w-full max-w-sm rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+              <div className="shrink-0 w-7 h-7 rounded-xl bg-amber-100 flex items-center justify-center mt-0.5">
+                <span className="text-amber-600 text-sm">🎙️</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-bold text-amber-700 uppercase tracking-wide mb-0.5">Didn't understand</p>
+                <p className="text-sm text-amber-800 italic truncate">"{voiceUnknown}"</p>
+                <p className="text-[11px] text-amber-600 mt-1">Try: "Text Maria…", "Call Rohan…", "Remind me…", or "Post in chat…"</p>
+              </div>
+              <button
+                onClick={() => setVoiceUnknown(null)}
+                className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-amber-400 hover:text-amber-700 hover:bg-amber-100 transition mt-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
 
           {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
           {voiceConfirm && voiceCardMinimized && (
