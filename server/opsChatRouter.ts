@@ -3752,6 +3752,86 @@ Respond ONLY with valid JSON, no markdown:
         );
       return rows.map(r => r.messageId);
     }),
+
+  /**
+   * voiceCommand — parse a voice transcript into a structured command.
+   * Currently supports: action="text" (send SMS to a client via CS chat).
+   * Falls back to action="chat" for unrecognized commands.
+   */
+  voiceCommand: opsChatProcedure
+    .input(z.object({
+      transcript: z.string().min(1).max(500),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      // Step 1: Extract intent from transcript
+      const intentResult = await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are a voice command parser for a cleaning business operations app.\nExtract the intent from the voice command transcript.\nReturn JSON only, no explanation.\nSupported actions:\n- "text": user wants to send a text/SMS to a client. Extract name and message.\n- "chat": anything else (post to ops chat, general commands, etc.)\n\nExamples:\n- "Text Maria: we're running late, be there in 20" → {"action":"text","name":"Maria","message":"We're running late, be there in 20 minutes."}\n- "Send a message to John Smith telling him we need to reschedule" → {"action":"text","name":"John Smith","message":"Hi, we need to reschedule your appointment. Please let us know your availability."}\n- "Post in chat: anyone available for a pickup?" → {"action":"chat","name":null,"message":null}\n- "Show me today's jobs" → {"action":"chat","name":null,"message":null}`,
+          },
+          { role: "user", content: input.transcript },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "voice_command",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                action: { type: "string", enum: ["text", "chat"] },
+                name: { type: ["string", "null"] },
+                message: { type: ["string", "null"] },
+              },
+              required: ["action", "name", "message"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      let parsed: { action: string; name: string | null; message: string | null };
+      try {
+        parsed = JSON.parse(intentResult.choices[0].message.content as string);
+      } catch {
+        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: null };
+      }
+
+      if (parsed.action !== "text" || !parsed.name) {
+        return { action: "chat" as const, matches: [] as Array<{ sessionId: number; name: string; phone: string }>, message: parsed.message };
+      }
+
+      // Step 2: Look up client by name in conversation_sessions
+      const nameLike = `%${parsed.name.trim()}%`;
+      const sessions = await db
+        .select({
+          id: conversationSessions.id,
+          leadName: conversationSessions.leadName,
+          leadPhone: conversationSessions.leadPhone,
+        })
+        .from(conversationSessions)
+        .where(like(conversationSessions.leadName, nameLike))
+        .limit(5);
+
+      const matches = sessions
+        .filter(s => s.leadPhone)
+        .map(s => ({
+          sessionId: s.id,
+          name: s.leadName ?? "Unknown",
+          phone: s.leadPhone!,
+        }));
+
+      return {
+        action: "text" as const,
+        matches,
+        message: parsed.message,
+      };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

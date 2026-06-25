@@ -3314,7 +3314,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
+    const transcribeVoice = trpc.opsChat.transcribeVoiceNote.useMutation();
+  const voiceCommandMutation = trpc.opsChat.voiceCommand.useMutation();
+  const sendVoiceText = trpc.leads.sendMessage.useMutation();
+
+  // Voice command confirmation card state
+  type VoiceMatch = { sessionId: number; name: string; phone: string };
+  type VoiceConfirmState = {
+    message: string;
+    matches: VoiceMatch[];
+    selected: VoiceMatch | null;
+  };
+  const [voiceConfirm, setVoiceConfirm] = useState<VoiceConfirmState | null>(null);
+  const [voiceConfirmMsg, setVoiceConfirmMsg] = useState("");
+  const [voiceSending, setVoiceSending] = useState(false);
 
   const startRecording = useCallback(async () => {
     try {
@@ -3388,7 +3401,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         reader.readAsDataURL(blob);
       });
       const { text } = await transcribeVoice.mutateAsync({ dataBase64, mimeType: "audio/webm" });
-      if (text.trim()) {
+      if (!text.trim()) return;
+
+      // Route through voice command intent detection
+      const result = await voiceCommandMutation.mutateAsync({ transcript: text.trim() });
+
+      if (result.action === "text" && result.matches.length > 0 && result.message) {
+        // Show confirmation card
+        setVoiceConfirmMsg(result.message);
+        setVoiceConfirm({
+          message: result.message,
+          matches: result.matches,
+          selected: result.matches.length === 1 ? result.matches[0] : null,
+        });
+      } else if (result.action === "text" && result.matches.length === 0 && result.message) {
+        // No client found — fall back to posting in chat
+        toast.warning("No client found — posting to chat instead");
+        onSendMessage(text.trim());
+      } else {
+        // Unknown action — post as normal chat message
         onSendMessage(text.trim());
         toast.success("Sent via voice");
       }
@@ -3397,7 +3428,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     } finally {
       setIsTranscribing(false);
     }
-  }, [transcribeVoice, onSendMessage]);
+  }, [transcribeVoice, voiceCommandMutation, onSendMessage]);
 
   // Global keyboard shortcut: hold Ctrl+Shift+Space to record, release to send
   useEffect(() => {
@@ -5313,7 +5344,102 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           )}
 
           {/* Typing indicator */}
-          <TypingBubble typers={cmdTypers} />
+                    <TypingBubble typers={cmdTypers} />
+
+          {/* ── Voice Command Confirmation Card ─────────────────────────────── */}
+          {voiceConfirm && (
+            <div className="mb-2 rounded-2xl border border-violet-200 bg-white shadow-lg overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center gap-2.5 px-4 py-3 bg-violet-50 border-b border-violet-100">
+                <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
+                  <Mic className="h-4 w-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide">Voice Command — Send Text</p>
+                  {voiceConfirm.selected ? (
+                    <p className="text-sm font-semibold text-slate-900 truncate">{voiceConfirm.selected.name} &middot; {voiceConfirm.selected.phone}</p>
+                  ) : (
+                    <p className="text-sm text-slate-500">Select a contact below</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => setVoiceConfirm(null)}
+                  className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Contact picker — only shown when multiple matches */}
+              {voiceConfirm.matches.length > 1 && (
+                <div className="px-4 py-2 border-b border-slate-100">
+                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Who did you mean?</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {voiceConfirm.matches.map(m => (
+                      <button
+                        key={m.sessionId}
+                        onClick={() => setVoiceConfirm(prev => prev ? { ...prev, selected: m } : null)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-sm font-medium border transition",
+                          voiceConfirm.selected?.sessionId === m.sessionId
+                            ? "bg-violet-600 text-white border-violet-600"
+                            : "bg-white text-slate-700 border-slate-200 hover:border-violet-400 hover:text-violet-700"
+                        )}
+                      >
+                        {m.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Message editor */}
+              <div className="px-4 py-3">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Message</p>
+                <textarea
+                  value={voiceConfirmMsg}
+                  onChange={e => setVoiceConfirmMsg(e.target.value)}
+                  rows={2}
+                  className="w-full text-sm text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-violet-300 focus:border-violet-400"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 px-4 pb-3">
+                <button
+                  onClick={() => setVoiceConfirm(null)}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  disabled={!voiceConfirm.selected || !voiceConfirmMsg.trim() || voiceSending}
+                  onClick={async () => {
+                    if (!voiceConfirm.selected || !voiceConfirmMsg.trim()) return;
+                    setVoiceSending(true);
+                    try {
+                      await sendVoiceText.mutateAsync({
+                        sessionId: voiceConfirm.selected.sessionId,
+                        message: voiceConfirmMsg.trim(),
+                        fromNumberId: "PN0wVLcpCq",
+                      });
+                      toast.success(`Texted ${voiceConfirm.selected.name} ✓`);
+                      setVoiceConfirm(null);
+                      setVoiceConfirmMsg("");
+                    } catch {
+                      toast.error("Failed to send — please try again");
+                    } finally {
+                      setVoiceSending(false);
+                    }
+                  }}
+                  className="flex-1 rounded-xl bg-violet-600 text-white px-4 py-2.5 text-sm font-semibold hover:bg-violet-700 disabled:opacity-40 transition flex items-center justify-center gap-2"
+                >
+                  {voiceSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {voiceSending ? "Sending…" : "Send Text"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Composer box with drag-drop */}
           <div className="relative">
