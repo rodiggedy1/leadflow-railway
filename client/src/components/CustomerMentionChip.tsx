@@ -416,11 +416,14 @@ function AiCallComposer({
   const callActive = ["firing", "queued", "ringing", "in_progress"].includes(callStatus);
   const callEnded = ["completed", "voicemail", "no_answer", "failed"].includes(callStatus);
 
-  // Auto-minimize when call goes active, expand when ended
+  // Auto-minimize when call goes active, auto-expand when ended
   useEffect(() => {
     if (callActive) setMinimized(true);
+  }, [callActive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (callEnded) setMinimized(false);
-  }, [callActive, callEnded]);
+  }, [callEnded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── CALL LOGIC (untouched) ────────────────────────────────────────────────
   const startCallMutation = trpc.callMatrix.startCall.useMutation({
@@ -559,30 +562,36 @@ function AiCallComposer({
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const statusColor = CALL_STATUS_COLORS[callStatus];
 
-  // ── Minimized pill (shown while call is active) ───────────────────────────
+  // ── Minimized pill — fixed bottom-right corner ──────────────────────────
   if (minimized) {
-    return (
+    return ReactDOM.createPortal(
       <div
-        className="rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white cursor-pointer"
-        style={{ fontFamily: "Inter, sans-serif", minWidth: 280 }}
+        className="rounded-2xl overflow-hidden shadow-2xl border border-slate-700 cursor-pointer select-none"
+        style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99999, fontFamily: "Inter, sans-serif", minWidth: 260, background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}
         onClick={() => setMinimized(false)}
       >
-        <div className="px-4 py-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
+        <div className="px-4 py-3">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
             <div className="flex-1 min-w-0">
               <p className="text-white font-bold text-sm truncate">{customer.name}</p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {callActive && <div className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: statusColor }} />}
+                <span className="text-[11px] font-semibold" style={{ color: statusColor }}>{CALL_STATUS_LABELS[callStatus]}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {callActive && <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: statusColor }} />}
-              <span className="text-[11px] font-bold" style={{ color: statusColor }}>{CALL_STATUS_LABELS[callStatus]}</span>
-            </div>
-            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-white/50 hover:text-white transition-colors ml-1">
+            {/* Maximize icon */}
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-white/40 hover:text-white transition-colors shrink-0 ml-1">
               <X className="h-4 w-4" />
             </button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     );
   }
 
