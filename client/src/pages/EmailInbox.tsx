@@ -527,39 +527,66 @@ function MessageBubble({ msg }: { msg: GmailMessage }) {
   const senderName = msg.from || msg.fromEmail || "?";
   const accentColor = senderHex(senderName);
   return (
-    <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(15,23,42,0.06)] p-6 mb-4">
-      <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-100">
-        <div className={cn("w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0", senderColorClass(senderName))}>
+    <div className="bg-white rounded-[22px] border border-[#eef2f7] shadow-[0_8px_18px_rgba(16,24,40,0.05)] p-7 mb-[18px]">
+      {/* Message header: avatar | sender+email | timestamp */}
+      <div
+        className="grid gap-3 mb-5 pb-5 border-b border-[#eef2f7]"
+        style={{ gridTemplateColumns: "45px 1fr auto" }}
+      >
+        {/* Avatar — 45px, soft gradient */}
+        <div
+          className="w-[45px] h-[45px] rounded-full flex items-center justify-center font-bold text-sm shrink-0"
+          style={{
+            background: `linear-gradient(135deg, ${accentColor}22 0%, ${accentColor}44 100%)`,
+            color: accentColor,
+          }}
+        >
           {getInitials(senderName)}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm text-slate-900 truncate" style={{ color: accentColor }}>{senderName}</p>
-          <p className="text-xs text-slate-400 truncate">
-            {msg.fromEmail !== msg.from && msg.fromEmail ? `${msg.fromEmail} · ` : ""}
-            {formatDate(msg.date)}
+        {/* Sender name + email */}
+        <div className="min-w-0 flex flex-col justify-center">
+          <p
+            className="text-[16px] font-[800] leading-tight truncate"
+            style={{ color: accentColor }}
+          >
+            {senderName}
           </p>
+          {msg.fromEmail && msg.fromEmail !== msg.from && (
+            <p className="text-[13px] text-slate-400 truncate mt-0.5">{msg.fromEmail}</p>
+          )}
+        </div>
+        {/* Timestamp */}
+        <div className="flex items-center shrink-0">
+          <span className="text-[13px] font-[800] text-[#9aa8bc]">{formatDate(msg.date)}</span>
         </div>
       </div>
+
+      {/* Body */}
       {sanitizedHtml ? (
         <div
-          className="text-[14px] text-slate-700 leading-relaxed prose prose-sm max-w-none"
+          className="text-[16px] text-[#27364d] leading-[1.7] prose prose-sm max-w-none
+            [&_blockquote]:border-l-[3px] [&_blockquote]:border-[#dbe4f0] [&_blockquote]:pl-4 [&_blockquote]:text-slate-500 [&_blockquote]:not-italic
+            [&_.gmail_quote]:border-l-[3px] [&_.gmail_quote]:border-[#dbe4f0] [&_.gmail_quote]:pl-4 [&_.gmail_quote]:text-slate-400"
           dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
         />
       ) : (
-        <div className="text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+        <div className="text-[16px] text-[#27364d] leading-[1.7] whitespace-pre-wrap">
           {msg.bodyText || msg.snippet}
         </div>
       )}
+
       {/* Attachments */}
       {msg.attachments && msg.attachments.length > 0 && (
-        <div className="mt-3 flex flex-col gap-1">
+        <div className="mt-4 flex flex-col gap-1.5">
           {msg.attachments.map((att) => (
             <AttachmentItem key={att.attachmentId} messageId={msg.id} att={att} />
           ))}
         </div>
       )}
+
+      {/* Sent-by footer */}
       {msg.sentBy && (
-        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-2 mt-[22px] pt-4 border-t border-[#eef2f7]">
           {msg.sentBy.photoUrl ? (
             <img
               src={msg.sentBy.photoUrl}
@@ -571,7 +598,7 @@ function MessageBubble({ msg }: { msg: GmailMessage }) {
               {getInitials(msg.sentBy.name)}
             </div>
           )}
-          <span className="text-[11px] text-slate-400">Sent by <span className="font-semibold text-slate-500">{msg.sentBy.name}</span></span>
+          <span className="text-[12px] text-[#334155]">Sent by <span className="font-semibold">{msg.sentBy.name}</span></span>
         </div>
       )}
     </div>
@@ -1968,10 +1995,23 @@ export default function EmailInbox() {
         {selectedThreadId && statusQuery.data?.connected && (
           <>
             {/* Thread header */}
-            <div className="h-[60px] bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0">
-              <h2 className="text-base font-bold text-slate-900 truncate mr-4">
-                {selectedThread?.subject ?? "Loading…"}
-              </h2>
+            <div className="min-h-[76px] bg-white border-b border-[#e8edf5] flex items-center justify-between px-7 shrink-0 gap-4">
+              <div className="flex-1 min-w-0">
+                <h2
+                  className="text-[18px] font-[900] text-[#162033] truncate leading-tight"
+                  style={{ letterSpacing: "-0.2px" }}
+                >
+                  {selectedThread?.subject ?? "Loading…"}
+                </h2>
+                {selectedThread && (
+                  <p className="text-[13px] font-[700] text-[#8b98ad] mt-0.5 truncate">
+                    {selectedThread.from ?? selectedThread.fromEmail ?? ""}
+                    {selectedThread.messages && selectedThread.messages.length > 1
+                      ? ` · ${selectedThread.messages.length} messages`
+                      : ""}
+                  </p>
+                )}
+              </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 {(() => {
                   const isCurrentIssue = (metaMap.get(selectedThreadId)?.isIssue ?? 0) === 1;
@@ -1980,10 +2020,10 @@ export default function EmailInbox() {
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "text-xs font-semibold gap-1.5 h-8 transition-colors",
+                        "text-xs font-semibold gap-1.5 h-10 rounded-[13px] border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-slate-300 hover:bg-[#fbfdff] transition-all duration-150",
                         isCurrentIssue
                           ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
-                          : "hover:border-red-200 hover:text-red-500"
+                          : "bg-white"
                       )}
                       onClick={toggleIssue}
                       disabled={flagIssueMutation.isPending}
@@ -1999,7 +2039,7 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs font-semibold gap-1.5 h-8"
+                  className="text-xs font-semibold gap-1.5 h-10 rounded-[13px] bg-white border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-slate-300 hover:bg-[#fbfdff] transition-all duration-150"
                   onClick={() => {
                     if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId });
                     else markUnreadMutation.mutate({ threadId: selectedThreadId });
@@ -2016,7 +2056,7 @@ export default function EmailInbox() {
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "text-xs font-semibold gap-1.5 h-8 transition-colors",
+                      "text-xs font-semibold gap-1.5 h-10 rounded-[13px] shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150",
                       "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
                     )}
                     onClick={() => {
@@ -2045,10 +2085,10 @@ export default function EmailInbox() {
                         variant="outline"
                         size="sm"
                         className={cn(
-                          "text-xs font-semibold gap-1.5 h-8 transition-colors",
+                          "text-xs font-semibold gap-1.5 h-10 rounded-[13px] shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150",
                           threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general"
                             ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                            : "hover:border-slate-300 text-slate-500"
+                            : "bg-white border-[#e6ebf2] hover:border-slate-300 hover:bg-[#fbfdff] text-slate-500"
                         )}
                         disabled={recategorizeThreadMutation.isPending}
                         title="Set or change AI category"
@@ -2110,10 +2150,10 @@ export default function EmailInbox() {
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "text-xs font-semibold gap-1.5 h-8 transition-colors",
+                            "text-xs font-semibold gap-1.5 h-10 rounded-[13px] shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150",
                             isAssigned
                               ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100"
-                              : "hover:border-violet-200 hover:text-violet-600"
+                              : "bg-white border-[#e6ebf2] hover:border-violet-200 hover:text-violet-600 hover:bg-[#fbfdff]"
                           )}
                           onClick={() => setAssignDropdownOpen(isOpen ? null : selectedThreadId)}
                         >
@@ -2188,7 +2228,7 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs font-semibold gap-1.5 h-8"
+                  className="text-xs font-semibold gap-1.5 h-10 rounded-[13px] bg-white border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-slate-300 hover:bg-[#fbfdff] transition-all duration-150"
                   onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })}
                   disabled={archiveMutation.isPending}
                 >
@@ -2202,7 +2242,7 @@ export default function EmailInbox() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs font-semibold gap-1.5 h-8 hover:border-amber-300 hover:text-amber-700 hover:bg-amber-50 transition-colors"
+                    className="text-xs font-semibold gap-1.5 h-10 rounded-[13px] bg-white border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-amber-300 hover:text-amber-700 hover:bg-amber-50 transition-all duration-150"
                     onClick={() => {
                       const fromEmail = selectedThread.fromEmail ?? "";
                       const fromName = selectedThread.from ?? fromEmail;
@@ -2219,8 +2259,8 @@ export default function EmailInbox() {
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-[6%] py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="w-full">
+            <div className="flex-1 overflow-y-auto bg-[#f3f5f9] [scrollbar-width:thin] [scrollbar-color:#dde3ee_transparent]">
+              <div style={{ padding: "28px 52px 80px" }}>
                 {threadQuery.isLoading && (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
@@ -2236,7 +2276,7 @@ export default function EmailInbox() {
 
                 {/* Reply box */}
                 {selectedThread && (
-                  <div className="bg-white rounded-2xl shadow-[0_2px_12px_rgba(15,23,42,0.06)] overflow-hidden mb-4">
+                  <div className="bg-white rounded-[22px] border border-[#e7edf5] shadow-[0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden mb-4">
                     <div className="flex border-b border-slate-100">
                       {(["reply", "note"] as const).map((mode) => (
                         <button
@@ -2290,7 +2330,7 @@ export default function EmailInbox() {
                     <Textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
-                      className="border-0 rounded-none resize-none min-h-[140px] text-[14px] leading-relaxed text-slate-700 focus-visible:ring-0 p-5"
+                      className="border-0 rounded-none resize-none min-h-[105px] text-[15px] leading-relaxed text-slate-700 focus-visible:ring-0 px-[16px] py-[12px]"
                       placeholder={replyMode === "note" ? "Add an internal note…" : "Write a reply…"}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -2299,7 +2339,7 @@ export default function EmailInbox() {
                         }
                       }}
                     />
-                    <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+                    <div className="flex items-center justify-between border-t border-slate-100 px-[12px] py-[12px]">
                       <div className="flex items-center gap-3">
                         {/* Hidden file input */}
                         <input
@@ -2324,10 +2364,11 @@ export default function EmailInbox() {
                             onClick={generateDraft}
                             disabled={draftMutation.isPending || !threadQuery.data}
                             className={cn(
-                              "flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors",
+                              "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all duration-150",
+                              "shadow-[0_4px_10px_rgba(16,24,40,0.04)]",
                               draftMutation.isPending
-                                ? "text-violet-400 bg-violet-50 cursor-not-allowed"
-                                : "text-violet-600 bg-violet-50 hover:bg-violet-100"
+                                ? "text-violet-400 bg-violet-50 border-violet-200 cursor-not-allowed"
+                                : "text-violet-600 bg-white border-[#e6ebf2] hover:border-violet-300 hover:bg-violet-50"
                             )}
                           >
                             {draftMutation.isPending
@@ -2340,7 +2381,7 @@ export default function EmailInbox() {
                         <div className="relative">
                           <button
                             onClick={() => setShowTemplates((v) => !v)}
-                            className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors text-emerald-700 bg-emerald-50 hover:bg-emerald-100"
+                            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-[#e6ebf2] bg-white shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-50"
                             title="Insert canned reply"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -2375,7 +2416,7 @@ export default function EmailInbox() {
                       {replyMode === "reply" ? (
                         <Button
                           size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5"
+                          className="h-[42px] rounded-[14px] bg-[#0f172a] hover:bg-[#1e293b] text-white font-[900] text-[14px] gap-1.5 px-5 shadow-[0_4px_10px_rgba(15,23,42,0.18)] transition-all duration-150"
                           disabled={replyMutation.isPending || !replyText.trim()}
                           onClick={sendReply}
                         >
