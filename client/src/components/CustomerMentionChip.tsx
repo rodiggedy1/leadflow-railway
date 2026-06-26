@@ -5,11 +5,8 @@
  * Token format in message body: @[Name|phone]
  * If multiple customers share the same name (ambiguous), the card shows
  * all matches and lets the user pick before taking action.
- *
- * Popover uses a React portal + getBoundingClientRect so it never clips.
  */
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
+import React, { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Phone, Mail, MessageSquare, History, Star, Loader2, ChevronDown } from "lucide-react";
@@ -34,9 +31,6 @@ type Props = {
   /** Phone number(s) — if multiple, card shows disambiguation */
   customers: CustomerData[];
 };
-
-const CARD_WIDTH = 340;
-const CARD_GAP = 8; // px gap between chip bottom and card top
 
 function formatLtv(n: number) {
   if (n >= 1000) return `$${(n / 1000).toFixed(1)}k`;
@@ -76,10 +70,11 @@ function CustomerCard({ customer }: { customer: CustomerData }) {
   ];
 
   return (
-    <div className="rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif", width: CARD_WIDTH }}>
+    <div className="w-[340px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       {/* Hero */}
       <div className="relative px-5 pt-5 pb-4" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <div className="flex items-start gap-3">
+          {/* Avatar */}
           <div
             className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg"
             style={{ background: `hsl(${hue}, 55%, 52%)` }}
@@ -148,6 +143,7 @@ function CustomerCard({ customer }: { customer: CustomerData }) {
           <p className="text-xs text-slate-400 italic">No context available</p>
         )}
 
+        {/* Open quotes */}
         {ctx?.openQuotes && ctx.openQuotes.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
             {ctx.openQuotes.map(q => (
@@ -158,6 +154,7 @@ function CustomerCard({ customer }: { customer: CustomerData }) {
           </div>
         )}
 
+        {/* Timeline */}
         {ctx?.timeline && ctx.timeline.length > 0 && (
           <div className="mt-3 space-y-1">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Recent</p>
@@ -178,7 +175,7 @@ function CustomerCard({ customer }: { customer: CustomerData }) {
 /** Disambiguation picker when multiple customers share the same name */
 function DisambiguationCard({ customers, onSelect }: { customers: CustomerData[]; onSelect: (c: CustomerData) => void }) {
   return (
-    <div className="rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif", width: 280 }}>
+    <div className="w-[280px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
         <p className="text-xs font-bold text-slate-700">Multiple matches — choose one</p>
       </div>
@@ -214,68 +211,9 @@ function DisambiguationCard({ customers, onSelect }: { customers: CustomerData[]
   );
 }
 
-/** Portal-based popover that positions itself to stay fully within the viewport */
-function PopoverPortal({
-  anchorRef,
-  open,
-  onMouseEnter,
-  onMouseLeave,
-  children,
-}: {
-  anchorRef: React.RefObject<HTMLSpanElement | null>;
-  open: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
-  children: React.ReactNode;
-}) {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-
-  const recalc = useCallback(() => {
-    if (!anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    // Prefer below the chip; flip above if not enough space
-    const spaceBelow = vh - rect.bottom;
-    const spaceAbove = rect.top;
-    const cardHeight = 480; // generous estimate
-    const top = spaceBelow >= cardHeight || spaceBelow >= spaceAbove
-      ? rect.bottom + CARD_GAP + window.scrollY
-      : rect.top - cardHeight - CARD_GAP + window.scrollY;
-
-    // Prefer left-aligned to chip; shift left if it would overflow right edge
-    let left = rect.left + window.scrollX;
-    if (left + CARD_WIDTH > vw - 12) {
-      left = vw - CARD_WIDTH - 12 + window.scrollX;
-    }
-    if (left < 8) left = 8;
-
-    setPos({ top, left });
-  }, [anchorRef]);
-
-  useEffect(() => {
-    if (open) recalc();
-  }, [open, recalc]);
-
-  if (!open || !pos) return null;
-
-  return createPortal(
-    <div
-      style={{ position: "absolute", top: pos.top, left: pos.left, zIndex: 9999 }}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      {children}
-    </div>,
-    document.body
-  );
-}
-
 export function CustomerMentionChip({ name, customers }: Props) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<CustomerData | null>(customers.length === 1 ? customers[0] : null);
-  const chipRef = useRef<HTMLSpanElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -293,7 +231,6 @@ export function CustomerMentionChip({ name, customers }: Props) {
 
   return (
     <span
-      ref={chipRef}
       className="relative inline-flex items-center gap-1 align-middle"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -310,33 +247,39 @@ export function CustomerMentionChip({ name, customers }: Props) {
         {customers.length > 1 && <ChevronDown className="h-3 w-3 opacity-60" />}
       </span>
 
-      <PopoverPortal
-        anchorRef={chipRef}
-        open={open}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        {selected ? (
-          <CustomerCard customer={selected} />
-        ) : (
-          <DisambiguationCard
-            customers={customers}
-            onSelect={c => setSelected(c)}
-          />
-        )}
-      </PopoverPortal>
+      {/* Popover */}
+      {open && (
+        <span
+          className="absolute z-[500] top-full mt-2 block"
+          style={{ right: 'auto', left: '50%', transform: 'translateX(-50%)', minWidth: 340, filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.18))' }}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+        >
+          {selected ? (
+            <CustomerCard customer={selected} />
+          ) : (
+            <DisambiguationCard
+              customers={customers}
+              onSelect={c => setSelected(c)}
+            />
+          )}
+        </span>
+      )}
     </span>
   );
 }
 
 /**
  * Parse a message body and replace @[Name|phone] tokens with CustomerMentionChip components.
+ * Also auto-detects bare full names that were resolved at send time.
+ * Falls back to plain text for any unrecognized content.
  */
 export function renderMessageWithMentions(
   body: string,
   customerMap: Map<string, CustomerData[]>,
   _keyPrefix?: string
 ): React.ReactNode[] {
+  // Token format: @[Name|phone1,phone2]
   const TOKEN_RE = /@\[([^\]|]+)\|([^\]]+)\]/g;
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -357,6 +300,7 @@ export function renderMessageWithMentions(
         <CustomerMentionChip key={match.index} name={name} customers={customers} />
       );
     } else {
+      // No customer data — render as plain green text
       parts.push(
         <span key={match.index} className="text-emerald-600 font-semibold">@{name}</span>
       );
