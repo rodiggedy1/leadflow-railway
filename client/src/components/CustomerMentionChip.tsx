@@ -921,20 +921,6 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
-  // AiCallComposer is always mounted once resolvedCustomer is known — never unmounted
-  // so call state (polling, status, recording) survives modal close/reopen.
-  // We just hide it with display:none when not visible.
-  const callComposer = resolvedCustomer ? (
-    <div style={{ display: open && view === "call" ? "block" : "none" }}>
-      <AiCallComposer
-        customer={resolvedCustomer}
-        onBack={() => setView("card")}
-        onClose={dismissAll}
-        onMinimize={(c) => { setPillCustomer(c); setCallMinimized(true); setPillDismissed(false); close(); }}
-      />
-    </div>
-  ) : null;
-
   const modal = open ? ReactDOM.createPortal(
     <>
       <div
@@ -960,8 +946,12 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
           view === "sms" ? (
             <SmsComposer customer={resolvedCustomer} onBack={() => setView("card")} onClose={close} />
           ) : view === "call" ? (
-            // rendered by callComposer above (always mounted), this slot is intentionally empty
-            null
+            <AiCallComposer
+              customer={resolvedCustomer}
+              onBack={() => setView("card")}
+              onClose={dismissAll}
+              onMinimize={(c) => { setPillCustomer(c); setCallMinimized(true); setPillDismissed(false); close(); }}
+            />
           ) : (
             <CustomerCard customer={resolvedCustomer} onClose={close} onText={() => setView("sms")} onCall={() => setView("call")} />
           )
@@ -1057,8 +1047,6 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
       </span>
       {modal}
       {pill}
-      {/* callComposer always mounted in body so call state survives modal close */}
-      {callComposer ? ReactDOM.createPortal(callComposer, document.body) : null}
     </>
   );
 }
