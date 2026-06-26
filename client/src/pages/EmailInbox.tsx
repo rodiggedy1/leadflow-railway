@@ -1707,7 +1707,7 @@ export default function EmailInbox() {
                 )}
                 title="Show all senders including ignored"
               >
-                <ShieldOff className="w-3.5 h-3.5" />
+                <ShieldOff className="w-[18px] h-[18px] text-red-500" />
                 All
               </button>
             </div>
@@ -1936,7 +1936,7 @@ export default function EmailInbox() {
                         if (activeCategoryFilter === cat.category) setActiveCategoryFilter(null);
                       }}
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <CheckCircle2 className="w-[18px] h-[18px]" />
                     </button>
                   </div>
                   );
@@ -2070,7 +2070,7 @@ export default function EmailInbox() {
         {selectedThreadId && statusQuery.data?.connected && (
           <>
             {/* Thread header */}
-            <div className="min-h-[76px] bg-white border-b border-[#e8edf5] flex items-center justify-between px-7 shrink-0 gap-4">
+            <div className="bg-white border-b border-[#e8edf5] flex items-center justify-between shrink-0" style={{ height: "72px", padding: "0 28px", gap: "12px" }}>
               <div className="flex-1 min-w-0">
                 <h2
                   className="text-[18px] font-[900] text-[#162033] truncate leading-tight"
@@ -2079,15 +2079,18 @@ export default function EmailInbox() {
                   {selectedThread?.subject ?? "Loading…"}
                 </h2>
                 {selectedThread && (
-                  <p className="text-[13px] font-[700] text-[#8b98ad] mt-0.5 truncate">
-                    {selectedThread.from ?? selectedThread.fromEmail ?? ""}
+                  <p className="text-[13px] font-[700] text-[#8b98ad] truncate" style={{ marginTop: "4px", lineHeight: "1.4" }}>
                     {selectedThread.messages && selectedThread.messages.length > 1
-                      ? ` · ${selectedThread.messages.length} messages`
-                      : ""}
+                      ? `${selectedThread.messages.length} messages`
+                      : "1 message"}
+                    {threadAiQuery.data?.aiCategory && GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory]
+                      ? ` · ${GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory].label}`
+                      : " · General"}
+                    {(metaMap.get(selectedThreadId)?.isActionable ?? 1) === 1 ? " · Actionable" : " · Ignored"}
                   </p>
                 )}
               </div>
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center shrink-0" style={{ gap: "10px" }}>
                 {(() => {
                   const isCurrentIssue = (metaMap.get(selectedThreadId)?.isIssue ?? 0) === 1;
                   return (
@@ -2095,9 +2098,9 @@ export default function EmailInbox() {
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "text-xs font-semibold gap-1.5 h-10 rounded-[13px] border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-slate-300 hover:bg-[#fbfdff] transition-all duration-150",
+                        "text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
                         isCurrentIssue
-                          ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
+                          ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                           : "bg-white"
                       )}
                       onClick={toggleIssue}
@@ -2105,8 +2108,8 @@ export default function EmailInbox() {
                       title={isCurrentIssue ? "Remove issue flag" : "Flag as issue"}
                     >
                       {flagIssueMutation.isPending
-                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        : <Flag className={cn("w-3.5 h-3.5", isCurrentIssue && "fill-red-500")} />}
+                        ? <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                        : <Flag className={cn("w-[18px] h-[18px]", isCurrentIssue && "fill-red-500")} />}
                       {isCurrentIssue ? "Issue" : "Flag"}
                     </Button>
                   );
@@ -2114,7 +2117,7 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs font-semibold gap-1.5 h-10 rounded-[13px] bg-white border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-slate-300 hover:bg-[#fbfdff] transition-all duration-150"
+                  className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                   onClick={() => {
                     if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId });
                     else markUnreadMutation.mutate({ threadId: selectedThreadId });
@@ -2122,8 +2125,8 @@ export default function EmailInbox() {
                   disabled={markReadMutation.isPending || markUnreadMutation.isPending}
                 >
                   {selectedThread?.isUnread
-                    ? <><MailCheck className="w-3.5 h-3.5" /> Mark read</>
-                    : <><MailOpen className="w-3.5 h-3.5" /> Mark unread</>}
+                    ? <><MailCheck className="w-[18px] h-[18px]" /> Mark read</>
+                    : <><MailOpen className="w-[18px] h-[18px]" /> Mark unread</>}
                 </Button>
                 {/* Resolve from glance — only shown when thread has an AI category */}
                 {threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general" && (
@@ -2131,7 +2134,7 @@ export default function EmailInbox() {
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "text-xs font-semibold gap-1.5 h-10 rounded-[13px] shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150",
+                      "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
                       "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
                     )}
                     onClick={() => {
@@ -2147,8 +2150,8 @@ export default function EmailInbox() {
                     title="Resolve and mark as read"
                   >
                     {resolveGlanceMutation.isPending
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      ? <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                      : <CheckCircle2 className="w-[18px] h-[18px]" />}
                     Resolve
                   </Button>
                 )}
@@ -2160,10 +2163,10 @@ export default function EmailInbox() {
                         variant="outline"
                         size="sm"
                         className={cn(
-                          "text-xs font-semibold gap-1.5 h-10 rounded-[13px] shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150",
+                          "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
                           threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general"
                             ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                            : "bg-white border-[#e6ebf2] hover:border-slate-300 hover:bg-[#fbfdff] text-slate-500"
+                            : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
                         )}
                         disabled={recategorizeThreadMutation.isPending}
                         title="Set or change AI category"
@@ -2171,7 +2174,7 @@ export default function EmailInbox() {
                         {threadAiQuery.data?.aiCategory && GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory]
                           ? <><span>{GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory].emoji}</span> {GLANCE_CATEGORY_LABELS[threadAiQuery.data.aiCategory].label}</>
                           : <>Categorize</>}
-                        <ChevronDown className="w-3 h-3 opacity-60" />
+                        <ChevronDown className="w-[14px] h-[14px] opacity-50 ml-auto" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="min-w-[200px]">
@@ -2225,10 +2228,10 @@ export default function EmailInbox() {
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "text-xs font-semibold gap-1.5 h-10 rounded-[13px] shadow-[0_4px_10px_rgba(16,24,40,0.04)] transition-all duration-150",
+                            "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
                             isAssigned
                               ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100"
-                              : "bg-white border-[#e6ebf2] hover:border-violet-200 hover:text-violet-600 hover:bg-[#fbfdff]"
+                              : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
                           )}
                           onClick={() => setAssignDropdownOpen(isOpen ? null : selectedThreadId)}
                         >
@@ -2238,7 +2241,7 @@ export default function EmailInbox() {
                             <UserCheck className="w-3.5 h-3.5" />
                           )}
                           {isAssigned ? (currentMeta?.assignedToName?.split(" ")[0] ?? "Assigned") : "Assign"}
-                          <ChevronDown className="w-3 h-3 opacity-60" />
+                          <ChevronDown className="w-[14px] h-[14px] opacity-50 ml-auto" />
                         </Button>
                         {isOpen && (
                           <>
@@ -2303,13 +2306,13 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs font-semibold gap-1.5 h-10 rounded-[13px] bg-white border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-slate-300 hover:bg-[#fbfdff] transition-all duration-150"
+                  className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                   onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })}
                   disabled={archiveMutation.isPending}
                 >
                   {archiveMutation.isPending
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <Archive className="w-3.5 h-3.5" />}
+                    ? <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                    : <Archive className="w-[18px] h-[18px]" />}
                   Archive
                 </Button>
                 {/* Ignore sender button */}
@@ -2317,7 +2320,7 @@ export default function EmailInbox() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-xs font-semibold gap-1.5 h-10 rounded-[13px] bg-white border-[#e6ebf2] shadow-[0_4px_10px_rgba(16,24,40,0.04)] hover:border-amber-300 hover:text-amber-700 hover:bg-amber-50 transition-all duration-150"
+                    className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all duration-150 text-[#243247]" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                     onClick={() => {
                       const fromEmail = selectedThread.fromEmail ?? "";
                       const fromName = selectedThread.from ?? fromEmail;
@@ -2326,7 +2329,7 @@ export default function EmailInbox() {
                     }}
                     title="Ignore this sender (hide from inbox)"
                   >
-                    <ShieldOff className="w-3.5 h-3.5" />
+                    <ShieldOff className="w-[18px] h-[18px] text-red-500" />
                     Ignore
                   </Button>
                 )}
@@ -2597,7 +2600,7 @@ export default function EmailInbox() {
                 disabled={upsertSenderPolicyMutation.isPending}
                 className="text-xs gap-1.5 bg-amber-600 hover:bg-amber-700"
               >
-                {upsertSenderPolicyMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldOff className="w-3.5 h-3.5" />}
+                {upsertSenderPolicyMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldOff className="w-[18px] h-[18px] text-red-500" />}
                 Ignore sender
               </Button>
             </DialogFooter>
