@@ -1634,41 +1634,7 @@ export default function EmailInbox() {
               </button>
             ))}
           </div>
-          {/* Tab filter — Row 2: sub-filters */}
-          <div className="flex items-center gap-1.5 mb-3">
-            {([
-              { key: "all" as const, label: "All", badge: undefined as number | undefined },
-              { key: "mine" as const, label: "Mine", badge: mineCount as number | undefined },
-            ]).map(({ key, label, badge }) => (
-              <button
-                key={key}
-                onClick={() => {
-                  if (activeTab === key) return;
-                  setActiveTab(key);
-                  setExtraThreads([]);
-                  setSelectedThreadId(null);
-                }}
-                className={cn(
-                  "flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 rounded-full transition-all duration-150",
-                  activeTab === key
-                    ? "bg-violet-100 text-violet-700 font-semibold"
-                    : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-                )}
-              >
-                {label}
-                {badge != null && badge > 0 && (
-                  <span className={cn(
-                    "inline-flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full text-[9px] font-bold leading-none",
-                    activeTab === key
-                      ? "bg-violet-200 text-violet-700"
-                      : "bg-violet-100 text-violet-700"
-                  )}>
-                    {badge}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+
           {/* Actionable segmented control */}
           <div className="rounded-2xl p-1 mb-1" style={{background: '#f1f4f9'}}>
             <div className="flex">
