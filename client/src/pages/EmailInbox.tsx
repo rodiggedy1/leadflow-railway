@@ -313,64 +313,63 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-4 py-3.5 border-b transition-colors group relative",
-        isIssue ? "border-red-100" : "border-slate-100",
+        "w-full text-left px-4 py-4 border-b transition-all duration-150 group relative",
+        isIssue ? "border-red-100" : "border-[#e8edf5]",
         active
-          ? isIssue ? "bg-red-50/80" : "bg-blue-50/70"
+          ? isIssue ? "bg-red-50/80" : "bg-[#eff6ff]"
           : isIssue
           ? "bg-red-50/40 hover:bg-red-50/70"
-          : thread.isUnread
-          ? "bg-white hover:bg-slate-50/80"
-          : "bg-white hover:bg-slate-50/60"
+          : "bg-white hover:bg-slate-50"
       )}
     >
       {/* Left accent bar */}
       {(active || isIssue) && (
         <span className={cn(
-          "absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full",
+          "absolute left-0 top-3 bottom-3 w-[4px] rounded-r-full",
           isIssue ? "bg-red-500" : "bg-blue-500"
         )} />
       )}
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-3">
         {/* Sender avatar */}
         <div
           className={cn(
-            "w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5",
+            "w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5",
             isIssue ? "bg-red-100 text-red-700" : senderColorClass(senderName)
           )}
         >
           {isIssue ? <Flag className="w-3.5 h-3.5" /> : getInitials(senderName)}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-0.5">
+          <div className="flex items-center justify-between gap-2 mb-1">
             <span
-              className={cn("text-sm leading-snug truncate font-bold")}
+              className={cn("text-[15px] leading-snug truncate", thread.isUnread ? "font-[900]" : "font-bold")}
               style={{ color: accentColor }}
             >
               {senderName}
             </span>
             <span className="text-[11px] text-slate-400 shrink-0">{formatDate(thread.date)}</span>
           </div>
-          <p className={cn("text-xs leading-snug truncate mb-1", thread.isUnread ? "text-slate-700 font-medium" : "text-slate-500")}>
+          <p className={cn("text-[13px] leading-snug truncate mb-1", thread.isUnread ? "text-slate-800 font-[700]" : "text-slate-500 font-normal")}>
             {thread.subject}
           </p>
           {isIssue && issueSummary ? (
-            <p className="text-[11px] text-red-500 line-clamp-1 leading-relaxed font-medium">
+            <p className="text-[12px] text-red-500 line-clamp-1 leading-relaxed font-medium">
               {issueSummary}
             </p>
           ) : (
-            <p className="text-[11px] text-slate-400 line-clamp-1 leading-relaxed">
+            <p className="text-[12px] text-slate-400 line-clamp-1 leading-relaxed">
               {thread.snippet?.slice(0, 80)}
             </p>
           )}
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
             {isIssue && (
               <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">
                 ISSUE
               </span>
             )}
             {thread.isUnread && (
-              <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
                 UNREAD
               </span>
             )}
@@ -1394,43 +1393,45 @@ export default function EmailInbox() {
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
       {/* Thread sidebar */}
-      <aside className="w-[280px] bg-white border-r border-slate-200 flex flex-col shrink-0 overflow-hidden">
+      <aside className="w-[330px] bg-white border-r border-[#e8edf5] flex flex-col shrink-0 overflow-hidden" style={{boxShadow: '0 12px 30px rgba(16,24,40,0.07)'}}>
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-slate-100">
-          <div className="flex items-center justify-between mb-3">
+        <div className="px-5 pt-5 pb-4 border-b border-[#e8edf5]">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-base font-bold text-slate-900 tracking-tight">Maids Inbox</h1>
-              <p className="text-[11px] text-slate-400">Shared Gmail inbox</p>
+              <h1 className="text-2xl font-bold text-slate-900 tracking-tight" style={{fontFamily: 'Georgia, serif'}}>Maids Inbox</h1>
+              <p className="text-[13px] text-[#8fa1b8] mt-0.5">Shared Gmail Inbox</p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => { utils.gmail.listThreads.invalidate(); utils.gmail.getConnectionStatus.invalidate(); }}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors"
+                className="w-[42px] h-[42px] rounded-2xl flex items-center justify-center text-slate-400 bg-white hover:bg-slate-50 transition-all duration-150 hover:-translate-y-px"
+                style={{boxShadow: '0 4px 10px rgba(15,23,42,0.04)', border: '1px solid #e8edf5'}}
                 title="Refresh"
               >
-                <RefreshCw className={cn("w-3.5 h-3.5", threadsQuery.isFetching && "animate-spin")} />
+                <RefreshCw className={cn("w-4 h-4", threadsQuery.isFetching && "animate-spin")} />
               </button>
               <button
                 onClick={() => setShowCompose(true)}
-                className="w-8 h-8 bg-slate-900 text-white rounded-lg flex items-center justify-center hover:bg-slate-800 transition-colors"
-                title="Compose"
+                className="w-[42px] h-[42px] bg-slate-900 text-white rounded-2xl flex items-center justify-center hover:bg-slate-800 transition-all duration-150 hover:-translate-y-px"
+                style={{boxShadow: '0 4px 10px rgba(15,23,42,0.04)'}}
+                title="New email"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus className="w-4 h-4" />
               </button>
             </div>
           </div>
           {/* Search */}
-          <div className="relative mb-2.5">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <div className="relative mb-4">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <Input
-              placeholder="Search inbox…"
+              placeholder="Search inbox..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 bg-slate-50 border-slate-200 rounded-lg text-xs h-8"
+              className="pl-11 bg-[#f8fafc] border-[#e6ebf2] rounded-2xl text-sm h-12 focus:ring-2 focus:ring-slate-200"
             />
           </div>
           {/* Tab filter — Row 1: primary tabs */}
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-1.5 mb-2">
             {([
               { key: "conversations" as const, label: "Inbox", badge: undefined as number | undefined },
               { key: "unread" as const, label: "Unread", badge: effectiveUnreadCount as number | undefined },
@@ -1445,16 +1446,16 @@ export default function EmailInbox() {
                   setSelectedThreadId(null);
                 }}
                 className={cn(
-                  "relative flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1.5 rounded-md transition-all duration-150",
+                  "relative flex items-center gap-1.5 text-[12px] font-semibold px-3.5 py-2 rounded-full transition-all duration-150",
                   activeTab === key
-                    ? "bg-slate-900 text-white shadow-sm"
+                    ? "bg-[#0f172a] text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                 )}
               >
                 {label}
                 {badge != null && badge > 0 && (
                   <span className={cn(
-                    "inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[9px] font-bold leading-none",
+                    "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none",
                     activeTab === key
                       ? "bg-white/20 text-white"
                       : "bg-blue-100 text-blue-700"
@@ -1466,7 +1467,7 @@ export default function EmailInbox() {
             ))}
           </div>
           {/* Tab filter — Row 2: sub-filters */}
-          <div className="flex items-center gap-0.5 mt-0.5">
+          <div className="flex items-center gap-1.5 mb-3">
             {([
               { key: "all" as const, label: "All", badge: undefined as number | undefined },
               { key: "mine" as const, label: "Mine", badge: mineCount as number | undefined },
@@ -1480,18 +1481,18 @@ export default function EmailInbox() {
                   setSelectedThreadId(null);
                 }}
                 className={cn(
-                  "flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-md transition-all duration-150",
+                  "flex items-center gap-1 text-[11px] font-medium px-3 py-1.5 rounded-full transition-all duration-150",
                   activeTab === key
-                    ? "bg-violet-600 text-white shadow-sm"
+                    ? "bg-violet-100 text-violet-700 font-semibold"
                     : "text-slate-400 hover:text-slate-600 hover:bg-slate-100"
                 )}
               >
                 {label}
                 {badge != null && badge > 0 && (
                   <span className={cn(
-                    "inline-flex items-center justify-center min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] font-bold leading-none",
+                    "inline-flex items-center justify-center min-w-[15px] h-[15px] px-0.5 rounded-full text-[9px] font-bold leading-none",
                     activeTab === key
-                      ? "bg-white/20 text-white"
+                      ? "bg-violet-200 text-violet-700"
                       : "bg-violet-100 text-violet-700"
                   )}>
                     {badge}
@@ -1500,29 +1501,55 @@ export default function EmailInbox() {
               </button>
             ))}
           </div>
-          {/* Actionable-only toggle + policies link */}
-          <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-            <button
-              onClick={() => {
-                setShowIgnored((v) => !v);
-                setExtraThreads([]);
-                setSelectedThreadId(null);
-              }}
-              className={cn(
-                "flex items-center gap-1.5 text-[10px] font-semibold px-2 py-1 rounded-md transition-all duration-150",
-                showIgnored
-                  ? "bg-amber-100 text-amber-700 border border-amber-200"
-                  : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-              )}
-              title={showIgnored ? "Showing all senders — click to show actionable only" : "Showing actionable only — click to show all senders"}
-            >
-              {showIgnored ? <ShieldOff className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
-              {showIgnored ? "Show all" : "Actionable"}
-            </button>
+          {/* Actionable segmented control */}
+          <div className="rounded-2xl p-1 mb-2" style={{background: '#f1f4f9'}}>
+            <div className="flex">
+              <button
+                onClick={() => {
+                  if (showIgnored) {
+                    setShowIgnored(false);
+                    setExtraThreads([]);
+                    setSelectedThreadId(null);
+                  }
+                }}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-semibold h-[34px] rounded-xl transition-all duration-150",
+                  !showIgnored
+                    ? "bg-white text-slate-800 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+                title="Show actionable threads only"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Actionable
+              </button>
+              <button
+                onClick={() => {
+                  if (!showIgnored) {
+                    setShowIgnored(true);
+                    setExtraThreads([]);
+                    setSelectedThreadId(null);
+                  }
+                }}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-semibold h-[34px] rounded-xl transition-all duration-150",
+                  showIgnored
+                    ? "bg-white text-slate-800 shadow-sm"
+                    : "text-slate-400 hover:text-slate-600"
+                )}
+                title="Show all senders including ignored"
+              >
+                <ShieldOff className="w-3.5 h-3.5" />
+                All
+              </button>
+            </div>
+          </div>
+          {/* Policies link */}
+          <div className="flex justify-end">
             <Link href="/admin/inbox/sender-policies">
-              <button className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 transition-colors px-1 py-1 rounded-md hover:bg-slate-100">
+              <button className="flex items-center gap-1 text-[11px] text-violet-500 hover:text-violet-700 transition-colors px-1 py-0.5 font-medium">
                 <Settings className="w-3 h-3" />
-                Policies
+                Manage sender policies
               </button>
             </Link>
           </div>
@@ -1530,16 +1557,16 @@ export default function EmailInbox() {
 
         {/* Agent Assignment Buckets — show on all tabs */}
         {agentAssignmentsQuery.data && agentAssignmentsQuery.data.agents.length > 0 && (
-          <div className="border-b border-slate-100">
+          <div className="border-b border-[#e8edf5]">
             <button
               onClick={() => setAgentPanelOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
+              className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors"
             >
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Assignments</span>
-              <ChevronRight className={cn("w-3 h-3 text-slate-300 transition-transform", agentPanelOpen && "rotate-90")} />
+              <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.12em]">Assignments</span>
+              <ChevronRight className={cn("w-3.5 h-3.5 text-slate-300 transition-transform duration-150", agentPanelOpen && "rotate-90")} />
             </button>
             {agentPanelOpen && (
-              <div className="px-3 pb-3">
+              <div className="px-5 pb-4">
                 {/* Clear filter row */}
                 {activeAgentFilter !== null && (
                   <button
@@ -1548,12 +1575,12 @@ export default function EmailInbox() {
                       setExtraThreads([]);
                       lastAutoSelectedKey.current = null;
                     }}
-                    className="w-full flex items-center gap-1.5 text-[10px] font-semibold text-violet-600 hover:text-violet-700 px-2 py-1 mb-1 rounded-md hover:bg-violet-50 transition-colors"
+                    className="w-full flex items-center gap-1.5 text-[11px] font-semibold text-violet-600 hover:text-violet-700 px-2 py-1 mb-2 rounded-lg hover:bg-violet-50 transition-colors"
                   >
-                    <X className="w-3 h-3" /> Clear filter
+                    <X className="w-3.5 h-3.5" /> Clear filter
                   </button>
                 )}
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-3 flex-wrap">
                   {agentAssignmentsQuery.data.agents.map((agent) => {
                     const isActive = activeAgentFilter === agent.agentId;
                     const hasWork = agent.count > 0;
@@ -1588,15 +1615,15 @@ export default function EmailInbox() {
                           }
                         }}
                         className={cn(
-                          "relative flex flex-col items-center gap-1 transition-all duration-150 group",
+                          "relative flex flex-col items-center gap-1.5 transition-all duration-150 group hover:-translate-y-px",
                           !hasWork && "opacity-40"
                         )}
                       >
                         {/* Avatar circle + badge wrapper (relative, NOT overflow-hidden) */}
-                        <div className="relative w-9 h-9">
+                        <div className="relative w-10 h-10">
                           {/* The image circle is overflow-hidden but the badge sits outside it */}
                           <div className={cn(
-                            "w-9 h-9 rounded-full overflow-hidden ring-2 transition-all duration-150",
+                            "w-10 h-10 rounded-full overflow-hidden ring-2 transition-all duration-150",
                             isActive
                               ? "ring-violet-500 ring-offset-1"
                               : hasWork
@@ -1630,8 +1657,8 @@ export default function EmailInbox() {
                         </div>
                         {/* Name label */}
                         <span className={cn(
-                          "text-[9px] font-semibold leading-none max-w-[36px] truncate",
-                          isActive ? "text-violet-600" : "text-slate-400"
+                          "text-[10px] font-semibold leading-none max-w-[40px] truncate",
+                          isActive ? "text-violet-600" : "text-slate-500"
                         )}>
                           {firstName}
                         </span>
@@ -1646,15 +1673,15 @@ export default function EmailInbox() {
 
         {/* Today at a Glance panel — only on Inbox/Unread/All/Mine tabs, not Leads */}
         {activeTab !== "leads" && glanceQuery.data && glanceQuery.data.categories.length > 0 && (
-          <div className="border-b border-slate-100">
+          <div className="border-b border-[#e8edf5]">
             {/* Glance header */}
             <button
               onClick={() => setGlancePanelOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-slate-50 transition-colors"
+              className="w-full flex items-center justify-between px-5 py-3 hover:bg-slate-50 transition-colors"
             >
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today at a Glance</span>
+              <span className="text-[11px] font-black text-slate-400 uppercase tracking-[0.12em]">Today at a Glance</span>
               <span className={cn(
-                "flex items-center justify-center w-6 h-6 rounded-full transition-all duration-200",
+                "flex items-center justify-center w-7 h-7 rounded-full transition-all duration-200",
                 glancePanelOpen
                   ? "bg-violet-100"
                   : "bg-violet-600 animate-pulse shadow-[0_0_8px_rgba(124,58,237,0.7)]"
@@ -1666,7 +1693,7 @@ export default function EmailInbox() {
               </span>
             </button>
             {glancePanelOpen && (
-              <div className="px-3 pb-3 space-y-1">
+              <div className="px-4 pb-4 space-y-1">
                 {/* Clear filter row */}
                 {activeCategoryFilter && (
                   <button
@@ -1674,9 +1701,9 @@ export default function EmailInbox() {
                       setActiveCategoryFilter(null);
                       lastAutoSelectedKey.current = null;
                     }}
-                    className="w-full flex items-center gap-1.5 text-[10px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                    className="w-full flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors"
                   >
-                    <X className="w-3 h-3" /> Clear filter
+                    <X className="w-3.5 h-3.5" /> Clear filter
                   </button>
                 )}
                 {glanceQuery.data.categories.map((cat) => {
@@ -1684,10 +1711,11 @@ export default function EmailInbox() {
                   <div
                     key={cat.category}
                     className={cn(
-                      "group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all duration-150",
+                      "group flex items-center gap-2.5 px-3 rounded-xl cursor-pointer transition-all duration-150",
+                      "h-12",
                       activeCategoryFilter === cat.category
-                        ? "bg-slate-900 text-white"
-                        : "hover:bg-slate-50"
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "hover:bg-slate-100"
                     )}
                     onClick={() => {
                       const newFilter = activeCategoryFilter === cat.category ? null : cat.category;
@@ -1715,14 +1743,14 @@ export default function EmailInbox() {
                   >
                     <span className="text-base leading-none shrink-0">{cat.emoji}</span>
                     <span className={cn(
-                      "flex-1 text-[11px] font-semibold truncate",
+                      "flex-1 text-[12px] font-semibold truncate",
                       activeCategoryFilter === cat.category ? "text-white" : "text-slate-700"
                     )}>
                       {cat.label}
                     </span>
                     <span className={cn(
-                      "text-[11px] font-black shrink-0",
-                      activeCategoryFilter === cat.category ? "text-white" : cat.urgentCount > 0 ? "text-red-500" : "text-slate-400"
+                      "text-[15px] font-black shrink-0",
+                      activeCategoryFilter === cat.category ? "text-white" : cat.urgentCount > 0 ? "text-red-500" : "text-slate-500"
                     )}>
                       {cat.count}
                     </span>
@@ -1751,7 +1779,7 @@ export default function EmailInbox() {
         )}
 
         {/* Thread list */}
-        <div className="flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex-1 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#e2e8f0_transparent]">
           {statusQuery.isLoading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
@@ -1846,11 +1874,11 @@ export default function EmailInbox() {
             </div>
           )}
           {threadsQuery.data?.nextPageToken && (
-            <div className="px-4 py-3 border-t border-slate-100">
+            <div className="px-4 py-4 border-t border-[#e8edf5]">
               <button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="w-full text-xs font-semibold text-slate-500 hover:text-slate-700 py-2 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="w-full text-[12px] font-semibold text-slate-500 hover:text-slate-700 py-2.5 rounded-xl hover:bg-slate-50 transition-all duration-150 flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {loadingMore ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 {loadingMore ? "Loading…" : "Load more"}
