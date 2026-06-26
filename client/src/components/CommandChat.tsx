@@ -2688,7 +2688,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [csSmsOpen, setCsSmsOpen] = useState(false);
   const [missedCallsOpen, setMissedCallsOpen] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
-  const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email" } | null>(null);
+  const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email"; lastMessage?: string; emailSubject?: string } | null>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
@@ -7476,6 +7476,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                                 city: "",
                               },
                               view: "sms",
+                              lastMessage: session.lastMessagePreview ?? undefined,
                             });
                           } else if (onSwitchToCSSession) {
                             onSwitchToCSSession(session.id);
@@ -7590,6 +7591,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                               city: "",
                             },
                             view: "sms",
+                            lastMessage: lead.lastMessagePreview ?? undefined,
                           });
                         } else {
                           window.location.href = `/admin/leads?session=${lead.id}`;
@@ -7699,6 +7701,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             city: "",
                           },
                           view: "email",
+                          lastMessage: thread.snippet || thread.subject || undefined,
+                          emailSubject: thread.subject ? `Re: ${thread.subject}` : undefined,
                         });
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
@@ -7834,6 +7838,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           customer={quickReplyTarget.customer}
           initialView={quickReplyTarget.view}
           onClose={() => setQuickReplyTarget(null)}
+          lastMessage={quickReplyTarget.lastMessage}
+          emailSubject={quickReplyTarget.emailSubject}
         />
       )}
     </div>

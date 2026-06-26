@@ -4309,10 +4309,54 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
     }),
 
   /**
-   * transformMessage — general-purpose message transformation.
-   * Accepts a free-form `instruction` string so new transformations
-   * (tones, translations, simplifications, etc.) never require backend changes.
+   * draftReply — generates a suggested reply using the CS gold-standard system prompt.
+   * Takes the last inbound message as context and returns a ready-to-send draft.
+   * Used by the SMS and Email composers when opened from sidebar panels or @mention chips.
    */
+  draftReply: opsChatProcedure
+    .input(z.object({
+      customerName: z.string().min(1).max(100),
+      lastMessage: z.string().min(1).max(2000),
+      channel: z.enum(["sms", "email"]),
+      subject: z.string().optional(), // email subject for context
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const csSystemPrompt = buildSystemPrompt();
+      const channelNote = input.channel === "email"
+        ? "Write a professional but warm email reply (not SMS). Keep it concise and human."
+        : "Write the exact SMS reply the agent should send. Keep it SMS-length and conversational.";
+
+      const systemPrompt = `${csSystemPrompt}
+
+=== CHANNEL ===
+${channelNote}
+
+Rules:
+- Return ONLY the reply text. No subject line, no preamble, no explanation.
+- Use the customer's first name naturally near the start.
+- Never invent information not present in the conversation.
+- End with a clear next step or resolution.`;
+
+      const firstName = input.customerName.trim().split(/\s+/)[0];
+      const userPrompt = [
+        `Customer's first name: ${firstName}`,
+        `Customer's last message: "${input.lastMessage}"`,
+        input.subject ? `Email subject: ${input.subject}` : "",
+        `Write the best reply to send right now.`,
+      ].filter(Boolean).join("\n");
+
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      const draft = ((result.choices[0].message.content as string) ?? "").trim();
+      return { draft };
+    }),
+
   transformMessage: opsChatProcedure
     .input(z.object({
       text: z.string().min(1).max(1000),

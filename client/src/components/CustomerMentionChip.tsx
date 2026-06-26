@@ -137,13 +137,17 @@ function SmsComposer({
   customer,
   onBack,
   onClose,
+  lastMessage,
 }: {
   customer: CustomerData;
   onBack: () => void;
   onClose: () => void;
+  lastMessage?: string;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const autoDraftFiredRef = useRef(false);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
@@ -159,6 +163,62 @@ function SmsComposer({
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
   const transformMutation = trpc.opsChat.transformMessage.useMutation();
+
+  // Auto-draft: stream a reply suggestion when lastMessage is provided
+  useEffect(() => {
+    if (!lastMessage || autoDraftFiredRef.current) return;
+    autoDraftFiredRef.current = true;
+    const abortCtrl = new AbortController();
+    setIsDrafting(true);
+    setText("");
+    (async () => {
+      try {
+        const res = await fetch("/api/cs-reply-stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            conversationContext: `Customer: ${lastMessage}`,
+            customerName: customer.name,
+            jobContext: "",
+          }),
+          signal: abortCtrl.signal,
+        });
+        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let accumulated = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith("data:")) continue;
+            const dataStr = trimmed.slice(5).trim();
+            if (dataStr === "[DONE]") { setIsDrafting(false); continue; }
+            let parsed: { token?: string; error?: string };
+            try { parsed = JSON.parse(dataStr); } catch { continue; }
+            if (parsed.error) throw new Error(parsed.error);
+            if (parsed.token) {
+              accumulated += parsed.token;
+              setText(accumulated);
+            }
+          }
+        }
+        setIsDrafting(false);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        setIsDrafting(false);
+      }
+    })();
+    return () => abortCtrl.abort();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sendMutation = trpc.opsChat.startCsConversation.useMutation({
     onSuccess: () => {
       toast.success(`SMS sent to ${customer.name}`);
@@ -274,6 +334,14 @@ function SmsComposer({
       </div>
 
       <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
+        {/* Last message strip — shown when opened from sidebar */}
+        {lastMessage && (
+          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Replying to</p>
+            <p className="text-xs text-slate-600 line-clamp-3">{lastMessage}</p>
+          </div>
+        )}
+
         {/* Call scenario chips — same as AI Call view */}
         <div className="flex flex-wrap gap-1.5">
           {CALL_SCENARIOS.map(s => (
@@ -288,13 +356,23 @@ function SmsComposer({
           ))}
         </div>
 
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          placeholder={`Type a text to ${firstName}…`}
-          rows={5}
-          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
-        />
+        <div className="relative">
+          <textarea
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder={isDrafting ? "" : `Type a text to ${firstName}…`}
+            rows={5}
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+          />
+          {isDrafting && (
+            <div className="absolute inset-0 rounded-xl flex items-start px-3 py-2.5 pointer-events-none">
+              <span className="text-sm text-blue-500 flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="animate-pulse">Drafting reply…</span>
+              </span>
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-wrap gap-1.5">
           {(["friendly", "professional", "casual"] as const).map(tone => (
@@ -427,16 +505,22 @@ function EmailComposer({
   customer,
   onBack,
   onClose,
+  lastMessage,
+  emailSubject,
 }: {
   customer: CustomerData;
   onBack: () => void;
   onClose: () => void;
+  lastMessage?: string;
+  emailSubject?: string;
 }) {
   const firstName = customer.name.split(" ")[0];
-  const [subject, setSubject] = useState("Regarding your cleaning appointment");
+  const [subject, setSubject] = useState(emailSubject || "Regarding your cleaning appointment");
   const [body, setBody] = useState("");
   const [sent, setSent] = useState(false);
   const [isRewriting, setIsRewriting] = useState(false);
+  const [isDrafting, setIsDrafting] = useState(false);
+  const autoDraftFiredRef = useRef(false);
 
   // In-memory draft cache — survives modal close/reopen within session
   const draftRef = useRef<{ subject: string; body: string } | null>(null);
@@ -463,10 +547,29 @@ function EmailComposer({
 
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
+  const draftReplyMutation = trpc.opsChat.draftReply.useMutation();
   const sendMutation = trpc.gmail.composeNew.useMutation({
     onSuccess: () => setSent(true),
     onError: (err) => toast.error(err.message),
   });
+
+  // Auto-draft: generate a reply suggestion when lastMessage is provided
+  useEffect(() => {
+    if (!lastMessage || autoDraftFiredRef.current) return;
+    autoDraftFiredRef.current = true;
+    setIsDrafting(true);
+    draftReplyMutation.mutateAsync({
+      customerName: customer.name,
+      lastMessage,
+      channel: "email",
+      subject: emailSubject,
+    }).then(({ draft }) => {
+      setBody(draft);
+    }).catch(() => {
+      // silently fail — agent can type manually
+    }).finally(() => setIsDrafting(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const startRecording = useCallback(async () => {
     try {
@@ -642,6 +745,14 @@ function EmailComposer({
       </div>
 
       <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
+        {/* Last message strip — shown when opened from sidebar */}
+        {lastMessage && (
+          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Replying to</p>
+            <p className="text-xs text-slate-600 line-clamp-3">{lastMessage}</p>
+          </div>
+        )}
+
         {/* Templates */}
         <div className="flex flex-wrap gap-1.5">
           {EMAIL_TEMPLATES.map(tpl => (
@@ -665,15 +776,25 @@ function EmailComposer({
         />
 
         {/* Body */}
-        <textarea
-          ref={bodyRef}
-          value={body}
-          onChange={e => setBody(e.target.value)}
-          placeholder={`Write an email to ${firstName}…`}
-          rows={5}
-          autoFocus
-          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-all"
-        />
+        <div className="relative">
+          <textarea
+            ref={bodyRef}
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder={isDrafting ? "" : `Write an email to ${firstName}…`}
+            rows={5}
+            autoFocus
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-all"
+          />
+          {isDrafting && (
+            <div className="absolute inset-0 rounded-xl flex items-start px-3 py-2.5 pointer-events-none">
+              <span className="text-sm text-violet-500 flex items-center gap-1.5">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span className="animate-pulse">Drafting reply…</span>
+              </span>
+            </div>
+          )}
+        </div>
 
         {/* AI tone chips */}
         <div className="flex flex-wrap gap-1.5">
@@ -1443,10 +1564,14 @@ export function QuickReplyModal({
   customer,
   initialView,
   onClose,
+  lastMessage,
+  emailSubject,
 }: {
   customer: CustomerData;
   initialView: "sms" | "email";
   onClose: () => void;
+  lastMessage?: string;
+  emailSubject?: string;
 }) {
   const [view, setView] = useState<"card" | "sms" | "call" | "email">(initialView);
   const { session, isPolling, startCall, cancelCall, dismissSession } = useCallSession();
@@ -1468,9 +1593,9 @@ export function QuickReplyModal({
         style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
       >
         {view === "sms" ? (
-          <SmsComposer customer={customer} onBack={onClose} onClose={onClose} />
+          <SmsComposer customer={customer} onBack={onClose} onClose={onClose} lastMessage={lastMessage} />
         ) : view === "email" ? (
-          <EmailComposer customer={customer} onBack={onClose} onClose={onClose} />
+          <EmailComposer customer={customer} onBack={onClose} onClose={onClose} lastMessage={lastMessage} emailSubject={emailSubject} />
         ) : view === "call" ? (
           <AiCallComposer
             customer={customer}
