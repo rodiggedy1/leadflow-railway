@@ -4161,7 +4161,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
           jobDate: completedJobs.jobDate,
         })
         .from(completedJobs)
-        .where(like(completedJobs.name, q))
+        .where(or(like(completedJobs.name, q), like(completedJobs.phone, q)))
         .orderBy(desc(completedJobs.jobDate))
         .limit(50);
 
