@@ -339,6 +339,350 @@ function SmsComposer({
   );
 }
 
+// ─── Email templates (subset of CANNED_TEMPLATES from EmailInbox) ─────────────
+const EMAIL_TEMPLATES = [
+  {
+    label: "Follow Up",
+    subject: "Just Checking In",
+    body: "Hi {first},\n\nJust wanted to follow up in case you were still looking for a cleaning service.\n\nYour quote is still available, and we'd be happy to get you on the schedule.\n\nLet us know if you have any questions!\n\nThanks,\nThe Maid in Black Team",
+  },
+  {
+    label: "Running Late",
+    subject: "Quick Update on Your Appointment",
+    body: "Hi {first},\n\nJust a quick update — our team is running a little behind due to the previous appointment taking longer than expected.\n\nWe appreciate your patience and apologize for the inconvenience.\n\nThanks,\nThe Maid in Black Team",
+  },
+  {
+    label: "Confirm Appointment",
+    subject: "Your Cleaning is Confirmed! 🎉",
+    body: "Hi {first},\n\nYou're all set! Your cleaning has been confirmed.\n\nOur team will arrive within the scheduled arrival window and will come fully equipped with supplies unless otherwise requested.\n\nIf you have any special instructions, parking information, or entry details, simply reply to this email.\n\nWe look forward to making your home shine!\n\nThanks,\nThe Maid in Black Team",
+  },
+  {
+    label: "Payment",
+    subject: "Payment Reminder",
+    body: "Hi {first},\n\nJust a friendly reminder that we still need a card on file before your appointment.\n\nIf you have any questions, let us know!\n\nThanks,\nThe Maid in Black Team",
+  },
+  {
+    label: "Thank You",
+    subject: "Thank You for Choosing Maid in Black!",
+    body: "Hi {first},\n\nThank you for choosing Maid in Black!\n\nWe hope you loved your cleaning. If everything looks great, we'd really appreciate a quick review — it helps our small business tremendously.\n\nIf there's anything that isn't perfect, please reply directly and we'll make it right.\n\nThanks again!\nThe Maid in Black Team",
+  },
+];
+
+// ─── Email Composer View ──────────────────────────────────────────────────────
+function EmailComposer({
+  customer,
+  onBack,
+  onClose,
+}: {
+  customer: CustomerData;
+  onBack: () => void;
+  onClose: () => void;
+}) {
+  const firstName = customer.name.split(" ")[0];
+  const [subject, setSubject] = useState("Regarding your cleaning appointment");
+  const [body, setBody] = useState("");
+  const [sent, setSent] = useState(false);
+  const [isRewriting, setIsRewriting] = useState(false);
+
+  // In-memory draft cache — survives modal close/reopen within session
+  const draftRef = useRef<{ subject: string; body: string } | null>(null);
+  useEffect(() => {
+    if (draftRef.current) {
+      setSubject(draftRef.current.subject);
+      setBody(draftRef.current.body);
+    }
+  }, []);
+  useEffect(() => {
+    draftRef.current = { subject, body };
+  }, [subject, body]);
+
+  // PTT voice
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPressing, setIsPressing] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPttRef = useRef(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
+  const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
+  const sendMutation = trpc.gmail.composeNew.useMutation({
+    onSuccess: () => setSent(true),
+    onError: (err) => toast.error(err.message),
+  });
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      isPttRef.current = true;
+      setIsPressing(false);
+      setIsRecording(true);
+      setVoiceSeconds(0);
+      timerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+    setIsPressing(false);
+    isPttRef.current = false;
+    setIsTranscribing(true);
+    await new Promise<void>(resolve => {
+      mr.onstop = () => resolve();
+      try { mr.requestData(); } catch { /* ignore */ }
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+    });
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      if (blob.size === 0) { toast.warning("No audio captured — hold longer"); return; }
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text: transcribed } = await transcribeMutation.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      if (transcribed.trim()) {
+        setBody(prev => prev ? prev + "\n" + transcribed.trim() : transcribed.trim());
+      } else {
+        toast.warning("No speech detected — try again");
+      }
+    } catch (err: any) {
+      toast.error(err?.message?.length < 200 ? err.message : "Transcription failed");
+    } finally {
+      setIsTranscribing(false);
+    }
+  }, [transcribeMutation]);
+
+  useEffect(() => {
+    const release = () => { if (isPttRef.current) stopRecording(); };
+    document.addEventListener("mouseup", release);
+    document.addEventListener("touchend", release);
+    return () => {
+      document.removeEventListener("mouseup", release);
+      document.removeEventListener("touchend", release);
+    };
+  }, [stopRecording]);
+
+  async function rewrite(tone: "friendly" | "professional" | "casual") {
+    if (!body.trim()) return;
+    setIsRewriting(true);
+    try {
+      const result = await rewriteMutation.mutateAsync({ rawMessage: body, customerName: customer.name, tone });
+      setBody(result.message);
+    } catch {
+      toast.error("Rewrite failed");
+    } finally {
+      setIsRewriting(false);
+    }
+  }
+
+  function applyTemplate(tpl: typeof EMAIL_TEMPLATES[number]) {
+    setSubject(tpl.subject);
+    setBody(tpl.body.replace(/{first}/g, firstName));
+    setTimeout(() => bodyRef.current?.focus(), 50);
+  }
+
+  function handleSend() {
+    if (!subject.trim() || !body.trim() || sendMutation.isPending) return;
+    sendMutation.mutate({
+      to: customer.email!,
+      subject: subject.trim(),
+      bodyHtml: body.trim().replace(/\n/g, "<br>"),
+    });
+  }
+
+  const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  const canSend = subject.trim().length > 0 && body.trim().length > 0;
+
+  // No email on file
+  if (!customer.email) {
+    return (
+      <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+        <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
+          <div className="flex items-center gap-3">
+            <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0"><ChevronLeft className="h-5 w-5" /></button>
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm truncate">{customer.name}</p>
+              <p className="text-blue-300 text-[11px]">Email</p>
+            </div>
+            <button onClick={onClose} className="text-white/50 hover:text-white transition-colors shrink-0"><X className="h-4 w-4" /></button>
+          </div>
+        </div>
+        <div className="px-5 py-8 text-center">
+          <Mail className="h-8 w-8 text-slate-300 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-700">No email on file</p>
+          <p className="text-xs text-slate-400 mt-1">No email address found for {customer.name}</p>
+          <button onClick={onBack} className="mt-4 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">← Back</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Sent confirmation
+  if (sent) {
+    return (
+      <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+        <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm truncate">{customer.name}</p>
+              <p className="text-blue-300 text-[11px]">{customer.email}</p>
+            </div>
+            <button onClick={onClose} className="text-white/50 hover:text-white transition-colors shrink-0"><X className="h-4 w-4" /></button>
+          </div>
+        </div>
+        <div className="px-5 py-8 text-center">
+          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+            <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-base font-bold text-slate-900">Email sent</p>
+          <p className="text-xs text-slate-500 mt-1">To: {customer.name}</p>
+          <p className="text-xs text-slate-400 mt-0.5 truncate px-4">{subject}</p>
+        </div>
+        <div className="px-3 pb-3 flex gap-2">
+          <button
+            onClick={() => { setSent(false); setSubject("Regarding your cleaning appointment"); setBody(""); draftRef.current = null; }}
+            className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50 transition-colors"
+          >
+            Send another
+          </button>
+          <button onClick={onClose} className="flex-1 h-10 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-colors">Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+      {/* Header */}
+      <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0"><ChevronLeft className="h-5 w-5" /></button>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-sm truncate">{customer.name}</p>
+            <p className="text-blue-300 text-[11px] truncate">{customer.email}</p>
+          </div>
+          <button onClick={onClose} className="text-white/50 hover:text-white transition-colors shrink-0"><X className="h-4 w-4" /></button>
+        </div>
+      </div>
+
+      <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
+        {/* Templates */}
+        <div className="flex flex-wrap gap-1.5">
+          {EMAIL_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.label}
+              onClick={() => applyTemplate(tpl)}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 transition-colors"
+            >
+              {tpl.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Subject */}
+        <input
+          type="text"
+          value={subject}
+          onChange={e => setSubject(e.target.value)}
+          placeholder="Subject"
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-all"
+        />
+
+        {/* Body */}
+        <textarea
+          ref={bodyRef}
+          value={body}
+          onChange={e => setBody(e.target.value)}
+          placeholder={`Write an email to ${firstName}…`}
+          rows={5}
+          autoFocus
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-all"
+        />
+
+        {/* AI tone chips */}
+        <div className="flex flex-wrap gap-1.5">
+          {([
+            { tone: "friendly" as const, label: "✨ Improve" },
+            { tone: "friendly" as const, label: "😊 Friendlier" },
+            { tone: "professional" as const, label: "👔 Professional" },
+            { tone: "casual" as const, label: "💬 Shorter" },
+          ]).map(({ tone, label }) => (
+            <button
+              key={label}
+              onClick={() => rewrite(tone)}
+              disabled={isRewriting || !body.trim()}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-violet-50 hover:border-violet-300 hover:text-violet-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+            >
+              {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="px-3 pb-3 pt-2 flex items-center gap-2">
+        <button
+          onMouseDown={() => { setIsPressing(true); startRecording(); }}
+          onTouchStart={(e) => { e.preventDefault(); setIsPressing(true); startRecording(); }}
+          disabled={isTranscribing}
+          className={cn(
+            "w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all select-none",
+            isRecording ? "bg-red-500 shadow-lg shadow-red-500/40 scale-110" : isPressing ? "bg-violet-600 scale-105" : "bg-gradient-to-br from-violet-500 to-purple-600 hover:scale-105",
+            isTranscribing && "opacity-50 cursor-not-allowed"
+          )}
+          title="Hold to record voice"
+        >
+          {isTranscribing ? (
+            <Loader2 className="h-4 w-4 text-white animate-spin" />
+          ) : isRecording ? (
+            <span className="flex flex-col items-center gap-0">
+              <MicOff className="h-4 w-4 text-white" />
+              <span className="text-white text-[8px] font-bold leading-none">{voiceSeconds}s</span>
+            </span>
+          ) : (
+            <Mic className="h-4 w-4 text-white" />
+          )}
+        </button>
+
+        <button
+          onClick={handleSend}
+          disabled={!canSend || sendMutation.isPending}
+          className="flex-1 h-11 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm flex items-center justify-center gap-2 transition-all"
+        >
+          {sendMutation.isPending ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</>
+          ) : (
+            <><Mail className="h-4 w-4" /> Send Email</>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── AI Call Composer View (presentational) ───────────────────────────────────
 // This component owns only UI state: script text, selected scenario, PTT, rewrite.
 // All call lifecycle state comes from the parent via props (session, onStartCall, etc.)
@@ -677,11 +1021,13 @@ function CustomerCard({
   onClose,
   onText,
   onCall,
+  onEmail,
 }: {
   customer: CustomerData;
   onClose: () => void;
   onText: () => void;
   onCall: () => void;
+  onEmail: () => void;
 }) {
   const { data: ctx, isLoading } = trpc.opsChat.getCustomerContext.useQuery(
     { phone: customer.phone, name: customer.name },
@@ -694,7 +1040,7 @@ function CustomerCard({
   const actions = [
     { icon: MessageSquare, label: "Text", color: "text-green-600", bg: "hover:bg-green-50", onClick: onText },
     { icon: Phone, label: "AI Call", color: "text-blue-600", bg: "hover:bg-blue-50", onClick: onCall },
-    { icon: Mail, label: "Email", color: "text-violet-600", bg: "hover:bg-violet-50", onClick: () => toast.info("Email — coming soon") },
+    { icon: Mail, label: "Email", color: "text-violet-600", bg: "hover:bg-violet-50", onClick: onEmail },
     { icon: History, label: "History", color: "text-slate-600", bg: "hover:bg-slate-100", onClick: () => toast.info("History — coming soon") },
   ];
 
@@ -773,7 +1119,7 @@ function CustomerCard({
 // ─── Main Chip ────────────────────────────────────────────────────────────────
 export function CustomerMentionChip({ name, phone }: { name: string; phone: string }) {
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"card" | "sms" | "call">("card");
+  const [view, setView] = useState<"card" | "sms" | "call" | "email">("card");
   const [selected, setSelected] = useState<CustomerData | null>(null);
 
   // Call session — lives here, survives modal open/close
@@ -866,8 +1212,10 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
               onBack={() => setView("card")}
               onClose={close}
             />
+          ) : view === "email" ? (
+            <EmailComposer customer={resolvedCustomer} onBack={() => setView("card")} onClose={close} />
           ) : (
-            <CustomerCard customer={resolvedCustomer} onClose={close} onText={() => setView("sms")} onCall={() => setView("call")} />
+            <CustomerCard customer={resolvedCustomer} onClose={close} onText={() => setView("sms")} onCall={() => setView("call")} onEmail={() => setView("email")} />
           )
         ) : customers.length > 1 ? (
           <div className="w-[300px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
