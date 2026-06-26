@@ -33,38 +33,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Link } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ---------------------------------------------------------------------------
-// Micro-animation keyframes — injected once, presentation-only
+// Framer Motion shared transition presets
 // ---------------------------------------------------------------------------
-const ANIMATION_STYLES = `
-  @keyframes ei-fade-slide-up {
-    from { opacity: 0; transform: translateY(10px); }
-    to   { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes ei-fade-in {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
-  @keyframes ei-scale-in {
-    from { opacity: 0; transform: scale(0.96); }
-    to   { opacity: 1; transform: scale(1); }
-  }
-  @keyframes ei-summary-expand {
-    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
-  }
-  @keyframes ei-badge-pop {
-    0%   { transform: scale(1); }
-    40%  { transform: scale(1.18); }
-    100% { transform: scale(1); }
-  }
-  .ei-panel-enter { animation: ei-fade-slide-up 150ms cubic-bezier(0.22,1,0.36,1) both; }
-  .ei-fade-enter  { animation: ei-fade-in 150ms ease both; }
-  .ei-scale-enter { animation: ei-scale-in 150ms cubic-bezier(0.22,1,0.36,1) both; }
-  .ei-summary-enter { animation: ei-summary-expand 200ms cubic-bezier(0.22,1,0.36,1) both; }
-  .ei-badge-pop   { animation: ei-badge-pop 250ms cubic-bezier(0.22,1,0.36,1) both; }
-`;
+const PANEL_TRANSITION = { duration: 0.13, ease: [0.22, 1, 0.36, 1] } as const;
+const SPRING_TRANSITION = { type: "spring" as const, stiffness: 380, damping: 32 };
+const SUMMARY_TRANSITION = { duration: 0.18, ease: [0.22, 1, 0.36, 1] } as const;
 
 // ---------------------------------------------------------------------------
 // Canned reply templates
@@ -356,28 +332,39 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
   const accentColor = isIssue ? "#dc2626" : senderHex(senderName);
   const catStyle = aiCategory ? (CATEGORY_BADGE_STYLES[aiCategory] ?? CATEGORY_BADGE_STYLES.general) : null;
   return (
-    <button
+    <motion.button
       onClick={onClick}
+      whileTap={{ scale: 0.985 }}
       className={cn(
-        "w-full text-left px-4 py-[18px] border-b transition-all duration-200 group relative active:scale-[0.99] active:brightness-95",
+        "w-full text-left px-4 py-[18px] border-b transition-colors duration-150 group relative",
         isIssue ? "border-red-100" : "border-[#e8edf5]",
         active
           ? isIssue
-            ? "bg-red-50/80 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.15)]"
-            : "bg-[#eff6ff] shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]"
+            ? "bg-red-50/80"
+            : "bg-[#eff6ff]"
           : isIssue
           ? "bg-red-50/40 hover:bg-red-50/70"
-          : "bg-white hover:bg-slate-50 hover:-translate-y-px hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+          : "bg-white hover:bg-slate-50"
       )}
     >
-      {/* Left accent bar — always reserve 4px gutter so content doesn't shift */}
-      <span className={cn(
-        "absolute left-0 top-4 bottom-4 w-[4px] rounded-r-full transition-all duration-200",
-        active && isIssue ? "bg-red-500" :
-        active ? "bg-blue-500" :
-        isIssue ? "bg-red-300" :
-        "bg-transparent"
-      )} />
+      {/* Left accent bar — Framer Motion layout animation for smooth slide-in */}
+      <AnimatePresence initial={false}>
+        {active && (
+          <motion.span
+            layoutId="thread-accent-bar"
+            className={cn(
+              "absolute left-0 top-4 bottom-4 w-[4px] rounded-r-full",
+              isIssue ? "bg-red-500" : "bg-blue-500"
+            )}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={SPRING_TRANSITION}
+          />
+        )}
+      </AnimatePresence>
+      {/* Invisible placeholder to keep layout stable when bar is absent */}
+      {!active && <span className="absolute left-0 top-4 bottom-4 w-[4px]" />}
 
       <div className="flex items-start gap-3 pl-1">
         {/* Sender avatar — 40px */}
@@ -443,13 +430,18 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
                 </span>
               )}
               {aiCategory && aiCategory !== "general" && GLANCE_CATEGORY_LABELS[aiCategory] && catStyle && (
-                <span key={aiCategory} className={cn(
-                  "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ei-badge-pop",
-                  catStyle.bg, catStyle.text, catStyle.border
-                )}>
+                <motion.span
+                  key={aiCategory}
+                  initial={{ scale: 0.7, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                    catStyle.bg, catStyle.text, catStyle.border
+                  )}>
                   <span className="text-[10px] leading-none">{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
                   {GLANCE_CATEGORY_LABELS[aiCategory].label}
-                </span>
+                </motion.span>
               )}
               {assignedToName && (
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
@@ -492,7 +484,7 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
           </div>
         </div>
       </div>
-    </button>
+    </motion.button>
   );
 }
 
@@ -779,7 +771,15 @@ function CustomerContextPanel({
           <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
         </div>
       ) : (
-        <div key={validEmail} className="flex flex-col ei-scale-enter">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={validEmail}
+            className="flex flex-col"
+            initial={{ opacity: 0, x: 8, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 8, scale: 0.98 }}
+            transition={{ delay: 0.03, ...PANEL_TRANSITION }}
+          >
           {/* ── Customer header hero card ─────────────────────────────── */}
           <div style={{ padding: "26px 22px 20px" }} className="border-b border-[#e8edf5]">
             <div className="flex items-start gap-3">
@@ -850,10 +850,14 @@ function CustomerContextPanel({
                   </button>
                 )}
               </div>
+              <AnimatePresence>
               {aiSummary ? (
-                <div
+                <motion.div
                   key={aiSummary.slice(0, 20)}
-                  className="ei-summary-enter"
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={SUMMARY_TRANSITION}
                   style={{
                     background: "#f8faff",
                     border: "1px solid #eef3fb",
@@ -864,9 +868,12 @@ function CustomerContextPanel({
                   {aiCategory && GLANCE_CATEGORY_LABELS[aiCategory] && (
                     <div className="flex items-center justify-between mb-3">
                       {/* Color-coded category chip */}
-                      <span
+                      <motion.span
                         key={aiCategory}
-                        className="inline-flex items-center gap-1.5 text-[12px] font-[900] shrink-0 ei-badge-pop"
+                        initial={{ scale: 0.75, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: "spring", stiffness: 500, damping: 28 }}
+                        className="inline-flex items-center gap-1.5 text-[12px] font-[900] shrink-0"
                         style={{
                           padding: "5px 11px",
                           borderRadius: "999px",
@@ -880,7 +887,7 @@ function CustomerContextPanel({
                       >
                         <span>{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
                         {GLANCE_CATEGORY_LABELS[aiCategory].label}
-                      </span>
+                      </motion.span>
                       <div className="flex items-center gap-1.5">
                         {aiUrgency === "high" && (
                           <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600">URGENT</span>
@@ -930,7 +937,7 @@ function CustomerContextPanel({
                       </button>
                     )}
                   </div>
-                </div>
+                </motion.div>
               ) : (
                 <div className="rounded-[20px] p-4 border border-dashed border-slate-200 text-center">
                   <Sparkles className="w-4 h-4 text-slate-300 mx-auto mb-1.5" />
@@ -938,6 +945,7 @@ function CustomerContextPanel({
                   <p className="text-[10px] text-slate-300 mt-0.5">Will auto-process in background</p>
                 </div>
               )}
+              </AnimatePresence>
             </div>
           )}
 
@@ -1068,7 +1076,8 @@ function CustomerContextPanel({
           </div>
 
           </div>
-        </div>
+          </motion.div>
+        </AnimatePresence>
       )}
     </aside>
   );
@@ -1595,8 +1604,6 @@ export default function EmailInbox() {
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
-      {/* Micro-animation keyframes */}
-      <style dangerouslySetInnerHTML={{ __html: ANIMATION_STYLES }} />
       {/* Thread sidebar */}
       <aside className="w-[330px] bg-white border-r border-[#e8edf5] flex flex-col shrink-0 overflow-hidden" style={{boxShadow: '0 12px 30px rgba(16,24,40,0.07)'}}>
         {/* Header */}
@@ -2075,10 +2082,18 @@ export default function EmailInbox() {
             </div>
           </div>
         )}
-        {selectedThreadId && statusQuery.data?.connected && (
-          <>
-            {/* Thread header — animates in on thread switch */}
-            <div key={`hdr-${selectedThreadId}`} className="bg-white border-b border-[#e8edf5] flex items-center justify-between shrink-0 ei-fade-enter" style={{ height: "72px", padding: "0 28px", gap: "12px" }}>
+        <AnimatePresence mode="wait">
+          {selectedThreadId && statusQuery.data?.connected && (
+            <motion.div
+              key={selectedThreadId}
+              className="flex flex-col flex-1 overflow-hidden min-w-0"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ delay: 0.05, ...PANEL_TRANSITION }}
+            >
+            {/* Thread header */}
+            <div className="bg-white border-b border-[#e8edf5] flex items-center justify-between shrink-0" style={{ height: "72px", padding: "0 28px", gap: "12px" }}>
               <div className="flex-1 min-w-0">
                 <h2
                   className="text-[18px] font-[900] text-[#162033] truncate leading-tight"
@@ -2349,9 +2364,9 @@ export default function EmailInbox() {
               </div>
             </div>
 
-            {/* Messages — key forces remount+animation on thread switch */}
+            {/* Messages — staggered entrance per card */}
             <div className="flex-1 overflow-y-auto bg-[#f3f5f9] [scrollbar-width:thin] [scrollbar-color:#dde3ee_transparent]">
-              <div key={selectedThreadId} className="ei-panel-enter" style={{ padding: "28px 52px 80px" }}>
+              <div style={{ padding: "28px 52px 80px" }}>
                 {threadQuery.isLoading && (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
@@ -2363,7 +2378,16 @@ export default function EmailInbox() {
                     <p className="text-sm text-red-500">{threadQuery.error.message}</p>
                   </div>
                 )}
-                {selectedThread?.messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)}
+                {selectedThread?.messages.map((msg, i) => (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(i * 0.04, 0.28), ...PANEL_TRANSITION }}
+                  >
+                    <MessageBubble msg={msg} />
+                  </motion.div>
+                ))}
 
                 {/* Reply box */}
                 {selectedThread && (
@@ -2532,8 +2556,9 @@ export default function EmailInbox() {
                 )}
               </div>
             </div>
-          </>
-        )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
       {/* Customer context panel */}
