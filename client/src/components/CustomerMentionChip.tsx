@@ -162,7 +162,7 @@ function SmsComposer({
         customerName: customer.name,
         tone,
       });
-      setText(result.rewritten);
+      setText(result.message);
     } catch (err: any) {
       toast.error("Rewrite failed");
     } finally {
@@ -255,7 +255,7 @@ function SmsComposer({
             try {
               const { invokeLLM } = await Promise.resolve(); // placeholder — use rewrite with casual + "translate to Portuguese"
               const result = await rewriteMutation.mutateAsync({ rawMessage: `Translate to Brazilian Portuguese: ${text}`, customerName: customer.name, tone: "casual" });
-              setText(result.rewritten);
+              setText(result.message);
             } catch { toast.error("Translation failed"); }
             finally { setIsRewriting(false); }
           }}
