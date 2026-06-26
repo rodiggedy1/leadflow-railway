@@ -2113,7 +2113,7 @@ export default function EmailInbox() {
                   </p>
                 )}
               </div>
-              <div className="flex items-center shrink-0" style={{ gap: "8px" }}>
+              <div className="flex items-center gap-1.5 overflow-x-auto shrink-0 max-w-[calc(100%-240px)]">
                 {(() => {
                   const isCurrentIssue = (metaMap.get(selectedThreadId)?.isIssue ?? 0) === 1;
                   return (
@@ -2121,19 +2121,19 @@ export default function EmailInbox() {
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247]",
+                        "text-[12px] font-[700] gap-[5px] rounded-[10px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247] shrink-0",
                         isCurrentIssue
                           ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
                           : "bg-white"
                       )}
-                      style={{ height: "36px", padding: "0 14px" }}
+                      style={{ height: "30px", padding: "0 10px" }}
                       onClick={toggleIssue}
                       disabled={flagIssueMutation.isPending}
                       title={isCurrentIssue ? "Remove issue flag" : "Flag as issue"}
                     >
                       {flagIssueMutation.isPending
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Flag className={cn("w-4 h-4", isCurrentIssue && "fill-red-500")} />}
+                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : <Flag className={cn("w-3.5 h-3.5", isCurrentIssue && "fill-red-500")} />}
                       {isCurrentIssue ? "Issue" : "Flag"}
                     </Button>
                   );
@@ -2141,7 +2141,7 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247]" style={{ height: "36px", padding: "0 14px" }}
+                  className="text-[12px] font-[700] gap-[5px] rounded-[10px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247] shrink-0" style={{ height: "30px", padding: "0 10px" }}
                   onClick={() => {
                     if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId });
                     else markUnreadMutation.mutate({ threadId: selectedThreadId });
@@ -2149,8 +2149,8 @@ export default function EmailInbox() {
                   disabled={markReadMutation.isPending || markUnreadMutation.isPending}
                 >
                   {selectedThread?.isUnread
-                    ? <><MailCheck className="w-4 h-4" /> Mark read</>
-                    : <><MailOpen className="w-4 h-4" /> Mark unread</>}
+                    ? <><MailCheck className="w-3.5 h-3.5" /> Mark read</>
+                    : <><MailOpen className="w-3.5 h-3.5" /> Mark unread</>}
                 </Button>
                 {/* Resolve from glance — only shown when thread has an AI category */}
                 {threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general" && (
@@ -2158,10 +2158,10 @@ export default function EmailInbox() {
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 active:scale-95",
+                      "text-[12px] font-[700] gap-[5px] rounded-[10px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 active:scale-95 shrink-0",
                       "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
                     )}
-                    style={{ height: "36px", padding: "0 14px" }}
+                    style={{ height: "30px", padding: "0 10px" }}
                     onClick={() => {
                       if (!selectedThreadId) return;
                       resolveGlanceMutation.mutate({ threadId: selectedThreadId });
@@ -2175,8 +2175,8 @@ export default function EmailInbox() {
                     title="Resolve and mark as read"
                   >
                     {resolveGlanceMutation.isPending
-                      ? <Loader2 className="w-4 h-4 animate-spin" />
-                      : <CheckCircle2 className="w-4 h-4" />}
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <CheckCircle2 className="w-3.5 h-3.5" />}
                     Resolve
                   </Button>
                 )}
@@ -2188,12 +2188,12 @@ export default function EmailInbox() {
                         variant="outline"
                         size="sm"
                         className={cn(
-                          "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
+                          "text-[12px] font-[700] gap-[5px] rounded-[10px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 shrink-0",
                           threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general"
                             ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95"
                             : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247] active:scale-95"
                         )}
-                        style={{ height: "36px", padding: "0 14px" }}
+                        style={{ height: "30px", padding: "0 10px" }}
                         disabled={recategorizeThreadMutation.isPending}
                         title="Set or change AI category"
                       >
@@ -2254,12 +2254,12 @@ export default function EmailInbox() {
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 active:scale-95",
+                            "text-[12px] font-[700] gap-[5px] rounded-[10px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 active:scale-95 shrink-0",
                             isAssigned
                               ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100"
                               : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
                           )}
-                          style={{ height: "36px", padding: "0 14px" }}
+                          style={{ height: "30px", padding: "0 10px" }}
                           onClick={() => setAssignDropdownOpen(isOpen ? null : selectedThreadId)}
                         >
                           {isAssigned && currentMeta?.assignedToPhotoUrl ? (
@@ -2333,14 +2333,14 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247]"
-                  style={{ height: "36px", padding: "0 14px" }}
+                  className="text-[12px] font-[700] gap-[5px] rounded-[10px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247] shrink-0"
+                  style={{ height: "30px", padding: "0 10px" }}
                   onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })}
                   disabled={archiveMutation.isPending}
                 >
                   {archiveMutation.isPending
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Archive className="w-4 h-4" />}
+                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    : <Archive className="w-3.5 h-3.5" />}
                   Archive
                 </Button>
                 {/* Ignore sender button */}
@@ -2348,7 +2348,7 @@ export default function EmailInbox() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all duration-150 active:scale-95 text-[#243247]" style={{ height: "36px", padding: "0 14px" }}
+                    className="text-[12px] font-[700] gap-[5px] rounded-[10px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all duration-150 active:scale-95 text-[#243247] shrink-0" style={{ height: "30px", padding: "0 10px" }}
                     onClick={() => {
                       const fromEmail = selectedThread.fromEmail ?? "";
                       const fromName = selectedThread.from ?? fromEmail;
@@ -2357,7 +2357,7 @@ export default function EmailInbox() {
                     }}
                     title="Ignore this sender (hide from inbox)"
                   >
-                    <ShieldOff className="w-4 h-4 text-red-500" />
+                    <ShieldOff className="w-3.5 h-3.5 text-red-500" />
                     Ignore
                   </Button>
                 )}
