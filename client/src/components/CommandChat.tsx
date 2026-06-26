@@ -2761,6 +2761,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.leads.listCsInbox.invalidate();
     },
   });
+  const [hiddenEmailThreadIds, setHiddenEmailThreadIds] = useState<Set<string>>(new Set());
+  const resolveEmailThread = trpc.gmail.resolveGlanceItem.useMutation({
+    onSuccess: () => {
+      utils.gmail.listThreads.invalidate();
+      utils.gmail.getUnreadCount.invalidate();
+    },
+  });
 
   const { data: cmdData, isLoading: cmdLoading } = trpc.opsChat.getCommandChatData.useQuery(undefined, {
     refetchInterval: 60_000, // SSE triggers immediate refetch; interval is fallback only
@@ -7428,12 +7435,24 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 </span>
               )}
             </div>
-            <button
-              onClick={() => setCsSmsOpen(false)}
-              className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {(onSwitchToCS || onSwitchToCSSession) && (
+                <button
+                  onClick={() => { setCsSmsOpen(false); if (onSwitchToCS) onSwitchToCS(); }}
+                  className="h-7 px-2.5 flex items-center gap-1 rounded-full text-[11px] font-semibold text-orange-600 hover:bg-orange-50 transition-colors"
+                  title="Open CS inbox"
+                >
+                  Open CS
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              )}
+              <button
+                onClick={() => setCsSmsOpen(false)}
+                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-400"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           {/* Body */}
           <div className="flex-1 min-h-0 overflow-y-auto">
@@ -7688,7 +7707,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {emailThreadsList.map((thread: any) => {
+                {emailThreadsList.filter((t: any) => !hiddenEmailThreadIds.has(t.id)).map((thread: any) => {
                   const mins = Math.floor((Date.now() - Number(thread.date)) / 60_000);
                   const timeLabel = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
                   return (
@@ -7756,6 +7775,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       >
                         <span>⚡</span>
                         <span>Reply</span>
+                      </button>
+                      {/* Resolve button — removes from panel */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHiddenEmailThreadIds(prev => new Set([...prev, thread.id]));
+                          resolveEmailThread.mutate({ threadId: thread.id });
+                        }}
+                        title="Resolve"
+                        className="flex items-center justify-center w-10 shrink-0 border-l border-slate-100 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors"
+                      >
+                        <CircleCheckBig className="h-4 w-4" />
                       </button>
                     </div>
                   );
