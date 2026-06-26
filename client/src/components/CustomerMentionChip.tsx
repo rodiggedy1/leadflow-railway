@@ -1362,7 +1362,8 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
     <>
       <span
         onClick={() => { setView("card"); setOpen(true); }}
-        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold text-[13px] cursor-pointer hover:bg-emerald-100 transition-colors select-none align-middle"
+        data-chip-pill
+        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 font-semibold text-[13px] cursor-pointer hover:bg-slate-200 transition-colors select-none align-middle"
       >
         <span
           className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-black shrink-0"

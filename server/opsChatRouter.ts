@@ -4279,6 +4279,34 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         isVip: totalCleans >= 5,
       };
     }),
+
+  searchCleaners: opsChatProcedure
+    .input(z.object({ query: z.string().min(1).max(80) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return { cleaners: [] };
+      const q = `%${input.query.trim()}%`;
+      const rows = await db
+        .select({
+          name: cleanerProfiles.name,
+          phone: cleanerProfiles.phone,
+          email: cleanerProfiles.email,
+          isActive: cleanerProfiles.isActive,
+        })
+        .from(cleanerProfiles)
+        .where(like(cleanerProfiles.name, q))
+        .limit(8);
+      return {
+        cleaners: rows
+          .filter(r => r.phone)
+          .map(r => ({
+            name: r.name,
+            phone: r.phone!,
+            email: r.email ?? null,
+            isActive: r.isActive === 1,
+          })),
+      };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

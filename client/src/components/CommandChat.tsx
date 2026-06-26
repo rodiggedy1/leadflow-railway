@@ -2628,6 +2628,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { query: customerMentionQuery ?? "" },
     { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
+  // Cleaner @mention — search cleaners/teams by name
+  const { data: cleanerMentionResults } = trpc.opsChat.searchCleaners.useQuery(
+    { query: customerMentionQuery ?? "" },
+    { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
+  );
   // Map of phone → CustomerData for rendering chips in messages
 
   // ── Issues tab state ─────────────────────────────────────────────────────
@@ -2862,6 +2867,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const customerSuggestions = useMemo(
     () => customerMentionQuery === null ? [] : (customerMentionResults?.customers ?? []),
     [customerMentionQuery, customerMentionResults]
+  );
+
+  // Cleaner/team mention suggestions
+  const cleanerSuggestions = useMemo(
+    () => customerMentionQuery === null ? [] : (cleanerMentionResults?.cleaners ?? []),
+    [customerMentionQuery, cleanerMentionResults]
   );
 
   // ── Notification sound + OS notification ──────────────────────────────────────
@@ -6157,53 +6168,91 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               ))}
             </div>
           )}
-          {/* Customer @mention autocomplete dropdown */}
-          {customerMentionQuery !== null && customerSuggestions.length > 0 && (
-            <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
-              <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Customers</p>
-              </div>
-              {customerSuggestions.map((c) => {
-                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                return (
-                  <button
-                    key={c.phone}
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      // Insert token: @[Name|phone]
-                      const token = `@[${c.name}|${c.phone}]`;
-                      const before = composer.slice(0, mentionStart);
-                      const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
-                      const next = before + token + " " + after;
-                      setComposer(next);
-                      setCustomerMentionQuery(null);
-                      requestAnimationFrame(() => {
-                        const pos = (before + token + " ").length;
-                        composerRef.current?.focus();
-                        composerRef.current?.setSelectionRange(pos, pos);
-                      });
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
-                  >
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                      style={{ background: `hsl(${hue}, 55%, 52%)` }}
-                    >
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 truncate">{c.name}</p>
-                      <p className="text-[11px] text-slate-400 truncate">{c.frequency ?? "Customer"}{c.city ? ` · ${c.city}` : ""}</p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xs font-bold text-emerald-600">${c.ltv >= 1000 ? `${(c.ltv / 1000).toFixed(1)}k` : c.ltv}</p>
-                      <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
-                    </div>
-                  </button>
-                );
-              })}
+          {/* @mention autocomplete dropdown — customers + cleaners combined */}
+          {customerMentionQuery !== null && (customerSuggestions.length > 0 || cleanerSuggestions.length > 0) && (
+            <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-80 overflow-y-auto">
+              {customerSuggestions.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 sticky top-0">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Customers</p>
+                  </div>
+                  {customerSuggestions.map((c) => {
+                    const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                    return (
+                      <button
+                        key={c.phone}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const token = `@[${c.name}|${c.phone}]`;
+                          const before = composer.slice(0, mentionStart);
+                          const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
+                          setComposer(before + token + " " + after);
+                          setCustomerMentionQuery(null);
+                          requestAnimationFrame(() => {
+                            const pos = (before + token + " ").length;
+                            composerRef.current?.focus();
+                            composerRef.current?.setSelectionRange(pos, pos);
+                          });
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-900 truncate">{c.name}</p>
+                          <p className="text-[11px] text-slate-400 truncate">{c.frequency ?? "Customer"}{c.city ? ` · ${c.city}` : ""}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-xs font-bold text-emerald-600">${c.ltv >= 1000 ? `${(c.ltv / 1000).toFixed(1)}k` : c.ltv}</p>
+                          <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+              {cleanerSuggestions.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 sticky top-0">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Cleaners / Teams</p>
+                  </div>
+                  {cleanerSuggestions.map((c) => {
+                    const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                    return (
+                      <button
+                        key={c.phone}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          const token = `@[${c.name}|${c.phone}]`;
+                          const before = composer.slice(0, mentionStart);
+                          const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
+                          setComposer(before + token + " " + after);
+                          setCustomerMentionQuery(null);
+                          requestAnimationFrame(() => {
+                            const pos = (before + token + " ").length;
+                            composerRef.current?.focus();
+                            composerRef.current?.setSelectionRange(pos, pos);
+                          });
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-900 truncate">{c.name}</p>
+                          <p className="text-[11px] text-slate-400">Cleaner</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
           )}
           {/* WhatsApp single-row composer: [+] [textarea] [emoji] */}
