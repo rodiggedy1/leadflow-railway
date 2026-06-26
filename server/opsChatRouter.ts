@@ -1876,7 +1876,11 @@ export const opsChatRouter = router({
       const key = `voice-notes/${Date.now()}-${Math.random().toString(36).slice(2)}.webm`;
       const { url } = await storagePut(key, audioBuffer, input.mimeType);
       const result = await transcribeAudio({ audioUrl: url });
-      if ("error" in result) throw new Error(result.error);
+      if ("error" in result) {
+        const detail = result.details ? ` (${result.details})` : "";
+        console.error(`[transcribeVoiceNote] Whisper error: ${result.error}${detail}`);
+        throw new Error(`${result.error}${detail}`);
+      }
       return { text: result.text ?? "" };
     }),
 
