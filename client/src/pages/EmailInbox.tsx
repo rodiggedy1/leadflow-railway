@@ -1148,6 +1148,7 @@ export default function EmailInbox() {
   // Voice-to-email state
   // ---------------------------------------------------------------------------
   const [voiceIsRecording, setVoiceIsRecording] = useState(false);
+  const [voiceIsPressing, setVoiceIsPressing] = useState(false); // instant visual feedback before getUserMedia resolves
   const [voiceIsTranscribing, setVoiceIsTranscribing] = useState(false);
   const [voiceIsRewriting, setVoiceIsRewriting] = useState(false);
   const [voiceTone, setVoiceTone] = useState<"friendly" | "professional" | "casual">("friendly");
@@ -1169,6 +1170,7 @@ export default function EmailInbox() {
       mr.ondataavailable = (e) => { if (e.data.size > 0) voiceAudioChunksRef.current.push(e.data); };
       mr.start(100);
       voiceMediaRecorderRef.current = mr;
+      setVoiceIsPressing(false);
       setVoiceIsRecording(true);
       setVoiceSeconds(0);
       voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
@@ -1182,15 +1184,23 @@ export default function EmailInbox() {
     if (!mr) return;
     if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
     setVoiceIsRecording(false);
+    setVoiceIsPressing(false);
     voiceIsPttRef.current = false;
     setVoiceIsTranscribing(true);
     await new Promise<void>(resolve => {
       mr.onstop = () => resolve();
+      // requestData() flushes any buffered audio into ondataavailable before stop fires
+      // This prevents the race where the final chunk arrives after onstop resolves
+      try { mr.requestData(); } catch { /* ignore if already stopping */ }
       mr.stop();
       mr.stream.getTracks().forEach(t => t.stop());
     });
     try {
       const blob = new Blob(voiceAudioChunksRef.current, { type: "audio/webm" });
+      if (blob.size === 0) {
+        toast.warning("No audio captured — try holding the button longer");
+        return;
+      }
       const dataBase64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(",")[1]);
@@ -1213,6 +1223,20 @@ export default function EmailInbox() {
       setVoiceIsTranscribing(false);
     }
   }, [transcribeVoiceMutation]);
+
+  // Document-level PTT release — stops recording when mouse/touch is released anywhere on the page
+  // This prevents the button losing its active state when the cursor drifts off it while holding
+  useEffect(() => {
+    const handleGlobalRelease = () => {
+      if (voiceIsPttRef.current) stopVoiceRecording();
+    };
+    document.addEventListener("mouseup", handleGlobalRelease);
+    document.addEventListener("touchend", handleGlobalRelease);
+    return () => {
+      document.removeEventListener("mouseup", handleGlobalRelease);
+      document.removeEventListener("touchend", handleGlobalRelease);
+    };
+  }, [stopVoiceRecording]);
 
   // Glance panel state: which category is active as a filter
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
@@ -2463,7 +2487,7 @@ export default function EmailInbox() {
 
                 {/* Reply box */}
                 {selectedThread && (
-                  <div className="bg-white rounded-[22px] border border-[#e7edf5] shadow-[0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden mb-4">
+                  <div className="relative bg-white rounded-[22px] border border-[#e7edf5] shadow-[0_12px_30px_rgba(16,24,40,0.07)] overflow-hidden mb-4">
                     <div className="flex border-b border-slate-100">
                       {(["reply", "note"] as const).map((mode) => (
                         <button
@@ -2514,19 +2538,19 @@ export default function EmailInbox() {
                         ))}
                       </div>
                     )}
-                    {/* Voice recording indicator */}
+                    {/* Voice recording indicator — absolute overlay so it never shifts layout */}
                     <AnimatePresence>
-                      {voiceIsRecording && (
+                      {(voiceIsRecording || voiceIsPressing) && (
                         <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="flex items-center gap-2 px-4 py-2 bg-red-50 border-b border-red-100"
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.12 }}
+                          className="absolute top-0 left-0 right-0 z-10 flex items-center gap-2 px-4 py-1.5 bg-red-50/95 backdrop-blur-sm border-b border-red-100 pointer-events-none"
                         >
                           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                          <span className="text-xs font-semibold text-red-600">Recording… {voiceSeconds}s</span>
-                          <span className="text-xs text-red-400">Release to transcribe</span>
+                          <span className="text-xs font-semibold text-red-600">{voiceIsRecording ? `Recording… ${voiceSeconds}s` : "Starting…"}</span>
+                          {voiceIsRecording && <span className="text-xs text-red-400">Release to transcribe</span>}
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -2648,21 +2672,18 @@ export default function EmailInbox() {
                           <button
                             className={cn(
                               "shrink-0 h-8 w-8 rounded-full border-2 flex items-center justify-center transition-all select-none",
-                              voiceIsRecording
-                                ? "border-red-500 bg-red-500 text-white animate-pulse"
+                              (voiceIsRecording || voiceIsPressing)
+                                ? "border-red-500 bg-red-500 text-white scale-110"
                                 : voiceIsTranscribing
                                 ? "border-violet-300 bg-violet-50 text-violet-400 cursor-wait"
                                 : "border-slate-200 bg-white hover:border-violet-400 hover:text-violet-600 text-slate-400"
                             )}
                             title="Hold to record voice reply"
                             disabled={voiceIsTranscribing}
-                            onMouseDown={(e) => { e.preventDefault(); if (!voiceIsPttRef.current && !voiceIsTranscribing) { voiceIsPttRef.current = true; startVoiceRecording(); } }}
-                            onMouseUp={() => { if (voiceIsPttRef.current) stopVoiceRecording(); }}
-                            onMouseLeave={() => { if (voiceIsPttRef.current) stopVoiceRecording(); }}
-                            onTouchStart={(e) => { e.preventDefault(); if (!voiceIsPttRef.current && !voiceIsTranscribing) { voiceIsPttRef.current = true; startVoiceRecording(); } }}
-                            onTouchEnd={() => { if (voiceIsPttRef.current) stopVoiceRecording(); }}
+                            onMouseDown={(e) => { e.preventDefault(); if (!voiceIsPttRef.current && !voiceIsTranscribing) { voiceIsPttRef.current = true; setVoiceIsPressing(true); startVoiceRecording(); } }}
+                            onTouchStart={(e) => { e.preventDefault(); if (!voiceIsPttRef.current && !voiceIsTranscribing) { voiceIsPttRef.current = true; setVoiceIsPressing(true); startVoiceRecording(); } }}
                           >
-                            {voiceIsRecording ? (
+                            {(voiceIsRecording || voiceIsPressing) ? (
                               <span className="w-2.5 h-2.5 rounded-full bg-white" />
                             ) : voiceIsTranscribing ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
