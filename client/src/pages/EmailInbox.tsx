@@ -2098,11 +2098,12 @@ export default function EmailInbox() {
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
+                        "text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]",
                         isCurrentIssue
-                          ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
+                          ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
                           : "bg-white"
                       )}
+                      style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                       onClick={toggleIssue}
                       disabled={flagIssueMutation.isPending}
                       title={isCurrentIssue ? "Remove issue flag" : "Flag as issue"}
@@ -2134,9 +2135,10 @@ export default function EmailInbox() {
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
+                      "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
                       "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
                     )}
+                    style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                     onClick={() => {
                       if (!selectedThreadId) return;
                       resolveGlanceMutation.mutate({ threadId: selectedThreadId });
@@ -2163,11 +2165,12 @@ export default function EmailInbox() {
                         variant="outline"
                         size="sm"
                         className={cn(
-                          "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
+                          "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
                           threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general"
                             ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                             : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
                         )}
+                        style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                         disabled={recategorizeThreadMutation.isPending}
                         title="Set or change AI category"
                       >
@@ -2228,11 +2231,12 @@ export default function EmailInbox() {
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }},
+                            "text-[15px] font-[800] gap-2 rounded-[16px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
                             isAssigned
                               ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100"
                               : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
                           )}
+                          style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                           onClick={() => setAssignDropdownOpen(isOpen ? null : selectedThreadId)}
                         >
                           {isAssigned && currentMeta?.assignedToPhotoUrl ? (
@@ -2306,7 +2310,8 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]" style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
+                  className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]"
+                  style={{ height: "44px", minWidth: "118px", padding: "0 18px" }}
                   onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })}
                   disabled={archiveMutation.isPending}
                 >
