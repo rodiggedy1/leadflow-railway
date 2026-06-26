@@ -163,59 +163,22 @@ function SmsComposer({
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
   const transformMutation = trpc.opsChat.transformMessage.useMutation();
+  const draftReplyMutation = trpc.opsChat.draftReply.useMutation();
 
-  // Auto-draft: stream a reply suggestion when lastMessage is provided
+  // Auto-draft: same as email — use draftReply mutation when lastMessage is provided
   useEffect(() => {
     if (!lastMessage || autoDraftFiredRef.current) return;
     autoDraftFiredRef.current = true;
-    const abortCtrl = new AbortController();
     setIsDrafting(true);
-    setText("");
-    (async () => {
-      try {
-        const res = await fetch("/api/cs-reply-stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            conversationContext: `Customer: ${lastMessage}`,
-            customerName: customer.name,
-            jobContext: "",
-          }),
-          signal: abortCtrl.signal,
-        });
-        if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buf = "";
-        let accumulated = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith("data:")) continue;
-            const dataStr = trimmed.slice(5).trim();
-            if (dataStr === "[DONE]") { setIsDrafting(false); continue; }
-            let parsed: { token?: string; error?: string };
-            try { parsed = JSON.parse(dataStr); } catch { continue; }
-            if (parsed.error) throw new Error(parsed.error);
-            if (parsed.token) {
-              accumulated += parsed.token;
-              setText(accumulated);
-            }
-          }
-        }
-        setIsDrafting(false);
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return;
-        setIsDrafting(false);
-      }
-    })();
-    return () => abortCtrl.abort();
+    draftReplyMutation.mutateAsync({
+      customerName: customer.name,
+      lastMessage,
+      channel: "sms",
+    }).then(({ draft }) => {
+      setText(draft);
+    }).catch(() => {
+      // silently fail — agent can type manually
+    }).finally(() => setIsDrafting(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -334,14 +297,6 @@ function SmsComposer({
       </div>
 
       <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
-        {/* Last message strip — shown when opened from sidebar */}
-        {lastMessage && (
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Replying to</p>
-            <p className="text-xs text-slate-600 line-clamp-3">{lastMessage}</p>
-          </div>
-        )}
-
         {/* Call scenario chips — same as AI Call view */}
         <div className="flex flex-wrap gap-1.5">
           {CALL_SCENARIOS.map(s => (
@@ -355,6 +310,16 @@ function SmsComposer({
             </button>
           ))}
         </div>
+
+        {/* Last message strip — below scenario chips, right above textarea */}
+        {lastMessage && (
+          <div className="rounded-xl border-l-4 border-blue-400 bg-blue-50 px-3 py-2.5">
+            <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+              <span>&#8629;</span> Replying to
+            </p>
+            <p className="text-xs text-slate-700 font-medium line-clamp-3 leading-relaxed">{lastMessage}</p>
+          </div>
+        )}
 
         <div className="relative">
           <textarea
@@ -745,14 +710,6 @@ function EmailComposer({
       </div>
 
       <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
-        {/* Last message strip — shown when opened from sidebar */}
-        {lastMessage && (
-          <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-1">Replying to</p>
-            <p className="text-xs text-slate-600 line-clamp-3">{lastMessage}</p>
-          </div>
-        )}
-
         {/* Templates */}
         <div className="flex flex-wrap gap-1.5">
           {EMAIL_TEMPLATES.map(tpl => (
@@ -774,6 +731,16 @@ function EmailComposer({
           placeholder="Subject"
           className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-400 transition-all"
         />
+
+        {/* Last message strip — below subject, right above body */}
+        {lastMessage && (
+          <div className="rounded-xl border-l-4 border-violet-400 bg-violet-50 px-3 py-2.5">
+            <p className="text-[10px] font-bold text-violet-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+              <span>&#8629;</span> Replying to
+            </p>
+            <p className="text-xs text-slate-700 font-medium line-clamp-3 leading-relaxed">{lastMessage}</p>
+          </div>
+        )}
 
         {/* Body */}
         <div className="relative">
