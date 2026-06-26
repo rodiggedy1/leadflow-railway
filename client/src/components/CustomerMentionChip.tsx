@@ -1435,3 +1435,65 @@ export function renderMessageWithMentions(
   if (last < body.length) parts.push(body.slice(last));
   return parts.length > 0 ? parts : [body];
 }
+
+// ─── QuickReplyModal ──────────────────────────────────────────────────────────
+// Opens the SMS or Email composer directly from a CustomerData object,
+// bypassing the search step. Used by sidebar panels (CS SMS, Email Inbox, Lead Replies).
+export function QuickReplyModal({
+  customer,
+  initialView,
+  onClose,
+}: {
+  customer: CustomerData;
+  initialView: "sms" | "email";
+  onClose: () => void;
+}) {
+  const [view, setView] = useState<"card" | "sms" | "call" | "email">(initialView);
+  const { session, isPolling, startCall, cancelCall, dismissSession } = useCallSession();
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return ReactDOM.createPortal(
+    <>
+      <div
+        style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.35)" }}
+        onMouseDown={onClose}
+      />
+      <div
+        data-chip-modal
+        style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
+      >
+        {view === "sms" ? (
+          <SmsComposer customer={customer} onBack={onClose} onClose={onClose} />
+        ) : view === "email" ? (
+          <EmailComposer customer={customer} onBack={onClose} onClose={onClose} />
+        ) : view === "call" ? (
+          <AiCallComposer
+            customer={customer}
+            session={session}
+            isPolling={isPolling}
+            onStartCall={startCall}
+            onMinimize={onClose}
+            onCancelCall={cancelCall}
+            onDismissSession={() => { dismissSession(); onClose(); }}
+            onBack={() => setView("card")}
+            onClose={onClose}
+          />
+        ) : (
+          <CustomerCard
+            customer={customer}
+            onClose={onClose}
+            onText={() => setView("sms")}
+            onCall={() => setView("call")}
+            onEmail={() => setView("email")}
+          />
+        )}
+      </div>
+    </>,
+    document.body
+  );
+}

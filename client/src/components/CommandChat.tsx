@@ -45,7 +45,7 @@ import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AICallPanel from "@/components/AICallPanel";
-import { CustomerMentionChip, renderMessageWithMentions } from "@/components/CustomerMentionChip";
+import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMentions } from "@/components/CustomerMentionChip";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -2688,6 +2688,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [csSmsOpen, setCsSmsOpen] = useState(false);
   const [missedCallsOpen, setMissedCallsOpen] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
+  const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email" } | null>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
@@ -7458,7 +7459,25 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       <button
                         onClick={() => {
                           setCsSmsOpen(false);
-                          if (onSwitchToCSSession) {
+                          const phone = session.leadPhone ?? "";
+                          const name = session.leadName ?? phone;
+                          if (phone) {
+                            setQuickReplyTarget({
+                              customer: {
+                                phone,
+                                name,
+                                email: null,
+                                address: null,
+                                frequency: null,
+                                lastJobDate: null,
+                                ltv: 0,
+                                totalCleans: 0,
+                                isVip: false,
+                                city: "",
+                              },
+                              view: "sms",
+                            });
+                          } else if (onSwitchToCSSession) {
                             onSwitchToCSSession(session.id);
                           } else if (onSwitchToCS) {
                             onSwitchToCS();
@@ -7554,7 +7573,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       key={lead.id}
                       onClick={() => {
                         setLeadRepliesOpen(false);
-                        window.location.href = `/admin/leads?session=${lead.id}`;
+                        const phone = lead.leadPhone ?? "";
+                        const name = lead.leadName ?? phone;
+                        if (phone) {
+                          setQuickReplyTarget({
+                            customer: {
+                              phone,
+                              name,
+                              email: null,
+                              address: null,
+                              frequency: null,
+                              lastJobDate: null,
+                              ltv: 0,
+                              totalCleans: 0,
+                              isVip: false,
+                              city: "",
+                            },
+                            view: "sms",
+                          });
+                        } else {
+                          window.location.href = `/admin/leads?session=${lead.id}`;
+                        }
                       }}
                       className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
                     >
@@ -7642,7 +7681,26 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   return (
                     <button
                       key={thread.id}
-                      onClick={() => { setEmailsOpen(false); window.location.href = `/admin/inbox?thread=${thread.id}`; }}
+                      onClick={() => {
+                        setEmailsOpen(false);
+                        const fromEmail = thread.fromEmail ?? thread.from ?? "";
+                        const fromName = thread.from ?? fromEmail;
+                        setQuickReplyTarget({
+                          customer: {
+                            phone: "",
+                            name: fromName,
+                            email: fromEmail,
+                            address: null,
+                            frequency: null,
+                            lastJobDate: null,
+                            ltv: 0,
+                            totalCleans: 0,
+                            isVip: false,
+                            city: "",
+                          },
+                          view: "email",
+                        });
+                      }}
                       className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
                     >
                       <div className="flex items-start gap-2.5">
@@ -7770,6 +7828,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         }}
         onOpenPanel={() => setTasksOpen(true)}
       />
+      {/* Quick-reply modal — opened from sidebar SMS/email rows */}
+      {quickReplyTarget && (
+        <QuickReplyModal
+          customer={quickReplyTarget.customer}
+          initialView={quickReplyTarget.view}
+          onClose={() => setQuickReplyTarget(null)}
+        />
+      )}
     </div>
   );
 }
