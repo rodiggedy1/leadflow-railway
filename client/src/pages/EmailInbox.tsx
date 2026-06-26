@@ -1690,8 +1690,27 @@ export default function EmailInbox() {
   // Uses setSelectedThreadId directly — NOT selectThread — so it does NOT call markRead.
   // The thread is displayed but stays unread until the user explicitly clicks it.
   const lastAutoSelectedKey = useRef<string | null>(null);
+  // Deep-link: if ?thread=<threadId> is in the URL, select that thread on first load
+  const deepLinkApplied = useRef(false);
+  useEffect(() => {
+    if (deepLinkApplied.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const threadParam = params.get("thread");
+    if (!threadParam) return;
+    // Wait until threads are loaded so we can find the thread
+    if (threads.length === 0) return;
+    deepLinkApplied.current = true;
+    // Remove the param from the URL without a page reload
+    const url = new URL(window.location.href);
+    url.searchParams.delete("thread");
+    window.history.replaceState({}, "", url.toString());
+    // Select the thread (marks it read)
+    selectThread(threadParam);
+  }, [threads]);
   useEffect(() => {
     if (threads.length === 0) return;       // nothing loaded yet
+    // Skip auto-select if a deep-link thread was already applied
+    if (deepLinkApplied.current && selectedThreadId) return;
     const key = `${activeTab}::${activeCategoryFilter ?? ""}::${activeAgentFilter ?? ""}`;
     if (lastAutoSelectedKey.current === key) return; // already auto-selected for this tab+filter combo
     lastAutoSelectedKey.current = key;
