@@ -919,6 +919,7 @@ type MessageListProps = {
   setCenterView: (v: "chat" | "issues" | "calls") => void;
   todayCallCount: number;
   emailUnreadCount: number;
+  mentionPhoneMap: Record<string, string>;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1075,6 +1076,7 @@ const MessageList = memo(function MessageList({
   setCenterView,
   todayCallCount,
   emailUnreadCount,
+  mentionPhoneMap,
 }: MessageListProps) {
   return (
     <>
@@ -2347,7 +2349,7 @@ const MessageList = memo(function MessageList({
                             </button>
                           )}
                           <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
-                            {renderMessageWithMentions(msg.body, `msg-${msg.id}`, mentionPhoneMapRef.current)}
+                            {renderMessageWithMentions(msg.body, `msg-${msg.id}`, mentionPhoneMap)}
                           </p>
                           {mediaUrls.length > 0 && (
                             <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
@@ -5463,6 +5465,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setCenterView={setCenterView}
           todayCallCount={todayCallCount}
           emailUnreadCount={emailUnreadCount}
+          mentionPhoneMap={mentionPhoneMapRef.current}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
