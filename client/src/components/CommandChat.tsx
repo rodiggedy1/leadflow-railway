@@ -919,6 +919,7 @@ type MessageListProps = {
   setCenterView: (v: "chat" | "issues" | "calls") => void;
   todayCallCount: number;
   emailUnreadCount: number;
+  customerMap: Map<string, import("@/components/CustomerMentionChip").CustomerData[]>;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1075,6 +1076,7 @@ const MessageList = memo(function MessageList({
   setCenterView,
   todayCallCount,
   emailUnreadCount,
+  customerMap,
 }: MessageListProps) {
   return (
     <>
@@ -5452,6 +5454,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setCenterView={setCenterView}
           todayCallCount={todayCallCount}
           emailUnreadCount={emailUnreadCount}
+          customerMap={customerMap}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
