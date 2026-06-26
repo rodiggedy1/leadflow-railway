@@ -1380,7 +1380,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
         data-chip-modal
         style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
       >
-        {combinedLoading ? (
+        {combinedLoading || (noCustomerFound && cleanerData === undefined) ? (
           <div className="w-[420px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-12 gap-2 text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Loading…</span>

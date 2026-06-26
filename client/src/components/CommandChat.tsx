@@ -6190,9 +6190,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          // Store phone in map, insert clean @[Name] token
+                          // Store phone in token for reliable lookup across sessions
                           mentionPhoneMapRef.current[c.name] = c.phone;
-                          const token = `@[${c.name}]`;
+                          const token = `@[${c.name}|${c.phone}]`;
                           const before = composer.slice(0, mentionStart);
                           const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
                           setComposer(before + token + " " + after);
@@ -6235,9 +6235,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          // Store phone in map, insert clean @[Name] token
+                          // Store phone in token for reliable lookup across sessions
                           mentionPhoneMapRef.current[c.name] = c.phone;
-                          const token = `@[${c.name}]`;
+                          const token = `@[${c.name}|${c.phone}]`;
                           const before = composer.slice(0, mentionStart);
                           const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
                           setComposer(before + token + " " + after);
