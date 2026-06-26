@@ -213,6 +213,7 @@ export async function processThread(threadId: string): Promise<void> {
     _threadsGetCount++;
     _uniqueThreadsProcessed.add(threadId);
     _currentlyProcessing = threadId;
+    console.log(`[Worker] processThread START threadId=${threadId}`);
     const t0 = Date.now();
     const _gid_w1 = Math.random().toString(36).slice(2, 10);
     const _gt_w1 = Date.now();
@@ -476,6 +477,14 @@ Return ONLY valid JSON. No markdown, no explanation.`,
           updatedAt: new Date(),
         },
       });
+
+    console.log(`[Worker] processThread COMMIT threadId=${threadId} isUnread=${isUnread} isActionable=${isActionable}`);
+
+    // Broadcast AFTER the DB commit so the UI refetch sees fresh data
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("gmail_new_messages");
+
+    console.log(`[Worker] processThread DONE threadId=${threadId}`);
 
     if (historyChanged) {
       console.log(`[GlanceWorker] Processed ${threadId} → ${aiFields.aiCategory} (${aiFields.aiUrgency})`);

@@ -109,11 +109,9 @@ export function registerGmailRoutes(app: Express) {
 
       // ── Handle new messages ────────────────────────────────────────────────
       if (events.newMessages.length > 0) {
-        console.log(`[Gmail] ${events.newMessages.length} new message(s) received`);
-        broadcastOpsUpdate("gmail_new_messages");
-        // Enqueue affected threads for AI re-processing (non-blocking)
         const affectedThreadIds = Array.from(new Set(events.newMessages.map((m) => m.threadId).filter(Boolean) as string[]));
         for (const tid of affectedThreadIds) {
+          console.log(`[Webhook] threadId=${tid} enqueueing`);
           enqueueThread(tid, "pubsub" as EnqueueSource);
           // Optimistic isUnread=1 — UPDATE only (never INSERT to avoid partial rows)
           // Worker will correct if wrong when it processes the thread
@@ -122,6 +120,9 @@ export function registerGmailRoutes(app: Express) {
             .where(eq(gmailThreadMeta.threadId, tid))
             .catch(() => {});
         }
+        // NOTE: broadcastOpsUpdate is intentionally NOT called here.
+        // The worker calls it after the DB commit so the UI refetch sees fresh data.
+        console.log(`[Webhook] ${affectedThreadIds.length} thread(s) enqueued — broadcast deferred to worker`);
       }
 
       // ── Handle label changes — no threads.get, no AI rerun ────────────────
