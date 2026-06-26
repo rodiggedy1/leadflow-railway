@@ -919,7 +919,6 @@ type MessageListProps = {
   setCenterView: (v: "chat" | "issues" | "calls") => void;
   todayCallCount: number;
   emailUnreadCount: number;
-  customerMap: Map<string, import("@/components/CustomerMentionChip").CustomerData[]>;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1076,7 +1075,6 @@ const MessageList = memo(function MessageList({
   setCenterView,
   todayCallCount,
   emailUnreadCount,
-  customerMap,
 }: MessageListProps) {
   return (
     <>
@@ -2349,7 +2347,7 @@ const MessageList = memo(function MessageList({
                             </button>
                           )}
                           <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
-                            {renderMessageWithMentions(msg.body, customerMap, `msg-${msg.id}`)}
+                            {renderMessageWithMentions(msg.body, `msg-${msg.id}`)}
                           </p>
                           {mediaUrls.length > 0 && (
                             <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
@@ -2631,7 +2629,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
   // Map of phone → CustomerData for rendering chips in messages
-  const [customerMap, setCustomerMap] = useState<Map<string, import("@/components/CustomerMentionChip").CustomerData[]>>(() => new Map());
+
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [rightTab, setRightTab] = useState<"leads" | "followups">("leads");
@@ -3943,8 +3941,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
     let body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
-    // Auto-detect: if body already has @[Name|phone] tokens, ensure customerMap is populated
-    // (tokens were already inserted by the dropdown, so no extra work needed)
+
     onSendMessage(body, mediaUrl, replyTo ?? undefined);
     setComposer("");
     setReplyTo(null);
@@ -5454,7 +5451,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           setCenterView={setCenterView}
           todayCallCount={todayCallCount}
           emailUnreadCount={emailUnreadCount}
-          customerMap={customerMap}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
@@ -6183,13 +6179,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       const next = before + token + " " + after;
                       setComposer(next);
                       setCustomerMentionQuery(null);
-                      // Add to customerMap so the chip can render
-                      setCustomerMap(prev => {
-                        const next = new Map(prev);
-                        const existing = next.get(c.phone) ?? [];
-                        if (!existing.find(x => x.phone === c.phone)) next.set(c.phone, [c]);
-                        return next;
-                      });
                       requestAnimationFrame(() => {
                         const pos = (before + token + " ").length;
                         composerRef.current?.focus();
