@@ -15,6 +15,7 @@ import {
   Mail, Search, Paperclip, Link2, Send, RefreshCw,
   Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag, X, FileText,
   UserCheck, ChevronDown, CheckCircle2, ChevronRight, ShieldOff, ShieldCheck, Settings,
+  MoreHorizontal, UserPlus,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import {
@@ -306,91 +307,156 @@ function NotConnectedBanner() {
   );
 }
 
+// Per-category color palette for badges
+const CATEGORY_BADGE_STYLES: Record<string, { bg: string; text: string; border: string }> = {
+  refund_request:        { bg: "bg-red-50",     text: "text-red-600",    border: "border-red-200" },
+  quote_request:         { bg: "bg-orange-50",  text: "text-orange-600", border: "border-orange-200" },
+  booking_confirmation:  { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+  payroll_issue:         { bg: "bg-yellow-50",  text: "text-yellow-700", border: "border-yellow-200" },
+  upset_customer:        { bg: "bg-rose-50",    text: "text-rose-600",   border: "border-rose-200" },
+  revenue_opportunity:   { bg: "bg-blue-50",    text: "text-blue-700",   border: "border-blue-200" },
+  recurring_cancellation:{ bg: "bg-slate-100",  text: "text-slate-600",  border: "border-slate-200" },
+  general:               { bg: "bg-slate-100",  text: "text-slate-500",  border: "border-slate-200" },
+};
+
 function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedToName, assignedToPhotoUrl, aiCategory }: { thread: GmailThread; active: boolean; onClick: () => void; isIssue?: boolean; issueSummary?: string | null; assignedToName?: string | null; assignedToPhotoUrl?: string | null; aiCategory?: string | null }) {
   const senderName = thread.from || thread.fromEmail || "?";
   const accentColor = isIssue ? "#dc2626" : senderHex(senderName);
+  const catStyle = aiCategory ? (CATEGORY_BADGE_STYLES[aiCategory] ?? CATEGORY_BADGE_STYLES.general) : null;
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-4 py-4 border-b transition-all duration-150 group relative",
+        "w-full text-left px-4 py-[18px] border-b transition-all duration-150 group relative",
         isIssue ? "border-red-100" : "border-[#e8edf5]",
         active
-          ? isIssue ? "bg-red-50/80" : "bg-[#eff6ff]"
+          ? isIssue
+            ? "bg-red-50/80 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.15)]"
+            : "bg-[#eff6ff] shadow-[inset_0_0_0_1px_rgba(59,130,246,0.1)]"
           : isIssue
           ? "bg-red-50/40 hover:bg-red-50/70"
-          : "bg-white hover:bg-slate-50"
+          : "bg-white hover:bg-slate-50 hover:-translate-y-px hover:shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
       )}
     >
-      {/* Left accent bar */}
-      {(active || isIssue) && (
-        <span className={cn(
-          "absolute left-0 top-3 bottom-3 w-[4px] rounded-r-full",
-          isIssue ? "bg-red-500" : "bg-blue-500"
-        )} />
-      )}
-      <div className="flex items-start gap-3">
-        {/* Sender avatar */}
-        <div
-          className={cn(
-            "w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5",
-            isIssue ? "bg-red-100 text-red-700" : senderColorClass(senderName)
+      {/* Left accent bar — always reserve 4px gutter so content doesn't shift */}
+      <span className={cn(
+        "absolute left-0 top-4 bottom-4 w-[4px] rounded-r-full transition-all duration-150",
+        active && isIssue ? "bg-red-500" :
+        active ? "bg-blue-500" :
+        isIssue ? "bg-red-300" :
+        "bg-transparent"
+      )} />
+
+      <div className="flex items-start gap-3 pl-1">
+        {/* Sender avatar — 40px */}
+        <div className="relative shrink-0">
+          <div
+            className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0",
+              isIssue ? "bg-red-100 text-red-700" : senderColorClass(senderName)
+            )}
+            style={isIssue ? {} : {
+              background: `linear-gradient(135deg, ${accentColor}22 0%, ${accentColor}44 100%)`,
+              color: accentColor,
+            }}
+          >
+            {isIssue ? <Flag className="w-4 h-4" /> : getInitials(senderName)}
+          </div>
+          {/* Unread dot on avatar */}
+          {thread.isUnread && !isIssue && (
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-blue-500 border-2 border-white" />
           )}
-        >
-          {isIssue ? <Flag className="w-3.5 h-3.5" /> : getInitials(senderName)}
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 mb-1">
+          {/* Row 1: sender + time */}
+          <div className="flex items-center justify-between gap-2 mb-0.5">
             <span
-              className={cn("text-[15px] leading-snug truncate", thread.isUnread ? "font-[900]" : "font-bold")}
-              style={{ color: accentColor }}
+              className={cn(
+                "text-[14px] leading-snug truncate",
+                thread.isUnread ? "font-[900] text-[#0f172a]" : "font-[700] text-slate-700"
+              )}
             >
               {senderName}
             </span>
-            <span className="text-[11px] text-slate-400 shrink-0">{formatDate(thread.date)}</span>
+            <span className="text-[11px] text-slate-400 shrink-0 font-semibold">{formatDate(thread.date)}</span>
           </div>
-          <p className={cn("text-[13px] leading-snug truncate mb-1", thread.isUnread ? "text-slate-800 font-[700]" : "text-slate-500 font-normal")}>
+
+          {/* Row 2: subject */}
+          <p className={cn(
+            "text-[13px] leading-snug truncate mb-1",
+            thread.isUnread ? "text-slate-800 font-[700]" : "text-slate-500 font-normal"
+          )}>
             {thread.subject}
           </p>
+
+          {/* Row 3: snippet or issue summary */}
           {isIssue && issueSummary ? (
-            <p className="text-[12px] text-red-500 line-clamp-1 leading-relaxed font-medium">
+            <p className="text-[12px] text-red-500 line-clamp-1 leading-relaxed font-medium mb-2">
               {issueSummary}
             </p>
           ) : (
-            <p className="text-[12px] text-slate-400 line-clamp-1 leading-relaxed">
-              {thread.snippet?.slice(0, 80)}
+            <p className="text-[12px] text-slate-400 line-clamp-1 leading-relaxed mb-2">
+              {thread.snippet?.slice(0, 90)}
             </p>
           )}
-          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-            {isIssue && (
-              <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">
-                ISSUE
+
+          {/* Row 4: badges row + hover quick actions */}
+          <div className="flex items-center justify-between gap-1">
+            {/* Badges */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {isIssue && (
+                <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">
+                  ISSUE
+                </span>
+              )}
+              {aiCategory && aiCategory !== "general" && GLANCE_CATEGORY_LABELS[aiCategory] && catStyle && (
+                <span className={cn(
+                  "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                  catStyle.bg, catStyle.text, catStyle.border
+                )}>
+                  <span className="text-[10px] leading-none">{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
+                  {GLANCE_CATEGORY_LABELS[aiCategory].label}
+                </span>
+              )}
+              {assignedToName && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
+                  {assignedToPhotoUrl ? (
+                    <img src={assignedToPhotoUrl} alt={assignedToName} className="w-3 h-3 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <span className="w-3 h-3 rounded-full bg-violet-200 flex items-center justify-center text-[7px] font-black text-violet-700 shrink-0">
+                      {assignedToName[0]?.toUpperCase()}
+                    </span>
+                  )}
+                  {assignedToName.split(" ")[0]}
+                </span>
+              )}
+            </div>
+
+            {/* Quick actions — visible only on hover, purely visual */}
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 shrink-0">
+              <span
+                className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                title="Assign"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <UserPlus className="w-3 h-3" />
               </span>
-            )}
-            {thread.isUnread && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                UNREAD
+              <span
+                className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                title="Archive"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Archive className="w-3 h-3" />
               </span>
-            )}
-            {aiCategory && aiCategory !== "general" && GLANCE_CATEGORY_LABELS[aiCategory] && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                <span className="text-[10px] leading-none">{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
-                {GLANCE_CATEGORY_LABELS[aiCategory].label}
+              <span
+                className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
+                title="More"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="w-3 h-3" />
               </span>
-            )}
-            {assignedToName && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-100">
-                {assignedToPhotoUrl ? (
-                  <img src={assignedToPhotoUrl} alt={assignedToName} className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
-                ) : (
-                  <span className="w-3.5 h-3.5 rounded-full bg-violet-200 flex items-center justify-center text-[8px] font-black text-violet-700 shrink-0">
-                    {assignedToName[0]?.toUpperCase()}
-                  </span>
-                )}
-                {assignedToName.split(" ")[0]}
-              </span>
-            )}
+            </div>
           </div>
         </div>
       </div>
