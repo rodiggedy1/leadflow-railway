@@ -101,13 +101,36 @@ function timeAgo(dateStr: string | null) {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-// ─── SMS Quick-text shortcuts ─────────────────────────────────────────────────
-const SMS_SHORTCUTS = [
-  { label: "Confirm availability", text: "Hi {name}, just checking — are you still available for your upcoming cleaning? Let us know! 😊" },
-  { label: "Ask details", text: "Hi {name}, could you share the full address and any special instructions for your cleaning? We want to make sure everything is perfect!" },
-  { label: "Send quote", text: "Hi {name}, your personalized quote is ready! Reply here and I'll send it right over." },
-  { label: "Follow up", text: "Hi {name}, just following up on your recent inquiry. Happy to help — what questions do you have?" },
-];
+// ─── Build SMS text from scenario (mirrors buildCallScript but for SMS) ─────────
+function buildSmsText(name: string, scenarioTitle: string): string {
+  const first = name.split(" ")[0];
+  const t = scenarioTitle.toLowerCase();
+  if (t.includes("significantly late"))
+    return `Hi ${first}, this is Maid in Black. We're sorry — our team is running more than 2 hours behind today. We can keep your appointment at the later time or reschedule at no charge. What works best for you?`;
+  if (t.includes("late"))
+    return `Hi ${first}, this is Maid in Black. Just a heads up — our team is running a bit behind schedule today. We appreciate your patience and will keep you updated!`;
+  if (t.includes("access"))
+    return `Hi ${first}, this is Maid in Black. Our team is at your address and needs help with access. Could you share the entry details (lockbox, gate code, front desk)? Thank you!`;
+  if (t.includes("parking"))
+    return `Hi ${first}, this is Maid in Black. Our team is on the way and needs parking details. What's the best option — street, garage, or driveway? Thanks!`;
+  if (t.includes("card on file") || t.includes("put card"))
+    return `Hi ${first}, this is Maid in Black. We still need a card on file to confirm your appointment. No deposit required — we just need it saved before dispatch. Reply here and we'll send the secure link!`;
+  if (t.includes("payment failed"))
+    return `Hi ${first}, this is Maid in Black. The card on file was declined during pre-authorization. Could you update your payment method? We want to make sure your appointment is confirmed. Thank you!`;
+  if (t.includes("confirm address"))
+    return `Hi ${first}, this is Maid in Black. Could you confirm your service address, unit number, and any entry instructions? We want to make sure the team has everything before arrival. Thanks!`;
+  if (t.includes("scope"))
+    return `Hi ${first}, this is Maid in Black. We wanted to confirm the scope of your upcoming cleaning before the team arrives. Any specific areas or tasks you'd like us to focus on?`;
+  if (t.includes("eta update"))
+    return `Hi ${first}, this is Maid in Black. Your team is on the way and should arrive within the scheduled window. Does that still work for you?`;
+  if (t.includes("earlier arrival"))
+    return `Hi ${first}, this is Maid in Black. Great news — a slot opened up earlier today! Would you prefer an earlier arrival or keep the original schedule?`;
+  if (t.includes("not ready") || t.includes("turned away"))
+    return `Hi ${first}, this is Maid in Black. Our team arrived but was unable to start the cleaning. We'd love to reschedule as soon as possible — what time works for you?`;
+  if (t.includes("paused") || t.includes("issue on site"))
+    return `Hi ${first}, this is Maid in Black. Our team had to pause the cleaning at your home. Could you give us a call or reply here so we can discuss next steps? Thank you!`;
+  return `Hi ${first}, this is Maid in Black. Just following up to make sure everything is going smoothly with your service. Feel free to reply here if you have any questions — we're happy to help!`;
+}
 
 // ─── SMS Composer View ────────────────────────────────────────────────────────
 function SmsComposer({
@@ -250,14 +273,16 @@ function SmsComposer({
       </div>
 
       <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
+        {/* Call scenario chips — same as AI Call view */}
         <div className="flex flex-wrap gap-1.5">
-          {SMS_SHORTCUTS.map(s => (
+          {CALL_SCENARIOS.map(s => (
             <button
-              key={s.label}
-              onClick={() => setText(s.text.replace("{name}", firstName))}
-              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+              key={s.title}
+              onClick={() => setText(buildSmsText(customer.name, s.title))}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border bg-white transition-colors hover:opacity-90"
+              style={{ borderColor: s.tagColor + "55", color: s.tagColor, background: s.tagColor + "12" }}
             >
-              {s.label}
+              {s.title}
             </button>
           ))}
         </div>
@@ -1058,9 +1083,31 @@ function CustomerCard({
           <X className="h-4 w-4" />
         </button>
 
-        {/* Chat-style header: customer → agent */}
+        {/* Chat-style header: agent → customer */}
         <div className="flex items-center justify-between gap-3 pb-1">
-          {/* Customer side */}
+          {/* Agent side (sender — left) */}
+          <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+            <div className="w-14 h-14 rounded-full overflow-hidden shadow-lg shrink-0 bg-slate-600 flex items-center justify-center">
+              {agentPhoto ? (
+                <img src={agentPhoto} alt={agentName} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white font-black text-lg">{agentInitials}</span>
+              )}
+            </div>
+            <div className="text-center min-w-0 w-full">
+              <p className="text-white font-bold text-sm truncate">{agentName}</p>
+              <p className="text-blue-300 text-[11px]">Sending as</p>
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <div className="shrink-0 flex flex-col items-center gap-1">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <path d="M6 14h16M16 8l6 6-6 6" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+
+          {/* Customer side (recipient — right) */}
           <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
             <div className="relative">
               <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-lg shadow-lg" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
@@ -1075,28 +1122,6 @@ function CustomerCard({
             <div className="text-center min-w-0 w-full">
               <p className="text-white font-bold text-sm truncate">{customer.name}</p>
               <p className="text-blue-200 text-[11px] truncate">{customer.frequency ?? "Customer"}{customer.city ? ` · ${customer.city}` : ""}</p>
-            </div>
-          </div>
-
-          {/* Arrow */}
-          <div className="shrink-0 flex flex-col items-center gap-1">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <path d="M6 14h16M16 8l6 6-6 6" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-
-          {/* Agent side */}
-          <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
-            <div className="w-14 h-14 rounded-full overflow-hidden shadow-lg shrink-0 bg-slate-600 flex items-center justify-center">
-              {agentPhoto ? (
-                <img src={agentPhoto} alt={agentName} className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-white font-black text-lg">{agentInitials}</span>
-              )}
-            </div>
-            <div className="text-center min-w-0 w-full">
-              <p className="text-white font-bold text-sm truncate">{agentName}</p>
-              <p className="text-blue-300 text-[11px]">Sending as</p>
             </div>
           </div>
         </div>
