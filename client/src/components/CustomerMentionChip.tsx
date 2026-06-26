@@ -1301,15 +1301,18 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
   // Track if we've already auto-reopened for this terminal session
   const autoReopenedRef = useRef(false);
 
+  // If phone is empty (new @[Name] token format), skip customer search and go straight to cleaner lookup
+  const hasPhone = phone.trim().length > 0;
+
   const { data, isLoading } = trpc.opsChat.searchCustomers.useQuery(
     { query: phone },
-    { staleTime: 300_000, retry: false, enabled: open || session !== null }
+    { staleTime: 300_000, retry: false, enabled: hasPhone && (open || session !== null) }
   );
 
   const customers: CustomerData[] = data?.customers ?? [];
-  const noCustomerFound = !isLoading && customers.length === 0;
+  const noCustomerFound = !isLoading && (customers.length === 0 || !hasPhone);
 
-  // Fallback: if no customer found by phone, try searching cleaners by name
+  // Fallback: if no customer found by phone (or no phone at all), try searching cleaners by name
   const { data: cleanerData, isLoading: cleanerLoading } = trpc.opsChat.searchCleaners.useQuery(
     { query: name },
     { staleTime: 300_000, retry: false, enabled: noCustomerFound && (open || session !== null) }
@@ -1319,7 +1322,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
     : null;
 
   const resolvedCustomer = selected ?? (customers.length === 1 ? customers[0] : null) ?? (noCustomerFound ? cleanerMatch : null);
-  const combinedLoading = isLoading || (noCustomerFound && cleanerLoading);
+  const combinedLoading = (hasPhone && isLoading) || (noCustomerFound && cleanerLoading);
 
   const hue = Math.abs(phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
