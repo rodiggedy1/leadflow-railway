@@ -1034,6 +1034,13 @@ function CustomerCard({
     { staleTime: 120_000, retry: false }
   );
 
+  // Agent info for the "sending as" side
+  const { data: agentMe } = trpc.agents.me.useQuery(undefined, { staleTime: 300_000, retry: false });
+  const { data: agentStatuses } = trpc.agents.getStatuses.useQuery(undefined, { staleTime: 300_000, retry: false });
+  const agentName = agentMe?.name ?? "Agent";
+  const agentPhoto = agentStatuses?.find(a => a.name === agentName)?.profilePhotoUrl ?? null;
+  const agentInitials = agentName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
 
@@ -1050,23 +1057,47 @@ function CustomerCard({
         <button onClick={onClose} className="absolute top-3 right-3 text-white/50 hover:text-white transition-colors">
           <X className="h-4 w-4" />
         </button>
-        <div className="flex items-start gap-3">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
-            {initials}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-white font-bold text-base truncate">{customer.name}</span>
+
+        {/* Chat-style header: customer → agent */}
+        <div className="flex items-center justify-between gap-3 pb-1">
+          {/* Customer side */}
+          <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+            <div className="relative">
+              <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-lg shadow-lg" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                {initials}
+              </div>
               {(ctx?.isVip ?? customer.isVip) && (
-                <span className="shrink-0 bg-green-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                  <Star className="h-2.5 w-2.5 fill-white" /> VIP
+                <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full flex items-center gap-0.5 leading-none">
+                  <Star className="h-2 w-2 fill-white" />
                 </span>
               )}
             </div>
-            <p className="text-blue-200 text-xs mt-0.5 truncate">
-              {customer.frequency ?? "Customer"}{customer.city ? ` · ${customer.city}` : ""}
-            </p>
-            <p className="text-blue-300 text-[11px] mt-0.5">{customer.phone}</p>
+            <div className="text-center min-w-0 w-full">
+              <p className="text-white font-bold text-sm truncate">{customer.name}</p>
+              <p className="text-blue-200 text-[11px] truncate">{customer.frequency ?? "Customer"}{customer.city ? ` · ${customer.city}` : ""}</p>
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <div className="shrink-0 flex flex-col items-center gap-1">
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <path d="M6 14h16M16 8l6 6-6 6" stroke="rgba(255,255,255,0.35)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+
+          {/* Agent side */}
+          <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
+            <div className="w-14 h-14 rounded-full overflow-hidden shadow-lg shrink-0 bg-slate-600 flex items-center justify-center">
+              {agentPhoto ? (
+                <img src={agentPhoto} alt={agentName} className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white font-black text-lg">{agentInitials}</span>
+              )}
+            </div>
+            <div className="text-center min-w-0 w-full">
+              <p className="text-white font-bold text-sm truncate">{agentName}</p>
+              <p className="text-blue-300 text-[11px]">Sending as</p>
+            </div>
           </div>
         </div>
       </div>
