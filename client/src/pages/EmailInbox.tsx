@@ -35,6 +35,38 @@ import {
 import { Link } from "wouter";
 
 // ---------------------------------------------------------------------------
+// Micro-animation keyframes — injected once, presentation-only
+// ---------------------------------------------------------------------------
+const ANIMATION_STYLES = `
+  @keyframes ei-fade-slide-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes ei-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes ei-scale-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes ei-summary-expand {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes ei-badge-pop {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+  .ei-panel-enter { animation: ei-fade-slide-up 150ms cubic-bezier(0.22,1,0.36,1) both; }
+  .ei-fade-enter  { animation: ei-fade-in 150ms ease both; }
+  .ei-scale-enter { animation: ei-scale-in 150ms cubic-bezier(0.22,1,0.36,1) both; }
+  .ei-summary-enter { animation: ei-summary-expand 200ms cubic-bezier(0.22,1,0.36,1) both; }
+  .ei-badge-pop   { animation: ei-badge-pop 250ms cubic-bezier(0.22,1,0.36,1) both; }
+`;
+
+// ---------------------------------------------------------------------------
 // Canned reply templates
 // ---------------------------------------------------------------------------
 const CANNED_TEMPLATES = [
@@ -327,7 +359,7 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left px-4 py-[18px] border-b transition-all duration-150 group relative",
+        "w-full text-left px-4 py-[18px] border-b transition-all duration-200 group relative active:scale-[0.99] active:brightness-95",
         isIssue ? "border-red-100" : "border-[#e8edf5]",
         active
           ? isIssue
@@ -340,7 +372,7 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
     >
       {/* Left accent bar — always reserve 4px gutter so content doesn't shift */}
       <span className={cn(
-        "absolute left-0 top-4 bottom-4 w-[4px] rounded-r-full transition-all duration-150",
+        "absolute left-0 top-4 bottom-4 w-[4px] rounded-r-full transition-all duration-200",
         active && isIssue ? "bg-red-500" :
         active ? "bg-blue-500" :
         isIssue ? "bg-red-300" :
@@ -411,8 +443,8 @@ function ThreadItem({ thread, active, onClick, isIssue, issueSummary, assignedTo
                 </span>
               )}
               {aiCategory && aiCategory !== "general" && GLANCE_CATEGORY_LABELS[aiCategory] && catStyle && (
-                <span className={cn(
-                  "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                <span key={aiCategory} className={cn(
+                  "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ei-badge-pop",
                   catStyle.bg, catStyle.text, catStyle.border
                 )}>
                   <span className="text-[10px] leading-none">{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
@@ -747,7 +779,7 @@ function CustomerContextPanel({
           <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
         </div>
       ) : (
-        <div className="flex flex-col">
+        <div key={validEmail} className="flex flex-col ei-scale-enter">
           {/* ── Customer header hero card ─────────────────────────────── */}
           <div style={{ padding: "26px 22px 20px" }} className="border-b border-[#e8edf5]">
             <div className="flex items-start gap-3">
@@ -820,6 +852,8 @@ function CustomerContextPanel({
               </div>
               {aiSummary ? (
                 <div
+                  key={aiSummary.slice(0, 20)}
+                  className="ei-summary-enter"
                   style={{
                     background: "#f8faff",
                     border: "1px solid #eef3fb",
@@ -831,7 +865,8 @@ function CustomerContextPanel({
                     <div className="flex items-center justify-between mb-3">
                       {/* Color-coded category chip */}
                       <span
-                        className="inline-flex items-center gap-1.5 text-[12px] font-[900] shrink-0"
+                        key={aiCategory}
+                        className="inline-flex items-center gap-1.5 text-[12px] font-[900] shrink-0 ei-badge-pop"
                         style={{
                           padding: "5px 11px",
                           borderRadius: "999px",
@@ -1560,6 +1595,8 @@ export default function EmailInbox() {
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
+      {/* Micro-animation keyframes */}
+      <style dangerouslySetInnerHTML={{ __html: ANIMATION_STYLES }} />
       {/* Thread sidebar */}
       <aside className="w-[330px] bg-white border-r border-[#e8edf5] flex flex-col shrink-0 overflow-hidden" style={{boxShadow: '0 12px 30px rgba(16,24,40,0.07)'}}>
         {/* Header */}
@@ -2040,8 +2077,8 @@ export default function EmailInbox() {
         )}
         {selectedThreadId && statusQuery.data?.connected && (
           <>
-            {/* Thread header */}
-            <div className="bg-white border-b border-[#e8edf5] flex items-center justify-between shrink-0" style={{ height: "72px", padding: "0 28px", gap: "12px" }}>
+            {/* Thread header — animates in on thread switch */}
+            <div key={`hdr-${selectedThreadId}`} className="bg-white border-b border-[#e8edf5] flex items-center justify-between shrink-0 ei-fade-enter" style={{ height: "72px", padding: "0 28px", gap: "12px" }}>
               <div className="flex-1 min-w-0">
                 <h2
                   className="text-[18px] font-[900] text-[#162033] truncate leading-tight"
@@ -2069,7 +2106,7 @@ export default function EmailInbox() {
                       variant="outline"
                       size="sm"
                       className={cn(
-                        "text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]",
+                        "text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247]",
                         isCurrentIssue
                           ? "border-red-300 bg-red-50 text-red-600 hover:bg-red-100"
                           : "bg-white"
@@ -2089,7 +2126,7 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]" style={{ height: "36px", padding: "0 14px" }}
+                  className="text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247]" style={{ height: "36px", padding: "0 14px" }}
                   onClick={() => {
                     if (selectedThread?.isUnread) markReadMutation.mutate({ threadId: selectedThreadId });
                     else markUnreadMutation.mutate({ threadId: selectedThreadId });
@@ -2106,7 +2143,7 @@ export default function EmailInbox() {
                     variant="outline"
                     size="sm"
                     className={cn(
-                      "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
+                      "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 active:scale-95",
                       "border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
                     )}
                     style={{ height: "36px", padding: "0 14px" }}
@@ -2138,8 +2175,8 @@ export default function EmailInbox() {
                         className={cn(
                           "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
                           threadAiQuery.data?.aiCategory && threadAiQuery.data.aiCategory !== "general"
-                            ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
-                            : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
+                            ? "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 active:scale-95"
+                            : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247] active:scale-95"
                         )}
                         style={{ height: "36px", padding: "0 14px" }}
                         disabled={recategorizeThreadMutation.isPending}
@@ -2202,7 +2239,7 @@ export default function EmailInbox() {
                           variant="outline"
                           size="sm"
                           className={cn(
-                            "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150",
+                            "text-[14px] font-[700] gap-[6px] rounded-[12px] shadow-[0_2px_8px_rgba(16,24,40,0.04)] transition-all duration-150 active:scale-95",
                             isAssigned
                               ? "border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100"
                               : "bg-white border-[#e5eaf2] hover:bg-[#f8fafc] hover:border-[#d7e0ec] text-[#243247]"
@@ -2281,7 +2318,7 @@ export default function EmailInbox() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 text-[#243247]"
+                  className="text-[14px] font-[700] gap-[6px] rounded-[12px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:bg-[#f8fafc] hover:border-[#d7e0ec] transition-all duration-150 active:scale-95 text-[#243247]"
                   style={{ height: "36px", padding: "0 14px" }}
                   onClick={() => archiveMutation.mutate({ threadId: selectedThreadId })}
                   disabled={archiveMutation.isPending}
@@ -2296,7 +2333,7 @@ export default function EmailInbox() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all duration-150 text-[#243247]" style={{ height: "36px", padding: "0 14px" }}
+                    className="text-[15px] font-[800] gap-2 rounded-[16px] border-[#e5eaf2] bg-white shadow-[0_2px_8px_rgba(16,24,40,0.04)] hover:border-red-300 hover:text-red-600 hover:bg-red-50 transition-all duration-150 active:scale-95 text-[#243247]" style={{ height: "36px", padding: "0 14px" }}
                     onClick={() => {
                       const fromEmail = selectedThread.fromEmail ?? "";
                       const fromName = selectedThread.from ?? fromEmail;
@@ -2312,9 +2349,9 @@ export default function EmailInbox() {
               </div>
             </div>
 
-            {/* Messages */}
+            {/* Messages — key forces remount+animation on thread switch */}
             <div className="flex-1 overflow-y-auto bg-[#f3f5f9] [scrollbar-width:thin] [scrollbar-color:#dde3ee_transparent]">
-              <div style={{ padding: "28px 52px 80px" }}>
+              <div key={selectedThreadId} className="ei-panel-enter" style={{ padding: "28px 52px 80px" }}>
                 {threadQuery.isLoading && (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="w-6 h-6 animate-spin text-slate-300" />
@@ -2470,7 +2507,7 @@ export default function EmailInbox() {
                       {replyMode === "reply" ? (
                         <Button
                           size="sm"
-                          className="h-[42px] rounded-[14px] bg-[#0f172a] hover:bg-[#1e293b] text-white font-[900] text-[14px] gap-1.5 px-5 shadow-[0_4px_10px_rgba(15,23,42,0.18)] transition-all duration-150"
+                          className="h-[42px] rounded-[14px] bg-[#0f172a] hover:bg-[#1e293b] text-white font-[900] text-[14px] gap-1.5 px-5 shadow-[0_4px_10px_rgba(15,23,42,0.18)] transition-all duration-150 active:scale-95"
                           disabled={replyMutation.isPending || !replyText.trim()}
                           onClick={sendReply}
                         >
