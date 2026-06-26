@@ -909,27 +909,27 @@ function CustomerContextPanel({
           {/* ── Lifetime Value Stats ────────────────── */}
           {stats && stats.jobCount > 0 && (
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Lifetime Value</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-2.5 text-center border border-green-100">
-                  <p className="text-sm font-black text-green-700">
+              <p className="text-[11px] font-[900] text-[#99a7bd] uppercase mb-3" style={{letterSpacing:"3px"}}>Lifetime Value</p>
+              <div className="grid grid-cols-3 gap-2.5">
+                <div className="bg-slate-50 rounded-[14px] p-3 text-center border border-slate-100">
+                  <p className="text-[17px] font-[900] text-[#162033]">
                     {stats.lifetimeValue >= 1000
                       ? `$${(stats.lifetimeValue / 1000).toFixed(1)}k`
                       : `$${stats.lifetimeValue}`}
                   </p>
-                  <p className="text-[9px] text-green-600 font-semibold mt-0.5">Total Spent</p>
+                  <p className="text-[11px] text-slate-400 font-[700] mt-0.5">Total spent</p>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-2.5 text-center border border-slate-100">
-                  <p className="text-sm font-black text-slate-700">{stats.jobCount}</p>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Cleanings</p>
+                <div className="bg-slate-50 rounded-[14px] p-3 text-center border border-slate-100">
+                  <p className="text-[17px] font-[900] text-[#162033]">{stats.jobCount}</p>
+                  <p className="text-[11px] text-slate-400 font-[700] mt-0.5">Cleanings</p>
                 </div>
-                <div className="bg-slate-50 rounded-xl p-2.5 text-center border border-slate-100">
-                  <p className="text-sm font-black text-slate-700">${stats.avgJobPrice}</p>
-                  <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Avg/Visit</p>
+                <div className="bg-slate-50 rounded-[14px] p-3 text-center border border-slate-100">
+                  <p className="text-[17px] font-[900] text-[#162033]">${stats.avgJobPrice}</p>
+                  <p className="text-[11px] text-slate-400 font-[700] mt-0.5">Avg/visit</p>
                 </div>
               </div>
               {stats.lastJobDate && (
-                <p className="text-[10px] text-slate-400 mt-2 text-center">
+                <p className="text-[12px] text-slate-400 mt-3 text-center font-[500]">
                   Last cleaned {formatJobDate(stats.lastJobDate)}
                 </p>
               )}
@@ -1670,7 +1670,7 @@ export default function EmailInbox() {
             ))}
           </div>
           {/* Actionable segmented control */}
-          <div className="rounded-2xl p-1 mb-2" style={{background: '#f1f4f9'}}>
+          <div className="rounded-2xl p-1 mb-1" style={{background: '#f1f4f9'}}>
             <div className="flex">
               <button
                 onClick={() => {
@@ -1681,15 +1681,16 @@ export default function EmailInbox() {
                   }
                 }}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-semibold h-[34px] rounded-xl transition-all duration-150",
+                  "flex-1 flex items-center justify-center gap-1.5 text-[13px] font-[700] h-[38px] rounded-xl transition-all duration-150",
                   !showIgnored
-                    ? "bg-white text-slate-800 shadow-sm"
+                    ? "bg-white text-[#162033] shadow-sm"
                     : "text-slate-400 hover:text-slate-600"
                 )}
                 title="Show actionable threads only"
               >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                Actionable
+                Actionable{!showIgnored && allThreads.length > 0 && (
+                  <span className="text-[11px] font-[600] text-slate-400">({allThreads.filter(t => (metaMap.get(t.id)?.isActionable ?? 1) === 1).length})</span>
+                )}
               </button>
               <button
                 onClick={() => {
@@ -1700,24 +1701,28 @@ export default function EmailInbox() {
                   }
                 }}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 text-[12px] font-semibold h-[34px] rounded-xl transition-all duration-150",
+                  "flex-1 flex items-center justify-center gap-1.5 text-[13px] font-[700] h-[38px] rounded-xl transition-all duration-150",
                   showIgnored
-                    ? "bg-white text-slate-800 shadow-sm"
+                    ? "bg-white text-[#162033] shadow-sm"
                     : "text-slate-400 hover:text-slate-600"
                 )}
                 title="Show all senders including ignored"
               >
-                <ShieldOff className="w-4 h-4 text-red-500" />
-                All
+                All{showIgnored && allThreads.length > 0 && (
+                  <span className="text-[11px] font-[600] text-slate-400">({allThreads.length})</span>
+                )}
               </button>
             </div>
           </div>
-          {/* Policies link */}
-          <div className="flex justify-end">
+          {/* Status line + Policies link */}
+          <div className="flex items-center justify-between px-1 mb-2">
+            <span className="text-[12px] font-[600] text-slate-400">
+              {!showIgnored ? "Hiding ignored senders" : "Showing all senders"}
+            </span>
             <Link href="/admin/inbox/sender-policies">
-              <button className="flex items-center gap-1 text-[11px] text-violet-500 hover:text-violet-700 transition-colors px-1 py-0.5 font-medium">
+              <button className="flex items-center gap-1 text-[12px] text-violet-500 hover:text-violet-700 transition-colors font-[700]">
                 <Settings className="w-3 h-3" />
-                Manage sender policies
+                Policies
               </button>
             </Link>
           </div>
