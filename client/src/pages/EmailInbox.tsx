@@ -1157,7 +1157,6 @@ export default function EmailInbox() {
   const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
   const voiceIsPttRef = useRef(false);
-  const voiceStartTimeRef = useRef<number>(0);
 
   const transcribeVoiceMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteEmailMutation = trpc.gmail.rewriteEmailDraft.useMutation();
@@ -1170,7 +1169,6 @@ export default function EmailInbox() {
       mr.ondataavailable = (e) => { if (e.data.size > 0) voiceAudioChunksRef.current.push(e.data); };
       mr.start(100);
       voiceMediaRecorderRef.current = mr;
-      voiceStartTimeRef.current = Date.now();
       setVoiceIsRecording(true);
       setVoiceSeconds(0);
       voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
@@ -1182,18 +1180,9 @@ export default function EmailInbox() {
   const stopVoiceRecording = useCallback(async () => {
     const mr = voiceMediaRecorderRef.current;
     if (!mr) return;
-    const elapsedMs = Date.now() - voiceStartTimeRef.current;
     if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
     setVoiceIsRecording(false);
     voiceIsPttRef.current = false;
-    // Guard: recordings under 500ms produce malformed webm that Whisper rejects
-    if (elapsedMs < 500) {
-      mr.stop();
-      mr.stream.getTracks().forEach(t => t.stop());
-      voiceMediaRecorderRef.current = null;
-      toast.warning("Hold the mic button longer to record");
-      return;
-    }
     setVoiceIsTranscribing(true);
     await new Promise<void>(resolve => {
       mr.onstop = () => resolve();
