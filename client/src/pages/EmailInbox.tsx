@@ -908,28 +908,28 @@ function CustomerContextPanel({
 
           {/* ── Lifetime Value Stats ────────────────── */}
           {stats && stats.jobCount > 0 && (
-            <div>
+            <div style={{ padding: "20px 22px" }}>
               <p className="text-[11px] font-[900] text-[#99a7bd] uppercase mb-3" style={{letterSpacing:"3px"}}>Lifetime Value</p>
-              <div className="grid grid-cols-3 gap-2.5">
-                <div className="bg-slate-50 rounded-[14px] p-3 text-center border border-slate-100">
-                  <p className="text-[17px] font-[900] text-[#162033]">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-slate-50 rounded-[12px] py-2.5 px-1 text-center border border-slate-100">
+                  <p className="text-[15px] font-[900] text-[#162033]">
                     {stats.lifetimeValue >= 1000
                       ? `$${(stats.lifetimeValue / 1000).toFixed(1)}k`
                       : `$${stats.lifetimeValue}`}
                   </p>
-                  <p className="text-[11px] text-slate-400 font-[700] mt-0.5">Total spent</p>
+                  <p className="text-[10px] text-slate-400 font-[700] mt-0.5">Total spent</p>
                 </div>
-                <div className="bg-slate-50 rounded-[14px] p-3 text-center border border-slate-100">
-                  <p className="text-[17px] font-[900] text-[#162033]">{stats.jobCount}</p>
-                  <p className="text-[11px] text-slate-400 font-[700] mt-0.5">Cleanings</p>
+                <div className="bg-slate-50 rounded-[12px] py-2.5 px-1 text-center border border-slate-100">
+                  <p className="text-[15px] font-[900] text-[#162033]">{stats.jobCount}</p>
+                  <p className="text-[10px] text-slate-400 font-[700] mt-0.5">Cleanings</p>
                 </div>
-                <div className="bg-slate-50 rounded-[14px] p-3 text-center border border-slate-100">
-                  <p className="text-[17px] font-[900] text-[#162033]">${stats.avgJobPrice}</p>
-                  <p className="text-[11px] text-slate-400 font-[700] mt-0.5">Avg/visit</p>
+                <div className="bg-slate-50 rounded-[12px] py-2.5 px-1 text-center border border-slate-100">
+                  <p className="text-[15px] font-[900] text-[#162033]">${stats.avgJobPrice}</p>
+                  <p className="text-[10px] text-slate-400 font-[700] mt-0.5">Avg/visit</p>
                 </div>
               </div>
               {stats.lastJobDate && (
-                <p className="text-[12px] text-slate-400 mt-3 text-center font-[500]">
+                <p className="text-[11px] text-slate-400 mt-2.5 text-center font-[500]">
                   Last cleaned {formatJobDate(stats.lastJobDate)}
                 </p>
               )}
