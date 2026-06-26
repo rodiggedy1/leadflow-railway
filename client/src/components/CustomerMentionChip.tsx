@@ -7,7 +7,8 @@
  * Self-loading: the chip fetches its own data using the phone from the token.
  * No customerMap needed — works on page refresh, old messages, any viewer.
  */
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+import ReactDOM from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Phone, Mail, MessageSquare, History, Star, Loader2 } from "lucide-react";
@@ -166,10 +167,13 @@ function CustomerCard({ customer }: { customer: CustomerData }) {
 /**
  * Self-loading chip. Receives name + phone from the token @[Name|phone].
  * Fetches customer data internally on hover — no customerMap needed.
+ * Popup renders in a portal (document.body) so it's never clipped by overflow:hidden.
  */
 export function CustomerMentionChip({ name, phone }: { name: string; phone: string }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<CustomerData | null>(null);
+  const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
+  const chipRef = useRef<HTMLSpanElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Only fetch when popover is open. staleTime 5min so repeated hovers don't re-fetch.
@@ -186,19 +190,89 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
 
   function handleMouseEnter() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    // Calculate position from chip's bounding rect
+    if (chipRef.current) {
+      const rect = chipRef.current.getBoundingClientRect();
+      setPopupPos({
+        top: rect.bottom + window.scrollY + 8,
+        left: rect.left + rect.width / 2 + window.scrollX,
+      });
+    }
     setOpen(true);
   }
   function handleMouseLeave() {
     timeoutRef.current = setTimeout(() => setOpen(false), 200);
   }
 
+  const popupContent = (
+    <div
+      style={{
+        position: 'absolute',
+        top: popupPos.top,
+        left: popupPos.left,
+        transform: 'translateX(-50%)',
+        zIndex: 99999,
+        filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.18))',
+      }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      {isLoading ? (
+        <div className="w-[340px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-8 gap-2 text-slate-400">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-sm">Loading…</span>
+        </div>
+      ) : resolvedCustomer ? (
+        <CustomerCard customer={resolvedCustomer} />
+      ) : customers.length > 1 ? (
+        <div className="w-[280px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+          <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
+            <p className="text-xs font-bold text-slate-700">Multiple matches — choose one</p>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {customers.map(c => {
+              const cInitials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+              const cHue = Math.abs(c.phone.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360;
+              return (
+                <button
+                  key={c.phone}
+                  onClick={() => setSelected(c)}
+                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0"
+                    style={{ background: `hsl(${cHue}, 55%, 52%)` }}
+                  >
+                    {cInitials}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{c.phone}{c.city ? ` · ${c.city}` : ""}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-bold text-slate-700">{formatLtv(c.ltv)}</p>
+                    <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="w-[280px] rounded-2xl bg-white border border-slate-200 shadow-2xl px-4 py-4 text-xs text-slate-400 italic">
+          No customer found
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <span
+      ref={chipRef}
       className="relative inline-flex items-center gap-1 align-middle"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* The chip */}
       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold text-[13px] cursor-pointer hover:bg-emerald-100 transition-colors select-none">
         <span
           className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-black shrink-0"
@@ -208,63 +282,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
         </span>
         {name}
       </span>
-
-      {/* Popover */}
-      {open && (
-        <span
-          className="absolute z-[500] top-full mt-2 block"
-          style={{ right: 'auto', left: '50%', transform: 'translateX(-50%)', minWidth: 340, filter: 'drop-shadow(0 20px 40px rgba(0,0,0,0.18))' }}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-        >
-          {isLoading ? (
-            <div className="w-[340px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-8 gap-2 text-slate-400">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Loading…</span>
-            </div>
-          ) : resolvedCustomer ? (
-            <CustomerCard customer={resolvedCustomer} />
-          ) : customers.length > 1 ? (
-            <div className="w-[280px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
-              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50">
-                <p className="text-xs font-bold text-slate-700">Multiple matches — choose one</p>
-              </div>
-              <div className="divide-y divide-slate-100">
-                {customers.map(c => {
-                  const cInitials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-                  const cHue = Math.abs(c.phone.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360;
-                  return (
-                    <button
-                      key={c.phone}
-                      onClick={() => setSelected(c)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0"
-                        style={{ background: `hsl(${cHue}, 55%, 52%)` }}
-                      >
-                        {cInitials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{c.phone}{c.city ? ` · ${c.city}` : ""}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="text-xs font-bold text-slate-700">{formatLtv(c.ltv)}</p>
-                        <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="w-[280px] rounded-2xl bg-white border border-slate-200 shadow-2xl px-4 py-4 text-xs text-slate-400 italic">
-              No customer found for {phone}
-            </div>
-          )}
-        </span>
-      )}
+      {open && ReactDOM.createPortal(popupContent, document.body)}
     </span>
   );
 }
