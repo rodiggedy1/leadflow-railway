@@ -364,11 +364,11 @@ export const callMatrixRouter = router({
           `You are Ava, a professional operations coordinator for Maids in Black, a premium cleaning company. ` +
           `You are calling ${input.personName} regarding: ${input.scenario}. ` +
           `Be warm, concise, and professional. Listen carefully for the outcome. ` +
-          `Once you have delivered the message and received a response, close the call naturally with: ` +
-          `'Thank you so much, I really appreciate your time. Have a wonderful day!' and then end the call. ` +
-          `If the person wants to call back later, say 'Of course, I completely understand. I'll make a note of that and have someone follow up with you. Have a great day!' then end the call. ` +
-          `Do not repeat yourself. Do not ask multiple questions. Do not discuss pricing, other services, or anything outside the scope of this call. ` +
-          `Keep the call under 2 minutes.`;
+          `Once you have delivered the message and had a natural exchange, close the call warmly — something like: ` +
+          `'It was so great talking with you! Have a wonderful rest of your day, take care!' and then end the call. ` +
+          `If the person wants to call back later, say 'Of course, absolutely no problem! I'll make a note and have someone follow up with you soon. You have a great day, take care!' then end the call. ` +
+          `Let the conversation breathe — wait for the person to fully finish speaking before responding. ` +
+          `Do not rush to end the call. Do not repeat yourself. Do not ask multiple questions. Do not discuss pricing, other services, or anything outside the scope of this call.`;
 
         const payload = {
           phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
@@ -391,7 +391,7 @@ export const callMatrixRouter = router({
             },
             maxDurationSeconds: 180,
             endCallFunctionEnabled: true,
-            silenceTimeoutSeconds: 20,
+            silenceTimeoutSeconds: 30,
             voicemailDetection: {
               provider: "twilio",
               voicemailDetectionTypes: ["machine_end_beep", "machine_end_silence"],
