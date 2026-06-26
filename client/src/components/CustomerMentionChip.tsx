@@ -41,9 +41,36 @@ const CALL_SCENARIOS = [
   { title: "Follow up / check-in", tag: "General", tagColor: "#6366f1", description: "General follow-up call to check on the customer." },
 ];
 
-function buildCallScript(name: string, scenario: string): string {
+// Exact script logic copied from AICallPanel.buildScript
+function buildCallScript(name: string, scenarioTitle: string): string {
   const first = name.split(" ")[0];
-  return `Hi ${first}, this is Ava calling from Maids in Black.\n\nI'm reaching out regarding: ${scenario}.\n\nPlease give us a call back or reply to this message if you have any questions. We appreciate your business!\n\nThank you.`;
+  const t = scenarioTitle.toLowerCase();
+  if (t.includes("significantly late"))
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling because our team is running more than two hours behind schedule today.\n\nWe sincerely apologize for the inconvenience. We'd like to offer you the option to keep the appointment at the later time or reschedule at no charge.\n\nWhich would you prefer?`;
+  if (t.includes("late"))
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling to let you know our team is running a bit behind schedule today.\n\nWe appreciate your patience and will keep you posted on the updated arrival time.\n\nIs there anything you need from us in the meantime?`;
+  if (t.includes("access"))
+    return `Hi ${first}, this is Ava from Maids in Black. Our team is at or near your address and we need help with access.\n\nCan you confirm the best way to get in — lockbox, front desk, gate code, or parking instructions?\n\nI'll update the team right away so they can get started.`;
+  if (t.includes("parking"))
+    return `Hi ${first}, this is Ava from Maids in Black. Our team is heading to your address and needs parking details before arrival.\n\nCould you share the best parking option — street, garage, or driveway?\n\nThank you!`;
+  if (t.includes("card on file") || t.includes("put card"))
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling because we still need a card on file to secure your cleaning appointment.\n\nThere is no deposit required, but we do need a card saved before dispatch. You can call us or use the secure link we send by text.\n\nWould you like me to send that link now?`;
+  if (t.includes("payment failed"))
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling because the card on file for your upcoming cleaning was declined during pre-authorization.\n\nCould you update your payment method or try the same card again? We want to make sure your appointment is confirmed.\n\nThank you!`;
+  if (t.includes("confirm address"))
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling to confirm the details for your upcoming cleaning.\n\nCould you verify your service address, unit number if any, parking, and entry instructions?\n\nOnce confirmed we'll update your job notes so the team has everything before arrival.`;
+  if (t.includes("scope"))
+    return `Hi ${first}, this is Ava from Maids in Black. Our team noted some additional areas that may need attention during your upcoming cleaning.\n\nI wanted to confirm the scope with you before the team arrives so there are no surprises.\n\nCould you clarify what you'd like included?`;
+  if (t.includes("eta update"))
+    return `Hi ${first}, this is Ava from Maids in Black. I'm calling to give you an update on your cleaning today.\n\nYour team is on their way and should arrive within the scheduled window. Does that still work for you?`;
+  if (t.includes("earlier arrival"))
+    return `Hi ${first}, this is Ava from Maids in Black. Great news — a slot opened up earlier today and we can send your team sooner if you'd like.\n\nWould you prefer the earlier time or keep the original schedule?`;
+  if (t.includes("not ready") || t.includes("turned away"))
+    return `Hi ${first}, this is Ava from Maids in Black. Our team arrived at your address but was unable to start the cleaning.\n\nI'd like to reschedule you as soon as possible. What time works best for you?`;
+  if (t.includes("paused") || t.includes("issue on site"))
+    return `Hi ${first}, this is Ava from Maids in Black. Our team had to pause the cleaning at your home and I wanted to reach out personally.\n\nCould you give us a call back so we can discuss next steps and make sure everything is taken care of?`;
+  // Default / follow-up
+  return `Hi ${first}, this is Ava calling from Maids in Black.\n\nI'm reaching out to follow up and make sure everything is going smoothly with your service.\n\nPlease feel free to call us back or reply to this message if you have any questions. We appreciate your business!\n\nThank you.`;
 }
 
 export type CustomerData = {
@@ -365,13 +392,37 @@ function AiCallComposer({
   const [callTranscript, setCallTranscript] = useState<string | null>(null);
   const [callRecordingUrl, setCallRecordingUrl] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [minimized, setMinimized] = useState(false);
   const [vapiCallId, setVapiCallId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const utils = trpc.useUtils();
 
+  // PTT state (copied from SmsComposer)
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPressing, setIsPressing] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isPttRef = useRef(false);
+
+  // AI rewrite
+  const [isRewriting, setIsRewriting] = useState(false);
+
+  const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
+  const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
+
   const callActive = ["firing", "queued", "ringing", "in_progress"].includes(callStatus);
   const callEnded = ["completed", "voicemail", "no_answer", "failed"].includes(callStatus);
 
+  // Auto-minimize when call goes active, expand when ended
+  useEffect(() => {
+    if (callActive) setMinimized(true);
+    if (callEnded) setMinimized(false);
+  }, [callActive, callEnded]);
+
+  // ── CALL LOGIC (untouched) ────────────────────────────────────────────────
   const startCallMutation = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
       if (result.vapiCallId) {
@@ -431,11 +482,109 @@ function AiCallComposer({
     setCallTranscript(null);
     setCallRecordingUrl(null);
     setShowTranscript(false);
+    setMinimized(false);
+  }
+  // ── END CALL LOGIC ────────────────────────────────────────────────────────
+
+  // ── PTT (copied verbatim from SmsComposer) ────────────────────────────────
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start(100);
+      mediaRecorderRef.current = mr;
+      isPttRef.current = true;
+      setIsPressing(false);
+      setIsRecording(true);
+      setVoiceSeconds(0);
+      timerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
+    } catch { toast.error("Microphone access denied"); }
+  }, []);
+
+  const stopRecording = useCallback(async () => {
+    const mr = mediaRecorderRef.current;
+    if (!mr) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+    setIsPressing(false);
+    isPttRef.current = false;
+    setIsTranscribing(true);
+    await new Promise<void>(resolve => {
+      mr.onstop = () => resolve();
+      try { mr.requestData(); } catch { /* ignore */ }
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+    });
+    try {
+      const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+      if (blob.size === 0) { toast.warning("No audio captured — hold longer"); return; }
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text } = await transcribeMutation.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      if (text.trim()) setScript(prev => prev ? prev + "\n" + text.trim() : text.trim());
+      else toast.warning("No speech detected — try again");
+    } catch (err: any) {
+      toast.error(err?.message?.length < 200 ? err.message : "Transcription failed");
+    } finally { setIsTranscribing(false); }
+  }, [transcribeMutation]);
+
+  useEffect(() => {
+    const release = () => { if (isPttRef.current) stopRecording(); };
+    document.addEventListener("mouseup", release);
+    document.addEventListener("touchend", release);
+    return () => {
+      document.removeEventListener("mouseup", release);
+      document.removeEventListener("touchend", release);
+    };
+  }, [stopRecording]);
+  // ── END PTT ───────────────────────────────────────────────────────────────
+
+  async function rewrite(tone: "friendly" | "professional" | "casual") {
+    if (!script.trim()) return;
+    setIsRewriting(true);
+    try {
+      const result = await rewriteMutation.mutateAsync({ rawMessage: script, customerName: customer.name, tone });
+      setScript(result.message);
+    } catch { toast.error("Rewrite failed"); }
+    finally { setIsRewriting(false); }
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const statusColor = CALL_STATUS_COLORS[callStatus];
+
+  // ── Minimized pill (shown while call is active) ───────────────────────────
+  if (minimized) {
+    return (
+      <div
+        className="rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white cursor-pointer"
+        style={{ fontFamily: "Inter, sans-serif", minWidth: 280 }}
+        onClick={() => setMinimized(false)}
+      >
+        <div className="px-4 py-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-bold text-sm truncate">{customer.name}</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {callActive && <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: statusColor }} />}
+              <span className="text-[11px] font-bold" style={{ color: statusColor }}>{CALL_STATUS_LABELS[callStatus]}</span>
+            </div>
+            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-white/50 hover:text-white transition-colors ml-1">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-[380px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
@@ -445,12 +594,7 @@ function AiCallComposer({
           <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0"
-            style={{ background: `hsl(${hue}, 55%, 52%)` }}
-          >
-            {initials}
-          </div>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{customer.name}</p>
             <p className="text-blue-300 text-[11px]">{customer.phone}</p>
@@ -458,6 +602,11 @@ function AiCallComposer({
           <span className="shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>
             {CALL_STATUS_LABELS[callStatus]}
           </span>
+          {callActive && (
+            <button onClick={() => setMinimized(true)} className="text-white/50 hover:text-white transition-colors shrink-0" title="Minimize">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          )}
           <button onClick={onClose} className="text-white/50 hover:text-white transition-colors shrink-0">
             <X className="h-4 w-4" />
           </button>
@@ -465,7 +614,7 @@ function AiCallComposer({
       </div>
 
       <div className="px-4 py-3 space-y-3 max-h-[70vh] overflow-y-auto">
-        {/* Scenario chips */}
+        {/* Scenario chips — only when idle */}
         {callStatus === "idle" && (
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Call reason</p>
@@ -473,15 +622,10 @@ function AiCallComposer({
               {CALL_SCENARIOS.map(s => (
                 <button
                   key={s.title}
-                  onClick={() => {
-                    setSelectedScenario(s.title);
-                    setScript(buildCallScript(customer.name, s.title));
-                  }}
+                  onClick={() => { setSelectedScenario(s.title); setScript(buildCallScript(customer.name, s.title)); }}
                   className={cn(
                     "text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors",
-                    selectedScenario === s.title
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                    selectedScenario === s.title ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                   )}
                 >
                   {s.title}
@@ -491,15 +635,12 @@ function AiCallComposer({
           </div>
         )}
 
-        {/* Script editor */}
+        {/* Script editor — only when idle */}
         {callStatus === "idle" && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Script — edit before calling</p>
-              <button
-                onClick={() => { navigator.clipboard.writeText(script); toast.success("Copied"); }}
-                className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1"
-              >
+              <button onClick={() => { navigator.clipboard.writeText(script); toast.success("Copied"); }} className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1">
                 <Copy className="h-3 w-3" /> Copy
               </button>
             </div>
@@ -509,21 +650,32 @@ function AiCallComposer({
               rows={6}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
             />
-            <button
-              onClick={() => setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"))}
-              className="mt-1.5 text-[11px] text-slate-400 hover:text-slate-600 flex items-center gap-1"
-            >
-              <RefreshCw className="h-3 w-3" /> Softer tone
-            </button>
+            {/* Tone rewrite chips */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {(["friendly", "professional", "casual"] as const).map(tone => (
+                <button
+                  key={tone}
+                  onClick={() => rewrite(tone)}
+                  disabled={isRewriting || !script.trim()}
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                >
+                  {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+                  {tone === "friendly" ? "😊 Friendlier" : tone === "professional" ? "👔 Professional" : "💬 Shorter"}
+                </button>
+              ))}
+              <button
+                onClick={() => setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"))}
+                className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1"
+              >
+                <RefreshCw className="h-2.5 w-2.5" /> Softer
+              </button>
+            </div>
           </div>
         )}
 
         {/* Live call status */}
         {callStatus !== "idle" && (
-          <div
-            className="rounded-2xl px-4 py-3 flex items-center gap-3"
-            style={{ background: `${statusColor}11`, border: `1px solid ${statusColor}33` }}
-          >
+          <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: `${statusColor}11`, border: `1px solid ${statusColor}33` }}>
             {callActive && <div className="w-2.5 h-2.5 rounded-full shrink-0 animate-pulse" style={{ background: statusColor }} />}
             <span className="text-sm font-bold" style={{ color: statusColor }}>{CALL_STATUS_LABELS[callStatus]}</span>
           </div>
@@ -538,37 +690,42 @@ function AiCallComposer({
         )}
 
         {/* Recording */}
-        {callRecordingUrl && (
-          <audio controls src={callRecordingUrl} className="w-full h-8" />
-        )}
+        {callRecordingUrl && <audio controls src={callRecordingUrl} className="w-full h-8" />}
 
         {/* Transcript */}
         {callTranscript && (
           <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <button
-              onClick={() => setShowTranscript(v => !v)}
-              className="w-full px-3 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 flex justify-between items-center"
-            >
-              <span>Transcript</span>
-              <span>{showTranscript ? "▲ Hide" : "▼ Show"}</span>
+            <button onClick={() => setShowTranscript(v => !v)} className="w-full px-3 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 flex justify-between items-center">
+              <span>Transcript</span><span>{showTranscript ? "▲ Hide" : "▼ Show"}</span>
             </button>
-            {showTranscript && (
-              <pre className="text-[11px] text-slate-600 whitespace-pre-wrap px-3 pb-3 max-h-40 overflow-y-auto leading-relaxed">{callTranscript}</pre>
-            )}
+            {showTranscript && <pre className="text-[11px] text-slate-600 whitespace-pre-wrap px-3 pb-3 max-h-40 overflow-y-auto leading-relaxed">{callTranscript}</pre>}
           </div>
         )}
       </div>
 
-      {/* Footer */}
+      {/* Footer: PTT mic + fire/done buttons */}
       <div className="px-4 pb-4 pt-2 flex gap-2 border-t border-slate-100">
+        {callStatus === "idle" && (
+          <button
+            onMouseDown={() => { setIsPressing(true); startRecording(); }}
+            onTouchStart={(e) => { e.preventDefault(); setIsPressing(true); startRecording(); }}
+            disabled={isTranscribing}
+            className={cn(
+              "w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all select-none",
+              isRecording ? "bg-red-500 shadow-lg shadow-red-500/40 scale-110" : isPressing ? "bg-indigo-600 scale-105" : "bg-gradient-to-br from-indigo-500 to-purple-600 hover:scale-105",
+              isTranscribing && "opacity-50 cursor-not-allowed"
+            )}
+            title="Hold to dictate script"
+          >
+            {isTranscribing ? <Loader2 className="h-4 w-4 text-white animate-spin" /> : isRecording ? (
+              <span className="flex flex-col items-center gap-0"><MicOff className="h-4 w-4 text-white" /><span className="text-white text-[8px] font-bold leading-none">{voiceSeconds}s</span></span>
+            ) : <Mic className="h-4 w-4 text-white" />}
+          </button>
+        )}
         {callEnded ? (
           <>
-            <button onClick={resetCall} className="flex-1 h-11 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">
-              Call again
-            </button>
-            <button onClick={onClose} className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all">
-              Done
-            </button>
+            <button onClick={resetCall} className="flex-1 h-11 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">Call again</button>
+            <button onClick={onClose} className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all">Done</button>
           </>
         ) : (
           <button
@@ -577,11 +734,7 @@ function AiCallComposer({
             className="flex-1 h-11 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: callActive ? CALL_STATUS_COLORS[callStatus] : "#16a34a" }}
           >
-            {callActive ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /> {CALL_STATUS_LABELS[callStatus]}</>
-            ) : (
-              <><Phone className="h-4 w-4" /> Start AI Call</>
-            )}
+            {callActive ? <><Loader2 className="h-4 w-4 animate-spin" /> {CALL_STATUS_LABELS[callStatus]}</> : <><Phone className="h-4 w-4" /> Start AI Call</>}
           </button>
         )}
       </div>
