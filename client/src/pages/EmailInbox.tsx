@@ -15,7 +15,7 @@ import {
   Mail, Search, Paperclip, Link2, Send, RefreshCw,
   Loader2, AlertCircle, Archive, MailOpen, MailCheck, Plus, Sparkles, Flag, X, FileText,
   UserCheck, ChevronDown, CheckCircle2, ChevronRight, ShieldOff, ShieldCheck, Settings,
-  MoreHorizontal, UserPlus,
+  MoreHorizontal, UserPlus, Mic, Wand2,
 } from "lucide-react";
 import { useOpsStream } from "@/hooks/useOpsStream";
 import {
@@ -1143,6 +1143,75 @@ export default function EmailInbox() {
   const agentsQuery = trpc.gmail.listAgentsForAssignment.useQuery(undefined, { staleTime: 120_000, retry: false, enabled: statusQuery.data?.connected === true });
   const [assignDropdownOpen, setAssignDropdownOpen] = useState<string | null>(null); // threadId of open dropdown
   const [showTemplates, setShowTemplates] = useState(false);
+
+  // ---------------------------------------------------------------------------
+  // Voice-to-email state
+  // ---------------------------------------------------------------------------
+  const [voiceIsRecording, setVoiceIsRecording] = useState(false);
+  const [voiceIsTranscribing, setVoiceIsTranscribing] = useState(false);
+  const [voiceIsRewriting, setVoiceIsRewriting] = useState(false);
+  const [voiceTone, setVoiceTone] = useState<"friendly" | "professional" | "casual">("friendly");
+  const [showVoiceImprove, setShowVoiceImprove] = useState(false);
+  const voiceMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceAudioChunksRef = useRef<Blob[]>([]);
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const voiceIsPttRef = useRef(false);
+
+  const transcribeVoiceMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
+  const rewriteEmailMutation = trpc.gmail.rewriteEmailDraft.useMutation();
+
+  const startVoiceRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      voiceAudioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) voiceAudioChunksRef.current.push(e.data); };
+      mr.start(100);
+      voiceMediaRecorderRef.current = mr;
+      setVoiceIsRecording(true);
+      setVoiceSeconds(0);
+      voiceTimerRef.current = setInterval(() => setVoiceSeconds(s => s + 1), 1000);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  }, []);
+
+  const stopVoiceRecording = useCallback(async () => {
+    const mr = voiceMediaRecorderRef.current;
+    if (!mr) return;
+    if (voiceTimerRef.current) clearInterval(voiceTimerRef.current);
+    setVoiceIsRecording(false);
+    voiceIsPttRef.current = false;
+    setVoiceIsTranscribing(true);
+    await new Promise<void>(resolve => {
+      mr.onstop = () => resolve();
+      mr.stop();
+      mr.stream.getTracks().forEach(t => t.stop());
+    });
+    try {
+      const blob = new Blob(voiceAudioChunksRef.current, { type: "audio/webm" });
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const { text } = await transcribeVoiceMutation.mutateAsync({ dataBase64, mimeType: "audio/webm" });
+      if (text.trim()) {
+        setReplyText(text.trim());
+        setShowVoiceImprove(true);
+        setVoiceTone("friendly");
+      } else {
+        toast.warning("No speech detected — try again");
+      }
+    } catch {
+      toast.error("Transcription failed");
+    } finally {
+      setVoiceIsTranscribing(false);
+    }
+  }, [transcribeVoiceMutation]);
+
   // Glance panel state: which category is active as a filter
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
   const [glancePanelOpen, setGlancePanelOpen] = useState(false);
@@ -1422,6 +1491,7 @@ export default function EmailInbox() {
     setSelectedThreadId(threadId);
     setReplyText("");
     setReplyMode("reply");
+    setShowVoiceImprove(false);
     const thread = threadsQuery.data?.threads.find((t) => t.id === threadId);
     if (effectiveIsUnread(thread ?? { isUnread: false } as any)) {
       // Mark locally read immediately — UI updates before API responds
@@ -2442,6 +2512,85 @@ export default function EmailInbox() {
                         ))}
                       </div>
                     )}
+                    {/* Voice recording indicator */}
+                    <AnimatePresence>
+                      {voiceIsRecording && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.15 }}
+                          className="flex items-center gap-2 px-4 py-2 bg-red-50 border-b border-red-100"
+                        >
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                          <span className="text-xs font-semibold text-red-600">Recording… {voiceSeconds}s</span>
+                          <span className="text-xs text-red-400">Release to transcribe</span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    {/* AI improve panel — shown after transcription */}
+                    <AnimatePresence>
+                      {showVoiceImprove && replyMode === "reply" && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                          className="border-b border-slate-100 px-4 py-3 bg-slate-50"
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Wand2 className="w-3.5 h-3.5 text-violet-500" />
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">AI Improve</span>
+                            <button
+                              onClick={() => setShowVoiceImprove(false)}
+                              className="ml-auto text-slate-300 hover:text-slate-500 transition"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="flex gap-2">
+                            {(["friendly", "professional", "casual"] as const).map(tone => (
+                              <button
+                                key={tone}
+                                disabled={voiceIsRewriting}
+                                onClick={async () => {
+                                  if (!replyText.trim() || voiceIsRewriting) return;
+                                  setVoiceTone(tone);
+                                  setVoiceIsRewriting(true);
+                                  try {
+                                    const result = await rewriteEmailMutation.mutateAsync({
+                                      rawDraft: replyText,
+                                      recipientName: selectedThread?.from?.split(" ")[0] ?? undefined,
+                                      tone,
+                                      context: threadQuery.data?.subject ?? undefined,
+                                    });
+                                    setReplyText(result.message);
+                                  } catch {
+                                    toast.error("Rewrite failed");
+                                  } finally {
+                                    setVoiceIsRewriting(false);
+                                  }
+                                }}
+                                className={cn(
+                                  "flex-1 rounded-xl py-1.5 text-xs font-semibold transition border",
+                                  voiceTone === tone && !voiceIsRewriting
+                                    ? "bg-slate-900 text-white border-slate-900"
+                                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900"
+                                )}
+                              >
+                                {voiceIsRewriting && voiceTone === tone ? (
+                                  <span className="flex items-center justify-center gap-1">
+                                    <Loader2 className="h-3 w-3 animate-spin" /> Rewriting…
+                                  </span>
+                                ) : (
+                                  tone === "friendly" ? "😊 Friendly" : tone === "professional" ? "👔 Professional" : "💬 Casual"
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                     <Textarea
                       value={replyText}
                       onChange={(e) => setReplyText(e.target.value)}
@@ -2490,6 +2639,34 @@ export default function EmailInbox() {
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <Sparkles className="w-3.5 h-3.5" />}
                             {draftMutation.isPending ? "Drafting…" : "AI Draft"}
+                          </button>
+                        )}
+                        {/* Voice-to-email PTT button */}
+                        {replyMode === "reply" && (
+                          <button
+                            className={cn(
+                              "shrink-0 h-8 w-8 rounded-full border-2 flex items-center justify-center transition-all select-none",
+                              voiceIsRecording
+                                ? "border-red-500 bg-red-500 text-white animate-pulse"
+                                : voiceIsTranscribing
+                                ? "border-violet-300 bg-violet-50 text-violet-400 cursor-wait"
+                                : "border-slate-200 bg-white hover:border-violet-400 hover:text-violet-600 text-slate-400"
+                            )}
+                            title="Hold to record voice reply"
+                            disabled={voiceIsTranscribing}
+                            onMouseDown={(e) => { e.preventDefault(); if (!voiceIsPttRef.current && !voiceIsTranscribing) { voiceIsPttRef.current = true; startVoiceRecording(); } }}
+                            onMouseUp={() => { if (voiceIsPttRef.current) stopVoiceRecording(); }}
+                            onMouseLeave={() => { if (voiceIsPttRef.current) stopVoiceRecording(); }}
+                            onTouchStart={(e) => { e.preventDefault(); if (!voiceIsPttRef.current && !voiceIsTranscribing) { voiceIsPttRef.current = true; startVoiceRecording(); } }}
+                            onTouchEnd={() => { if (voiceIsPttRef.current) stopVoiceRecording(); }}
+                          >
+                            {voiceIsRecording ? (
+                              <span className="w-2.5 h-2.5 rounded-full bg-white" />
+                            ) : voiceIsTranscribing ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <Mic className="h-3.5 w-3.5" />
+                            )}
                           </button>
                         )}
                         {/* Template picker */}

@@ -1034,6 +1034,39 @@ Write the reply now:`;
       return { success: true, threadsReResolved: updated };
     }),
 
+  /**
+   * Rewrite a voice-transcribed email draft with a specific tone.
+   * Mirrors opsChat.rewriteVoiceMessage but uses email-appropriate prompting.
+   */
+  rewriteEmailDraft: agentProcedure
+    .input(z.object({
+      rawDraft: z.string().min(1).max(2000),
+      recipientName: z.string().min(1).max(100).optional(),
+      tone: z.enum(["friendly", "professional", "casual"]),
+      context: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const toneInstructions: Record<string, string> = {
+        friendly: `Tone: FRIENDLY. Warm, personal, and upbeat. Use the recipient's name if known.\nInclude 1-2 emoji placed naturally (e.g. \ud83d\ude0a \ud83d\udc4b \ud83d\ude4f). A friendly email with zero emoji is wrong.\nFeel complete and warm.`,
+        professional: `Tone: PROFESSIONAL. Polished, clear, and concise. No emoji.\nFormal but not cold. Sounds like a well-run business communicating professionally.`,
+        casual: `Tone: CASUAL. Short and conversational.\n2-4 sentences max. No corporate language. Natural and relaxed. 0-1 emoji max.`,
+      };
+
+      const systemPrompt = `You are an expert email writer for a residential cleaning company.\nYou rewrite rough voice-dictated drafts into polished email replies.\n${toneInstructions[input.tone]}\n\nRules:\n- Write ONLY the email body text. No subject line, no salutation, no sign-off.\n- Keep it concise.\n- Preserve all factual details from the original draft (dates, prices, names).\n- Do not add information that wasn't in the original draft.`;
+
+      const userPrompt = `${input.recipientName ? `Recipient: ${input.recipientName}\n` : ""}${input.context ? `Thread context: ${input.context}\n` : ""}Voice draft to rewrite: ${input.rawDraft}`;
+
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      const rewritten = ((result.choices[0].message.content as string) ?? "").trim();
+      return { message: rewritten };
+    }),
+
   /** Set up Gmail Pub/Sub watch — call once after OAuth, then renew before expiry */
   setupWatch: agentProcedure.mutation(async () => {
     const topicName = ENV.gmailPubsubTopic;
