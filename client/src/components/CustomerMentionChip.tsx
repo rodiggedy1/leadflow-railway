@@ -158,6 +158,7 @@ function SmsComposer({
 
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
+  const transformMutation = trpc.opsChat.transformMessage.useMutation();
   const sendMutation = trpc.opsChat.startCsConversation.useMutation({
     onSuccess: () => {
       toast.success(`SMS sent to ${customer.name}`);
@@ -307,19 +308,47 @@ function SmsComposer({
               {tone === "friendly" ? "😊 Friendlier" : tone === "professional" ? "👔 Professional" : "💬 Shorter"}
             </button>
           ))}
+          <div className="w-px h-4 bg-slate-200 mx-0.5 self-center" />
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide self-center">Translate</span>
           <button
-            onClick={() => rewrite("casual")}
+            onClick={async () => {
+              if (!text.trim()) return;
+              setIsRewriting(true);
+              try {
+                const result = await transformMutation.mutateAsync({
+                  text,
+                  customerName: customer.name,
+                  instruction: "Translate into natural, conversational Latin American Spanish suitable for SMS customer support. Preserve names, addresses, dates, times, prices, URLs, phone numbers, and formatting exactly. Do not explain the translation or add any extra text. Return only the translated message.",
+                });
+                setText(result.message);
+              } catch { toast.error("Translation failed"); }
+              finally { setIsRewriting(false); }
+            }}
             disabled={isRewriting || !text.trim()}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-orange-50 hover:border-orange-300 hover:text-orange-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
           >
-            🇪🇸 Spanish
+            {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+            🇪🇸 Español
           </button>
           <button
-            onClick={() => rewrite("casual")}
+            onClick={async () => {
+              if (!text.trim()) return;
+              setIsRewriting(true);
+              try {
+                const result = await transformMutation.mutateAsync({
+                  text,
+                  customerName: customer.name,
+                  instruction: "Translate into natural Brazilian Portuguese suitable for SMS customer support. Preserve names, addresses, dates, times, prices, URLs, phone numbers, and formatting exactly. Do not explain the translation or add any extra text. Return only the translated message.",
+                });
+                setText(result.message);
+              } catch { toast.error("Translation failed"); }
+              finally { setIsRewriting(false); }
+            }}
             disabled={isRewriting || !text.trim()}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-green-50 hover:border-green-300 hover:text-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
           >
-            🇧🇷 Portuguese
+            {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+            🇧🇷 Português
           </button>
         </div>
       </div>

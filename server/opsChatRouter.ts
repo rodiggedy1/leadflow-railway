@@ -4307,6 +4307,45 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
           })),
       };
     }),
+
+  /**
+   * transformMessage — general-purpose message transformation.
+   * Accepts a free-form `instruction` string so new transformations
+   * (tones, translations, simplifications, etc.) never require backend changes.
+   */
+  transformMessage: opsChatProcedure
+    .input(z.object({
+      text: z.string().min(1).max(1000),
+      customerName: z.string().min(1).max(100),
+      instruction: z.string().min(1).max(500),
+      context: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { invokeLLM } = await import("./_core/llm");
+      const csSystemPrompt = buildSystemPrompt();
+      const systemPrompt = `${csSystemPrompt}
+
+=== TRANSFORMATION INSTRUCTION ===
+${input.instruction}
+
+Rules that ALWAYS apply regardless of instruction:
+- Preserve all names, addresses, dates, times, prices, URLs, and phone numbers exactly as written.
+- Return ONLY the transformed message. No explanation, no preamble, no quotes around the output.
+- If the instruction is a translation, translate the entire message including any emoji or formatting.
+- Never invent new information not present in the original message.`;
+
+      const userPrompt = `Customer name: ${input.customerName}${input.context ? `\nContext: ${input.context}` : ""}\nMessage to transform:\n${input.text}`;
+
+      const result = await invokeLLM({
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      const transformed = ((result.choices[0].message.content as string) ?? "").trim();
+      return { message: transformed };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
