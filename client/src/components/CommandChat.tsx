@@ -7455,30 +7455,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const displayName = session.leadName || session.leadPhone;
                   return (
                     <div key={session.id} className="flex items-stretch group hover:bg-slate-50 transition-colors">
-                      {/* Main row — opens chat */}
+                      {/* Main row — navigates to CS inbox */}
                       <button
                         onClick={() => {
                           setCsSmsOpen(false);
-                          const phone = session.leadPhone ?? "";
-                          const name = session.leadName ?? phone;
-                          if (phone) {
-                            setQuickReplyTarget({
-                              customer: {
-                                phone,
-                                name,
-                                email: null,
-                                address: null,
-                                frequency: null,
-                                lastJobDate: null,
-                                ltv: 0,
-                                totalCleans: 0,
-                                isVip: false,
-                                city: "",
-                              },
-                              view: "sms",
-                              lastMessage: session.lastMessagePreview ?? undefined,
-                            });
-                          } else if (onSwitchToCSSession) {
+                          if (onSwitchToCSSession) {
                             onSwitchToCSSession(session.id);
                           } else if (onSwitchToCS) {
                             onSwitchToCS();
@@ -7506,6 +7487,36 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           </div>
                           <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-orange-500 transition-colors shrink-0 mt-1" />
                         </div>
+                      </button>
+                      {/* ⚡ Quick-reply button — opens composer modal */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCsSmsOpen(false);
+                          const phone = session.leadPhone ?? "";
+                          const name = session.leadName ?? phone;
+                          setQuickReplyTarget({
+                            customer: {
+                              phone,
+                              name,
+                              email: null,
+                              address: null,
+                              frequency: null,
+                              lastJobDate: null,
+                              ltv: 0,
+                              totalCleans: 0,
+                              isVip: false,
+                              city: "",
+                            },
+                            view: "sms",
+                            lastMessage: session.lastMessagePreview ?? undefined,
+                          });
+                        }}
+                        title="Quick Reply"
+                        className="flex items-center gap-1 px-2.5 shrink-0 border-l border-slate-100 text-slate-400 hover:text-orange-600 hover:bg-orange-50 transition-colors text-[11px] font-semibold"
+                      >
+                        <span>⚡</span>
+                        <span>Reply</span>
                       </button>
                       {/* Quick-resolve button — resolves without opening chat */}
                       <button
@@ -7681,57 +7692,72 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const mins = Math.floor((Date.now() - Number(thread.date)) / 60_000);
                   const timeLabel = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
                   return (
-                    <button
-                      key={thread.id}
-                      onClick={() => {
-                        setEmailsOpen(false);
-                        const fromEmail = thread.fromEmail ?? thread.from ?? "";
-                        const fromName = thread.from ?? fromEmail;
-                        setQuickReplyTarget({
-                          customer: {
-                            phone: "",
-                            name: fromName,
-                            email: fromEmail,
-                            address: null,
-                            frequency: null,
-                            lastJobDate: null,
-                            ltv: 0,
-                            totalCleans: 0,
-                            isVip: false,
-                            city: "",
-                          },
-                          view: "email",
-                          lastMessage: thread.snippet || thread.subject || undefined,
-                          emailSubject: thread.subject ? `Re: ${thread.subject}` : undefined,
-                        });
-                      }}
-                      className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
-                    >
-                      <div className="flex items-start gap-2.5">
-                        {/* Unread dot */}
-                        <div className={cn(
-                          "mt-1.5 h-2 w-2 rounded-full shrink-0 transition-colors",
-                          thread.isUnread ? "bg-blue-500" : "bg-slate-200"
-                        )} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <span className={cn(
-                              "text-sm truncate",
-                              thread.isUnread ? "font-semibold text-slate-900" : "font-medium text-slate-600"
-                            )}>{thread.from || thread.fromEmail}</span>
-                            <span className="text-[10px] text-slate-400 shrink-0">{timeLabel}</span>
+                    <div key={thread.id} className="flex items-stretch group hover:bg-slate-50 transition-colors">
+                      {/* Main row — navigates to email inbox */}
+                      <button
+                        onClick={() => {
+                          setEmailsOpen(false);
+                          window.location.href = `/admin/inbox?thread=${encodeURIComponent(thread.id)}`;
+                        }}
+                        className="flex-1 text-left px-4 py-3 min-w-0"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          {/* Unread dot */}
+                          <div className={cn(
+                            "mt-1.5 h-2 w-2 rounded-full shrink-0 transition-colors",
+                            thread.isUnread ? "bg-blue-500" : "bg-slate-200"
+                          )} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <span className={cn(
+                                "text-sm truncate",
+                                thread.isUnread ? "font-semibold text-slate-900" : "font-medium text-slate-600"
+                              )}>{thread.from || thread.fromEmail}</span>
+                              <span className="text-[10px] text-slate-400 shrink-0">{timeLabel}</span>
+                            </div>
+                            <p className={cn(
+                              "text-xs truncate mb-0.5",
+                              thread.isUnread ? "font-semibold text-slate-800" : "text-slate-600"
+                            )}>{thread.subject}</p>
+                            {thread.snippet && (
+                              <p className="text-[11px] text-slate-400 truncate">{thread.snippet}</p>
+                            )}
                           </div>
-                          <p className={cn(
-                            "text-xs truncate mb-0.5",
-                            thread.isUnread ? "font-semibold text-slate-800" : "text-slate-600"
-                          )}>{thread.subject}</p>
-                          {thread.snippet && (
-                            <p className="text-[11px] text-slate-400 truncate">{thread.snippet}</p>
-                          )}
+                          <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500 transition-colors shrink-0 mt-1" />
                         </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-blue-500 transition-colors shrink-0 mt-1" />
-                      </div>
-                    </button>
+                      </button>
+                      {/* ⚡ Quick-reply button — opens composer modal */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEmailsOpen(false);
+                          const fromEmail = thread.fromEmail ?? thread.from ?? "";
+                          const fromName = thread.from ?? fromEmail;
+                          setQuickReplyTarget({
+                            customer: {
+                              phone: "",
+                              name: fromName,
+                              email: fromEmail,
+                              address: null,
+                              frequency: null,
+                              lastJobDate: null,
+                              ltv: 0,
+                              totalCleans: 0,
+                              isVip: false,
+                              city: "",
+                            },
+                            view: "email",
+                            lastMessage: thread.snippet || thread.subject || undefined,
+                            emailSubject: thread.subject ? `Re: ${thread.subject}` : undefined,
+                          });
+                        }}
+                        title="Quick Reply"
+                        className="flex items-center gap-1 px-2.5 shrink-0 border-l border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors text-[11px] font-semibold"
+                      >
+                        <span>⚡</span>
+                        <span>Reply</span>
+                      </button>
+                    </div>
                   );
                 })}
               </div>
