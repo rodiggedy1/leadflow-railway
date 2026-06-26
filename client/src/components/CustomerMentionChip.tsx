@@ -1307,7 +1307,19 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
   );
 
   const customers: CustomerData[] = data?.customers ?? [];
-  const resolvedCustomer = selected ?? (customers.length === 1 ? customers[0] : null);
+  const noCustomerFound = !isLoading && customers.length === 0;
+
+  // Fallback: if no customer found by phone, try searching cleaners by name
+  const { data: cleanerData, isLoading: cleanerLoading } = trpc.opsChat.searchCleaners.useQuery(
+    { query: name },
+    { staleTime: 300_000, retry: false, enabled: noCustomerFound && (open || session !== null) }
+  );
+  const cleanerMatch: CustomerData | null = cleanerData?.cleaners?.[0]
+    ? { ...cleanerData.cleaners[0], ltv: 0, totalCleans: 0, city: null, frequency: null, isVip: false }
+    : null;
+
+  const resolvedCustomer = selected ?? (customers.length === 1 ? customers[0] : null) ?? (noCustomerFound ? cleanerMatch : null);
+  const combinedLoading = isLoading || (noCustomerFound && cleanerLoading);
 
   const hue = Math.abs(phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -1365,7 +1377,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
         data-chip-modal
         style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
       >
-        {isLoading ? (
+        {combinedLoading ? (
           <div className="w-[420px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-12 gap-2 text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Loading…</span>
