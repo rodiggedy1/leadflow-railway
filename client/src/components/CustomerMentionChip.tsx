@@ -2,6 +2,7 @@
  * CustomerMentionChip — renders a @CustomerName chip in chat messages.
  * Click to open a modal card centered in the viewport.
  * Text button slides into an SMS composer view (reuses startCsConversation + PTT + tone rewrite).
+ * AI Call button slides into a call composer view backed by useCallSession.
  * Click outside / Escape / X to close.
  */
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -10,38 +11,37 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Phone, Mail, MessageSquare, History, Star, Loader2, X, ChevronLeft, Mic, MicOff, Send, RefreshCw, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCallSession, CallSession, CallStatus, StartCallParams } from "@/hooks/useCallSession";
 
-// ─── AI Call types (mirrored from AICallPanel) ────────────────────────────────
-type CallStatus = "idle" | "firing" | "queued" | "ringing" | "in_progress" | "completed" | "voicemail" | "no_answer" | "failed";
+// ─── Call status display maps ─────────────────────────────────────────────────
 const CALL_STATUS_COLORS: Record<CallStatus, string> = {
-  idle: "#8f98aa", firing: "#f3c96b", queued: "#7bb7ff",
+  firing: "#f3c96b", queued: "#7bb7ff",
   ringing: "#f3c96b", in_progress: "#63d297", completed: "#63d297",
-  voicemail: "#8f98aa", no_answer: "#ff6b6b", failed: "#ff6b6b",
+  voicemail: "#8f98aa", no_answer: "#ff6b6b", failed: "#ff6b6b", canceled: "#8f98aa",
 };
 const CALL_STATUS_LABELS: Record<CallStatus, string> = {
-  idle: "Ready", firing: "Connecting…", queued: "Queued…",
-  ringing: "Ringing…", in_progress: "In call…", completed: "Call completed",
-  voicemail: "Left voicemail", no_answer: "No answer", failed: "Call failed",
+  firing: "Connecting…", queued: "Queued…",
+  ringing: "Ringing…", in_progress: "In call…", completed: "Completed",
+  voicemail: "Voicemail", no_answer: "No answer", failed: "Call failed", canceled: "Canceled",
 };
 
-// Customer-facing call scenarios (same list as AICallPanel)
+// ─── Call scenarios ───────────────────────────────────────────────────────────
 const CALL_SCENARIOS = [
-  { title: "Team running late", tag: "Urgent", tagColor: "#ef4444", description: "Apologize, give updated ETA, ask flexibility, offer status text." },
-  { title: "Running significantly late", tag: "Urgent", tagColor: "#ef4444", description: "Team is 2+ hrs behind — offer to keep or reschedule." },
-  { title: "Team at address / access needed", tag: "Now", tagColor: "#f97316", description: "Ask how to access home, lockbox, gate, concierge, parking." },
-  { title: "Parking instructions", tag: "Now", tagColor: "#f97316", description: "Team is heading over — need parking details before arrival." },
-  { title: "Put card on file", tag: "Payment", tagColor: "#8b5cf6", description: "Ask client to call Maids in Black or securely add a card before service." },
-  { title: "Payment failed", tag: "Payment", tagColor: "#8b5cf6", description: "Card pre-auth declined — need new card or retry same card." },
-  { title: "Confirm address", tag: "Prep", tagColor: "#3b82f6", description: "Verify address, unit, parking, and entry instructions." },
-  { title: "Scope clarification", tag: "Prep", tagColor: "#3b82f6", description: "Extra areas noted — confirm scope before team arrives." },
-  { title: "Client ETA update", tag: "Update", tagColor: "#10b981", description: "Tell client cleaner ETA and confirm window still works." },
-  { title: "Earlier arrival available", tag: "Update", tagColor: "#10b981", description: "Slot opened up earlier — offer customer the option to move up." },
-  { title: "Home not ready / team turned away", tag: "Issue", tagColor: "#f59e0b", description: "Team arrived but couldn't start — reschedule immediately." },
-  { title: "Job paused — issue on site", tag: "Issue", tagColor: "#f59e0b", description: "Team stopped mid-clean — inform customer and decide next step." },
-  { title: "Follow up / check-in", tag: "General", tagColor: "#6366f1", description: "General follow-up call to check on the customer." },
+  { title: "Team running late", tag: "Urgent", tagColor: "#ef4444" },
+  { title: "Running significantly late", tag: "Urgent", tagColor: "#ef4444" },
+  { title: "Team at address / access needed", tag: "Now", tagColor: "#f97316" },
+  { title: "Parking instructions", tag: "Now", tagColor: "#f97316" },
+  { title: "Put card on file", tag: "Payment", tagColor: "#8b5cf6" },
+  { title: "Payment failed", tag: "Payment", tagColor: "#8b5cf6" },
+  { title: "Confirm address", tag: "Prep", tagColor: "#3b82f6" },
+  { title: "Scope clarification", tag: "Prep", tagColor: "#3b82f6" },
+  { title: "Client ETA update", tag: "Update", tagColor: "#10b981" },
+  { title: "Earlier arrival available", tag: "Update", tagColor: "#10b981" },
+  { title: "Home not ready / team turned away", tag: "Issue", tagColor: "#f59e0b" },
+  { title: "Job paused — issue on site", tag: "Issue", tagColor: "#f59e0b" },
+  { title: "Follow up / check-in", tag: "General", tagColor: "#6366f1" },
 ];
 
-// Exact script logic copied from AICallPanel.buildScript
 function buildCallScript(name: string, scenarioTitle: string): string {
   const first = name.split(" ")[0];
   const t = scenarioTitle.toLowerCase();
@@ -69,7 +69,6 @@ function buildCallScript(name: string, scenarioTitle: string): string {
     return `Hi ${first}, this is Ava from Maids in Black. Our team arrived at your address but was unable to start the cleaning.\n\nI'd like to reschedule you as soon as possible. What time works best for you?`;
   if (t.includes("paused") || t.includes("issue on site"))
     return `Hi ${first}, this is Ava from Maids in Black. Our team had to pause the cleaning at your home and I wanted to reach out personally.\n\nCould you give us a call back so we can discuss next steps and make sure everything is taken care of?`;
-  // Default / follow-up
   return `Hi ${first}, this is Ava calling from Maids in Black.\n\nI'm reaching out to follow up and make sure everything is going smoothly with your service.\n\nPlease feel free to call us back or reply to this message if you have any questions. We appreciate your business!\n\nThank you.`;
 }
 
@@ -123,7 +122,6 @@ function SmsComposer({
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
-  // Voice PTT
   const [isRecording, setIsRecording] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -133,7 +131,6 @@ function SmsComposer({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isPttRef = useRef(false);
 
-  // Tone rewrite
   const [isRewriting, setIsRewriting] = useState(false);
 
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
@@ -148,7 +145,6 @@ function SmsComposer({
 
   const firstName = customer.name.split(" ")[0];
 
-  // ── Voice PTT ──────────────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -203,7 +199,6 @@ function SmsComposer({
     }
   }, [transcribeMutation]);
 
-  // Global PTT release
   useEffect(() => {
     const release = () => { if (isPttRef.current) stopRecording(); };
     document.addEventListener("mouseup", release);
@@ -214,25 +209,19 @@ function SmsComposer({
     };
   }, [stopRecording]);
 
-  // ── Tone rewrite ───────────────────────────────────────────────────────────
   async function rewrite(tone: "friendly" | "professional" | "casual") {
     if (!text.trim()) return;
     setIsRewriting(true);
     try {
-      const result = await rewriteMutation.mutateAsync({
-        rawMessage: text,
-        customerName: customer.name,
-        tone,
-      });
+      const result = await rewriteMutation.mutateAsync({ rawMessage: text, customerName: customer.name, tone });
       setText(result.message);
-    } catch (err: any) {
+    } catch {
       toast.error("Rewrite failed");
     } finally {
       setIsRewriting(false);
     }
   }
 
-  // ── Send ───────────────────────────────────────────────────────────────────
   async function handleSend() {
     if (!text.trim() || sending) return;
     setSending(true);
@@ -244,18 +233,12 @@ function SmsComposer({
 
   return (
     <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
-      {/* Header */}
       <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0"
-            style={{ background: `hsl(${hue}, 55%, 52%)` }}
-          >
-            {initials}
-          </div>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{customer.name}</p>
             <p className="text-blue-300 text-[11px]">{customer.phone}</p>
@@ -266,82 +249,64 @@ function SmsComposer({
         </div>
       </div>
 
-      {/* Quick shortcuts */}
-      <div className="px-3 pt-3 pb-1 flex flex-wrap gap-1.5">
-        {SMS_SHORTCUTS.map(s => (
-          <button
-            key={s.label}
-            onClick={() => setText(s.text.replace("{name}", firstName))}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 hover:border-slate-300 transition-colors"
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <div className="px-3 py-3 space-y-2 max-h-[65vh] overflow-y-auto">
+        <div className="flex flex-wrap gap-1.5">
+          {SMS_SHORTCUTS.map(s => (
+            <button
+              key={s.label}
+              onClick={() => setText(s.text.replace("{name}", firstName))}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
 
-      {/* Text area */}
-      <div className="px-3 pt-2">
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder={`Type a text to ${firstName}…`}
-          rows={4}
-          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
+          rows={5}
+          className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
         />
-      </div>
 
-      {/* Tone chips */}
-      <div className="px-3 pt-1.5 pb-1 flex flex-wrap gap-1.5">
-        {(["friendly", "professional", "casual"] as const).map(tone => (
+        <div className="flex flex-wrap gap-1.5">
+          {(["friendly", "professional", "casual"] as const).map(tone => (
+            <button
+              key={tone}
+              onClick={() => rewrite(tone)}
+              disabled={isRewriting || !text.trim()}
+              className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+            >
+              {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
+              {tone === "friendly" ? "😊 Friendlier" : tone === "professional" ? "👔 Professional" : "💬 Shorter"}
+            </button>
+          ))}
           <button
-            key={tone}
-            onClick={() => rewrite(tone)}
+            onClick={() => rewrite("casual")}
             disabled={isRewriting || !text.trim()}
-            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors"
           >
-            {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
-            {tone === "friendly" ? "😊 Friendlier" : tone === "professional" ? "👔 Professional" : "💬 Shorter"}
+            🇪🇸 Spanish
           </button>
-        ))}
-        <button
-          onClick={() => rewrite("friendly")}
-          disabled={isRewriting || !text.trim()}
-          className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          🇪🇸 Spanish
-        </button>
-        <button
-          onClick={async () => {
-            if (!text.trim()) return;
-            setIsRewriting(true);
-            try {
-              const { invokeLLM } = await Promise.resolve(); // placeholder — use rewrite with casual + "translate to Portuguese"
-              const result = await rewriteMutation.mutateAsync({ rawMessage: `Translate to Brazilian Portuguese: ${text}`, customerName: customer.name, tone: "casual" });
-              setText(result.message);
-            } catch { toast.error("Translation failed"); }
-            finally { setIsRewriting(false); }
-          }}
-          disabled={isRewriting || !text.trim()}
-          className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          🇧🇷 Portuguese
-        </button>
+          <button
+            onClick={() => rewrite("casual")}
+            disabled={isRewriting || !text.trim()}
+            className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-40 transition-colors"
+          >
+            🇧🇷 Portuguese
+          </button>
+        </div>
       </div>
 
-      {/* Bottom bar: PTT + Send */}
       <div className="px-3 pb-3 pt-2 flex items-center gap-2">
-        {/* PTT mic button */}
         <button
           onMouseDown={() => { setIsPressing(true); startRecording(); }}
           onTouchStart={(e) => { e.preventDefault(); setIsPressing(true); startRecording(); }}
           disabled={isTranscribing}
           className={cn(
             "w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all select-none",
-            isRecording
-              ? "bg-red-500 shadow-lg shadow-red-500/40 scale-110"
-              : isPressing
-              ? "bg-indigo-600 scale-105"
-              : "bg-gradient-to-br from-indigo-500 to-purple-600 hover:scale-105",
+            isRecording ? "bg-red-500 shadow-lg shadow-red-500/40 scale-110" : isPressing ? "bg-indigo-600 scale-105" : "bg-gradient-to-br from-indigo-500 to-purple-600 hover:scale-105",
             isTranscribing && "opacity-50 cursor-not-allowed"
           )}
           title="Hold to record voice"
@@ -358,7 +323,6 @@ function SmsComposer({
           )}
         </button>
 
-        {/* Send button */}
         <button
           onClick={handleSend}
           disabled={!text.trim() || sending || sendMutation.isPending}
@@ -375,31 +339,36 @@ function SmsComposer({
   );
 }
 
-// ─── AI Call Composer View ───────────────────────────────────────────────────
+// ─── AI Call Composer View (presentational) ───────────────────────────────────
+// This component owns only UI state: script text, selected scenario, PTT, rewrite.
+// All call lifecycle state comes from the parent via props (session, onStartCall, etc.)
 function AiCallComposer({
   customer,
+  session,
+  isPolling,
+  onStartCall,
+  onMinimize,
+  onCancelCall,
+  onDismissSession,
   onBack,
   onClose,
-  onMinimize,
 }: {
   customer: CustomerData;
+  session: CallSession | null;
+  isPolling: boolean;
+  onStartCall: (params: StartCallParams) => Promise<void>;
+  onMinimize: () => void;
+  onCancelCall: () => Promise<void>;
+  onDismissSession: () => void;
   onBack: () => void;
   onClose: () => void;
-  onMinimize?: (c: CustomerData) => void;
 }) {
   const [selectedScenario, setSelectedScenario] = useState(CALL_SCENARIOS[0].title);
   const [script, setScript] = useState(() => buildCallScript(customer.name, CALL_SCENARIOS[0].title));
-  const [callStatus, setCallStatus] = useState<CallStatus>("idle");
-  const [callSummary, setCallSummary] = useState<string | null>(null);
-  const [callTranscript, setCallTranscript] = useState<string | null>(null);
-  const [callRecordingUrl, setCallRecordingUrl] = useState<string | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
-  const [minimized, setMinimized] = useState(false);
-  const [vapiCallId, setVapiCallId] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const utils = trpc.useUtils();
+  const [isFiring, setIsFiring] = useState(false);
 
-  // PTT state (copied from SmsComposer)
+  // PTT state
   const [isRecording, setIsRecording] = useState(false);
   const [isPressing, setIsPressing] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -409,95 +378,29 @@ function AiCallComposer({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isPttRef = useRef(false);
 
-  // AI rewrite
   const [isRewriting, setIsRewriting] = useState(false);
 
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
 
-  const callActive = ["firing", "queued", "ringing", "in_progress"].includes(callStatus);
-  const callEnded = ["completed", "voicemail", "no_answer", "failed"].includes(callStatus);
+  const callStatus = session?.status ?? null;
+  const callPhase = session?.phase ?? null;
+  const isActive = callPhase === "active";
+  const isTerminal = callPhase === "terminal";
+  const statusColor = callStatus ? CALL_STATUS_COLORS[callStatus] : "#8f98aa";
+  const statusLabel = callStatus ? CALL_STATUS_LABELS[callStatus] : "Ready";
 
-  // Auto-minimize when call goes active (notify parent), auto-expand when ended
+  const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  // Auto-minimize when call goes active
   useEffect(() => {
-    if (callActive) {
-      if (onMinimize) {
-        onMinimize(customer);
-      } else {
-        setMinimized(true);
-      }
+    if (isActive) {
+      onMinimize();
     }
-  }, [callActive]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (callEnded) setMinimized(false);
-  }, [callEnded]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── CALL LOGIC (untouched) ────────────────────────────────────────────────
-  const startCallMutation = trpc.callMatrix.startCall.useMutation({
-    onSuccess: (result) => {
-      if (result.vapiCallId) {
-        setVapiCallId(result.vapiCallId);
-        setCallStatus("queued");
-        if (pollRef.current) clearInterval(pollRef.current);
-        pollRef.current = setInterval(async () => {
-          try {
-            const poll = await utils.callMatrix.pollCall.fetch({ vapiCallId: result.vapiCallId! });
-            const s = poll.status as CallStatus;
-            setCallStatus(s);
-            if (poll.summary) setCallSummary(poll.summary);
-            if (poll.transcript) setCallTranscript(poll.transcript);
-            if (poll.recordingUrl) setCallRecordingUrl(poll.recordingUrl);
-            if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
-              if (pollRef.current) clearInterval(pollRef.current);
-              pollRef.current = null;
-            }
-          } catch { /* ignore */ }
-        }, 5000);
-      } else {
-        setCallStatus("failed");
-        toast.error("Call failed to start — no call ID returned");
-      }
-    },
-    onError: (err) => {
-      setCallStatus("failed");
-      toast.error(`Call error: ${err.message}`);
-    },
-  });
-
-  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
-
-  function fireCall() {
-    if (callActive) return;
-    setCallStatus("firing");
-    setCallSummary(null);
-    setCallTranscript(null);
-    setCallRecordingUrl(null);
-    setShowTranscript(false);
-    startCallMutation.mutate({
-      cleanerJobId: 1,
-      jobDate: "",
-      personName: customer.name,
-      phone: customer.phone,
-      scenario: selectedScenario,
-      script: script.trim(),
-      audience: "customer",
-    });
-  }
-
-  function resetCall() {
-    if (pollRef.current) clearInterval(pollRef.current);
-    setCallStatus("idle");
-    setVapiCallId(null);
-    setCallSummary(null);
-    setCallTranscript(null);
-    setCallRecordingUrl(null);
-    setShowTranscript(false);
-    setMinimized(false);
-  }
-  // ── END CALL LOGIC ────────────────────────────────────────────────────────
-
-  // ── PTT (copied verbatim from SmsComposer) ────────────────────────────────
+  // PTT
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -554,7 +457,6 @@ function AiCallComposer({
       document.removeEventListener("touchend", release);
     };
   }, [stopRecording]);
-  // ── END PTT ───────────────────────────────────────────────────────────────
 
   async function rewrite(tone: "friendly" | "professional" | "casual") {
     if (!script.trim()) return;
@@ -566,41 +468,29 @@ function AiCallComposer({
     finally { setIsRewriting(false); }
   }
 
-  const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-  const statusColor = CALL_STATUS_COLORS[callStatus];
+  async function fireCall() {
+    if (session !== null || isFiring) return;
+    setIsFiring(true);
+    try {
+      await onStartCall({
+        cleanerJobId: 1,
+        jobDate: "",
+        personName: customer.name,
+        phone: customer.phone,
+        scenario: selectedScenario,
+        script: script.trim(),
+        audience: "customer",
+      });
+    } catch (err: any) {
+      toast.error(err?.message?.length < 200 ? err.message : "Failed to start call");
+    } finally {
+      setIsFiring(false);
+    }
+  }
 
-  // ── Minimized pill — fixed bottom-right corner ──────────────────────────
-  if (minimized) {
-    return ReactDOM.createPortal(
-      <div
-        className="rounded-2xl overflow-hidden shadow-2xl border border-slate-700 cursor-pointer select-none"
-        style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99999, fontFamily: "Inter, sans-serif", minWidth: 260, background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}
-        onClick={() => setMinimized(false)}
-      >
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white font-bold text-sm truncate">{customer.name}</p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                {callActive && <div className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: statusColor }} />}
-                <span className="text-[11px] font-semibold" style={{ color: statusColor }}>{CALL_STATUS_LABELS[callStatus]}</span>
-              </div>
-            </div>
-            {/* Maximize icon */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-              <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-            </svg>
-            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-white/40 hover:text-white transition-colors shrink-0 ml-1">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
+  function handleCallAgain() {
+    onDismissSession();
+    setShowTranscript(false);
   }
 
   return (
@@ -616,12 +506,14 @@ function AiCallComposer({
             <p className="text-white font-bold text-sm truncate">{customer.name}</p>
             <p className="text-blue-300 text-[11px]">{customer.phone}</p>
           </div>
-          <span className="shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>
-            {CALL_STATUS_LABELS[callStatus]}
-          </span>
-          {callActive && (
+          {session && (
+            <span className="shrink-0 text-[10px] font-black px-2 py-0.5 rounded-full" style={{ background: `${statusColor}22`, color: statusColor, border: `1px solid ${statusColor}44` }}>
+              {statusLabel}
+            </span>
+          )}
+          {isActive && (
             <button
-              onClick={() => { if (onMinimize) { onMinimize(customer); } else { setMinimized(true); } }}
+              onClick={onMinimize}
               className="text-white/50 hover:text-white transition-colors shrink-0"
               title="Minimize"
             >
@@ -635,8 +527,8 @@ function AiCallComposer({
       </div>
 
       <div className="px-4 py-3 space-y-3 max-h-[70vh] overflow-y-auto">
-        {/* Scenario chips — only when idle */}
-        {callStatus === "idle" && (
+        {/* Scenario chips — only when no session */}
+        {!session && (
           <div>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Call reason</p>
             <div className="flex flex-wrap gap-1.5">
@@ -656,8 +548,8 @@ function AiCallComposer({
           </div>
         )}
 
-        {/* Script editor — only when idle */}
-        {callStatus === "idle" && (
+        {/* Script editor — only when no session */}
+        {!session && (
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Script — edit before calling</p>
@@ -671,7 +563,6 @@ function AiCallComposer({
               rows={6}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
             />
-            {/* Tone rewrite chips */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               {(["friendly", "professional", "casual"] as const).map(tone => (
                 <button
@@ -695,38 +586,49 @@ function AiCallComposer({
         )}
 
         {/* Live call status */}
-        {callStatus !== "idle" && (
+        {session && (
           <div className="rounded-2xl px-4 py-3 flex items-center gap-3" style={{ background: `${statusColor}11`, border: `1px solid ${statusColor}33` }}>
-            {callActive && <div className="w-2.5 h-2.5 rounded-full shrink-0 animate-pulse" style={{ background: statusColor }} />}
-            <span className="text-sm font-bold" style={{ color: statusColor }}>{CALL_STATUS_LABELS[callStatus]}</span>
+            {isActive && <div className="w-2.5 h-2.5 rounded-full shrink-0 animate-pulse" style={{ background: statusColor }} />}
+            <span className="text-sm font-bold" style={{ color: statusColor }}>{statusLabel}</span>
+            {isPolling && <Loader2 className="h-3.5 w-3.5 animate-spin ml-auto" style={{ color: statusColor }} />}
+          </div>
+        )}
+
+        {/* Error */}
+        {session?.outcome?.error && !session?.outcome?.summary && (
+          <div className="rounded-xl bg-red-50 border border-red-200 px-3 py-2.5">
+            <p className="text-[10px] font-bold text-red-500 uppercase tracking-wide mb-1">Error</p>
+            <p className="text-xs text-slate-700 leading-relaxed">{session.outcome.error}</p>
           </div>
         )}
 
         {/* Summary */}
-        {callSummary && (
+        {session?.outcome?.summary && (
           <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
             <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide mb-1">Call summary</p>
-            <p className="text-xs text-slate-700 leading-relaxed">{callSummary}</p>
+            <p className="text-xs text-slate-700 leading-relaxed">{session.outcome?.summary}</p>
           </div>
         )}
 
         {/* Recording */}
-        {callRecordingUrl && <audio controls src={callRecordingUrl} className="w-full h-8" />}
+        {session?.outcome?.recordingUrl && (
+          <audio controls src={session.outcome?.recordingUrl} className="w-full h-8" />
+        )}
 
         {/* Transcript */}
-        {callTranscript && (
+        {session?.outcome?.transcript && (
           <div className="rounded-xl border border-slate-200 overflow-hidden">
             <button onClick={() => setShowTranscript(v => !v)} className="w-full px-3 py-2 text-[11px] font-semibold text-slate-500 hover:bg-slate-50 flex justify-between items-center">
               <span>Transcript</span><span>{showTranscript ? "▲ Hide" : "▼ Show"}</span>
             </button>
-            {showTranscript && <pre className="text-[11px] text-slate-600 whitespace-pre-wrap px-3 pb-3 max-h-40 overflow-y-auto leading-relaxed">{callTranscript}</pre>}
+            {showTranscript && <pre className="text-[11px] text-slate-600 whitespace-pre-wrap px-3 pb-3 max-h-40 overflow-y-auto leading-relaxed">{session.outcome?.transcript}</pre>}
           </div>
         )}
       </div>
 
-      {/* Footer: PTT mic + fire/done buttons */}
+      {/* Footer */}
       <div className="px-4 pb-4 pt-2 flex gap-2 border-t border-slate-100">
-        {callStatus === "idle" && (
+        {!session && (
           <button
             onMouseDown={() => { setIsPressing(true); startRecording(); }}
             onTouchStart={(e) => { e.preventDefault(); setIsPressing(true); startRecording(); }}
@@ -743,19 +645,25 @@ function AiCallComposer({
             ) : <Mic className="h-4 w-4 text-white" />}
           </button>
         )}
-        {callEnded ? (
+        {isTerminal ? (
           <>
-            <button onClick={resetCall} className="flex-1 h-11 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">Call again</button>
+            <button onClick={handleCallAgain} className="flex-1 h-11 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all">Call again</button>
             <button onClick={onClose} className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-bold hover:bg-slate-800 transition-all">Done</button>
           </>
         ) : (
           <button
             onClick={fireCall}
-            disabled={callActive || startCallMutation.isPending || !script.trim()}
+            disabled={session !== null || isFiring || !script.trim()}
             className="flex-1 h-11 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: callActive ? CALL_STATUS_COLORS[callStatus] : "#16a34a" }}
+            style={{ background: session ? statusColor : "#16a34a" }}
           >
-            {callActive ? <><Loader2 className="h-4 w-4 animate-spin" /> {CALL_STATUS_LABELS[callStatus]}</> : <><Phone className="h-4 w-4" /> Start AI Call</>}
+            {session ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> {statusLabel}</>
+            ) : isFiring ? (
+              <><Loader2 className="h-4 w-4 animate-spin" /> Connecting…</>
+            ) : (
+              <><Phone className="h-4 w-4" /> Start AI Call</>
+            )}
           </button>
         )}
       </div>
@@ -797,10 +705,7 @@ function CustomerCard({
           <X className="h-4 w-4" />
         </button>
         <div className="flex items-start gap-3">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg"
-            style={{ background: `hsl(${hue}, 55%, 52%)` }}
-          >
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-black text-lg shrink-0 shadow-lg" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
             {initials}
           </div>
           <div className="flex-1 min-w-0">
@@ -871,14 +776,15 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
   const [view, setView] = useState<"card" | "sms" | "call">("card");
   const [selected, setSelected] = useState<CustomerData | null>(null);
 
-  // Call pill state — lives here so it survives modal close
-  const [callMinimized, setCallMinimized] = useState(false);
-  const [pillCustomer, setPillCustomer] = useState<CustomerData | null>(null);
-  const [pillDismissed, setPillDismissed] = useState(false);
+  // Call session — lives here, survives modal open/close
+  const { session, isPolling, startCall, cancelCall, dismissSession } = useCallSession();
+
+  // Track if we've already auto-reopened for this terminal session
+  const autoReopenedRef = useRef(false);
 
   const { data, isLoading } = trpc.opsChat.searchCustomers.useQuery(
     { query: phone },
-    { staleTime: 300_000, retry: false, enabled: open }
+    { staleTime: 300_000, retry: false, enabled: open || session !== null }
   );
 
   const customers: CustomerData[] = data?.customers ?? [];
@@ -887,18 +793,28 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
   const hue = Math.abs(phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
-  // Close modal but keep pill alive if call is minimized
+  // Auto-reopen modal when call reaches terminal state (once per session)
+  useEffect(() => {
+    if (session?.phase === "terminal" && !autoReopenedRef.current) {
+      autoReopenedRef.current = true;
+      setView("call");
+      setOpen(true);
+    }
+    // Reset the flag when session is cleared
+    if (session === null) {
+      autoReopenedRef.current = false;
+    }
+  }, [session?.phase, session]);
+
   function close() {
     setOpen(false);
     setSelected(null);
     setView("card");
   }
 
-  // Full dismiss — kills pill too
-  function dismissAll() {
-    setPillDismissed(true);
-    setCallMinimized(false);
-    setPillCustomer(null);
+  function handleDismissSession() {
+    dismissSession();
+    autoReopenedRef.current = false;
     close();
   }
 
@@ -906,7 +822,6 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
     if (!open) return;
     function onDown(e: MouseEvent) {
       const target = e.target as Element;
-      // Don't close if clicking inside the modal OR the pill
       if (target.closest("[data-chip-modal]") || target.closest("[data-chip-pill]")) return;
       close();
     }
@@ -929,13 +844,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
       />
       <div
         data-chip-modal
-        style={{
-          position: "fixed",
-          top: "50%",
-          left: "50%",
-          transform: "translate(-50%, -50%)",
-          zIndex: 99999,
-        }}
+        style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
       >
         {isLoading ? (
           <div className="w-[340px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-12 gap-2 text-slate-400">
@@ -948,9 +857,14 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
           ) : view === "call" ? (
             <AiCallComposer
               customer={resolvedCustomer}
+              session={session}
+              isPolling={isPolling}
+              onStartCall={startCall}
+              onMinimize={close}
+              onCancelCall={cancelCall}
+              onDismissSession={handleDismissSession}
               onBack={() => setView("card")}
-              onClose={dismissAll}
-              onMinimize={(c) => { setPillCustomer(c); setCallMinimized(true); setPillDismissed(false); close(); }}
+              onClose={close}
             />
           ) : (
             <CustomerCard customer={resolvedCustomer} onClose={close} onText={() => setView("sms")} onCall={() => setView("call")} />
@@ -992,17 +906,19 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
     document.body
   ) : null;
 
-  // Standalone pill — rendered independently of the modal
-  const pill = callMinimized && pillCustomer && !pillDismissed ? ReactDOM.createPortal(
+  // Pill — shown whenever session exists (active OR terminal), until dismissed
+  const pillSession = session;
+  const pillStatusColor = pillSession ? CALL_STATUS_COLORS[pillSession.status] : "#8f98aa";
+  const pillStatusLabel = pillSession ? CALL_STATUS_LABELS[pillSession.status] : "";
+  const pillIsActive = pillSession?.phase === "active";
+
+  const pill = pillSession ? ReactDOM.createPortal(
     <div
       data-chip-pill
       className="rounded-2xl overflow-hidden shadow-2xl border border-slate-700 cursor-pointer select-none"
       style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99997, fontFamily: "Inter, sans-serif", minWidth: 260, background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}
       onClick={() => {
-        // Re-open modal in call view
-        setSelected(pillCustomer);
         setView("call");
-        setCallMinimized(false);
         setOpen(true);
       }}
     >
@@ -1010,17 +926,24 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
-            style={{ background: `hsl(${Math.abs(pillCustomer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
+            style={{ background: `hsl(${hue}, 55%, 52%)` }}
           >
-            {pillCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-white font-bold text-sm truncate">{pillCustomer.name}</p>
-            <p className="text-blue-300 text-[10px]">AI Call in progress — tap to expand</p>
+            <p className="text-white font-bold text-sm truncate">{pillSession.customerName}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {pillIsActive && <div className="w-1.5 h-1.5 rounded-full animate-pulse shrink-0" style={{ background: pillStatusColor }} />}
+              <span className="text-[11px] font-semibold" style={{ color: pillStatusColor }}>{pillStatusLabel}</span>
+            </div>
           </div>
-          <div className="w-2 h-2 rounded-full animate-pulse shrink-0 bg-green-400" />
+          {/* Maximize icon */}
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+            <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+            <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+          </svg>
           <button
-            onClick={(e) => { e.stopPropagation(); dismissAll(); }}
+            onClick={(e) => { e.stopPropagation(); handleDismissSession(); }}
             className="text-white/40 hover:text-white transition-colors shrink-0 ml-1"
           >
             <X className="h-4 w-4" />
