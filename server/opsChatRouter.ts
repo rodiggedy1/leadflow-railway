@@ -4140,6 +4140,145 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
       broadcastOpsUpdate("new_message", { channel: "command" });
       return { success: true };
     }),
+
+  // ── Customer mention search ───────────────────────────────────────────────
+  /** Search customers by name for @mention autocomplete and auto-detect */
+  searchCustomers: opsChatProcedure
+    .input(z.object({ query: z.string().min(1).max(80) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      const q = `%${input.query.trim()}%`;
+      // Get distinct customers by phone, aggregate stats
+      const rows = await db
+        .select({
+          phone: completedJobs.phone,
+          name: completedJobs.name,
+          firstName: completedJobs.firstName,
+          email: completedJobs.email,
+          address: completedJobs.address,
+          frequency: completedJobs.frequency,
+          lastBookingPrice: completedJobs.lastBookingPrice,
+          jobDate: completedJobs.jobDate,
+        })
+        .from(completedJobs)
+        .where(like(completedJobs.name, q))
+        .orderBy(desc(completedJobs.jobDate))
+        .limit(50);
+
+      // Deduplicate by phone, aggregate LTV + clean count
+      const byPhone = new Map<string, {
+        phone: string; name: string; firstName: string | null;
+        email: string | null; address: string | null;
+        frequency: string | null; lastJobDate: string | null;
+        ltv: number; totalCleans: number;
+      }>();
+      for (const r of rows) {
+        const key = r.phone;
+        const existing = byPhone.get(key);
+        if (existing) {
+          existing.ltv += r.lastBookingPrice ?? 0;
+          existing.totalCleans += 1;
+          if (!existing.lastJobDate || (r.jobDate && r.jobDate > existing.lastJobDate)) {
+            existing.lastJobDate = r.jobDate ?? null;
+          }
+        } else {
+          byPhone.set(key, {
+            phone: key,
+            name: r.name ?? "",
+            firstName: r.firstName ?? null,
+            email: r.email ?? null,
+            address: r.address ?? null,
+            frequency: r.frequency ?? null,
+            lastJobDate: r.jobDate ?? null,
+            ltv: r.lastBookingPrice ?? 0,
+            totalCleans: 1,
+          });
+        }
+      }
+
+      const customers = Array.from(byPhone.values())
+        .sort((a, b) => b.totalCleans - a.totalCleans)
+        .slice(0, 8)
+        .map(c => ({
+          ...c,
+          isVip: c.totalCleans >= 5,
+          city: c.address ? c.address.split(",").slice(-2, -1)[0]?.trim() ?? "" : "",
+        }));
+
+      return { customers };
+    }),
+
+  /** Get AI context summary for a customer mention card */
+  getCustomerContext: opsChatProcedure
+    .input(z.object({ phone: z.string(), name: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+
+      // Get all jobs for this customer
+      const jobs = await db
+        .select({
+          jobDate: completedJobs.jobDate,
+          frequency: completedJobs.frequency,
+          lastBookingPrice: completedJobs.lastBookingPrice,
+          address: completedJobs.address,
+          serviceType: completedJobs.serviceType,
+        })
+        .from(completedJobs)
+        .where(eq(completedJobs.phone, input.phone))
+        .orderBy(desc(completedJobs.jobDate))
+        .limit(10);
+
+      // Get open quotes
+      const p10 = input.phone.replace(/\D/g, "").slice(-10);
+      const openQuotes = await db
+        .select({ id: quoteLeads.id, createdAt: quoteLeads.createdAt, totalPrice: quoteLeads.totalPrice })
+        .from(quoteLeads)
+        .where(sql`REGEXP_REPLACE(${quoteLeads.phone}, '[^0-9]', '') LIKE ${'%' + p10}`)
+        .orderBy(desc(quoteLeads.createdAt))
+        .limit(3);
+
+      const totalCleans = jobs.length;
+      const ltv = jobs.reduce((s, j) => s + (j.lastBookingPrice ?? 0), 0);
+      const lastJob = jobs[0];
+      const frequency = lastJob?.frequency ?? "Unknown";
+
+      // Build AI context summary
+      const { invokeLLM } = await import("./_core/llm");
+      const contextLines = [
+        `Customer: ${input.name}`,
+        `Total cleans: ${totalCleans}`,
+        `LTV: $${ltv}`,
+        `Frequency: ${frequency}`,
+        `Last job: ${lastJob?.jobDate ?? "unknown"}`,
+        openQuotes.length > 0 ? `Open quotes: ${openQuotes.length} (latest: $${openQuotes[0].totalPrice ?? "?"})`  : "No open quotes",
+      ];
+
+      const llmResult = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are a concise CRM assistant for a home cleaning company. Write 2 sentences max. Be specific and actionable. No fluff." },
+          { role: "user", content: `Summarize this customer's situation and recommend the single best next action:\n${contextLines.join("\n")}` },
+        ],
+      });
+
+      const aiSummary = llmResult?.choices?.[0]?.message?.content ?? "";
+
+      // Recent timeline (last 4 events)
+      const timeline = jobs.slice(0, 4).map(j => ({
+        date: j.jobDate ?? "",
+        label: `${j.serviceType ?? "Clean"} — $${j.lastBookingPrice ?? "?"}`,
+      }));
+
+      return {
+        totalCleans,
+        ltv,
+        frequency,
+        lastJobDate: lastJob?.jobDate ?? null,
+        openQuotes: openQuotes.map(q => ({ id: q.id, totalPrice: q.totalPrice })),
+        aiSummary,
+        timeline,
+        isVip: totalCleans >= 5,
+      };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {

@@ -45,6 +45,7 @@ import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AICallPanel from "@/components/AICallPanel";
+import { CustomerMentionChip, renderMessageWithMentions } from "@/components/CustomerMentionChip";
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -2346,43 +2347,7 @@ const MessageList = memo(function MessageList({
                             </button>
                           )}
                           <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
-                            {(() => {
-                              // Token-based renderer: supports **bold**, [text](url), and bare https?:// URLs
-                              const tokens: React.ReactNode[] = [];
-                              // Combined regex: markdown links OR bare URLs (not already inside a markdown link)
-                              const combinedRe = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/[^\s<>"'\]\)]+)/g;
-                              const boldRe = /\*\*([^*]+)\*\*/g;
-                              let lastIdx = 0;
-                              let match: RegExpExecArray | null;
-                              const renderBold = (text: string, keyPrefix: string) => {
-                                const parts: React.ReactNode[] = [];
-                                let bi = 0, bLast = 0;
-                                let bm: RegExpExecArray | null;
-                                boldRe.lastIndex = 0;
-                                while ((bm = boldRe.exec(text)) !== null) {
-                                  if (bm.index > bLast) parts.push(<span key={`${keyPrefix}-t${bi++}`}>{text.slice(bLast, bm.index)}</span>);
-                                  parts.push(<strong key={`${keyPrefix}-b${bi++}`}>{bm[1]}</strong>);
-                                  bLast = bm.index + bm[0].length;
-                                }
-                                if (bLast < text.length) parts.push(<span key={`${keyPrefix}-t${bi}`}>{text.slice(bLast)}</span>);
-                                return parts;
-                              };
-                              combinedRe.lastIndex = 0;
-                              while ((match = combinedRe.exec(msg.body)) !== null) {
-                                if (match.index > lastIdx) tokens.push(...renderBold(msg.body.slice(lastIdx, match.index), `pre-${match.index}`));
-                                if (match[1] !== undefined) {
-                                  // Markdown [text](url)
-                                  tokens.push(<a key={`link-${match.index}`} href={match[2]} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300">{match[1]}</a>);
-                                } else {
-                                  // Bare URL — strip trailing punctuation that's likely not part of the URL
-                                  const rawUrl = match[3].replace(/[.,!?;:]+$/, "");
-                                  tokens.push(<a key={`url-${match.index}`} href={rawUrl} target="_blank" rel="noopener noreferrer" className="underline text-blue-400 hover:text-blue-300 break-all">{rawUrl}</a>);
-                                }
-                                lastIdx = match.index + match[0].length;
-                              }
-                              if (lastIdx < msg.body.length) tokens.push(...renderBold(msg.body.slice(lastIdx), `tail`));
-                              return tokens;
-                            })()}
+                            {renderMessageWithMentions(msg.body, customerMap, `msg-${msg.id}`)}
                           </p>
                           {mediaUrls.length > 0 && (
                             <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
@@ -2656,6 +2621,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [mentionQuery, setMentionQuery] = useState<string | null>(null); // null = closed
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(0); // cursor pos of the '@'
+
+  // Customer @mention — separate query for customer search
+  const [customerMentionQuery, setCustomerMentionQuery] = useState<string | null>(null);
+  const { data: customerMentionResults } = trpc.opsChat.searchCustomers.useQuery(
+    { query: customerMentionQuery ?? "" },
+    { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
+  );
+  // Map of phone → CustomerData for rendering chips in messages
+  const [customerMap, setCustomerMap] = useState<Map<string, import("@/components/CustomerMentionChip").CustomerData[]>>(() => new Map());
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [rightTab, setRightTab] = useState<"leads" | "followups">("leads");
@@ -2882,6 +2856,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const mentionSuggestions = useMemo(
     () => mentionQuery === null ? [] : mentionNames.filter(n => n.toLowerCase().startsWith(mentionQuery.toLowerCase())),
     [mentionNames, mentionQuery]
+  );
+
+  // Customer mention suggestions (separate from agent mentions)
+  const customerSuggestions = useMemo(
+    () => customerMentionQuery === null ? [] : (customerMentionResults?.customers ?? []),
+    [customerMentionQuery, customerMentionResults]
   );
 
   // ── Notification sound + OS notification ──────────────────────────────────────
@@ -3960,7 +3940,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   function doSend() {
     const donePhotos = stagedPhotos.filter(p => p.status === "done" && p.s3Url);
     const mediaUrl = donePhotos.length > 0 ? JSON.stringify(donePhotos.map(p => p.s3Url!)) : undefined;
-    const body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
+    let body = composer.trim() || (donePhotos.length > 0 ? "Photo" : "");
+    // Auto-detect: if body already has @[Name|phone] tokens, ensure customerMap is populated
+    // (tokens were already inserted by the dropdown, so no extra work needed)
     onSendMessage(body, mediaUrl, replyTo ?? undefined);
     setComposer("");
     setReplyTo(null);
@@ -6176,6 +6158,62 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               ))}
             </div>
           )}
+          {/* Customer @mention autocomplete dropdown */}
+          {customerMentionQuery !== null && customerSuggestions.length > 0 && (
+            <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Customers</p>
+              </div>
+              {customerSuggestions.map((c) => {
+                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                return (
+                  <button
+                    key={c.phone}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      // Insert token: @[Name|phone]
+                      const token = `@[${c.name}|${c.phone}]`;
+                      const before = composer.slice(0, mentionStart);
+                      const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
+                      const next = before + token + " " + after;
+                      setComposer(next);
+                      setCustomerMentionQuery(null);
+                      // Add to customerMap so the chip can render
+                      setCustomerMap(prev => {
+                        const next = new Map(prev);
+                        const existing = next.get(c.phone) ?? [];
+                        if (!existing.find(x => x.phone === c.phone)) next.set(c.phone, [c]);
+                        return next;
+                      });
+                      requestAnimationFrame(() => {
+                        const pos = (before + token + " ").length;
+                        composerRef.current?.focus();
+                        composerRef.current?.setSelectionRange(pos, pos);
+                      });
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                  >
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                      style={{ background: `hsl(${hue}, 55%, 52%)` }}
+                    >
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900 truncate">{c.name}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{c.frequency ?? "Customer"}{c.city ? ` · ${c.city}` : ""}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-bold text-emerald-600">${c.ltv >= 1000 ? `${(c.ltv / 1000).toFixed(1)}k` : c.ltv}</p>
+                      <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {/* WhatsApp single-row composer: [+] [textarea] [emoji] */}
           <div
             className={cn(
@@ -6297,13 +6335,29 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 setComposer(val);
                 const pos = e.target.selectionStart ?? val.length;
                 const before = val.slice(0, pos);
-                const atMatch = before.match(/@(\w*)$/);
+                const atMatch = before.match(/@([\w\s]*)$/);
                 if (atMatch) {
-                  setMentionQuery(atMatch[1]);
+                  const q = atMatch[1];
                   setMentionStart(pos - atMatch[0].length);
                   setMentionIndex(0);
+                  // If query has a space it's likely a full name — search customers
+                  if (q.includes(" ") || q.length >= 3) {
+                    // Check if it matches an agent name first
+                    const agentMatch = mentionNames.some(n => n.toLowerCase().startsWith(q.toLowerCase()));
+                    if (!agentMatch && q.length >= 2) {
+                      setCustomerMentionQuery(q);
+                      setMentionQuery(null);
+                    } else {
+                      setMentionQuery(q);
+                      setCustomerMentionQuery(null);
+                    }
+                  } else {
+                    setMentionQuery(q);
+                    setCustomerMentionQuery(null);
+                  }
                 } else {
                   setMentionQuery(null);
+                  setCustomerMentionQuery(null);
                 }
               }}
               placeholder={isDragging ? "Drop photos here…" : isTranscribing ? "Transcribing voice note…" : "Message the team…"}
