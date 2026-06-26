@@ -255,7 +255,7 @@ function SmsComposer({
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (
-    <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0">
@@ -538,7 +538,7 @@ function EmailComposer({
   // No email on file
   if (!customer.email) {
     return (
-      <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+      <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
         <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0"><ChevronLeft className="h-5 w-5" /></button>
@@ -563,7 +563,7 @@ function EmailComposer({
   // Sent confirmation
   if (sent) {
     return (
-      <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+      <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
         <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
@@ -598,7 +598,7 @@ function EmailComposer({
   }
 
   return (
-    <div className="w-[360px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       {/* Header */}
       <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <div className="flex items-center gap-3">
@@ -863,7 +863,7 @@ function AiCallComposer({
   }
 
   return (
-    <div className="w-[380px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       {/* Header */}
       <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <div className="flex items-center gap-3">
@@ -1077,7 +1077,7 @@ function CustomerCard({
   ];
 
   return (
-    <div className="w-[340px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+    <div className="w-[420px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       <div className="relative px-5 pt-5 pb-4" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <button onClick={onClose} className="absolute top-3 right-3 text-white/50 hover:text-white transition-colors">
           <X className="h-4 w-4" />
@@ -1249,7 +1249,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
         style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
       >
         {isLoading ? (
-          <div className="w-[340px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-12 gap-2 text-slate-400">
+          <div className="w-[420px] rounded-2xl bg-white border border-slate-200 shadow-2xl flex items-center justify-center py-12 gap-2 text-slate-400">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Loading…</span>
           </div>
@@ -1274,7 +1274,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
             <CustomerCard customer={resolvedCustomer} onClose={close} onText={() => setView("sms")} onCall={() => setView("call")} onEmail={() => setView("email")} />
           )
         ) : customers.length > 1 ? (
-          <div className="w-[300px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
+          <div className="w-[380px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
             <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <p className="text-xs font-bold text-slate-700">Multiple matches — choose one</p>
               <button onClick={close} className="text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></button>
@@ -1300,7 +1300,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
             </div>
           </div>
         ) : (
-          <div className="w-[300px] rounded-2xl bg-white border border-slate-200 shadow-2xl px-5 py-5 flex items-center justify-between gap-3">
+          <div className="w-[380px] rounded-2xl bg-white border border-slate-200 shadow-2xl px-5 py-5 flex items-center justify-between gap-3">
             <p className="text-sm text-slate-500 italic">No customer found for {phone}</p>
             <button onClick={close} className="text-slate-400 hover:text-slate-600 shrink-0"><X className="h-4 w-4" /></button>
           </div>
@@ -1380,18 +1380,27 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
 }
 
 /**
- * Parse @[Name|phone] tokens and render CustomerMentionChip components.
+ * Parse @[Name|phone] (legacy) or @[Name] (new) tokens and render CustomerMentionChip components.
+ * phoneMap is used for new-format tokens to resolve the phone number.
  */
-export function renderMessageWithMentions(body: string, _keyPrefix?: string): React.ReactNode[] {
-  const TOKEN_RE = /@\[([^\]|]+)\|([^\]]+)\]/g;
+export function renderMessageWithMentions(
+  body: string,
+  _keyPrefix?: string,
+  phoneMap?: Record<string, string>
+): React.ReactNode[] {
+  // Matches both @[Name|phone] and @[Name]
+  const TOKEN_RE = /@\[([^\]]+?)(?:\|([^\]]+))?\]/g;
   const parts: React.ReactNode[] = [];
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = TOKEN_RE.exec(body)) !== null) {
     if (match.index > last) parts.push(body.slice(last, match.index));
     const mName = match[1];
-    const mPhone = match[2].split(",")[0].trim();
-    parts.push(<CustomerMentionChip key={`${match.index}-${mPhone}`} name={mName} phone={mPhone} />);
+    // Phone comes from: (1) legacy inline format, (2) phoneMap lookup
+    const mPhone = match[2]
+      ? match[2].split(",")[0].trim()
+      : (phoneMap?.[mName] ?? "");
+    parts.push(<CustomerMentionChip key={`${match.index}-${mName}`} name={mName} phone={mPhone} />);
     last = match.index + match[0].length;
   }
   if (last < body.length) parts.push(body.slice(last));

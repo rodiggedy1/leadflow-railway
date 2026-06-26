@@ -2347,7 +2347,7 @@ const MessageList = memo(function MessageList({
                             </button>
                           )}
                           <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
-                            {renderMessageWithMentions(msg.body, `msg-${msg.id}`)}
+                            {renderMessageWithMentions(msg.body, `msg-${msg.id}`, mentionPhoneMapRef.current)}
                           </p>
                           {mediaUrls.length > 0 && (
                             <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
@@ -2633,7 +2633,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { query: customerMentionQuery ?? "" },
     { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
-  // Map of phone → CustomerData for rendering chips in messages
+  // Map of name → phone for @[Name] token format (populated on mention selection)
+  const mentionPhoneMapRef = useRef<Record<string, string>>({});
 
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
@@ -6185,7 +6186,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          const token = `@[${c.name}|${c.phone}]`;
+                          // Store phone in map, insert clean @[Name] token
+                          mentionPhoneMapRef.current[c.name] = c.phone;
+                          const token = `@[${c.name}]`;
                           const before = composer.slice(0, mentionStart);
                           const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
                           setComposer(before + token + " " + after);
@@ -6228,7 +6231,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          const token = `@[${c.name}|${c.phone}]`;
+                          // Store phone in map, insert clean @[Name] token
+                          mentionPhoneMapRef.current[c.name] = c.phone;
+                          const token = `@[${c.name}]`;
                           const before = composer.slice(0, mentionStart);
                           const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
                           setComposer(before + token + " " + after);
