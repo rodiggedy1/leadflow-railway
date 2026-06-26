@@ -732,7 +732,7 @@ function CustomerContextPanel({
   const isLongTimeCustomer = customerSince !== null && new Date().getFullYear() - customerSince >= 2;
 
   return (
-    <aside className="w-[272px] shrink-0 bg-white border-l border-slate-200 flex flex-col overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <aside className="w-[330px] shrink-0 bg-white border-l border-[#e8edf5] flex flex-col overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#dde3ee_transparent]">
       {!validEmail ? (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center">
@@ -748,43 +748,70 @@ function CustomerContextPanel({
         </div>
       ) : (
         <div className="flex flex-col">
-          {/* ── Customer header ─────────────────────────────── */}
-          <div className="px-4 pt-5 pb-4 bg-gradient-to-b from-slate-50 to-white border-b border-slate-100">
+          {/* ── Customer header hero card ─────────────────────────────── */}
+          <div style={{ padding: "26px 22px 20px" }} className="border-b border-[#e8edf5]">
             <div className="flex items-start gap-3">
-              <div className={cn(
-                "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-base shrink-0 shadow-sm",
-                senderColorClass(displayName)
-              )}>
+              {/* 62px avatar, 20px radius, #dff2ff bg */}
+              <div
+                className="w-[62px] h-[62px] shrink-0 flex items-center justify-center font-black text-xl shadow-[0_4px_12px_rgba(16,24,40,0.10)]"
+                style={{
+                  borderRadius: "20px",
+                  background: "#dff2ff",
+                  color: "#1a6fa8",
+                }}
+              >
                 {getInitials(displayName)}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <p className="font-black text-sm text-slate-900 leading-tight">{displayName}</p>
+                  <p
+                    className="font-[900] text-[17px] text-[#162033] leading-tight"
+                    style={{ letterSpacing: "-0.2px" }}
+                  >
+                    {displayName}
+                  </p>
                   {isLongTimeCustomer && (
-                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 shrink-0">⭐ LOYAL</span>
+                    <span
+                      className="text-[11px] font-[900] shrink-0"
+                      style={{
+                        background: "#fff7d6",
+                        color: "#a16207",
+                        borderRadius: "999px",
+                        padding: "4px 8px",
+                      }}
+                    >
+                      ⭐ LOYAL
+                    </span>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-400 truncate mt-0.5">{validEmail}</p>
-                {customerPhone && <p className="text-[11px] text-slate-400 mt-0.5">{customerPhone}</p>}
-                {customerSince && (
-                  <p className="text-[10px] text-slate-400 mt-1">Customer since {customerSince}</p>
-                )}
+                <div className="mt-1.5 space-y-[3px]">
+                  <p className="text-[13px] font-[700] text-[#8ba0bd] truncate">{validEmail}</p>
+                  {customerPhone && <p className="text-[13px] font-[700] text-[#8ba0bd]">{customerPhone}</p>}
+                  {customerSince && (
+                    <p className="text-[13px] font-[700] text-[#8ba0bd]">Customer since {customerSince}</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-4 space-y-5">
+          <div className="flex flex-col divide-y divide-[#e8edf5]">
 
-          {/* ── AI Thread Summary ────────────────────────────────── */}
+          {/* ── AI Thread Summary ──────────────────────────────────── */}
           {threadId && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">AI Summary</p>
+            <div style={{ padding: "20px 22px" }}>
+              <div className="flex items-center justify-between mb-3">
+                <p
+                  className="text-[12px] font-[900] text-[#99a7bd] uppercase"
+                  style={{ letterSpacing: "3px" }}
+                >
+                  AI Summary
+                </p>
                 {!aiSummary && (
                   <button
                     onClick={onProcessThread}
                     disabled={isProcessing}
-                    className="flex items-center gap-1 text-[10px] font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 disabled:opacity-50 transition-colors"
                   >
                     {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                     {isProcessing ? "Analyzing…" : "Analyze"}
@@ -792,64 +819,88 @@ function CustomerContextPanel({
                 )}
               </div>
               {aiSummary ? (
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                <div
+                  style={{
+                    background: "#f8faff",
+                    border: "1px solid #eef3fb",
+                    borderRadius: "20px",
+                    padding: "17px 18px",
+                  }}
+                >
                   {aiCategory && GLANCE_CATEGORY_LABELS[aiCategory] && (
-                    <div className="flex items-center justify-between mb-2.5">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">
+                    <div className="flex items-center justify-between mb-3">
+                      {/* Color-coded category chip */}
+                      <span
+                        className="inline-flex items-center gap-1.5 text-[12px] font-[900] shrink-0"
+                        style={{
+                          padding: "5px 11px",
+                          borderRadius: "999px",
+                          ...(aiCategory === "booking" ? { background: "#dcfce7", color: "#15803d" }
+                            : aiCategory === "revenue" ? { background: "#fff7ed", color: "#c2410c" }
+                            : aiCategory === "upset" ? { background: "#fee2e2", color: "#dc2626" }
+                            : aiCategory === "internal" ? { background: "#f3e8ff", color: "#7c3aed" }
+                            : aiCategory === "refund" ? { background: "#fef9c3", color: "#a16207" }
+                            : { background: "#eef5ff", color: "#52637c" }),
+                        }}
+                      >
                         <span>{GLANCE_CATEGORY_LABELS[aiCategory].emoji}</span>
                         {GLANCE_CATEGORY_LABELS[aiCategory].label}
                       </span>
-                      {aiUrgency === "high" && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 border border-red-200">URGENT</span>
-                      )}
-                      {aiUrgency === "medium" && (
-                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">MEDIUM</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {aiUrgency === "high" && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-red-100 text-red-600">URGENT</span>
+                        )}
+                        {aiUrgency === "medium" && (
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">MEDIUM</span>
+                        )}
+                        {/* Refresh icon top-right */}
+                        <button
+                          onClick={onProcessThread}
+                          disabled={isProcessing}
+                          className="text-slate-300 hover:text-blue-500 disabled:opacity-50 transition-colors"
+                          title="Refresh AI summary"
+                        >
+                          {isProcessing
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <RefreshCw className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
                     </div>
                   )}
-                  <ul className="space-y-1">
+                  <ul className="space-y-1.5">
                     {(() => {
                       try {
                         const bullets: string[] = JSON.parse(aiSummary);
                         return bullets.map((b, i) => (
-                          <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-700">
+                          <li key={i} className="flex items-start gap-2 text-[13px] text-[#475569]" style={{ lineHeight: "1.6" }}>
                             <span className="text-slate-300 mt-0.5 shrink-0">•</span>
                             <span>{b}</span>
                           </li>
                         ));
                       } catch {
-                        return <li className="text-[11px] text-slate-500">{aiSummary}</li>;
+                        return <li className="text-[13px] text-[#475569]" style={{ lineHeight: "1.6" }}>{aiSummary}</li>;
                       }
                     })()}
                   </ul>
-                  <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-100">
-                    <p className="text-[9px] text-slate-300">
+                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#eef3fb]">
+                    <p className="text-[10px] text-slate-300">
                       {aiProcessedAt ? new Date(aiProcessedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : ""}
                     </p>
-                    <div className="flex items-center gap-2">
+                    {aiCategory && aiCategory !== "general" && (
                       <button
-                        onClick={onProcessThread}
-                        disabled={isProcessing}
-                        className="text-[9px] font-semibold text-slate-400 hover:text-blue-600 disabled:opacity-50 transition-colors"
+                        onClick={onResolveGlance}
+                        className="text-[10px] font-semibold text-slate-400 hover:text-green-600 transition-colors"
                       >
-                        {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : "↻ refresh"}
+                        ✓ resolve
                       </button>
-                      {aiCategory && aiCategory !== "general" && (
-                        <button
-                          onClick={onResolveGlance}
-                          className="text-[9px] font-semibold text-slate-400 hover:text-green-600 transition-colors"
-                        >
-                          ✓ resolve
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
-                  <Sparkles className="w-4 h-4 text-slate-300 mx-auto mb-1" />
-                  <p className="text-[10px] text-slate-400">No AI summary yet</p>
-                  <p className="text-[9px] text-slate-300 mt-0.5">Will auto-process in background</p>
+                <div className="rounded-[20px] p-4 border border-dashed border-slate-200 text-center">
+                  <Sparkles className="w-4 h-4 text-slate-300 mx-auto mb-1.5" />
+                  <p className="text-[12px] text-slate-400">No AI summary yet</p>
+                  <p className="text-[10px] text-slate-300 mt-0.5">Will auto-process in background</p>
                 </div>
               )}
             </div>
@@ -887,8 +938,10 @@ function CustomerContextPanel({
 
           {/* ── No customer record ──────────────────────────── */}
           {(!jobs || jobs.length === 0) && (
-            <div className="rounded-xl p-3 border border-dashed border-slate-200 text-center">
-              <p className="text-xs text-slate-400 italic">No booking history found</p>
+            <div style={{ padding: "20px 22px" }}>
+              <div className="rounded-[20px] p-4 border border-dashed border-slate-200 text-center">
+                <p className="text-[12px] text-slate-400 italic">No booking history found</p>
+              </div>
             </div>
           )}
 
@@ -896,16 +949,27 @@ function CustomerContextPanel({
 
           {/* ── Home Profile (from most recent job) ──────────────── */}
           {jobs && jobs.length > 0 && (jobs[0].bedrooms || jobs[0].bathrooms) && (
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Home Profile</p>
+            <div style={{ padding: "20px 22px" }}>
+              <p
+                className="text-[12px] font-[900] text-[#99a7bd] uppercase mb-3"
+                style={{ letterSpacing: "3px" }}
+              >
+                Home Profile
+              </p>
               <div className="flex items-center gap-2 flex-wrap">
                 {jobs[0].bedrooms && (
-                  <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
+                  <span
+                    className="inline-flex items-center text-[12px] font-[700] text-slate-600"
+                    style={{ height: "34px", padding: "0 12px", borderRadius: "999px", background: "#f8fafc", border: "1px solid #edf2f7" }}
+                  >
                     🛏 {jobs[0].bedrooms} bed{jobs[0].bedrooms !== 1 ? "s" : ""}
                   </span>
                 )}
                 {jobs[0].bathrooms && (
-                  <span className="text-[11px] bg-slate-50 border border-slate-100 rounded-lg px-2.5 py-1 text-slate-600 font-medium">
+                  <span
+                    className="inline-flex items-center text-[12px] font-[700] text-slate-600"
+                    style={{ height: "34px", padding: "0 12px", borderRadius: "999px", background: "#f8fafc", border: "1px solid #edf2f7" }}
+                  >
                     🚿 {jobs[0].bathrooms} bath{jobs[0].bathrooms !== 1 ? "s" : ""}
                   </span>
                 )}
@@ -915,32 +979,43 @@ function CustomerContextPanel({
 
           {/* ── Booking History Timeline ─────────────────────── */}
           {jobs && jobs.length > 0 && (
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5">Recent Bookings</p>
-              <div className="space-y-1.5 max-h-64 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div style={{ padding: "20px 22px" }}>
+              <p
+                className="text-[12px] font-[900] text-[#99a7bd] uppercase mb-3"
+                style={{ letterSpacing: "3px" }}
+              >
+                Recent Bookings
+              </p>
+              <div className="space-y-0 max-h-64 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {jobs.map((job) => (
-                  <div key={job.id} className="flex items-center gap-2.5 py-1.5 border-b border-slate-50 last:border-0">
-                    <span className={cn("w-2 h-2 rounded-full shrink-0", freqColor(job.frequency ?? null))} />
+                  <div key={job.id} className="flex items-center gap-3 py-2.5 border-b border-[#f0f4f8] last:border-0">
+                    <span
+                      className="shrink-0"
+                      style={{ width: "9px", height: "9px", borderRadius: "50%", background: "#22c55e", display: "block" }}
+                    />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-1">
-                        <p className="text-[11px] font-semibold text-slate-700 truncate">
-                          {job.frequency ?? "One-time"}
-                        </p>
-                        {job.lastBookingPrice ? (
-                          <p className="text-[11px] font-bold text-slate-800 shrink-0">${job.lastBookingPrice}</p>
-                        ) : null}
-                      </div>
-                      <p className="text-[10px] text-slate-400">{formatJobDate(job.jobDate ?? null)}</p>
+                      <p className="text-[13px] font-[800] text-slate-700 truncate">
+                        {job.frequency ?? "One-time"}
+                      </p>
+                      <p className="text-[12px] text-slate-400 mt-0.5">{formatJobDate(job.jobDate ?? null)}</p>
                     </div>
+                    {job.lastBookingPrice ? (
+                      <p className="text-[13px] font-[800] text-slate-800 shrink-0">${job.lastBookingPrice}</p>
+                    ) : null}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ── Automation ──────────────────────────────────── */}
-          <div className="border-t border-slate-100 pt-4">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Quick Actions</p>
+          {/* ── Quick Actions ──────────────────────────────────── */}
+          <div style={{ padding: "20px 22px" }}>
+            <p
+              className="text-[12px] font-[900] text-[#99a7bd] uppercase mb-3"
+              style={{ letterSpacing: "3px" }}
+            >
+              Quick Actions
+            </p>
             <div className="flex flex-col gap-1.5">
               <button
                 className="text-left text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline transition-colors"
