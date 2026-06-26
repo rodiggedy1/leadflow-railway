@@ -380,10 +380,12 @@ function AiCallComposer({
   customer,
   onBack,
   onClose,
+  onMinimize,
 }: {
   customer: CustomerData;
   onBack: () => void;
   onClose: () => void;
+  onMinimize?: (c: CustomerData) => void;
 }) {
   const [selectedScenario, setSelectedScenario] = useState(CALL_SCENARIOS[0].title);
   const [script, setScript] = useState(() => buildCallScript(customer.name, CALL_SCENARIOS[0].title));
@@ -416,9 +418,15 @@ function AiCallComposer({
   const callActive = ["firing", "queued", "ringing", "in_progress"].includes(callStatus);
   const callEnded = ["completed", "voicemail", "no_answer", "failed"].includes(callStatus);
 
-  // Auto-minimize when call goes active, auto-expand when ended
+  // Auto-minimize when call goes active (notify parent), auto-expand when ended
   useEffect(() => {
-    if (callActive) setMinimized(true);
+    if (callActive) {
+      if (onMinimize) {
+        onMinimize(customer);
+      } else {
+        setMinimized(true);
+      }
+    }
   }, [callActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -612,7 +620,11 @@ function AiCallComposer({
             {CALL_STATUS_LABELS[callStatus]}
           </span>
           {callActive && (
-            <button onClick={() => setMinimized(true)} className="text-white/50 hover:text-white transition-colors shrink-0" title="Minimize">
+            <button
+              onClick={() => { if (onMinimize) { onMinimize(customer); } else { setMinimized(true); } }}
+              className="text-white/50 hover:text-white transition-colors shrink-0"
+              title="Minimize"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
           )}
@@ -859,6 +871,11 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
   const [view, setView] = useState<"card" | "sms" | "call">("card");
   const [selected, setSelected] = useState<CustomerData | null>(null);
 
+  // Call pill state — lives here so it survives modal close
+  const [callMinimized, setCallMinimized] = useState(false);
+  const [pillCustomer, setPillCustomer] = useState<CustomerData | null>(null);
+  const [pillDismissed, setPillDismissed] = useState(false);
+
   const { data, isLoading } = trpc.opsChat.searchCustomers.useQuery(
     { query: phone },
     { staleTime: 300_000, retry: false, enabled: open }
@@ -870,13 +887,28 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
   const hue = Math.abs(phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
-  function close() { setOpen(false); setSelected(null); setView("card"); }
+  // Close modal but keep pill alive if call is minimized
+  function close() {
+    setOpen(false);
+    setSelected(null);
+    setView("card");
+  }
+
+  // Full dismiss — kills pill too
+  function dismissAll() {
+    setPillDismissed(true);
+    setCallMinimized(false);
+    setPillCustomer(null);
+    close();
+  }
 
   useEffect(() => {
     if (!open) return;
     function onDown(e: MouseEvent) {
       const target = e.target as Element;
-      if (!target.closest("[data-chip-modal]")) close();
+      // Don't close if clicking inside the modal OR the pill
+      if (target.closest("[data-chip-modal]") || target.closest("[data-chip-pill]")) return;
+      close();
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -914,7 +946,12 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
           view === "sms" ? (
             <SmsComposer customer={resolvedCustomer} onBack={() => setView("card")} onClose={close} />
           ) : view === "call" ? (
-            <AiCallComposer customer={resolvedCustomer} onBack={() => setView("card")} onClose={close} />
+            <AiCallComposer
+              customer={resolvedCustomer}
+              onBack={() => setView("card")}
+              onClose={dismissAll}
+              onMinimize={(c) => { setPillCustomer(c); setCallMinimized(true); setPillDismissed(false); close(); }}
+            />
           ) : (
             <CustomerCard customer={resolvedCustomer} onClose={close} onText={() => setView("sms")} onCall={() => setView("call")} />
           )
@@ -955,6 +992,45 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
     document.body
   ) : null;
 
+  // Standalone pill — rendered independently of the modal
+  const pill = callMinimized && pillCustomer && !pillDismissed ? ReactDOM.createPortal(
+    <div
+      data-chip-pill
+      className="rounded-2xl overflow-hidden shadow-2xl border border-slate-700 cursor-pointer select-none"
+      style={{ position: "fixed", bottom: 24, right: 24, zIndex: 99997, fontFamily: "Inter, sans-serif", minWidth: 260, background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}
+      onClick={() => {
+        // Re-open modal in call view
+        setSelected(pillCustomer);
+        setView("call");
+        setCallMinimized(false);
+        setOpen(true);
+      }}
+    >
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
+            style={{ background: `hsl(${Math.abs(pillCustomer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 55%, 52%)` }}
+          >
+            {pillCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-bold text-sm truncate">{pillCustomer.name}</p>
+            <p className="text-blue-300 text-[10px]">AI Call in progress — tap to expand</p>
+          </div>
+          <div className="w-2 h-2 rounded-full animate-pulse shrink-0 bg-green-400" />
+          <button
+            onClick={(e) => { e.stopPropagation(); dismissAll(); }}
+            className="text-white/40 hover:text-white transition-colors shrink-0 ml-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <>
       <span
@@ -970,6 +1046,7 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
         {name}
       </span>
       {modal}
+      {pill}
     </>
   );
 }
