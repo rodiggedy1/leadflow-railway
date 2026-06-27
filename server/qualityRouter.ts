@@ -2541,7 +2541,10 @@ export const qualityRouter = router({
       };
     });
 
-    return { ghosts: result };
+    // Include all real profile names for diagnosis (helps identify name mismatches)
+    const allRealProfileNames = realProfiles.map(r => ({ id: r.id, name: r.name, email: r.email }));
+
+    return { ghosts: result, allRealProfileNames };
   }),
 
   /**

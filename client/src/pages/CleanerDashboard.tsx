@@ -1311,6 +1311,7 @@ function UnlinkedTeamsSection() {
   const [selectedReal, setSelectedReal] = useState<Record<number, number>>({});
 
   const ghosts = data?.ghosts ?? [];
+  const allRealProfileNames = data?.allRealProfileNames ?? [];
 
   if (isLoading) {
     return (
@@ -1407,6 +1408,24 @@ function UnlinkedTeamsSection() {
           })}
         </CardContent>
       </Card>
+
+      {/* Debug: show all real profiles so we can identify name mismatches */}
+      {allRealProfileNames.length > 0 && (
+        <details className="mb-4">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+            Debug: {allRealProfileNames.length} real profiles with logins (expand to see names for mapping)
+          </summary>
+          <div className="mt-2 border rounded p-3 bg-muted/30 text-xs font-mono space-y-1 max-h-48 overflow-y-auto">
+            {allRealProfileNames.map(r => (
+              <div key={r.id} className="flex gap-2">
+                <span className="text-muted-foreground w-8 shrink-0">#{r.id}</span>
+                <span className="font-medium">{r.name}</span>
+                <span className="text-muted-foreground">{r.email}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
 
       {/* Merge confirmation dialog */}
       <Dialog open={!!pendingMerge} onOpenChange={(open) => { if (!open) setPendingMerge(null); }}>
