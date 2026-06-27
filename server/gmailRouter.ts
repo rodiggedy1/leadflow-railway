@@ -66,6 +66,7 @@ export const gmailRouter = router({
         maxResults: z.number().min(1).max(500).default(100),
         query: z.string().optional(),
         showIgnored: z.boolean().optional().default(false),
+        unreadOnly: z.boolean().optional().default(false),
       })
     )
     .query(async ({ input }) => {
@@ -81,6 +82,10 @@ export const gmailRouter = router({
       // When showIgnored=false (default), only show actionable threads
       if (!input.showIgnored) {
         conditions.push(eq(gmailThreadMeta.isActionable, 1));
+      }
+      // When unreadOnly=true, only return unread threads (used by the right-panel quick-view)
+      if (input.unreadOnly) {
+        conditions.push(eq(gmailThreadMeta.isUnread, 1));
       }
       if (cursorAt && !isNaN(cursorAt)) {
         conditions.push(sql`${gmailThreadMeta.lastMessageAt} < ${cursorAt}`);

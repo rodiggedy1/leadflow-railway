@@ -2210,6 +2210,25 @@ export default function EmailInbox() {
           {selectedThreadId && statusQuery.data?.connected && (
             <motion.div
               key={selectedThreadId}
+              ref={(el) => {
+                if (!el) return;
+                // DIAGNOSTIC: log pane dimensions and visibility after mount
+                requestAnimationFrame(() => {
+                  const rect = el.getBoundingClientRect();
+                  const style = window.getComputedStyle(el);
+                  console.log("[PaneMount]", {
+                    selectedThreadId,
+                    width: rect.width,
+                    height: rect.height,
+                    top: rect.top,
+                    left: rect.left,
+                    display: style.display,
+                    visibility: style.visibility,
+                    opacity: style.opacity,
+                    overflow: style.overflow,
+                  });
+                });
+              }}
               className="flex flex-col flex-1 overflow-hidden min-w-0"
               initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}

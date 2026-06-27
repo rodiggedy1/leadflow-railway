@@ -2862,10 +2862,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const emailUnreadCount = emailUnreadData?.count ?? 0;
   // ── Email thread list for the slide-in panel ────────────────────────────────
   const { data: emailThreadsData } = trpc.gmail.listThreads.useQuery(
-    { maxResults: 25 },
+    { maxResults: 50, unreadOnly: true },
     { staleTime: 30_000, refetchInterval: 60_000, retry: false, enabled: emailsOpen }
   );
-  const emailThreadsList = (emailThreadsData?.threads ?? []).filter((t: any) => t.isUnread);
+  const emailThreadsList = emailThreadsData?.threads ?? [];
   // ── Missed Calls today count (pending only) ─────────────────────────────────
   const { data: missedCallsTodayData, refetch: refetchMissedCallsToday } = trpc.missedCalls.getPendingCount.useQuery(
     { todayOnly: true },
