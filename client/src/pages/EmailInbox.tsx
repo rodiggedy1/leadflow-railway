@@ -1704,8 +1704,8 @@ export default function EmailInbox() {
   }, [threads]);
   useEffect(() => {
     if (threads.length === 0) return;       // nothing loaded yet
-    // Skip auto-select if a deep-link thread was already applied
-    if (deepLinkApplied.current && selectedThreadId) return;
+    // Skip auto-select if a deep-link thread was already applied (don't overwrite it)
+    if (deepLinkApplied.current) return;
     const key = `${activeTab}::${activeCategoryFilter ?? ""}::${activeAgentFilter ?? ""}`;
     if (lastAutoSelectedKey.current === key) return; // already auto-selected for this tab+filter combo
     lastAutoSelectedKey.current = key;
