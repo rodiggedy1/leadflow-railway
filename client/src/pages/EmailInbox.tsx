@@ -2195,6 +2195,8 @@ export default function EmailInbox() {
 
       {/* Email viewer */}
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        {/* DIAGNOSTIC */}
+        {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("thread") === null && console.log("[RenderGate]", { selectedThreadId, connected: statusQuery.data?.connected, statusLoading: statusQuery.isLoading })}
         {statusQuery.data?.connected === false && <NotConnectedBanner />}
         {statusQuery.data?.connected && !selectedThreadId && (
           <div className="flex-1 flex items-center justify-center text-slate-400">
