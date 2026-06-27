@@ -1288,6 +1288,164 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
   );
 }
 
+// ── Unlinked Teams Section ──────────────────────────────────────────────────
+/**
+ * Shows all ghost profiles (no email/password — created by sync when L27 team
+ * title didn't match any real cleaner profile). Allows merging each ghost into
+ * the correct real profile, which re-points all affected jobs and permanently
+ * links the L27 team ID so future syncs never create a ghost again.
+ */
+function UnlinkedTeamsSection() {
+  const { data, isLoading, refetch } = trpc.quality.listGhostProfiles.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const merge = trpc.quality.mergeGhostProfile.useMutation({
+    onSuccess: (res) => {
+      toast.success(res.message);
+      refetch();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const [pendingMerge, setPendingMerge] = useState<{ ghostId: number; realId: number; ghostName: string; realName: string } | null>(null);
+  const [selectedReal, setSelectedReal] = useState<Record<number, number>>({});
+
+  const ghosts = data?.ghosts ?? [];
+
+  if (isLoading) {
+    return (
+      <Card className="mb-6">
+        <CardHeader><CardTitle className="flex items-center gap-2"><GitMerge className="w-5 h-5" /> Unlinked Teams</CardTitle></CardHeader>
+        <CardContent><div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div></CardContent>
+      </Card>
+    );
+  }
+
+  if (ghosts.length === 0) {
+    return (
+      <Card className="mb-6">
+        <CardHeader><CardTitle className="flex items-center gap-2"><GitMerge className="w-5 h-5" /> Unlinked Teams</CardTitle></CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2 text-green-600">
+            <CheckCircle className="w-4 h-4" />
+            <span className="text-sm">No unlinked teams — all L27 teams are mapped to real cleaner profiles.</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card className="mb-6 border-orange-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-700">
+            <AlertTriangle className="w-5 h-5" />
+            Unlinked Teams ({ghosts.length})
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            These Launch27 teams have no matching cleaner profile login. Jobs assigned to them are
+            <span className="font-semibold text-red-600"> invisible in the cleaner portal</span>.
+            Merge each ghost into the correct real profile to fix affected jobs.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {ghosts.map((ghost) => {
+            const realId = selectedReal[ghost.id];
+            const realProfile = ghost.candidates.find(c => c.id === realId);
+            return (
+              <div key={ghost.id} className="border rounded-lg p-4 bg-orange-50">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="destructive" className="text-xs">Ghost</Badge>
+                      <span className="font-medium">{ghost.name}</span>
+                      {ghost.launch27TeamId && (
+                        <span className="text-xs text-muted-foreground">L27 team id={ghost.launch27TeamId}</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      <span className="font-medium text-red-600">{ghost.jobCount} job(s)</span> invisible in portal
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {ghost.candidates.length > 0 ? (
+                      <>
+                        <Select
+                          value={realId ? String(realId) : ""}
+                          onValueChange={(v) => setSelectedReal(prev => ({ ...prev, [ghost.id]: parseInt(v, 10) }))}
+                        >
+                          <SelectTrigger className="w-52 text-sm">
+                            <SelectValue placeholder="Select real profile..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ghost.candidates.map(c => (
+                              <SelectItem key={c.id} value={String(c.id)}>
+                                {c.name} ({c.email})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          disabled={!realId || merge.isPending}
+                          onClick={() => {
+                            if (!realId || !realProfile) return;
+                            setPendingMerge({ ghostId: ghost.id, realId, ghostName: ghost.name, realName: realProfile.name });
+                          }}
+                        >
+                          <GitMerge className="w-4 h-4 mr-1" /> Merge
+                        </Button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic">No matching real profile found — check names</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {/* Merge confirmation dialog */}
+      <Dialog open={!!pendingMerge} onOpenChange={(open) => { if (!open) setPendingMerge(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Merge</DialogTitle>
+          </DialogHeader>
+          {pendingMerge && (
+            <div className="space-y-3 text-sm">
+              <p>This will permanently:</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>Re-point all jobs from <span className="font-medium text-red-600">{pendingMerge.ghostName}</span> (ghost) to <span className="font-medium text-green-700">{pendingMerge.realName}</span></li>
+                <li>Copy the L27 team ID to the real profile (prevents future ghosts)</li>
+                <li>Delete the ghost profile row</li>
+              </ul>
+              <p className="text-muted-foreground">This cannot be undone. Affected jobs will immediately become visible in the cleaner portal.</p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingMerge(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={merge.isPending}
+              onClick={() => {
+                if (!pendingMerge) return;
+                merge.mutate({ ghostId: pendingMerge.ghostId, realId: pendingMerge.realId });
+                setPendingMerge(null);
+              }}
+            >
+              {merge.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+              Confirm Merge
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 // ── Portal Diagnostic Section ────────────────────────────────────────────────
 /**
  * Diagnostic tool: traces a job from L27 booking → cleaner_jobs → cleaner_profile
@@ -2046,6 +2204,9 @@ export default function CleanerDashboard() {
 
         {/* Weekly Pay Summary */}
         <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); setResetEmail(""); }} />
+
+        {/* Unlinked Teams — ghost profiles with no login, jobs invisible in portal */}
+        <UnlinkedTeamsSection />
 
         {/* Portal Diagnostic — trace job visibility, prove ghost profile root cause */}
         <PortalDiagnosticSection />

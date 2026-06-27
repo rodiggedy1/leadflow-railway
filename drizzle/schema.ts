@@ -1028,7 +1028,7 @@ export const cleanerProfiles = mysqlTable("cleaner_profiles", {
    * This prevents ghost profile creation when L27 team titles don't exactly match
    * the cleanerProfiles.name (the root cause of jobs missing from the cleaner portal).
    */
-  launch27TeamId: int("launch27TeamId"),
+  launch27TeamId: int("launch27TeamId").unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

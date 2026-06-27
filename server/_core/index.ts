@@ -171,6 +171,42 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] Failed to create payment_authorizations:', err);
   }
+
+  // ── cleaner_profiles.launch27TeamId (ghost-profile fix) ──────────────────────────
+  // Adds the canonical L27 team ID column so the sync can match by ID instead of name.
+  // The UNIQUE constraint prevents two profiles from ever claiming the same L27 team.
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE cleaner_profiles
+        ADD COLUMN IF NOT EXISTS launch27TeamId INT NULL
+    `));
+    console.log('[Migration] cleaner_profiles.launch27TeamId column: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to add cleaner_profiles.launch27TeamId:', err);
+  }
+  try {
+    // Check if the unique index already exists before trying to add it
+    // (MySQL does not support CREATE INDEX IF NOT EXISTS)
+    const [rows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) as cnt
+      FROM information_schema.statistics
+      WHERE table_schema = DATABASE()
+        AND table_name = 'cleaner_profiles'
+        AND index_name = 'cleaner_profiles_launch27TeamId_unique'
+    `)) as any;
+    const alreadyExists = Array.isArray(rows) && rows[0]?.cnt > 0;
+    if (!alreadyExists) {
+      await db.execute(sql.raw(
+        `ALTER TABLE cleaner_profiles ADD UNIQUE INDEX cleaner_profiles_launch27TeamId_unique (launch27TeamId)`
+      ));
+      console.log('[Migration] cleaner_profiles.launch27TeamId unique index: created');
+    } else {
+      console.log('[Migration] cleaner_profiles.launch27TeamId unique index: already exists, skipped');
+    }
+  } catch (err) {
+    // Non-fatal: log and continue — the column still works without the index
+    console.warn('[Migration] cleaner_profiles.launch27TeamId unique index: skipped —', (err as any)?.message);
+  }
 }
 
 async function startServer() {

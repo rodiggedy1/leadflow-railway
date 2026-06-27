@@ -19,7 +19,7 @@
 
 import { randomBytes } from "crypto";
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, isNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
 import { router, agentProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -618,6 +618,80 @@ export async function handleRatingReply(
 
 // ─── tRPC Router ──────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveCleanerProfile — single authoritative helper for all sync paths
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Resolves (or creates) a cleaner_profiles row for a given Launch27 team.
+ *
+ * Lookup order (inside a single transaction to prevent concurrent self-heals):
+ *   1. By launch27TeamId (exact, ID-based) — fast path once self-heal has run
+ *   2. By name (legacy rows where launch27TeamId IS NULL) + self-heal
+ *   3. Create ghost profile as last resort (logs a structured warning)
+ *
+ * Returns { id, payPercent } of the resolved profile.
+ */
+export async function resolveCleanerProfile(
+  db: Awaited<ReturnType<typeof getDb>>,
+  team: { id: number; title: string; share: number }
+): Promise<{ id: number; payPercent: string | null }> {
+  if (!db) throw new Error("DB unavailable");
+
+  // ── Step 1: ID-based lookup (only for real teams) ──────────────────────────
+  if (team.id > 0) {
+    const [byId] = await db
+      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
+      .from(cleanerProfiles)
+      .where(eq(cleanerProfiles.launch27TeamId, team.id))
+      .limit(1);
+    if (byId) return byId;
+  }
+
+  // ── Step 2: Name fallback + transactional self-heal ───────────────────────
+  // Wrapped in a transaction so two concurrent sync workers can't both try to
+  // write launch27TeamId to the same row simultaneously.
+  const healed = await (db as any).transaction(async (tx: typeof db) => {
+    const normalizedTitle = team.title.trim().toLowerCase();
+    const [nameMatch] = await (tx as any)
+      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
+      .from(cleanerProfiles)
+      .where(and(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`, isNull(cleanerProfiles.launch27TeamId)))
+      .limit(1);
+
+    if (!nameMatch) return null;
+
+    if (team.id > 0) {
+      // Self-heal: write launch27TeamId so future syncs skip this fallback
+      await (tx as any)
+        .update(cleanerProfiles)
+        .set({ launch27TeamId: team.id })
+        .where(eq(cleanerProfiles.id, nameMatch.id));
+      console.log(
+        `[Sync] Self-healed: Launch27 team id=${team.id} title='${team.title}' → ` +
+        `matched legacy profile id=${nameMatch.id} — backfilled launch27TeamId=${team.id}`
+      );
+    }
+    return nameMatch;
+  });
+
+  if (healed) return healed;
+
+  // ── Step 3: Ghost profile creation (last resort) ──────────────────────────
+  console.warn(
+    `[Sync] GHOST_PROFILE_CREATED:\n` +
+    `  Launch27 team id=${team.id} title='${team.title}'\n` +
+    `  No launch27TeamId match, no name match.\n` +
+    `  Creating ghost profile — ACTION REQUIRED: link via Portal Diagnostic tool.`
+  );
+  const [ins] = await db.insert(cleanerProfiles).values({
+    name: team.title,
+    payPercent: team.share > 0 ? String(team.share) : null,
+    isActive: 1,
+    launch27TeamId: team.id > 0 ? team.id : null,
+  });
+  return { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null };
+}
+
 /**
  * Standalone sync function — called by the hourly TodaySync cron.
  * Syncs cleanerJobs from Launch27 for the given date.
@@ -644,19 +718,8 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
     try {
       const teams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
       for (const team of teams) {
-        let [profile] = await db
-          .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
-          .from(cleanerProfiles)
-          .where(eq(cleanerProfiles.name, team.title))
-          .limit(1);
-        if (!profile) {
-          const [ins] = await db.insert(cleanerProfiles).values({
-            name: team.title,
-            payPercent: team.share > 0 ? String(team.share) : null,
-            isActive: 1,
-          });
-          profile = { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null };
-        } else if (team.share > 0 && (!profile.payPercent || profile.payPercent === "0")) {
+        const profile = await resolveCleanerProfile(db, team);
+        if (team.share > 0 && (!profile.payPercent || profile.payPercent === "0")) {
           await db.update(cleanerProfiles).set({ payPercent: String(team.share) }).where(eq(cleanerProfiles.id, profile.id));
           profile.payPercent = String(team.share);
         }
@@ -754,7 +817,7 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
       const currentTeams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
       const currentProfileIds: number[] = [];
       for (const team of currentTeams) {
-        const [profile] = await db.select({ id: cleanerProfiles.id }).from(cleanerProfiles).where(eq(cleanerProfiles.name, team.title)).limit(1);
+        const profile = await resolveCleanerProfile(db, team).catch(() => null);
         if (profile) currentProfileIds.push(profile.id);
       }
       if (currentProfileIds.length > 0) {
@@ -973,6 +1036,85 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
   } catch (mmErr) {
     errors.push(`Integrity check error: ${mmErr instanceof Error ? mmErr.message : String(mmErr)}`);
   }
+  // ── Portal-visibility assertion ─────────────────────────────────────────────
+  // Checks that every cleaner_jobs row for this date is linked to a profile that
+  // has a login (email + passwordHash). Ghost profiles (created by sync when no
+  // matching profile was found by name) have no login and are invisible in the portal.
+  // This is the specific failure mode that caused the Alex Delaney incident.
+  try {
+    const ghostJobs = await db
+      .select({
+        jobId: cleanerJobs.id,
+        bookingId: cleanerJobs.bookingId,
+        customerName: cleanerJobs.customerName,
+        cleanerProfileId: cleanerJobs.cleanerProfileId,
+        profileName: cleanerProfiles.name,
+        profileEmail: cleanerProfiles.email,
+      })
+      .from(cleanerJobs)
+      .innerJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+      .where(
+        and(
+          eq(cleanerJobs.jobDate, dateStr),
+          ne(cleanerJobs.bookingStatus, "cancelled"),
+          ne(cleanerJobs.bookingStatus, "rescheduled"),
+          isNull(cleanerProfiles.email)  // ghost profile = no email = portal-invisible
+        )
+      );
+    if (ghostJobs.length > 0) {
+      const ghostMsg = [
+        `🚨 PORTAL VISIBILITY FAILURE for ${dateStr}: ${ghostJobs.length} job(s) are in DB but INVISIBLE in the cleaner portal.`,
+        `These jobs are linked to ghost profiles (no login). Cleaners cannot see them.`,
+        ...ghostJobs.map(j => `  - Job ${j.jobId} (booking ${j.bookingId}, ${j.customerName}) → ghost profile id=${j.cleanerProfileId} name='${j.profileName}'`),
+        `ACTION REQUIRED: Use the Portal Diagnostic tool in CleanerDashboard to merge ghost profiles.`,
+      ].join("\n");
+      console.error(`[TodaySync] ${ghostMsg}`);
+      // Post a portal_ghost alert card to Command Chat (fire-and-forget)
+      Promise.resolve().then(async () => {
+        try {
+          const { getDb } = await import("./db");
+          const { opsChatMessages } = await import("../drizzle/schema");
+          const dbConn = await getDb();
+          if (!dbConn) return;
+          // Deduplicate: don't re-alert if already posted in last 2h
+          const existing = await dbConn
+            .select({ id: opsChatMessages.id })
+            .from(opsChatMessages)
+            .where(
+              and(
+                eq(opsChatMessages.channel, "command"),
+                eq(opsChatMessages.quickAction as any, "portal_ghost"),
+                gte(opsChatMessages.createdAt, new Date(Date.now() - 2 * 60 * 60 * 1000))
+              )
+            )
+            .limit(1);
+          if (existing.length > 0) return;
+          await dbConn.insert(opsChatMessages).values({
+            channel: "command",
+            authorName: "System",
+            authorRole: "system",
+            body: ghostMsg,
+            quickAction: "portal_ghost",
+            metadata: JSON.stringify({ date: dateStr, ghostJobCount: ghostJobs.length, ghostJobs }),
+          } as any);
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message");
+        } catch (cardErr) {
+          console.error("[TodaySync] Failed to post portal_ghost card:", cardErr);
+        }
+      });
+      // Owner push notification
+      import("./_core/notification").then(({ notifyOwner }) =>
+        notifyOwner({
+          title: `🚨 Portal visibility failure ${dateStr}: ${ghostJobs.length} job(s) invisible to cleaners`,
+          content: ghostMsg,
+        }).catch(() => {})
+      ).catch(() => {});
+    }
+  } catch (ghostCheckErr) {
+    errors.push(`Portal visibility check error: ${ghostCheckErr instanceof Error ? ghostCheckErr.message : String(ghostCheckErr)}`);
+  }
+
   // ── Phone normalization pass ────────────────────────────────────────────────
   // Attempt to fix any phoneInvalid=1 rows (non-fatal, dynamic import avoids circular dep).
   try {
@@ -1630,24 +1772,8 @@ export const qualityRouter = router({
           const teams = booking.teams.length > 0 ? booking.teams : [{ id: 0, title: "Unassigned", share: 0, bgColor: "#888888" }];
 
           for (const team of teams) {
-            // Find or create cleaner profile for this team
-            // Use normalized match (LOWER + TRIM) to prevent duplicates from whitespace/case variations
-            const normalizedTitle = team.title.trim().toLowerCase();
-            let [profile] = await db
-              .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
-              .from(cleanerProfiles)
-              .where(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`)
-              .limit(1);
-
-            if (!profile) {
-              // Auto-create profile from Launch27 team data
-              const [ins] = await db.insert(cleanerProfiles).values({
-                name: team.title,
-                payPercent: team.share > 0 ? String(team.share) : null,
-                isActive: 1,
-              });
-              profile = { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null };
-            } else if (team.share > 0 && (!profile.payPercent || profile.payPercent === "0")) {
+            const profile = await resolveCleanerProfile(db, team);
+            if (team.share > 0 && (!profile.payPercent || profile.payPercent === "0")) {
               // Update pay % from Launch27 if it's now available
               await db
                 .update(cleanerProfiles)
@@ -1809,11 +1935,7 @@ export const qualityRouter = router({
           // Resolve profile IDs for current teams
           const currentProfileIds: number[] = [];
           for (const team of currentTeams) {
-            const [profile] = await db
-              .select({ id: cleanerProfiles.id })
-              .from(cleanerProfiles)
-              .where(eq(cleanerProfiles.name, team.title))
-              .limit(1);
+            const profile = await resolveCleanerProfile(db, team).catch(() => null);
             if (profile) currentProfileIds.push(profile.id);
           }
           if (currentProfileIds.length > 0) {
@@ -2368,6 +2490,129 @@ export const qualityRouter = router({
         found: true,
         summary: `${jobs.length} job(s) found. ${okCount} portal-visible, ${ghostCount} ghost-profile (invisible), ${missingProfileCount} missing profile.`,
         jobs,
+      };
+    }),
+
+  /**
+   * quality.listGhostProfiles — returns all ghost profiles (no email/passwordHash)
+   * along with the count of cleaner_jobs pointing to each one.
+   * Used by the "Unlinked Teams" admin panel.
+   */
+  listGhostProfiles: agentProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    // Ghost profiles: no email AND no passwordHash (created by sync, never logged in)
+    const ghosts = await db
+      .select({
+        id: cleanerProfiles.id,
+        name: cleanerProfiles.name,
+        launch27TeamId: cleanerProfiles.launch27TeamId,
+        createdAt: cleanerProfiles.createdAt,
+      })
+      .from(cleanerProfiles)
+      .where(and(isNull(cleanerProfiles.email), isNull(cleanerProfiles.passwordHash)));
+
+    if (ghosts.length === 0) return { ghosts: [] };
+
+    // For each ghost, count how many cleaner_jobs point to it
+    const ghostIds = ghosts.map(g => g.id);
+    const jobCounts = await db
+      .select({ cleanerProfileId: cleanerJobs.cleanerProfileId, count: count() })
+      .from(cleanerJobs)
+      .where(inArray(cleanerJobs.cleanerProfileId, ghostIds))
+      .groupBy(cleanerJobs.cleanerProfileId);
+
+    const countMap = new Map(jobCounts.map(r => [r.cleanerProfileId, r.count]));
+
+    // For each ghost, find candidate real profiles with the same name (for the merge UI)
+    const realProfiles = await db
+      .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, email: cleanerProfiles.email })
+      .from(cleanerProfiles)
+      .where(isNotNull(cleanerProfiles.email));
+
+    const result = ghosts.map(g => {
+      const normalizedGhost = g.name.trim().toLowerCase();
+      const candidates = realProfiles.filter(r => r.name.trim().toLowerCase() === normalizedGhost);
+      return {
+        ...g,
+        jobCount: countMap.get(g.id) ?? 0,
+        candidates,
+      };
+    });
+
+    return { ghosts: result };
+  }),
+
+  /**
+   * quality.mergeGhostProfile — merges a ghost profile into a real profile.
+   * 1. Re-points all cleaner_jobs from ghostId → realId
+   * 2. Copies launch27TeamId from ghost → real (so future syncs use ID-first lookup)
+   * 3. Deletes the ghost profile row
+   *
+   * This is the data-fix for existing ghost profiles. The sync fix prevents new ones.
+   */
+  mergeGhostProfile: agentProcedure
+    .input(z.object({ ghostId: z.number().int().positive(), realId: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const { ghostId, realId } = input;
+      if (ghostId === realId) throw new TRPCError({ code: "BAD_REQUEST", message: "ghostId and realId must be different" });
+
+      // Fetch both profiles to validate
+      const [ghost] = await db.select().from(cleanerProfiles).where(eq(cleanerProfiles.id, ghostId)).limit(1);
+      const [real] = await db.select().from(cleanerProfiles).where(eq(cleanerProfiles.id, realId)).limit(1);
+
+      if (!ghost) throw new TRPCError({ code: "NOT_FOUND", message: `Ghost profile id=${ghostId} not found` });
+      if (!real) throw new TRPCError({ code: "NOT_FOUND", message: `Real profile id=${realId} not found` });
+      if (ghost.email) throw new TRPCError({ code: "BAD_REQUEST", message: `Profile id=${ghostId} has an email — it is not a ghost profile` });
+
+      // Count jobs being re-pointed
+      const [{ jobCount }] = await db
+        .select({ jobCount: count() })
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.cleanerProfileId, ghostId));
+
+      // 1. Re-point all cleaner_jobs from ghost → real
+      await db.update(cleanerJobs)
+        .set({ cleanerProfileId: realId })
+        .where(eq(cleanerJobs.cleanerProfileId, ghostId));
+
+      // 2. Copy launch27TeamId to real profile (so future syncs find it by ID)
+      // Safety guard: if the real profile already has a DIFFERENT launch27TeamId, reject.
+      // Overwriting would silently map two L27 teams to one cleaner — never allowed.
+      if (ghost.launch27TeamId) {
+        if (real.launch27TeamId && real.launch27TeamId !== ghost.launch27TeamId) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              `Cannot merge: real profile id=${realId} already has launch27TeamId=${real.launch27TeamId}, ` +
+              `but ghost has launch27TeamId=${ghost.launch27TeamId}. ` +
+              `Two different L27 teams cannot map to the same cleaner. Fix manually.`,
+          });
+        }
+        if (!real.launch27TeamId) {
+          await db.update(cleanerProfiles)
+            .set({ launch27TeamId: ghost.launch27TeamId })
+            .where(eq(cleanerProfiles.id, realId));
+        }
+        // If real.launch27TeamId === ghost.launch27TeamId, they already match — no update needed
+      }
+
+      // 3. Delete the ghost profile
+      await db.delete(cleanerProfiles).where(eq(cleanerProfiles.id, ghostId));
+
+      console.log(
+        `[MergeGhost] Ghost profile id=${ghostId} name='${ghost.name}' merged into real profile id=${realId} name='${real.name}'. ` +
+        `${jobCount} job(s) re-pointed. launch27TeamId=${ghost.launch27TeamId ?? 'none'} copied to real profile.`
+      );
+
+      return {
+        ok: true,
+        message: `Merged ghost '${ghost.name}' (id=${ghostId}) into '${real.name}' (id=${realId}). ${jobCount} job(s) re-pointed.`,
+        jobsRepointed: jobCount,
       };
     }),
 });
