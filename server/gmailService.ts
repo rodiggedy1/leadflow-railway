@@ -9,7 +9,7 @@ import { google } from "googleapis";
 import { ENV } from "./_core/env";
 import { getDb } from "./db";
 import { gmailState, gmailThreadMeta } from "../drizzle/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, isNotNull } from "drizzle-orm";
 
 // In-memory cache so we don't hit the DB on every API call.
 // Cleared when a new token is stored via the OAuth callback.
@@ -658,7 +658,8 @@ export async function getConversationsUnreadCount(): Promise<number> {
       and(
         eq(gmailThreadMeta.isUnread, 1),
         eq(gmailThreadMeta.isInInbox, 1),
-        eq(gmailThreadMeta.isActionable, 1)
+        eq(gmailThreadMeta.isActionable, 1),
+        isNotNull(gmailThreadMeta.senderName) // match listThreads: only count worker-processed threads
       )
     );
   return Number(row?.count ?? 0);
