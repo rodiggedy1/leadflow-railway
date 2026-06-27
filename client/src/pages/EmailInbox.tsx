@@ -756,7 +756,7 @@ function CustomerContextPanel({
   const isLongTimeCustomer = customerSince !== null && new Date().getFullYear() - customerSince >= 2;
 
   return (
-    <aside className="w-[330px] shrink-0 bg-white border-l border-[#e8edf5] flex flex-col overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#dde3ee_transparent]">
+    <aside className="w-[clamp(260px,22vw,330px)] shrink-0 bg-white border-l border-[#e8edf5] flex flex-col overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#dde3ee_transparent]">
       {!validEmail ? (
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="text-center">
@@ -1694,17 +1694,6 @@ export default function EmailInbox() {
     if (!threadParam) return;
     // Wait until threads are loaded so we can find the thread
     if (threads.length === 0) return;
-    // DIAGNOSTIC: verify the deep-linked thread is actually in the query result
-    const allLoadedIds = threadsQuery.data?.threads.map((t) => t.id) ?? [];
-    const foundInQuery = allLoadedIds.includes(threadParam);
-    const foundInFiltered = threads.some((t) => t.id === threadParam);
-    console.log("[DeepLink]", {
-      threadParam,
-      totalLoaded: allLoadedIds.length,
-      foundInQuery,
-      foundInFilteredThreads: foundInFiltered,
-      activeTab,
-    });
     deepLinkApplied.current = true;
     // Remove the param from the URL without a page reload
     const url = new URL(window.location.href);
@@ -1720,12 +1709,11 @@ export default function EmailInbox() {
     const key = `${activeTab}::${activeCategoryFilter ?? ""}::${activeAgentFilter ?? ""}`;
     if (lastAutoSelectedKey.current === key) return; // already auto-selected for this tab+filter combo
     lastAutoSelectedKey.current = key;
-    console.log("[AutoSelect] selecting", threads[0].id, "deepLinkApplied:", deepLinkApplied.current, "selectedThreadId:", selectedThreadId);
     setSelectedThreadId(threads[0].id);
   }, [threads, activeTab, activeCategoryFilter, activeAgentFilter]);
 
   return (
-    <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans">
+    <div className="h-screen flex overflow-hidden bg-[#f5f5f3] font-sans min-w-[920px]">
       {/* Thread sidebar */}
       <aside className="w-[330px] bg-white border-r border-[#e8edf5] flex flex-col shrink-0 overflow-hidden" style={{boxShadow: '0 12px 30px rgba(16,24,40,0.07)'}}>
         {/* Header */}
@@ -2194,9 +2182,7 @@ export default function EmailInbox() {
       </aside>
 
       {/* Email viewer */}
-      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* DIAGNOSTIC */}
-        {typeof window !== "undefined" && new URLSearchParams(window.location.search).get("thread") === null && console.log("[RenderGate]", { selectedThreadId, connected: statusQuery.data?.connected, statusLoading: statusQuery.isLoading })}
+      <main className="flex-1 flex flex-col overflow-hidden min-w-[320px]">
         {statusQuery.data?.connected === false && <NotConnectedBanner />}
         {statusQuery.data?.connected && !selectedThreadId && (
           <div className="flex-1 flex items-center justify-center text-slate-400">
@@ -2210,32 +2196,7 @@ export default function EmailInbox() {
           {selectedThreadId && statusQuery.data?.connected && (
             <motion.div
               key={selectedThreadId}
-              ref={(el) => {
-                if (!el) return;
-                // DIAGNOSTIC: inspect actual rendered DOM — all children of flex container
-                setTimeout(() => {
-                  const parent = document.querySelector('.h-screen.flex.overflow-hidden') as HTMLElement | null;
-                  if (!parent) { console.log('[FlexDOM] parent not found'); return; }
-                  const childData = [...parent.children].map((c) => {
-                    const rect = (c as HTMLElement).getBoundingClientRect();
-                    const cs = window.getComputedStyle(c as HTMLElement);
-                    return {
-                      tag: c.tagName,
-                      cls: (c as HTMLElement).className.slice(0, 60),
-                      width: rect.width,
-                      display: cs.display,
-                      flex: cs.flex,
-                      position: cs.position,
-                    };
-                  });
-                  console.log('[FlexDOM]', {
-                    clientWidth: parent.clientWidth,
-                    scrollWidth: parent.scrollWidth,
-                    children: childData,
-                  });
-                }, 600);
-              }}
-              className="flex flex-col flex-1 overflow-hidden min-w-0"
+                className="flex flex-col flex-1 overflow-hidden min-w-0"
               initial={{ opacity: 0, x: 12 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -8 }}
