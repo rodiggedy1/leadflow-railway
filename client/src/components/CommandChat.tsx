@@ -2643,8 +2643,8 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
       {children}
       {hovered && right !== null && (
         <div
-          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
-          style={{ top: 80, right }}
+          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          style={{ top: 80, right, maxHeight: "calc(100vh - 100px)" }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
@@ -2667,7 +2667,7 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
                   )}>
                     {msg.role === "assistant" ? "You" : "Customer"}
                   </div>
-                  <div className="text-sm text-slate-800 leading-relaxed break-words">{msg.content}</div>
+                  <div className="text-sm text-slate-800 leading-relaxed">{msg.content}</div>
                 </div>
               ))}
             </div>
@@ -2703,8 +2703,8 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
       {children}
       {hovered && right !== null && (
         <div
-          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
-          style={{ top: 80, right }}
+          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          style={{ top: 80, right, maxHeight: "calc(100vh - 100px)" }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
@@ -2731,7 +2731,7 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
                         {new Date(msg.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-800 leading-relaxed break-words">{(msg.snippet || msg.bodyText || "").slice(0, 150)}{((msg.snippet || msg.bodyText || "").length > 150) ? "…" : ""}</p>
+                    <p className="text-sm text-slate-800 leading-relaxed">{msg.snippet || msg.bodyText || ""}</p>
                   </div>
                 );
               })}
