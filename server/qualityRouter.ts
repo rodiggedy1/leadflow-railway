@@ -19,7 +19,7 @@
 
 import { randomBytes } from "crypto";
 import { z } from "zod";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, sql, count, lt, notInArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, not, or, sql, count, lt, notInArray, ne } from "drizzle-orm";
 import { router, agentProcedure, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -2525,11 +2525,18 @@ export const qualityRouter = router({
 
     const countMap = new Map(jobCounts.map(r => [r.cleanerProfileId, r.count]));
 
-    // For each ghost, find candidate real profiles with the same name (for the merge UI)
+    // Real profiles = has email OR passwordHash (i.e. can actually log in)
+    // Exclude ghost IDs so they don't appear as merge targets
     const realProfiles = await db
       .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, email: cleanerProfiles.email })
       .from(cleanerProfiles)
-      .where(isNotNull(cleanerProfiles.email));
+      .where(
+        and(
+          or(isNotNull(cleanerProfiles.email), isNotNull(cleanerProfiles.passwordHash)),
+          not(inArray(cleanerProfiles.id, ghostIds))
+        )
+      )
+      .orderBy(cleanerProfiles.name);
 
     const result = ghosts.map(g => {
       const normalizedGhost = g.name.trim().toLowerCase();
