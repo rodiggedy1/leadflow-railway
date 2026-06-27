@@ -1058,7 +1058,7 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           eq(cleanerJobs.jobDate, dateStr),
           ne(cleanerJobs.bookingStatus, "cancelled"),
           ne(cleanerJobs.bookingStatus, "rescheduled"),
-          isNull(cleanerProfiles.email)  // ghost profile = no email = portal-invisible
+          and(isNull(cleanerProfiles.email), isNull(cleanerProfiles.passwordHash))  // ghost = no login at all
         )
       );
     if (ghostJobs.length > 0) {
@@ -2525,17 +2525,12 @@ export const qualityRouter = router({
 
     const countMap = new Map(jobCounts.map(r => [r.cleanerProfileId, r.count]));
 
-    // Real profiles = has email OR passwordHash (i.e. can actually log in)
-    // Exclude ghost IDs so they don't appear as merge targets
+    // Real profiles = any profile that is NOT a ghost (i.e. not in the ghost list)
+    // This includes profiles with phone/pay but no login yet — they can still be merge targets
     const realProfiles = await db
-      .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, email: cleanerProfiles.email })
+      .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, email: cleanerProfiles.email, passwordHash: cleanerProfiles.passwordHash })
       .from(cleanerProfiles)
-      .where(
-        and(
-          or(isNotNull(cleanerProfiles.email), isNotNull(cleanerProfiles.passwordHash)),
-          not(inArray(cleanerProfiles.id, ghostIds))
-        )
-      )
+      .where(not(inArray(cleanerProfiles.id, ghostIds)))
       .orderBy(cleanerProfiles.name);
 
     const result = ghosts.map(g => {
@@ -2549,7 +2544,12 @@ export const qualityRouter = router({
     });
 
     // Include all real profile names for diagnosis (helps identify name mismatches)
-    const allRealProfileNames = realProfiles.map(r => ({ id: r.id, name: r.name, email: r.email }));
+    const allRealProfileNames = realProfiles.map(r => ({
+      id: r.id,
+      name: r.name,
+      email: r.email,
+      hasLogin: !!(r.email || r.passwordHash),
+    }));
 
     return { ghosts: result, allRealProfileNames };
   }),
