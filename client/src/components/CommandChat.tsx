@@ -2865,7 +2865,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { maxResults: 25 },
     { staleTime: 30_000, refetchInterval: 60_000, retry: false, enabled: emailsOpen }
   );
-  const emailThreadsList = emailThreadsData?.threads ?? [];
+  const emailThreadsList = (emailThreadsData?.threads ?? []).filter((t: any) => t.isUnread);
   // ── Missed Calls today count (pending only) ─────────────────────────────────
   const { data: missedCallsTodayData, refetch: refetchMissedCallsToday } = trpc.missedCalls.getPendingCount.useQuery(
     { todayOnly: true },
@@ -2906,7 +2906,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
   });
   const [hiddenEmailThreadIds, setHiddenEmailThreadIds] = useState<Set<string>>(new Set());
-  const resolveEmailThread = trpc.gmail.resolveGlanceItem.useMutation({
+  const completeEmailThread = trpc.gmail.completeThread.useMutation({
     onSuccess: () => {
       utils.gmail.listThreads.invalidate();
       utils.gmail.getUnreadCount.invalidate();
@@ -7848,8 +7848,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             {emailThreadsList.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-400 py-16">
                 <Mail className="h-8 w-8 opacity-30" />
-                <p className="text-sm font-medium">No emails</p>
-                <p className="text-xs text-slate-400">Inbox is empty</p>
+                <p className="text-sm font-medium">All caught up</p>
+                <p className="text-xs text-slate-400">No unread emails</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -7928,7 +7928,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         onClick={(e) => {
                           e.stopPropagation();
                           setHiddenEmailThreadIds(prev => new Set([...prev, thread.id]));
-                          resolveEmailThread.mutate({ threadId: thread.id });
+                          completeEmailThread.mutate({ threadId: thread.id });
                         }}
                         title="Resolve"
                         className="flex items-center justify-center w-10 shrink-0 border-l border-slate-100 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors"

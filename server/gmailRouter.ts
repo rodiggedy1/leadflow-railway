@@ -765,6 +765,38 @@ Write the reply now:`;
     }),
 
   /**
+   * Operator "I'm done with this email" workflow.
+   * If the thread is still unread, marks it read first (Gmail + DB).
+   * Then resolves the AI glance item (sets aiResolvedAt).
+   * Single round-trip — orchestrates markRead + resolveGlanceItem without
+   * duplicating their logic.
+   */
+  completeThread: agentProcedure
+    .input(z.object({ threadId: z.string() }))
+    .mutation(async ({ input }) => {
+      const { db } = await requireGmailConnected();
+      // Step 1: mark read if currently unread (UPDATE only — never insert partial rows)
+      const [meta] = await db
+        .select({ isUnread: gmailThreadMeta.isUnread })
+        .from(gmailThreadMeta)
+        .where(eq(gmailThreadMeta.threadId, input.threadId))
+        .limit(1);
+      if (meta?.isUnread) {
+        await markThreadRead(input.threadId).catch(() => {});
+        await db.update(gmailThreadMeta)
+          .set({ isUnread: 0 })
+          .where(eq(gmailThreadMeta.threadId, input.threadId))
+          .catch(() => {});
+      }
+      // Step 2: resolve the AI glance item
+      await db
+        .insert(gmailThreadMeta)
+        .values({ threadId: input.threadId, isIssue: 0, aiResolvedAt: new Date() })
+        .onDuplicateKeyUpdate({ set: { aiResolvedAt: new Date(), updatedAt: new Date() } });
+      return { success: true };
+    }),
+
+  /**
    * Get the stored AI summary + category for a single thread.
    * Used to hydrate the right panel when a thread is selected.
    */
