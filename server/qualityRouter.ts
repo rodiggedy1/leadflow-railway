@@ -2518,12 +2518,14 @@ export const qualityRouter = router({
       .from(cleanerProfiles)
       // A ghost = sync-created empty row: no phone, no email, no password, no pay
       // Real cleaners always have at least phone OR payPercent set
+      // Exclude 'Unassigned' — synthetic profile for L27 bookings with no team assigned
       .where(
         and(
           isNull(cleanerProfiles.phone),
           isNull(cleanerProfiles.email),
           isNull(cleanerProfiles.passwordHash),
-          isNull(cleanerProfiles.payPercent)
+          isNull(cleanerProfiles.payPercent),
+          not(eq(cleanerProfiles.name, "Unassigned"))
         )
       );
 
@@ -2557,15 +2559,7 @@ export const qualityRouter = router({
       };
     });
 
-    // Include all real profile names for diagnosis (helps identify name mismatches)
-    const allRealProfileNames = realProfiles.map(r => ({
-      id: r.id,
-      name: r.name,
-      email: r.email,
-      hasLogin: !!(r.email || r.passwordHash),
-    }));
-
-    return { ghosts: result, allRealProfileNames };
+    return { ghosts: result, allRealProfileNames: realProfiles.map(r => ({ id: r.id, name: r.name, email: r.email })) };
   }),
 
   /**
