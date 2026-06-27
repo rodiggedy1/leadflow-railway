@@ -1312,6 +1312,7 @@ function UnlinkedTeamsSection() {
 
   const ghosts = data?.ghosts ?? [];
   const allRealProfileNames = data?.allRealProfileNames ?? [];
+  const [searchTerms, setSearchTerms] = useState<Record<number, string>>({});
 
   if (isLoading) {
     return (
@@ -1353,55 +1354,78 @@ function UnlinkedTeamsSection() {
         <CardContent className="space-y-4">
           {ghosts.map((ghost) => {
             const realId = selectedReal[ghost.id];
-            const realProfile = ghost.candidates.find(c => c.id === realId);
+            const realProfile = allRealProfileNames.find(r => r.id === realId);
+            const search = searchTerms[ghost.id] ?? "";
+            const filtered = allRealProfileNames.filter(r =>
+              r.name.toLowerCase().includes(search.toLowerCase()) ||
+              (r.email ?? "").toLowerCase().includes(search.toLowerCase())
+            );
             return (
               <div key={ghost.id} className="border rounded-lg p-4 bg-orange-50">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="destructive" className="text-xs">Ghost</Badge>
-                      <span className="font-medium">{ghost.name}</span>
-                      {ghost.launch27TeamId && (
-                        <span className="text-xs text-muted-foreground">L27 team id={ghost.launch27TeamId}</span>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="destructive" className="text-xs">Ghost</Badge>
+                    <span className="font-medium">{ghost.name}</span>
+                    {ghost.launch27TeamId && (
+                      <span className="text-xs text-muted-foreground">L27 id={ghost.launch27TeamId}</span>
+                    )}
+                    <span className="text-sm text-red-600 font-medium ml-auto">{ghost.jobCount} job(s) invisible</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        className="pl-7 h-8 text-sm"
+                        placeholder="Search real profile by name or email..."
+                        value={search}
+                        onChange={e => {
+                          setSearchTerms(prev => ({ ...prev, [ghost.id]: e.target.value }));
+                          // clear selection when search changes
+                          if (realId) setSelectedReal(prev => { const n = { ...prev }; delete n[ghost.id]; return n; });
+                        }}
+                      />
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={!realId || merge.isPending}
+                      onClick={() => {
+                        if (!realId || !realProfile) return;
+                        setPendingMerge({ ghostId: ghost.id, realId, ghostName: ghost.name, realName: realProfile.name });
+                      }}
+                    >
+                      <GitMerge className="w-4 h-4 mr-1" /> Merge
+                    </Button>
+                  </div>
+                  {search.length > 0 && (
+                    <div className="border rounded bg-white shadow-sm max-h-40 overflow-y-auto">
+                      {filtered.length === 0 ? (
+                        <div className="p-2 text-xs text-muted-foreground">No profiles match</div>
+                      ) : (
+                        filtered.map(r => (
+                          <button
+                            key={r.id}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center gap-2 ${
+                              realId === r.id ? "bg-muted font-medium" : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedReal(prev => ({ ...prev, [ghost.id]: r.id }));
+                              setSearchTerms(prev => ({ ...prev, [ghost.id]: r.name }));
+                            }}
+                          >
+                            <span className="font-medium">{r.name}</span>
+                            <span className="text-muted-foreground text-xs">{r.email}</span>
+                            <span className="text-muted-foreground text-xs ml-auto">#{r.id}</span>
+                          </button>
+                        ))
                       )}
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                      <span className="font-medium text-red-600">{ghost.jobCount} job(s)</span> invisible in portal
+                  )}
+                  {realId && realProfile && (
+                    <div className="text-xs text-green-700 flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      Will merge into: <span className="font-medium">{realProfile.name}</span> ({realProfile.email})
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {ghost.candidates.length > 0 ? (
-                      <>
-                        <Select
-                          value={realId ? String(realId) : ""}
-                          onValueChange={(v) => setSelectedReal(prev => ({ ...prev, [ghost.id]: parseInt(v, 10) }))}
-                        >
-                          <SelectTrigger className="w-52 text-sm">
-                            <SelectValue placeholder="Select real profile..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ghost.candidates.map(c => (
-                              <SelectItem key={c.id} value={String(c.id)}>
-                                {c.name} ({c.email})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          size="sm"
-                          disabled={!realId || merge.isPending}
-                          onClick={() => {
-                            if (!realId || !realProfile) return;
-                            setPendingMerge({ ghostId: ghost.id, realId, ghostName: ghost.name, realName: realProfile.name });
-                          }}
-                        >
-                          <GitMerge className="w-4 h-4 mr-1" /> Merge
-                        </Button>
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground italic">No matching real profile found — check names</span>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
             );
