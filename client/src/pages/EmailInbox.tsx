@@ -1694,6 +1694,17 @@ export default function EmailInbox() {
     if (!threadParam) return;
     // Wait until threads are loaded so we can find the thread
     if (threads.length === 0) return;
+    // DIAGNOSTIC: verify the deep-linked thread is actually in the query result
+    const allLoadedIds = threadsQuery.data?.threads.map((t) => t.id) ?? [];
+    const foundInQuery = allLoadedIds.includes(threadParam);
+    const foundInFiltered = threads.some((t) => t.id === threadParam);
+    console.log("[DeepLink]", {
+      threadParam,
+      totalLoaded: allLoadedIds.length,
+      foundInQuery,
+      foundInFilteredThreads: foundInFiltered,
+      activeTab,
+    });
     deepLinkApplied.current = true;
     // Remove the param from the URL without a page reload
     const url = new URL(window.location.href);
