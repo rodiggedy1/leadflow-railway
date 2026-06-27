@@ -1720,6 +1720,7 @@ export default function EmailInbox() {
     const key = `${activeTab}::${activeCategoryFilter ?? ""}::${activeAgentFilter ?? ""}`;
     if (lastAutoSelectedKey.current === key) return; // already auto-selected for this tab+filter combo
     lastAutoSelectedKey.current = key;
+    console.log("[AutoSelect] selecting", threads[0].id, "deepLinkApplied:", deepLinkApplied.current, "selectedThreadId:", selectedThreadId);
     setSelectedThreadId(threads[0].id);
   }, [threads, activeTab, activeCategoryFilter, activeAgentFilter]);
 
