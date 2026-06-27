@@ -2305,9 +2305,20 @@ export const qualityRouter = router({
       }
 
       // 2. For each job row, fetch the linked cleaner_profile and diagnose
+      // NOTE: select only columns that exist pre-migration (launch27TeamId added in schema
+      // but not yet migrated to production DB — selecting it would cause a query failure).
       const profileIds = Array.from(new Set(jobRows.map(j => j.cleanerProfileId)));
       const profiles = await db
-        .select()
+        .select({
+          id: cleanerProfiles.id,
+          name: cleanerProfiles.name,
+          email: cleanerProfiles.email,
+          phone: cleanerProfiles.phone,
+          passwordHash: cleanerProfiles.passwordHash,
+          isActive: cleanerProfiles.isActive,
+          payPercent: cleanerProfiles.payPercent,
+          language: cleanerProfiles.language,
+        })
         .from(cleanerProfiles)
         .where(inArray(cleanerProfiles.id, profileIds));
       const profileMap = new Map(profiles.map(p => [p.id, p]));
@@ -2337,7 +2348,6 @@ export const qualityRouter = router({
             phone: profile.phone ?? null,
             hasLogin,
             isGhost,
-            launch27TeamId: (profile as any).launch27TeamId ?? null,
           } : null,
           diagnosis: !profile
             ? "MISSING_PROFILE: cleanerProfileId points to a non-existent row"
