@@ -2197,7 +2197,8 @@ export const opsChatRouter = router({
       if (!db) return { photos: {} };
       const rows = await db
         .select({ name: agents.name, profilePhotoUrl: agents.profilePhotoUrl })
-        .from(agents);
+        .from(agents)
+        .where(eq(agents.isActive, 1));
       const photos: Record<string, string | null> = {};
       for (const row of rows) {
         photos[row.name] = row.profilePhotoUrl ?? null;
