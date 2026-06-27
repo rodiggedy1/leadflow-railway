@@ -2212,29 +2212,27 @@ export default function EmailInbox() {
               key={selectedThreadId}
               ref={(el) => {
                 if (!el) return;
-                // DIAGNOSTIC: detailed flex property dump of main and its parent
+                // DIAGNOSTIC: inspect actual rendered DOM — all children of flex container
                 setTimeout(() => {
-                  const main = el.closest('main') as HTMLElement | null;
-                  const parent = main?.parentElement as HTMLElement | null;
-                  const logEl = (label: string, node: HTMLElement | null) => {
-                    if (!node) return;
-                    const r = node.getBoundingClientRect();
-                    const s = window.getComputedStyle(node);
-                    console.log(`[FlexDebug:${label}]`, {
-                      width: r.width,
-                      flexGrow: s.flexGrow,
-                      flexShrink: s.flexShrink,
-                      flexBasis: s.flexBasis,
-                      minWidth: s.minWidth,
-                      maxWidth: s.maxWidth,
-                      computedWidth: s.width,
-                      overflow: s.overflow,
-                      cls: node.className.slice(0, 80),
-                    });
-                  };
-                  logEl('parent', parent);
-                  logEl('main', main);
-                  logEl('pane', el);
+                  const parent = document.querySelector('.h-screen.flex.overflow-hidden') as HTMLElement | null;
+                  if (!parent) { console.log('[FlexDOM] parent not found'); return; }
+                  const childData = [...parent.children].map((c) => {
+                    const rect = (c as HTMLElement).getBoundingClientRect();
+                    const cs = window.getComputedStyle(c as HTMLElement);
+                    return {
+                      tag: c.tagName,
+                      cls: (c as HTMLElement).className.slice(0, 60),
+                      width: rect.width,
+                      display: cs.display,
+                      flex: cs.flex,
+                      position: cs.position,
+                    };
+                  });
+                  console.log('[FlexDOM]', {
+                    clientWidth: parent.clientWidth,
+                    scrollWidth: parent.scrollWidth,
+                    children: childData,
+                  });
                 }, 600);
               }}
               className="flex flex-col flex-1 overflow-hidden min-w-0"
