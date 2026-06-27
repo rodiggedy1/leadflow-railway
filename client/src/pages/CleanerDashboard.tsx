@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
   CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink,
-  X, ZoomIn, Images, Pencil, Link2
+  X, ZoomIn, Images, Pencil, Link2, Search, AlertCircle, CheckCircle, GitMerge
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -1288,6 +1288,127 @@ function PaySummarySection({ date, onSetPassword }: { date: string; onSetPasswor
   );
 }
 
+// ── Portal Diagnostic Section ────────────────────────────────────────────────
+/**
+ * Diagnostic tool: traces a job from L27 booking → cleaner_jobs → cleaner_profile
+ * → portal visibility. Proves whether a ghost profile is causing a job to be
+ * invisible in the cleaner portal.
+ */
+function PortalDiagnosticSection() {
+  const [bookingId, setBookingId] = useState("");
+  const [date, setDate] = useState("");
+  const [enabled, setEnabled] = useState(false);
+
+  const { data, isFetching, error } = trpc.quality.traceJob.useQuery(
+    { bookingId: bookingId ? parseInt(bookingId, 10) : undefined, date: date || undefined },
+    { enabled, refetchOnWindowFocus: false }
+  );
+
+  function runTrace() {
+    if (!bookingId && !date) { toast.error("Enter a Booking ID or date"); return; }
+    setEnabled(false);
+    setTimeout(() => setEnabled(true), 50);
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+          <Search className="w-4 h-4 text-gray-400" />
+          Portal Diagnostic — Trace Job Visibility
+          <span className="text-xs font-normal text-gray-400 ml-1">Prove why a job is missing from the cleaner portal</span>
+        </h3>
+      </div>
+      <div className="p-4 space-y-3">
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Launch27 Booking ID</label>
+            <Input
+              value={bookingId}
+              onChange={e => { setBookingId(e.target.value); setDate(""); }}
+              placeholder="e.g. 123456"
+              className="h-8 text-sm"
+            />
+          </div>
+          <div className="text-xs text-muted-foreground pb-2">or</div>
+          <div className="flex-1">
+            <label className="text-xs font-medium text-muted-foreground block mb-1">Date (all jobs)</label>
+            <Input
+              type="date"
+              value={date}
+              onChange={e => { setDate(e.target.value); setBookingId(""); }}
+              className="h-8 text-sm"
+            />
+          </div>
+          <Button
+            size="sm"
+            className="h-8 px-3 text-xs"
+            onClick={runTrace}
+            disabled={isFetching}
+            style={{ backgroundColor: "#E8603C", color: "white" }}
+          >
+            {isFetching ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+            Trace
+          </Button>
+        </div>
+
+        {error && (
+          <div className="text-xs text-red-600 bg-red-50 rounded p-2">{error.message}</div>
+        )}
+
+        {data && (
+          <div className="space-y-2">
+            <div className={`text-xs font-medium px-2 py-1.5 rounded flex items-center gap-1.5 ${
+              data.found ? "bg-gray-100 text-gray-700" : "bg-amber-50 text-amber-700"
+            }`}>
+              {data.found ? <CheckCircle className="w-3.5 h-3.5 text-green-500" /> : <AlertCircle className="w-3.5 h-3.5" />}
+              {data.found ? data.summary : data.message}
+            </div>
+
+            {data.jobs?.map((job) => (
+              <div key={job.cleanerJobId} className={`rounded-lg border p-3 text-xs space-y-1.5 ${
+                job.portalWouldReturn ? "border-green-200 bg-green-50" :
+                job.profile?.isGhost ? "border-red-200 bg-red-50" :
+                "border-amber-200 bg-amber-50"
+              }`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-medium text-sm">{job.customerName ?? "Unknown"} — {job.jobDate}</div>
+                  {job.portalWouldReturn ? (
+                    <Badge className="text-xs bg-green-100 text-green-700 border-green-200">Portal OK</Badge>
+                  ) : job.profile?.isGhost ? (
+                    <Badge className="text-xs bg-red-100 text-red-700 border-red-200">Ghost Profile</Badge>
+                  ) : (
+                    <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-200">No Login</Badge>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-muted-foreground">
+                  <span>Booking ID: <span className="font-mono text-gray-900">{job.bookingId ?? "—"}</span></span>
+                  <span>Team: <span className="text-gray-900">{job.teamName ?? "—"}</span> (L27 ID: {job.teamId ?? "—"})</span>
+                  <span>cleaner_job.id: <span className="font-mono text-gray-900">{job.cleanerJobId}</span></span>
+                  <span>cleanerProfileId: <span className="font-mono text-gray-900">{job.cleanerProfileId}</span></span>
+                  {job.profile && (
+                    <>
+                      <span>Profile name: <span className="text-gray-900">{job.profile.name}</span></span>
+                      <span>Profile email: <span className="text-gray-900">{job.profile.email ?? "NONE"}</span></span>
+                    </>
+                  )}
+                </div>
+                <div className={`font-mono text-xs mt-1 px-2 py-1 rounded ${
+                  job.portalWouldReturn ? "bg-green-100 text-green-800" :
+                  job.profile?.isGhost ? "bg-red-100 text-red-800" :
+                  "bg-amber-100 text-amber-800"
+                }`}>
+                  {job.diagnosis}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Cleaner Profiles Section ─────────────────────────────────────────────────
 /**
  * Inline editor for cleaner profiles — lets admin set phone, email, pay %.
@@ -1925,6 +2046,9 @@ export default function CleanerDashboard() {
 
         {/* Weekly Pay Summary */}
         <PaySummarySection date={selectedDate} onSetPassword={(id, name) => { setResetTarget({ id, name }); setResetPw(""); setResetEmail(""); }} />
+
+        {/* Portal Diagnostic — trace job visibility, prove ghost profile root cause */}
+        <PortalDiagnosticSection />
 
         {/* Cleaner Profiles (phone numbers, email, pay %) */}
         <CleanerProfilesSection />

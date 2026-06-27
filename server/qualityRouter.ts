@@ -2269,4 +2269,95 @@ export const qualityRouter = router({
       console.log(`[Quality] flagAsComplaint cleanerJob=${input.cleanerJobId} charge=${input.applyCharge} newFinalPay=${newFinalPay}`);
       return { ok: true, newFinalPay };
     }),
+
+  /**
+   * quality.traceJob — diagnostic tool to prove the ghost-profile root cause.
+   *
+   * Given a bookingId (from Launch27), traces the full chain:
+   *   L27 booking → cleaner_jobs row → cleanerProfileId → cleaner_profiles row
+   *   → does that profile have a login? → would the portal query return this job?
+   *
+   * Returns a structured report so we can confirm whether a ghost profile is
+   * the reason a job is invisible in the cleaner portal.
+   */
+  traceJob: agentProcedure
+    .input(z.object({
+      bookingId: z.number().optional(),
+      date: z.string().optional(), // YYYY-MM-DD, used to find jobs if bookingId unknown
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // 1. Find cleaner_jobs rows matching the criteria
+      const jobRows = await db
+        .select()
+        .from(cleanerJobs)
+        .where(
+          input.bookingId
+            ? eq(cleanerJobs.bookingId, input.bookingId)
+            : eq(cleanerJobs.jobDate, input.date ?? "")
+        )
+        .orderBy(cleanerJobs.serviceDateTime);
+
+      if (jobRows.length === 0) {
+        return { found: false, message: `No cleaner_jobs rows found for ${input.bookingId ? `bookingId=${input.bookingId}` : `date=${input.date}`}`, jobs: [] };
+      }
+
+      // 2. For each job row, fetch the linked cleaner_profile and diagnose
+      const profileIds = Array.from(new Set(jobRows.map(j => j.cleanerProfileId)));
+      const profiles = await db
+        .select()
+        .from(cleanerProfiles)
+        .where(inArray(cleanerProfiles.id, profileIds));
+      const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+      const jobs = jobRows.map(job => {
+        const profile = profileMap.get(job.cleanerProfileId);
+        const hasLogin = !!(profile?.email && profile?.passwordHash);
+        const isGhost = !!(profile && !profile.email && !profile.passwordHash);
+        const portalWouldReturn = hasLogin; // portal query: WHERE cleanerProfileId = session.cleanerId
+        // A ghost profile means: the sync created a new cleanerProfiles row because
+        // team.title didn't match any existing profile name. The cleaner's real profile
+        // has a different id, so the portal query returns nothing for this job.
+        return {
+          cleanerJobId: job.id,
+          bookingId: job.bookingId,
+          jobDate: job.jobDate,
+          serviceDateTime: job.serviceDateTime,
+          customerName: job.customerName,
+          teamName: job.teamName,
+          teamId: job.teamId,
+          bookingStatus: job.bookingStatus,
+          cleanerProfileId: job.cleanerProfileId,
+          profile: profile ? {
+            id: profile.id,
+            name: profile.name,
+            email: profile.email ?? null,
+            phone: profile.phone ?? null,
+            hasLogin,
+            isGhost,
+            launch27TeamId: (profile as any).launch27TeamId ?? null,
+          } : null,
+          diagnosis: !profile
+            ? "MISSING_PROFILE: cleanerProfileId points to a non-existent row"
+            : isGhost
+            ? `GHOST_PROFILE: profile id=${profile.id} name='${profile.name}' has no email/password — created by sync when L27 team title didn't match any existing profile. Portal query WHERE cleanerProfileId=${job.cleanerProfileId} returns nothing for any logged-in cleaner.`
+            : hasLogin
+            ? `OK: profile id=${profile.id} name='${profile.name}' has login — portal would return this job for the cleaner with email='${profile.email}'`
+            : `NO_LOGIN: profile id=${profile.id} name='${profile.name}' has no passwordHash — cleaner cannot log in yet`,
+          portalWouldReturn,
+        };
+      });
+
+      const ghostCount = jobs.filter(j => j.profile?.isGhost).length;
+      const missingProfileCount = jobs.filter(j => !j.profile).length;
+      const okCount = jobs.filter(j => j.portalWouldReturn).length;
+
+      return {
+        found: true,
+        summary: `${jobs.length} job(s) found. ${okCount} portal-visible, ${ghostCount} ghost-profile (invisible), ${missingProfileCount} missing profile.`,
+        jobs,
+      };
+    }),
 });

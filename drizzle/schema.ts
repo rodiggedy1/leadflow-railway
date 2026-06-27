@@ -1022,6 +1022,13 @@ export const cleanerProfiles = mysqlTable("cleaner_profiles", {
   passwordHash: varchar("passwordHash", { length: 255 }),
   /** Portal language: 'en' | 'es' | 'pt'. Default 'en'. */
   language: varchar("language", { length: 5 }).default("en").notNull(),
+  /**
+   * Launch27 team ID — the numeric ID from L27's teams array.
+   * When set, the sync uses this as the primary key for matching instead of name.
+   * This prevents ghost profile creation when L27 team titles don't exactly match
+   * the cleanerProfiles.name (the root cause of jobs missing from the cleaner portal).
+   */
+  launch27TeamId: int("launch27TeamId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
