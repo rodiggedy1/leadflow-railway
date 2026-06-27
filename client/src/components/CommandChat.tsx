@@ -2616,7 +2616,7 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
 // ─── CS SMS History Hover Popover ───────────────────────────────────────────
 function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; children: React.ReactNode }) {
   const [hovered, setHovered] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [right, setRight] = useState<number | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const { data: sessionData, isLoading } = trpc.leads.getById.useQuery(
     { id: sessionId },
@@ -2634,17 +2634,17 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
   const handleMouseEnter = () => {
     if (rowRef.current) {
       const rect = rowRef.current.getBoundingClientRect();
-      setPos({ top: rect.top, right: window.innerWidth - rect.left + 8 });
+      setRight(window.innerWidth - rect.left + 8);
     }
     setHovered(true);
   };
   return (
     <div ref={rowRef} onMouseEnter={handleMouseEnter} onMouseLeave={() => setHovered(false)}>
       {children}
-      {hovered && pos && (
+      {hovered && right !== null && (
         <div
           className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
-          style={{ top: pos.top, right: pos.right }}
+          style={{ top: 80, right }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
@@ -2667,7 +2667,7 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
                   )}>
                     {msg.role === "assistant" ? "You" : "Customer"}
                   </div>
-                  <div className="text-sm text-slate-800 leading-relaxed">{msg.content}</div>
+                  <div className="text-sm text-slate-800 leading-relaxed line-clamp-3">{msg.content}</div>
                 </div>
               ))}
             </div>
@@ -2681,7 +2681,7 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
 // ─── Email History Hover Popover ─────────────────────────────────────────────
 function EmailHistoryPopover({ threadId, children }: { threadId: string; children: React.ReactNode }) {
   const [hovered, setHovered] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const [right, setRight] = useState<number | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const { data: threadData, isLoading } = trpc.gmail.getThread.useQuery(
     { threadId },
@@ -2694,17 +2694,17 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
   const handleMouseEnter = () => {
     if (rowRef.current) {
       const rect = rowRef.current.getBoundingClientRect();
-      setPos({ top: rect.top, right: window.innerWidth - rect.left + 8 });
+      setRight(window.innerWidth - rect.left + 8);
     }
     setHovered(true);
   };
   return (
     <div ref={rowRef} onMouseEnter={handleMouseEnter} onMouseLeave={() => setHovered(false)}>
       {children}
-      {hovered && pos && (
+      {hovered && right !== null && (
         <div
           className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
-          style={{ top: pos.top, right: pos.right }}
+          style={{ top: 80, right }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
@@ -2731,7 +2731,7 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
                         {new Date(msg.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-800 leading-relaxed">{msg.snippet || msg.bodyText?.slice(0, 200)}</p>
+                    <p className="text-sm text-slate-800 leading-relaxed line-clamp-3">{msg.snippet || msg.bodyText?.slice(0, 200)}</p>
                   </div>
                 );
               })}
