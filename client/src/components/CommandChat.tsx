@@ -2731,7 +2731,7 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
                         {new Date(msg.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-800 leading-relaxed break-words">{msg.snippet || msg.bodyText?.slice(0, 200)}</p>
+                    <p className="text-sm text-slate-800 leading-relaxed break-words">{(msg.snippet || msg.bodyText || "").slice(0, 150)}{((msg.snippet || msg.bodyText || "").length > 150) ? "…" : ""}</p>
                   </div>
                 );
               })}
