@@ -2628,13 +2628,9 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
       const parsed: Array<{ role: string; content?: string; ts?: number }> = JSON.parse(sessionData.messageHistory as string);
       return parsed
         .filter(m => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
-        .slice(-15);
+        .slice(-6);
     } catch { return []; }
   }, [sessionData?.messageHistory]);
-  const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (endRef.current && messages.length > 0) endRef.current.scrollIntoView({ behavior: "instant" });
-  }, [messages.length]);
   const handleMouseEnter = () => {
     if (rowRef.current) {
       const rect = rowRef.current.getBoundingClientRect();
@@ -2647,36 +2643,33 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
       {children}
       {hovered && pos && (
         <div
-          className="fixed z-[9999] w-72 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
-          style={{ top: pos.top, right: pos.right, maxHeight: 320 }}
+          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          style={{ top: pos.top, right: pos.right }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
-          <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50">
-            <MessageCircle className="h-3 w-3 text-slate-400" />
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Conversation</span>
+          <div className="px-5 py-3 border-b border-slate-100">
+            <span className="text-xs font-semibold text-slate-500">Recent conversation</span>
           </div>
           {isLoading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="px-3 py-4 text-xs text-slate-400 text-center">No messages</div>
+            <div className="px-5 py-5 text-sm text-slate-400">No messages</div>
           ) : (
-            <div className="overflow-y-auto px-3 py-2 space-y-1.5" style={{ maxHeight: 272 }}>
+            <div className="divide-y divide-slate-50">
               {messages.map((msg, i) => (
-                <div key={i} className={cn("flex", msg.role === "assistant" ? "justify-end" : "justify-start")}>
+                <div key={i} className="px-5 py-3">
                   <div className={cn(
-                    "max-w-[85%] px-2.5 py-1.5 rounded-xl text-xs leading-relaxed break-words",
-                    msg.role === "assistant"
-                      ? "bg-orange-500 text-white rounded-br-sm"
-                      : "bg-slate-100 text-slate-700 rounded-bl-sm"
+                    "text-[11px] font-semibold mb-1",
+                    msg.role === "assistant" ? "text-orange-500" : "text-slate-400"
                   )}>
-                    {msg.content}
+                    {msg.role === "assistant" ? "You" : "Customer"}
                   </div>
+                  <div className="text-sm text-slate-800 leading-relaxed">{msg.content}</div>
                 </div>
               ))}
-              <div ref={endRef} />
             </div>
           )}
         </div>
@@ -2696,7 +2689,7 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
   );
   const messages = useMemo(() => {
     if (!threadData?.messages) return [];
-    return [...threadData.messages].slice(-6);
+    return [...threadData.messages].slice(-4);
   }, [threadData?.messages]);
   const handleMouseEnter = () => {
     if (rowRef.current) {
@@ -2710,37 +2703,35 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
       {children}
       {hovered && pos && (
         <div
-          className="fixed z-[9999] w-80 rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden"
-          style={{ top: pos.top, right: pos.right, maxHeight: 360 }}
+          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          style={{ top: pos.top, right: pos.right }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
-          <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50">
-            <Mail className="h-3 w-3 text-slate-400" />
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Thread</span>
-            {messages.length > 0 && <span className="ml-auto text-[10px] text-slate-400">{messages.length} message{messages.length !== 1 ? "s" : ""}</span>}
+          <div className="px-5 py-3 border-b border-slate-100">
+            <span className="text-xs font-semibold text-slate-500">Recent emails</span>
           </div>
           {isLoading ? (
-            <div className="flex items-center justify-center py-6">
-              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="px-3 py-4 text-xs text-slate-400 text-center">No messages</div>
+            <div className="px-5 py-5 text-sm text-slate-400">No emails</div>
           ) : (
-            <div className="overflow-y-auto" style={{ maxHeight: 312 }}>
+            <div className="divide-y divide-slate-50">
               {messages.map((msg: any, i: number) => {
                 const isOutbound = threadData?.inboxEmail && msg.fromEmail === threadData.inboxEmail;
                 return (
-                  <div key={msg.id ?? i} className={cn("px-3 py-2.5 border-b border-slate-50 last:border-0", isOutbound ? "bg-blue-50/40" : "")}>
+                  <div key={msg.id ?? i} className="px-5 py-3">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className={cn("text-[11px] font-semibold truncate", isOutbound ? "text-blue-700" : "text-slate-700")}>
+                      <span className={cn("text-[11px] font-semibold", isOutbound ? "text-blue-600" : "text-slate-400")}>
                         {isOutbound ? "You" : msg.from || msg.fromEmail}
                       </span>
-                      <span className="text-[10px] text-slate-400 shrink-0">
+                      <span className="text-[11px] text-slate-400">
                         {new Date(msg.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">{msg.snippet || msg.bodyText?.slice(0, 200)}</p>
+                    <p className="text-sm text-slate-800 leading-relaxed">{msg.snippet || msg.bodyText?.slice(0, 200)}</p>
                   </div>
                 );
               })}
