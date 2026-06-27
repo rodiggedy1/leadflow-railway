@@ -2212,22 +2212,24 @@ export default function EmailInbox() {
               key={selectedThreadId}
               ref={(el) => {
                 if (!el) return;
-                // DIAGNOSTIC: log pane dimensions and visibility after mount
+                // DIAGNOSTIC: walk parent chain to find collapsing container
                 requestAnimationFrame(() => {
-                  const rect = el.getBoundingClientRect();
-                  const style = window.getComputedStyle(el);
-                  console.log("[PaneMount]", {
-                    selectedThreadId,
-                    width: rect.width,
-                    height: rect.height,
-                    top: rect.top,
-                    left: rect.left,
-                    display: style.display,
-                    visibility: style.visibility,
-                    opacity: style.opacity,
-                    overflow: style.overflow,
-                  });
+                  const chain: object[] = [];
+                  let node: HTMLElement | null = el;
+                  while (node) {
+                    const r = node.getBoundingClientRect();
+                    const s = window.getComputedStyle(node);
+                    chain.push({ tag: node.tagName, cls: node.className.slice(0, 60), width: r.width, display: s.display, flex: s.flex });
+                    node = node.parentElement;
+                    if (node === document.body) break;
+                  }
+                  console.log("[PaneChain-rAF]", chain);
                 });
+                // Second measurement after animation completes
+                setTimeout(() => {
+                  const r = el.getBoundingClientRect();
+                  console.log("[PaneWidth-600ms]", { width: r.width, height: r.height, opacity: window.getComputedStyle(el).opacity });
+                }, 600);
               }}
               className="flex flex-col flex-1 overflow-hidden min-w-0"
               initial={{ opacity: 0, x: 12 }}
