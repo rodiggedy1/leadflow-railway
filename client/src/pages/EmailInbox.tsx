@@ -2212,23 +2212,29 @@ export default function EmailInbox() {
               key={selectedThreadId}
               ref={(el) => {
                 if (!el) return;
-                // DIAGNOSTIC: walk parent chain to find collapsing container
-                requestAnimationFrame(() => {
-                  const chain: object[] = [];
-                  let node: HTMLElement | null = el;
-                  while (node) {
+                // DIAGNOSTIC: detailed flex property dump of main and its parent
+                setTimeout(() => {
+                  const main = el.closest('main') as HTMLElement | null;
+                  const parent = main?.parentElement as HTMLElement | null;
+                  const logEl = (label: string, node: HTMLElement | null) => {
+                    if (!node) return;
                     const r = node.getBoundingClientRect();
                     const s = window.getComputedStyle(node);
-                    chain.push({ tag: node.tagName, cls: node.className.slice(0, 60), width: r.width, display: s.display, flex: s.flex });
-                    node = node.parentElement;
-                    if (node === document.body) break;
-                  }
-                  console.log("[PaneChain-rAF]", chain);
-                });
-                // Second measurement after animation completes
-                setTimeout(() => {
-                  const r = el.getBoundingClientRect();
-                  console.log("[PaneWidth-600ms]", { width: r.width, height: r.height, opacity: window.getComputedStyle(el).opacity });
+                    console.log(`[FlexDebug:${label}]`, {
+                      width: r.width,
+                      flexGrow: s.flexGrow,
+                      flexShrink: s.flexShrink,
+                      flexBasis: s.flexBasis,
+                      minWidth: s.minWidth,
+                      maxWidth: s.maxWidth,
+                      computedWidth: s.width,
+                      overflow: s.overflow,
+                      cls: node.className.slice(0, 80),
+                    });
+                  };
+                  logEl('parent', parent);
+                  logEl('main', main);
+                  logEl('pane', el);
                 }, 600);
               }}
               className="flex flex-col flex-1 overflow-hidden min-w-0"
