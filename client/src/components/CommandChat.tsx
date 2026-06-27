@@ -10,6 +10,7 @@
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
 import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import { ConversationViewport, type ConversationMessage as CVMessage } from "@/components/ConversationViewport";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
@@ -2613,8 +2614,16 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
   );
 }
 
-// ─── CS SMS History Hover Popover ───────────────────────────────────────────
-function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; children: React.ReactNode }) {
+// ─── CS SMS History Hover Popover (uses ConversationViewport) ────────────────
+function CsSmsHistoryPopover({
+  sessionId,
+  children,
+  onOpenFull,
+}: {
+  sessionId: number;
+  children: React.ReactNode;
+  onOpenFull: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   const [right, setRight] = useState<number | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -2622,15 +2631,35 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
     { id: sessionId },
     { enabled: hovered, staleTime: 60_000 }
   );
-  const messages = useMemo(() => {
+  // SMS adapter: normalize messageHistory JSON → ConversationMessage[]
+  const messages = useMemo((): CVMessage[] => {
     if (!sessionData?.messageHistory) return [];
     try {
-      const parsed: Array<{ role: string; content?: string; ts?: number }> = JSON.parse(sessionData.messageHistory as string);
+      const parsed: Array<{ role: string; content?: string; ts?: number }> = JSON.parse(
+        sessionData.messageHistory as string
+      );
+      const updatedAt = String(sessionData.updatedAt ?? sessionData.id);
       return parsed
-        .filter(m => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
-        .slice(-6);
-    } catch { return []; }
-  }, [sessionData?.messageHistory]);
+        .filter(
+          (m) =>
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string" &&
+            m.content.trim()
+        )
+        .map((m, idx) => ({
+          id: `${sessionId}:${idx}`,
+          versionKey: `${sessionId}:${idx}:${updatedAt}`,
+          author: {
+            name: m.role === "assistant" ? "You" : "Customer",
+            role: m.role === "assistant" ? "agent" : "customer",
+          },
+          content: m.content!,
+          createdAt: m.ts ? new Date(m.ts) : new Date(0),
+        }));
+    } catch {
+      return [];
+    }
+  }, [sessionData?.messageHistory, sessionData?.updatedAt, sessionId]);
   const handleMouseEnter = () => {
     if (rowRef.current) {
       const rect = rowRef.current.getBoundingClientRect();
@@ -2644,42 +2673,33 @@ function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; child
       {hovered && right !== null && (
         <div
           className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
-          style={{ top: 80, right, maxHeight: "calc(100vh - 100px)" }}
+          style={{ top: 80, right }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
-          <div className="px-5 py-3 border-b border-slate-100">
-            <span className="text-xs font-semibold text-slate-500">Recent conversation</span>
-          </div>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="px-5 py-5 text-sm text-slate-400">No messages</div>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {messages.map((msg, i) => (
-                <div key={i} className="px-5 py-3">
-                  <div className={cn(
-                    "text-[11px] font-semibold mb-1",
-                    msg.role === "assistant" ? "text-orange-500" : "text-slate-400"
-                  )}>
-                    {msg.role === "assistant" ? "You" : "Customer"}
-                  </div>
-                  <div className="text-sm text-slate-800 leading-relaxed">{msg.content}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <ConversationViewport
+            messages={messages}
+            isLoading={isLoading}
+            title="Recent conversation"
+            ctaLabel="Open conversation →"
+            onOpenFull={onOpenFull}
+          />
         </div>
       )}
     </div>
   );
 }
 
-// ─── Email History Hover Popover ─────────────────────────────────────────────
-function EmailHistoryPopover({ threadId, children }: { threadId: string; children: React.ReactNode }) {
+// ─── Email History Hover Popover (uses ConversationViewport) ─────────────────
+function EmailHistoryPopover({
+  threadId,
+  children,
+  onOpenFull,
+}: {
+  threadId: string;
+  children: React.ReactNode;
+  onOpenFull: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   const [right, setRight] = useState<number | null>(null);
   const rowRef = useRef<HTMLDivElement>(null);
@@ -2687,10 +2707,26 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
     { threadId },
     { enabled: hovered, staleTime: 60_000 }
   );
-  const messages = useMemo(() => {
+  // Email adapter: normalize Gmail thread messages → ConversationMessage[]
+  const messages = useMemo((): CVMessage[] => {
     if (!threadData?.messages) return [];
-    return [...threadData.messages].slice(-4);
-  }, [threadData?.messages]);
+    return [...threadData.messages].map((msg: any) => ({
+      id: msg.id ?? msg.date,
+      versionKey: `${msg.id ?? msg.date}:${msg.date}`,
+      author: {
+        name:
+          threadData.inboxEmail && msg.fromEmail === threadData.inboxEmail
+            ? "You"
+            : msg.from || msg.fromEmail || "Unknown",
+        role:
+          threadData.inboxEmail && msg.fromEmail === threadData.inboxEmail
+            ? "agent"
+            : "customer",
+      },
+      content: msg.snippet || msg.bodyText || "",
+      createdAt: new Date(msg.date),
+    }));
+  }, [threadData]);
   const handleMouseEnter = () => {
     if (rowRef.current) {
       const rect = rowRef.current.getBoundingClientRect();
@@ -2704,39 +2740,17 @@ function EmailHistoryPopover({ threadId, children }: { threadId: string; childre
       {hovered && right !== null && (
         <div
           className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
-          style={{ top: 80, right, maxHeight: "calc(100vh - 100px)" }}
+          style={{ top: 80, right }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
         >
-          <div className="px-5 py-3 border-b border-slate-100">
-            <span className="text-xs font-semibold text-slate-500">Recent emails</span>
-          </div>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="px-5 py-5 text-sm text-slate-400">No emails</div>
-          ) : (
-            <div className="divide-y divide-slate-50">
-              {messages.map((msg: any, i: number) => {
-                const isOutbound = threadData?.inboxEmail && msg.fromEmail === threadData.inboxEmail;
-                return (
-                  <div key={msg.id ?? i} className="px-5 py-3">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className={cn("text-[11px] font-semibold", isOutbound ? "text-blue-600" : "text-slate-400")}>
-                        {isOutbound ? "You" : msg.from || msg.fromEmail}
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {new Date(msg.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-800 leading-relaxed">{msg.snippet || msg.bodyText || ""}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <ConversationViewport
+            messages={messages}
+            isLoading={isLoading}
+            title="Recent emails"
+            ctaLabel="View full thread →"
+            onOpenFull={onOpenFull}
+          />
         </div>
       )}
     </div>
@@ -7603,7 +7617,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const isWarning = !isUrgent && session.ageMs > 15 * 60 * 1000;
                   const displayName = session.leadName || session.leadPhone;
                   return (
-                    <CsSmsHistoryPopover key={session.id} sessionId={session.id}>
+                    <CsSmsHistoryPopover key={session.id} sessionId={session.id} onOpenFull={() => { setCsSmsOpen(false); if (onSwitchToCSSession) { onSwitchToCSSession(session.id); } else if (onSwitchToCS) { onSwitchToCS(); } }}>
                     <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
                       {/* Main row — navigates to CS inbox */}
                       <button
@@ -7843,7 +7857,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const mins = Math.floor((Date.now() - Number(thread.date)) / 60_000);
                   const timeLabel = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
                   return (
-                    <EmailHistoryPopover key={thread.id} threadId={thread.id}>
+                    <EmailHistoryPopover key={thread.id} threadId={thread.id} onOpenFull={() => { setEmailsOpen(false); window.location.href = `/admin/inbox?thread=${encodeURIComponent(thread.id)}`; }}>
                     <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
                       {/* Main row — navigates to email inbox */}
                       <button
