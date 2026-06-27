@@ -1061,9 +1061,8 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           and(
             isNull(cleanerProfiles.phone),
             isNull(cleanerProfiles.email),
-            isNull(cleanerProfiles.passwordHash),
-            isNull(cleanerProfiles.payPercent)
-          )  // ghost = sync-created empty row (no phone, email, password, or pay)
+            isNull(cleanerProfiles.passwordHash)
+          )  // ghost = no contact info (no phone, email, or password)
         )
       );
     if (ghostJobs.length > 0) {
@@ -2516,15 +2515,14 @@ export const qualityRouter = router({
         createdAt: cleanerProfiles.createdAt,
       })
       .from(cleanerProfiles)
-      // A ghost = sync-created empty row: no phone, no email, no password, no pay
-      // Real cleaners always have at least phone OR payPercent set
+      // A ghost = sync-created row with no contact info: no phone, no email, no password
+      // payPercent is NOT used as a discriminator — old ghosts may have payPercent from team.share
       // Exclude 'Unassigned' — synthetic profile for L27 bookings with no team assigned
       .where(
         and(
           isNull(cleanerProfiles.phone),
           isNull(cleanerProfiles.email),
           isNull(cleanerProfiles.passwordHash),
-          isNull(cleanerProfiles.payPercent),
           not(eq(cleanerProfiles.name, "Unassigned"))
         )
       );
