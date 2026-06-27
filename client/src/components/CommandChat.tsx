@@ -9,7 +9,7 @@
  * Composer has full parity with the job-thread composer:
  *   Photo (drag-drop + click), Voice (MediaRecorder + Whisper), Emoji picker
  */
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
 import EmojiPicker, { type EmojiClickData, Theme } from "emoji-picker-react";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { useOsNotification } from "@/hooks/useOsNotification";
@@ -2608,6 +2608,111 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+    </div>
+  );
+}
+
+// ─── CS SMS History Hover Popover ───────────────────────────────────────────
+function CsSmsHistoryPopover({ sessionId, children }: { sessionId: number; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  const { data: sessionData } = trpc.leads.getById.useQuery(
+    { id: sessionId },
+    { enabled: hovered, staleTime: 60_000 }
+  );
+  const messages = useMemo(() => {
+    if (!sessionData?.messageHistory) return [];
+    try {
+      const parsed: Array<{ role: string; content?: string; ts?: number }> = JSON.parse(sessionData.messageHistory as string);
+      return parsed
+        .filter(m => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+        .slice(-15);
+    } catch { return []; }
+  }, [sessionData?.messageHistory]);
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (endRef.current && messages.length > 0) endRef.current.scrollIntoView({ behavior: "instant" });
+  }, [messages.length]);
+  return (
+    <div className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {children}
+      {hovered && messages.length > 0 && (
+        <div
+          className="absolute right-full top-0 mr-2 z-50 w-72 rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden"
+          style={{ maxHeight: 320 }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50">
+            <MessageCircle className="h-3 w-3 text-slate-400" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Conversation</span>
+          </div>
+          <div className="overflow-y-auto px-3 py-2 space-y-1.5" style={{ maxHeight: 272 }}>
+            {messages.map((msg, i) => (
+              <div key={i} className={cn("flex", msg.role === "assistant" ? "justify-end" : "justify-start")}>
+                <div className={cn(
+                  "max-w-[85%] px-2.5 py-1.5 rounded-xl text-xs leading-relaxed break-words",
+                  msg.role === "assistant"
+                    ? "bg-orange-500 text-white rounded-br-sm"
+                    : "bg-slate-100 text-slate-700 rounded-bl-sm"
+                )}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            <div ref={endRef} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Email History Hover Popover ─────────────────────────────────────────────
+function EmailHistoryPopover({ threadId, children }: { threadId: string; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  const { data: threadData } = trpc.gmail.getThread.useQuery(
+    { threadId },
+    { enabled: hovered, staleTime: 60_000 }
+  );
+  const messages = useMemo(() => {
+    if (!threadData?.messages) return [];
+    return [...threadData.messages].slice(-6);
+  }, [threadData?.messages]);
+  return (
+    <div className="relative" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {children}
+      {hovered && messages.length > 0 && (
+        <div
+          className="absolute right-full top-0 mr-2 z-50 w-80 rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden"
+          style={{ maxHeight: 360 }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          <div className="px-3 py-2 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50">
+            <Mail className="h-3 w-3 text-slate-400" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Thread</span>
+            <span className="ml-auto text-[10px] text-slate-400">{messages.length} message{messages.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="overflow-y-auto" style={{ maxHeight: 312 }}>
+            {messages.map((msg: any, i: number) => {
+              const isOutbound = threadData?.inboxEmail && msg.fromEmail === threadData.inboxEmail;
+              return (
+                <div key={msg.id ?? i} className={cn("px-3 py-2.5 border-b border-slate-50 last:border-0", isOutbound ? "bg-blue-50/40" : "")}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className={cn("text-[11px] font-semibold truncate", isOutbound ? "text-blue-700" : "text-slate-700")}>
+                      {isOutbound ? "You" : msg.from || msg.fromEmail}
+                    </span>
+                    <span className="text-[10px] text-slate-400 shrink-0">
+                      {new Date(msg.date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">{msg.snippet || msg.bodyText?.slice(0, 200)}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -7473,7 +7578,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const isWarning = !isUrgent && session.ageMs > 15 * 60 * 1000;
                   const displayName = session.leadName || session.leadPhone;
                   return (
-                    <div key={session.id} className="flex items-stretch group hover:bg-slate-50 transition-colors">
+                    <CsSmsHistoryPopover key={session.id} sessionId={session.id}>
+                    <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
                       {/* Main row — navigates to CS inbox */}
                       <button
                         onClick={() => {
@@ -7551,6 +7657,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <CircleCheckBig className="h-4 w-4" />
                       </button>
                     </div>
+                    </CsSmsHistoryPopover>
                   );
                 })}
               </div>
@@ -7711,7 +7818,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   const mins = Math.floor((Date.now() - Number(thread.date)) / 60_000);
                   const timeLabel = mins < 1 ? "just now" : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
                   return (
-                    <div key={thread.id} className="flex items-stretch group hover:bg-slate-50 transition-colors">
+                    <EmailHistoryPopover key={thread.id} threadId={thread.id}>
+                    <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
                       {/* Main row — navigates to email inbox */}
                       <button
                         onClick={() => {
@@ -7789,6 +7897,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         <CircleCheckBig className="h-4 w-4" />
                       </button>
                     </div>
+                    </EmailHistoryPopover>
                   );
                 })}
               </div>
