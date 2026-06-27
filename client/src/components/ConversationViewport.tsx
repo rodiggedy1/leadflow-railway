@@ -152,7 +152,7 @@ export function ConversationViewport({
         ? parseFloat(getComputedStyle(containerRef.current).paddingTop) +
           parseFloat(getComputedStyle(containerRef.current).paddingBottom)
         : 0;
-      const bottomPadding = 16;
+      const bottomPadding = 32;
       const budget = window.innerHeight * 0.7 - headerHeight - containerPadding - bottomPadding;
 
       // Measure and cache each message height
@@ -213,6 +213,7 @@ export function ConversationViewport({
       style={{
         height: cardHeight ?? undefined,
         maxHeight: "70vh",
+        paddingBottom: 24,
         transition: animate && !measured ? "height 200ms ease" : undefined,
         overflow: "hidden",
       }}
