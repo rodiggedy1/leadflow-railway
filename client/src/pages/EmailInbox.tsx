@@ -1102,33 +1102,25 @@ export default function EmailInbox() {
   const utils = trpc.useUtils();
 
   // ---------------------------------------------------------------------------
-  // Local read-state overlay (Gmail/HubSpot pattern)
+  // Optimistic thread state — Map<threadId, true>
   // ---------------------------------------------------------------------------
-  // `localReadSet` tracks thread IDs the user has opened in this session.
-  // It is the authoritative client-side override: a thread is "effectively unread"
-  // only if the server says so AND the user hasn't opened it yet.
-  // This gives instant UI feedback without any cache patching or query key juggling.
-  // On the next server refetch the server truth reconciles naturally.
+  // Tracks threads with an in-flight mutation (e.g. markRead) so the unread dot
+  // disappears immediately on click without waiting for the server round-trip.
+  // The badge always reads trueUnreadCount directly from the server — no arithmetic.
+  // Entries expire automatically when the server confirms the thread is no longer
+  // unread (via the cleanup useEffect below), or immediately on mutation error.
   // ---------------------------------------------------------------------------
-  const localReadSet = useRef<Set<string>>(new Set());
+  const [optimisticThreadState, setOptimisticThreadState] =
+    useState(() => new Map<string, true>());
   // Ref so mutation callbacks can read the current filtered list without closure staleness
   const filteredThreadsRef = useRef<GmailThread[]>([]);
-  const [readTick, setReadTick] = useState(0); // increment to force re-render after set mutation
-
-  /** Mark a thread as locally read and trigger a re-render. */
-  function markLocallyRead(threadId: string) {
-    if (!localReadSet.current.has(threadId)) {
-      localReadSet.current.add(threadId);
-      setReadTick((n) => n + 1);
-    }
-  }
 
   /**
-   * Derived unread truth: server flag AND not locally read.
+   * Derived unread truth: server flag AND not in optimistic pending set.
    * Use this everywhere instead of `thread.isUnread` directly.
    */
   function effectiveIsUnread(thread: GmailThread): boolean {
-    return thread.isUnread && !localReadSet.current.has(thread.id);
+    return thread.isUnread && !optimisticThreadState.has(thread.id);
   }
 
   useEffect(() => {
@@ -1324,22 +1316,7 @@ export default function EmailInbox() {
   });
   const trueUnreadCount = unreadCountQuery.data?.count ?? 0;
 
-  // Track the last server count we saw so we can reset localReadSet when it syncs
-  const lastServerUnreadCount = useRef<number | null>(null);
-  useEffect(() => {
-    if (unreadCountQuery.data !== undefined) {
-      // Server just gave us a fresh count — reset local optimistic adjustments
-      // so we don't permanently over-subtract from the badge
-      localReadSet.current = new Set();
-      setReadTick((n) => n + 1);
-      lastServerUnreadCount.current = unreadCountQuery.data.count;
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unreadCountQuery.dataUpdatedAt]);
-
-  // Effective badge count: server total minus threads opened since last server sync.
-  // Resets to server truth every 30s. `readTick` forces re-render after local reads.
-  const effectiveUnreadCount = Math.max(0, trueUnreadCount - (readTick >= 0 ? localReadSet.current.size : 0));
+  // Badge always shows server truth (trueUnreadCount) — no client arithmetic.
 
   // Build the Gmail search query — only the user's free-text search is passed to the server.
   // Tab filtering (unread, leads, mine) is done client-side after the server returns all threads.
@@ -1392,11 +1369,19 @@ export default function EmailInbox() {
 
   const markReadMutation = trpc.gmail.markRead.useMutation({
     onSuccess: (_data, { threadId }) => {
-      // Server confirmed read — invalidate to reconcile, but UI already updated
-      // via localReadSet (set in selectThread before this mutation fires).
+      // Invalidate first (fire-and-forget) — optimistic entry expires naturally
+      // via the cleanup useEffect once the refetched thread shows isUnread=false.
       utils.gmail.listThreads.invalidate();
       utils.gmail.getThread.invalidate({ threadId });
       utils.gmail.getUnreadCount.invalidate();
+    },
+    onError: (_err, { threadId }) => {
+      // Mutation failed — unwind optimistic state immediately so UI doesn't get stuck
+      setOptimisticThreadState((prev) => {
+        const next = new Map(prev);
+        next.delete(threadId);
+        return next;
+      });
     },
   });
   const markUnreadMutation = trpc.gmail.markUnread.useMutation({
@@ -1519,11 +1504,15 @@ export default function EmailInbox() {
     setReplyMode("reply");
     setShowVoiceImprove(false);
     const thread = threadsQuery.data?.threads.find((t) => t.id === threadId);
-    if (effectiveIsUnread(thread ?? { isUnread: false } as any)) {
-      // Mark locally read immediately — UI updates before API responds
-      markLocallyRead(threadId);
-      markReadMutation.mutate({ threadId });
-    }
+    // Only fire markRead if the thread is actually unread — mutation is idempotent
+    // but no reason to do unnecessary work.
+    if (!thread?.isUnread) return;
+    // Atomic optimistic addition — guard is inside the updater (React-safe, no stale closure)
+    setOptimisticThreadState((prev) => {
+      if (prev.has(threadId)) return prev; // duplicate click, no-op
+      return new Map(prev).set(threadId, true);
+    });
+    markReadMutation.mutate({ threadId });
   }
 
   function sendReply() {
@@ -1667,18 +1656,24 @@ export default function EmailInbox() {
   filteredThreadsRef.current = threads;
   const selectedThread = threadQuery.data ?? null;
 
-  // Reconcile localReadSet after every server refetch:
-  // once the server confirms a thread is no longer unread, remove it from the
-  // local set so it no longer inflates the optimistic decrement.
+  // Cleanup: expire optimistic entries once the server confirms the thread is no longer unread.
+  // Iterates only the optimistic map (typically 0–2 entries), not the full thread list.
+  // Returns prev unchanged if nothing changed, so React skips the re-render.
   useEffect(() => {
-    let changed = false;
-    for (const t of allThreads) {
-      if (!t.isUnread && localReadSet.current.has(t.id)) {
-        localReadSet.current.delete(t.id);
-        changed = true;
+    if (optimisticThreadState.size === 0) return; // fast path — nothing pending
+    const threadMap = new Map(allThreads.map((t) => [t.id, t]));
+    setOptimisticThreadState((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const threadId of next.keys()) {
+        const t = threadMap.get(threadId);
+        if (!t || !t.isUnread) {
+          next.delete(threadId);
+          changed = true;
+        }
       }
-    }
-    if (changed) setReadTick((n) => n + 1);
+      return changed ? next : prev;
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allThreads]);
   const mineCount = sortedThreads.filter((t) => {
@@ -1761,7 +1756,7 @@ export default function EmailInbox() {
           <div className="flex items-center gap-1.5 mb-2">
             {([
               { key: "conversations" as const, label: "Inbox", badge: undefined as number | undefined },
-              { key: "unread" as const, label: "Unread", badge: effectiveUnreadCount as number | undefined },
+              { key: "unread" as const, label: "Unread", badge: trueUnreadCount as number | undefined },
               { key: "leads" as const, label: "Leads", badge: undefined as number | undefined },
             ]).map(({ key, label, badge }) => (
               <button
@@ -2281,8 +2276,11 @@ export default function EmailInbox() {
                       if (!selectedThreadId) return;
                       resolveGlanceMutation.mutate({ threadId: selectedThreadId });
                       // Also mark as read if currently unread
-                      if (effectiveIsUnread(selectedThread ?? { isUnread: false } as any)) {
-                        markLocallyRead(selectedThreadId);
+                      if (selectedThread?.isUnread) {
+                        setOptimisticThreadState((prev) => {
+                          if (prev.has(selectedThreadId)) return prev;
+                          return new Map(prev).set(selectedThreadId, true);
+                        });
                         markReadMutation.mutate({ threadId: selectedThreadId });
                       }
                     }}
