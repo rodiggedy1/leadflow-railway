@@ -1058,7 +1058,12 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           eq(cleanerJobs.jobDate, dateStr),
           ne(cleanerJobs.bookingStatus, "cancelled"),
           ne(cleanerJobs.bookingStatus, "rescheduled"),
-          and(isNull(cleanerProfiles.email), isNull(cleanerProfiles.passwordHash))  // ghost = no login at all
+          and(
+            isNull(cleanerProfiles.phone),
+            isNull(cleanerProfiles.email),
+            isNull(cleanerProfiles.passwordHash),
+            isNull(cleanerProfiles.payPercent)
+          )  // ghost = sync-created empty row (no phone, email, password, or pay)
         )
       );
     if (ghostJobs.length > 0) {
@@ -2511,7 +2516,16 @@ export const qualityRouter = router({
         createdAt: cleanerProfiles.createdAt,
       })
       .from(cleanerProfiles)
-      .where(and(isNull(cleanerProfiles.email), isNull(cleanerProfiles.passwordHash)));
+      // A ghost = sync-created empty row: no phone, no email, no password, no pay
+      // Real cleaners always have at least phone OR payPercent set
+      .where(
+        and(
+          isNull(cleanerProfiles.phone),
+          isNull(cleanerProfiles.email),
+          isNull(cleanerProfiles.passwordHash),
+          isNull(cleanerProfiles.payPercent)
+        )
+      );
 
     if (ghosts.length === 0) return { ghosts: [] };
 
