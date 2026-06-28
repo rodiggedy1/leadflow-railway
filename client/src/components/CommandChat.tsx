@@ -7953,7 +7953,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     form: 'Website', widget: 'Widget', voice: 'Phone',
                   };
                   const src = lead.leadSource ? (sourceLabel[lead.leadSource] ?? lead.leadSource) : 'Direct';
-                  const openConversation = () => {
+                  const openLeadsPage = () => {
+                    setLeadRepliesOpen(false);
+                    window.location.href = `/admin/leads?session=${lead.id}`;
+                  };
+                  const openQuickReply = () => {
                     setLeadRepliesOpen(false);
                     const phone = lead.leadPhone ?? "";
                     const name = lead.leadName ?? phone;
@@ -7972,22 +7976,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           city: "",
                         },
                         view: "sms",
-                        lastMessage: undefined,
+                        lastMessage: lead.lastMessagePreview ?? undefined,
                       });
                     } else {
-                      window.location.href = `/admin/leads?session=${lead.id}`;
+                      openLeadsPage();
                     }
                   };
                   return (
                     <LeadChatHistoryPopover
                       key={lead.id}
                       sessionId={lead.id}
-                      onOpenFull={openConversation}
+                      onOpenFull={openLeadsPage}
                     >
                       <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
-                        {/* Main row — opens SMS composer */}
+                        {/* Main row — navigates to leads page */}
                         <button
-                          onClick={openConversation}
+                          onClick={openLeadsPage}
                           className="flex-1 text-left px-4 py-3 min-w-0"
                         >
                           <div className="flex items-start gap-3">
@@ -7998,24 +8002,41 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                             )} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="text-sm font-semibold text-slate-900 truncate">{lead.leadName}</span>
+                                <span className="text-sm font-semibold text-slate-900 truncate">{lead.leadName ?? lead.leadPhone}</span>
                                 <span className={cn(
                                   "text-[10px] font-semibold shrink-0",
                                   ageMin < 10 ? "text-red-500" : ageMin < 60 ? "text-amber-500" : "text-slate-400"
                                 )}>{ageLabel}</span>
                               </div>
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[10px] text-slate-400">{src}</span>
-                                {lead.assignedAgentName && (
-                                  <>
-                                    <span className="text-[10px] text-slate-300">·</span>
-                                    <span className="text-[10px] text-slate-400">{lead.assignedAgentName}</span>
-                                  </>
-                                )}
-                              </div>
+                              {lead.lastMessagePreview && (
+                                <p className="text-xs text-slate-500 truncate mt-0.5">{lead.lastMessagePreview}</p>
+                              )}
+                              {!lead.lastMessagePreview && (
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="text-[10px] text-slate-400">{src}</span>
+                                  {lead.assignedAgentName && (
+                                    <>
+                                      <span className="text-[10px] text-slate-300">·</span>
+                                      <span className="text-[10px] text-slate-400">{lead.assignedAgentName}</span>
+                                    </>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0 mt-1" />
                           </div>
+                        </button>
+                        {/* ⚡ Quick-reply button — opens SMS composer in CommandChat */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openQuickReply();
+                          }}
+                          title="Quick Reply"
+                          className="flex items-center gap-1 px-2.5 shrink-0 border-l border-slate-100 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors text-[11px] font-semibold"
+                        >
+                          <span>⚡</span>
+                          <span>Reply</span>
                         </button>
                         {/* Quick-resolve button */}
                         <button
