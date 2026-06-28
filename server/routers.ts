@@ -4857,6 +4857,10 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
             lastReadAt IS NULL
             OR lastCustomerReplyAt > lastReadAt
           )
+          AND (
+            lastReadAt IS NOT NULL
+            OR lastCustomerReplyAt >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 7 DAY)) * 1000
+          )
         ORDER BY lastCustomerReplyAt DESC
         LIMIT 200
       `);
