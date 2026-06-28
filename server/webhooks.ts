@@ -824,7 +824,7 @@ export function registerWebhookRoutes(app: Express) {
       // The history will be updated again later with the assistant reply appended.
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now } as any)
+        .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now, lastReadAt: null } as any)
         .where(eq(conversationSessions.id, session.id));
 
       // Log the inbound reply as an activity event
@@ -845,6 +845,8 @@ export function registerWebhookRoutes(app: Express) {
       // NOTE: messageHistory + lastCustomerReplyAt were already saved above — no second update needed.
       if (session.aiMode === 0) {
         console.log(`[Webhook] Manual mode for session ${session.id} — storing inbound, skipping AI reply.`);
+        const { broadcastOpsUpdate: bcastManual } = await import("./sseBroadcast");
+        bcastManual("lead_update");
         return;
       }
 
@@ -857,6 +859,8 @@ export function registerWebhookRoutes(app: Express) {
         (Date.now() - bookedAt) < BOOKED_SILENCE_DAYS * 24 * 60 * 60 * 1000;
       if (bookedRecently) {
         console.log(`[Webhook] Lead ${fromPhone} (session ${session.id}) was booked ${Math.floor((Date.now() - bookedAt!) / 86400000)}d ago — storing inbound, skipping AI reply.`);
+        const { broadcastOpsUpdate: bcastBooked } = await import("./sseBroadcast");
+        bcastBooked("lead_update");
         return;
       }
 
