@@ -286,7 +286,7 @@ function SmsComposer({
     setSending(true);
     if (isLeadChat && sessionId != null) {
       // Lead Chats ⚡ Reply path: write to messageHistory + broadcast lead_update
-      leadSendMutation.mutate({ sessionId, message: text.trim(), fromNumberId: "PN0wVLcpCq" });
+      leadSendMutation.mutate({ sessionId, message: text.trim() });
     } else {
       sendMutation.mutate({ phone: customer.phone, firstMessage: text.trim(), ...(isLeadChat ? { isLeadChat: true } : {}) });
     }
