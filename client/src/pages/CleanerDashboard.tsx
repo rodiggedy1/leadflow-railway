@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { Camera, Star, AlertTriangle, CheckCircle2, Clock, MapPin,
   DollarSign, User, ChevronLeft, ChevronRight, Upload, Loader2,
   CalendarDays, TrendingUp, RefreshCw, List, Users, KeyRound, ExternalLink,
-  X, ZoomIn, Images, Pencil, Link2, Search, AlertCircle, CheckCircle, GitMerge
+  X, ZoomIn, Images, Pencil, Link2, Search, AlertCircle, CheckCircle, GitMerge, Activity
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -1834,6 +1834,23 @@ export default function CleanerDashboard() {
 
   const { data: pendingList, refetch: refetchPending } = trpc.quality.listPendingRatingSms.useQuery();
 
+  // ── Schedule Health Engine ──────────────────────────────────────────────────
+  type BookingHealthStage = { imported: boolean; assigned: boolean; scheduled: boolean; portalReady: boolean };
+  type BookingHealth = { bookingId: number; customerName: string; health: "critical" | "warning" | "healthy"; stages: BookingHealthStage; failureStage?: string; failureReason?: string; impact?: string; recommendation?: string };
+  type HealthReport = { date: string; healthScore: number; critical: number; warning: number; healthy: number; total: number; bookings: BookingHealth[]; runAt: string };
+  const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
+  const [healthExpanded, setHealthExpanded] = useState(true);
+  const [expandedHealthBookings, setExpandedHealthBookings] = useState<Set<number>>(new Set());
+  const [showHealthyBookings, setShowHealthyBookings] = useState(false);
+  const verifySyncMutation = trpc.launch27.verifySync.useMutation({
+    onSuccess: (result) => {
+      setHealthReport(result as HealthReport);
+      setExpandedHealthBookings(new Set());
+      setShowHealthyBookings(false);
+    },
+    onError: (err) => toast.error(`Health check failed: ${err.message}`),
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
   const syncJobs = trpc.quality.syncTodayJobs.useMutation({
     onSuccess: (result) => {
       toast.success(
@@ -1939,6 +1956,15 @@ export default function CleanerDashboard() {
               {syncJobs.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
               {syncJobs.isPending ? "Syncing…" : "Sync from Launch27"}
             </button>
+            {/* Health Check */}
+            <button
+              disabled={verifySyncMutation.isPending}
+              onClick={() => verifySyncMutation.mutate({ date: selectedDate })}
+              className="flex items-center gap-1.5 text-xs font-medium bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 border border-gray-300 rounded-lg px-3 py-1.5 transition-colors"
+            >
+              {verifySyncMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+              {verifySyncMutation.isPending ? "Checking…" : "Health Check"}
+            </button>
           </div>
         </div>
       </div>
@@ -1987,6 +2013,125 @@ export default function CleanerDashboard() {
             </div>
           );
         })()}
+
+        {/* ── Schedule Health Report ──────────────────────────────────────── */}
+        {(verifySyncMutation.isPending || healthReport) && (
+          <div
+            className="rounded-xl border-2 shadow-sm overflow-hidden"
+            style={{ borderColor: healthReport && healthReport.critical > 0 ? "#fca5a5" : healthReport && healthReport.warning > 0 ? "#fde68a" : "#bbf7d0" }}
+          >
+            {/* Header */}
+            <button
+              className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50 transition-colors"
+              onClick={() => setHealthExpanded(v => !v)}
+            >
+              <div className="flex items-center gap-2">
+                <Activity
+                  className="w-4 h-4"
+                  style={{ color: healthReport && healthReport.critical > 0 ? "#dc2626" : healthReport && healthReport.warning > 0 ? "#d97706" : "#16a34a" }}
+                />
+                <span className="text-sm font-semibold text-gray-900">Schedule Health</span>
+                {healthReport && (
+                  <span
+                    className="text-sm font-bold"
+                    style={{ color: healthReport.healthScore >= 90 ? "#16a34a" : healthReport.healthScore >= 70 ? "#d97706" : "#dc2626" }}
+                  >
+                    {healthReport.healthScore}%
+                  </span>
+                )}
+                {verifySyncMutation.isPending && (
+                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Checking…
+                  </span>
+                )}
+                {healthReport && (
+                  <div className="flex items-center gap-1.5">
+                    {healthReport.critical > 0 && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{healthReport.critical} Critical</span>}
+                    {healthReport.warning > 0 && <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{healthReport.warning} Warning</span>}
+                    {healthReport.healthy > 0 && <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{healthReport.healthy} Healthy</span>}
+                  </div>
+                )}
+              </div>
+              <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${healthExpanded ? "rotate-90" : ""}`} />
+            </button>
+            {/* Body */}
+            {healthExpanded && healthReport && (
+              <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
+                {/* Failed bookings — critical first */}
+                {healthReport.bookings
+                  .filter(b => b.health !== "healthy")
+                  .sort((a, b) => (a.health === "critical" ? -1 : 1))
+                  .map(b => (
+                    <div key={b.bookingId} className={`rounded-lg border bg-white overflow-hidden ${b.health === "critical" ? "border-red-200" : "border-amber-200"}`}>
+                      <button
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 transition-colors"
+                        onClick={() => setExpandedHealthBookings(prev => {
+                          const next = new Set(prev);
+                          next.has(b.bookingId) ? next.delete(b.bookingId) : next.add(b.bookingId);
+                          return next;
+                        })}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${b.health === "critical" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                            {b.health === "critical" ? "CRITICAL" : "WARNING"}
+                          </span>
+                          <span className="text-sm font-medium text-gray-900 truncate">{b.customerName}</span>
+                          <span className="text-xs text-gray-400">#{b.bookingId}</span>
+                          <span className="text-xs text-gray-500 truncate">— {b.failureReason}</span>
+                        </div>
+                        <ChevronRight className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expandedHealthBookings.has(b.bookingId) ? "rotate-90" : ""}`} />
+                      </button>
+                      {expandedHealthBookings.has(b.bookingId) && (
+                        <div className="border-t border-gray-100 px-3 py-2 space-y-2">
+                          {/* Stage pills */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {(["imported", "assigned", "scheduled", "portalReady"] as const).map(stage => {
+                              const stageLabels = { imported: "Imported", assigned: "Assigned", scheduled: "Scheduled", portalReady: "Portal Ready" };
+                              const passed = b.stages[stage];
+                              const isFailStage = b.failureStage === stage;
+                              const isBlocked = !passed && !isFailStage;
+                              return (
+                                <span key={stage} className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  passed ? "bg-green-100 text-green-700" : isBlocked ? "bg-gray-100 text-gray-400" : "bg-red-100 text-red-700"
+                                }`}>
+                                  {passed ? "✅" : isBlocked ? "⏸" : "❌"} {stageLabels[stage]}
+                                </span>
+                              );
+                            })}
+                          </div>
+                          {b.impact && <p className="text-xs text-gray-600"><span className="font-medium">Impact:</span> {b.impact}</p>}
+                          {b.recommendation && <p className="text-xs text-gray-600"><span className="font-medium">Fix:</span> {b.recommendation}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                {/* Healthy bookings toggle */}
+                {healthReport.healthy > 0 && (
+                  <div>
+                    <button
+                      className="text-xs text-gray-400 hover:text-gray-600 underline"
+                      onClick={() => setShowHealthyBookings(v => !v)}
+                    >
+                      {showHealthyBookings ? "Hide" : `View ${healthReport.healthy} healthy booking${healthReport.healthy !== 1 ? "s" : ""}`}
+                    </button>
+                    {showHealthyBookings && (
+                      <div className="mt-2 space-y-1">
+                        {healthReport.bookings.filter(b => b.health === "healthy").map(b => (
+                          <div key={b.bookingId} className="flex items-center gap-2 text-xs text-gray-500 px-2 py-1 bg-white rounded border border-gray-100">
+                            <span className="text-green-500">✅</span>
+                            <span>{b.customerName}</span>
+                            <span className="text-gray-300">#{b.bookingId}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 pt-1">Checked {healthReport.total} booking{healthReport.total !== 1 ? "s" : ""} · {new Date(healthReport.runAt).toLocaleTimeString()}</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Skeleton loading state */}
         {isLoading && (
