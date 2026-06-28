@@ -382,20 +382,19 @@ function StoryCard() {
           className="text-[26px] tracking-tight mb-2"
           style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
         >
-          Why our customers trust us
+          Making home cleaning convenient
         </h2>
         <p className="text-[14px] leading-relaxed" style={{ color: T.muted, margin: 0 }}>
-          Hear directly from homeowners who've experienced the Maids in Black difference — professional, insured, and always on time.
+          Watch our video on the Maids in Black difference — professional, insured, and always on time.
         </p>
-        {!playing && (
-          <button
-            onClick={handlePlay}
-            className="mt-5 inline-flex items-center gap-2 text-[13px] font-bold border-0 bg-transparent cursor-pointer p-0 transition-opacity hover:opacity-70"
-            style={{ color: T.orange }}
-          >
-            Watch the story →
-          </button>
-        )}
+        <a
+          href="#trust-video"
+          onClick={(e) => { e.preventDefault(); document.getElementById("trust-video")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+          className="mt-5 inline-flex items-center gap-2 text-[13px] font-bold cursor-pointer p-0 transition-opacity hover:opacity-70 no-underline"
+          style={{ color: T.orange }}
+        >
+          Watch the video →
+        </a>
       </div>
     </div>
   );
@@ -493,24 +492,20 @@ function StoryCardMobile() {
 
 // ── Trust video card ─────────────────────────────────────────────────────────
 function TrustVideoCard() {
-  const [playing, setPlaying] = useState(false);
   const playerRef = useRef<HTMLDivElement>(null);
 
-  const handlePlay = () => {
-    setPlaying(true);
-    setTimeout(() => {
-      const el = playerRef.current;
-      if (!el || el.querySelector("wistia-player")) return;
-      const player = document.createElement("wistia-player");
-      player.setAttribute("media-id", "jtv8f50ale");
-      player.setAttribute("seo", "false");
-      player.setAttribute("aspect", "1.7777777777777777");
-      player.style.display = "block";
-      player.style.width = "100%";
-      player.style.height = "100%";
-      el.appendChild(player);
-    }, 0);
-  };
+  useEffect(() => {
+    const el = playerRef.current;
+    if (!el || el.querySelector("wistia-player")) return;
+    const player = document.createElement("wistia-player");
+    player.setAttribute("media-id", "jtv8f50ale");
+    player.setAttribute("seo", "false");
+    player.setAttribute("aspect", "1.7777777777777777");
+    player.style.display = "block";
+    player.style.width = "100%";
+    player.style.height = "100%";
+    el.appendChild(player);
+  }, []);
 
   const checkItems = [
     { label: "Why we request a card", sub: "No deposit. No charge before your cleaning." },
@@ -524,57 +519,8 @@ function TrustVideoCard() {
       className="rounded-[28px] overflow-hidden my-6"
       style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
     >
-      {/* Video thumbnail → inline player */}
-      <div className="relative" style={{ paddingBottom: "56.25%", overflow: "hidden" }}>
-        {/* Swatch thumbnail */}
-        <div
-          className="absolute inset-0 transition-opacity duration-500"
-          style={{
-            opacity: playing ? 0 : 1,
-            pointerEvents: playing ? "none" : "auto",
-            background: `url("https://fast.wistia.com/embed/medias/jtv8f50ale/swatch") center/cover no-repeat`,
-          }}
-        >
-          {/* Badge: 43 second welcome */}
-          <div
-            className="absolute top-3 left-3 text-[12px] font-bold px-3 py-1 rounded-full"
-            style={{ background: "rgba(255,255,255,0.92)", color: T.ink, backdropFilter: "blur(4px)" }}
-          >
-            43 second welcome
-          </div>
-          {/* Duration badge */}
-          <div
-            className="absolute bottom-3 right-3 text-[12px] font-bold px-2.5 py-1 rounded-full"
-            style={{ background: "rgba(17,24,39,0.78)", color: "white" }}
-          >
-            0:43
-          </div>
-          {/* Play button */}
-          <button
-            onClick={handlePlay}
-            className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
-            aria-label="Play video"
-          >
-            <span
-              className="w-[72px] h-[72px] rounded-full grid place-items-center transition-transform duration-200 hover:scale-110"
-              style={{
-                background: "rgba(255,255,255,0.95)",
-                color: T.orange,
-                fontSize: "24px",
-                boxShadow: "0 16px 48px rgba(0,0,0,.28)",
-              }}
-            >
-              ▶
-            </span>
-          </button>
-        </div>
-        {/* Inline player */}
-        <div
-          ref={playerRef}
-          className="absolute inset-0 transition-opacity duration-500"
-          style={{ opacity: playing ? 1 : 0, pointerEvents: playing ? "auto" : "none" }}
-        />
-      </div>
+      {/* Wistia player — mounted directly, no cover */}
+      <div ref={playerRef} style={{ width: "100%" }} />
 
       {/* Copy + checklist */}
       <div className="p-7 pt-6">
@@ -617,19 +563,8 @@ function TrustVideoCard() {
         </div>
 
         {/* Footer row */}
-        <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-[12px] mb-1" style={{ color: T.muted }}>Thousands of homeowners reserve their appointments every month.</p>
-            {!playing && (
-              <button
-                onClick={handlePlay}
-                className="inline-flex items-center gap-1.5 text-[12px] font-bold border-0 bg-transparent cursor-pointer p-0 transition-opacity hover:opacity-70"
-                style={{ color: T.orange }}
-              >
-                ▶ Watch the welcome again
-              </button>
-            )}
-          </div>
+        <div className="mt-5">
+          <p className="text-[12px]" style={{ color: T.muted }}>Thousands of homeowners reserve their appointments every month.</p>
         </div>
       </div>
     </div>
@@ -1194,7 +1129,7 @@ function CardAuthInner({
         </div>
 
         {/* Trust video card */}
-        <TrustVideoCard />
+        <div id="trust-video"><TrustVideoCard /></div>
 
         {/* Testimonial */}
         <Testimonial />
