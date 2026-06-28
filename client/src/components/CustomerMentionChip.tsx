@@ -138,11 +138,13 @@ function SmsComposer({
   onBack,
   onClose,
   lastMessage,
+  isLeadChat,
 }: {
   customer: CustomerData;
   onBack: () => void;
   onClose: () => void;
   lastMessage?: string;
+  isLeadChat?: boolean;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -272,7 +274,7 @@ function SmsComposer({
   async function handleSend() {
     if (!text.trim() || sending) return;
     setSending(true);
-    sendMutation.mutate({ phone: customer.phone, firstMessage: text.trim() });
+    sendMutation.mutate({ phone: customer.phone, firstMessage: text.trim(), ...(isLeadChat ? { isLeadChat: true } : {}) });
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
@@ -1548,12 +1550,14 @@ export function QuickReplyModal({
   onClose,
   lastMessage,
   emailSubject,
+  isLeadChat,
 }: {
   customer: CustomerData;
   initialView: "sms" | "email";
   onClose: () => void;
   lastMessage?: string;
   emailSubject?: string;
+  isLeadChat?: boolean;
 }) {
   const [view, setView] = useState<"card" | "sms" | "call" | "email">(initialView);
   const { session, isPolling, startCall, cancelCall, dismissSession } = useCallSession();
@@ -1575,7 +1579,7 @@ export function QuickReplyModal({
         style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}
       >
         {view === "sms" ? (
-          <SmsComposer customer={customer} onBack={onClose} onClose={onClose} lastMessage={lastMessage} />
+          <SmsComposer customer={customer} onBack={onClose} onClose={onClose} lastMessage={lastMessage} isLeadChat={isLeadChat} />
         ) : view === "email" ? (
           <EmailComposer customer={customer} onBack={onClose} onClose={onClose} lastMessage={lastMessage} emailSubject={emailSubject} />
         ) : view === "call" ? (
