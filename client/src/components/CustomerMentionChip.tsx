@@ -1517,6 +1517,32 @@ export function CustomerMentionChip({ name, phone }: { name: string; phone: stri
  * Parse @[Name|phone] (legacy) or @[Name] (new) tokens and render CustomerMentionChip components.
  * phoneMap is used for new-format tokens to resolve the phone number.
  */
+/** Split a plain-text segment into runs of plain text and clickable URLs */
+function renderTextWithLinks(text: string, keyPrefix: string): React.ReactNode[] {
+  const URL_RE = /https?:\/\/[^\s<>"']+/g;
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = URL_RE.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    nodes.push(
+      <a
+        key={`${keyPrefix}-url-${m.index}`}
+        href={m[0]}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline text-blue-600 hover:text-blue-800 break-all"
+        onClick={e => e.stopPropagation()}
+      >
+        {m[0]}
+      </a>
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes.length > 0 ? nodes : [text];
+}
+
 export function renderMessageWithMentions(
   body: string,
   _keyPrefix?: string,
@@ -1528,7 +1554,10 @@ export function renderMessageWithMentions(
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = TOKEN_RE.exec(body)) !== null) {
-    if (match.index > last) parts.push(body.slice(last, match.index));
+    if (match.index > last) {
+      // Render plain text segment with clickable URLs
+      renderTextWithLinks(body.slice(last, match.index), `${_keyPrefix ?? ""}-${last}`).forEach(n => parts.push(n));
+    }
     const mName = match[1];
     // Phone comes from: (1) legacy inline format, (2) phoneMap lookup
     const mPhone = match[2]
@@ -1537,7 +1566,9 @@ export function renderMessageWithMentions(
     parts.push(<CustomerMentionChip key={`${match.index}-${mName}`} name={mName} phone={mPhone} />);
     last = match.index + match[0].length;
   }
-  if (last < body.length) parts.push(body.slice(last));
+  if (last < body.length) {
+    renderTextWithLinks(body.slice(last), `${_keyPrefix ?? ""}-tail`).forEach(n => parts.push(n));
+  }
   return parts.length > 0 ? parts : [body];
 }
 
