@@ -16,7 +16,7 @@ import {
   cleanerProfiles,
   scheduleAssignments,
 } from "../drizzle/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, ne, inArray } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 
 export const launch27Router = router({
@@ -184,15 +184,22 @@ export const launch27Router = router({
   }),
 
   /**
-   * Verify the scheduling layer for a given date against what Launch27 reports.
-   * Runs 4-stage pipeline check per booking:
-   *   1. Imported    — cleaner_jobs row exists with this bookingId
-   *   2. Assigned    — cleanerProfileId is non-null
-   *   3. Scheduled   — schedule_assignments row exists for cleanerJobId
-   *   4. Portal Ready — profile isActive=1 AND phone is not null
+   * Health check: verify 3 things for a given date.
    *
-   * Returns a health report with per-booking trace details.
-   * No DB writes — read-only check.
+   * CHECK 1 — L27 count vs Jobs page count
+   *   Launch27 booking count for the date == cleanerJobs row count for the date
+   *   (excluding cancelled/rescheduled, same filter as getJobsForDate)
+   *
+   * CHECK 2 — Schedule page count vs Jobs page count
+   *   cleanerJobs rows with a schedule_assignments row == total cleanerJobs rows
+   *   (schedule page only shows jobs that have been assigned to a team in the scheduler)
+   *
+   * CHECK 3 — Jobs page assignments vs Cleaner portal assignments
+   *   For each team: count of jobs assigned on Jobs page (cleanerProfileId set, teamName set)
+   *   matches count of jobs that would appear in each cleaner's portal (same cleanerProfileId filter)
+   *   Broken down by team so you can see which team has a mismatch.
+   *
+   * Read-only — zero DB writes.
    */
   verifySync: agentProcedure
     .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD") }))
@@ -200,7 +207,7 @@ export const launch27Router = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      // Fetch all bookings (assigned + completed) from L27 for this date
+      // ── Fetch L27 bookings (all statuses — same as what the Jobs page syncs from) ──
       const l27Result = await getCompletedBookingsForDate(input.date, { includeAll: true });
       if (l27Result.error) {
         throw new TRPCError({
@@ -208,164 +215,169 @@ export const launch27Router = router({
           message: `Launch27 fetch failed: ${l27Result.error}`,
         });
       }
+      const l27Count = l27Result.bookings.length;
 
-      const l27Bookings = l27Result.bookings;
-      if (l27Bookings.length === 0) {
-        return {
-          date: input.date,
-          healthScore: 100,
-          critical: 0,
-          warning: 0,
-          healthy: 0,
-          total: 0,
-          bookings: [] as BookingHealth[],
-          runAt: new Date().toISOString(),
-        };
-      }
-
-      // Load all cleaner_jobs rows for this date in one query
+      // ── Load all cleanerJobs for the date (same filter as Jobs page & Schedule page) ──
       const dbJobs = await db
         .select()
         .from(cleanerJobs)
-        .where(eq(cleanerJobs.jobDate, input.date));
+        .where(
+          and(
+            eq(cleanerJobs.jobDate, input.date),
+            ne(cleanerJobs.bookingStatus, "cancelled"),
+            ne(cleanerJobs.bookingStatus, "rescheduled")
+          )
+        );
+      const jobsPageCount = dbJobs.length;
 
-      // Build a map: bookingId -> cleaner_jobs row(s)
-      const jobsByBookingId = new Map<number, (typeof dbJobs)[number][]>();
-      for (const job of dbJobs) {
-        if (job.bookingId == null) continue;
-        const arr = jobsByBookingId.get(job.bookingId) ?? [];
-        arr.push(job);
-        jobsByBookingId.set(job.bookingId, arr);
+      // ── CHECK 1: L27 count vs Jobs page count ──
+      const check1Pass = l27Count === jobsPageCount;
+      const check1Detail: string[] = [];
+      if (!check1Pass) {
+        // Find which L27 bookings are missing from DB
+        const dbBookingIds = new Set(dbJobs.map((j) => j.bookingId).filter(Boolean));
+        const missingFromDb = l27Result.bookings.filter((b) => !dbBookingIds.has(b.id));
+        const extraInDb = dbJobs.filter(
+          (j) => j.bookingId && !l27Result.bookings.find((b) => b.id === j.bookingId)
+        );
+        for (const b of missingFromDb) {
+          check1Detail.push(`Missing in DB: #${b.id} ${b.fullName}`);
+        }
+        for (const j of extraInDb) {
+          check1Detail.push(`Extra in DB (not in L27): #${j.bookingId} ${j.customerName}`);
+        }
       }
 
-      // Load all cleaner profiles referenced by these jobs (one query)
+      // ── CHECK 2: Schedule page count vs Jobs page count ──
+      // Schedule page shows jobs that have a schedule_assignments row
+      const jobIds = dbJobs.map((j) => j.id);
+      const assignments =
+        jobIds.length > 0
+          ? await db
+              .select({ cleanerJobId: scheduleAssignments.cleanerJobId })
+              .from(scheduleAssignments)
+              .where(
+                and(
+                  eq(scheduleAssignments.jobDate, input.date),
+                  inArray(scheduleAssignments.cleanerJobId, jobIds)
+                )
+              )
+          : [];
+      const scheduledJobIds = new Set(assignments.map((a) => a.cleanerJobId));
+      const schedulePageCount = scheduledJobIds.size;
+      const check2Pass = schedulePageCount === jobsPageCount;
+      const check2Detail: string[] = [];
+      if (!check2Pass) {
+        const unscheduled = dbJobs.filter((j) => !scheduledJobIds.has(j.id));
+        for (const j of unscheduled) {
+          check2Detail.push(`Not on Schedule page: #${j.bookingId ?? j.id} ${j.customerName} (team: ${j.teamName ?? "unassigned"})`);
+        }
+      }
+
+      // ── CHECK 3: Jobs page assignments vs Cleaner portal assignments (by team) ──
+      // Jobs page: jobs with cleanerProfileId set, grouped by teamName
+      // Portal: same jobs — portal query is WHERE cleanerProfileId = session.cleanerId
+      // So if cleanerProfileId is set on the job, it WILL appear in that cleaner's portal.
+      // We check: for each team, count of jobs with cleanerProfileId set on Jobs page
+      // matches count of jobs that would appear in the portal for that team's cleaner(s).
+
+      // Group by teamName
+      const teamMap = new Map<string, { assigned: number; portalVisible: number; missingProfiles: string[] }>();
+      const unassignedJobs: string[] = [];
+
+      // Load profiles for all assigned jobs
       const profileIds = Array.from(
         new Set(dbJobs.map((j) => j.cleanerProfileId).filter((id): id is number => id != null))
       );
       const profiles =
         profileIds.length > 0
-          ? await db.select().from(cleanerProfiles).where(inArray(cleanerProfiles.id, profileIds))
+          ? await db
+              .select({ id: cleanerProfiles.id, isActive: cleanerProfiles.isActive, name: cleanerProfiles.name })
+              .from(cleanerProfiles)
+              .where(inArray(cleanerProfiles.id, profileIds))
           : [];
       const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
-      // Run 3-stage pipeline per L27 booking
-      const bookingResults: BookingHealth[] = [];
-
-      for (const b of l27Bookings) {
-        const matchedJobs = jobsByBookingId.get(b.id) ?? [];
-
-        // Stage 1: Imported
-        const imported = matchedJobs.length > 0;
-
-        if (!imported) {
-          bookingResults.push({
-            bookingId: b.id,
-            customerName: b.fullName,
-            health: "critical",
-            stages: { imported: false, assigned: false, scheduled: false, portalReady: false },
-            failureStage: "imported",
-            failureReason: "No cleaner_jobs row found for this booking ID",
-            impact: "Cleaner has no record of this job — will not appear in portal",
-            recommendation: "Re-run the scheduling sync for this date",
-          });
-          continue;
+      for (const job of dbJobs) {
+        const team = job.teamName ?? "Unassigned";
+        if (!teamMap.has(team)) {
+          teamMap.set(team, { assigned: 0, portalVisible: 0, missingProfiles: [] });
         }
+        const entry = teamMap.get(team)!;
+        entry.assigned++;
 
-        // Use the first matched job (primary assignment)
-        const job = matchedJobs[0];
-
-        // Stage 2: Assigned
-        const assigned = job.cleanerProfileId != null;
-
-        if (!assigned) {
-          bookingResults.push({
-            bookingId: b.id,
-            customerName: b.fullName,
-            health: "critical",
-            stages: { imported: true, assigned: false, scheduled: false, portalReady: false },
-            failureStage: "assigned",
-            failureReason: "cleanerProfileId is null — no cleaner linked to this job",
-            impact: "Job exists in DB but has no cleaner assignment",
-            recommendation: "Assign a cleaner profile to this job in the scheduling engine",
-          });
-          continue;
-        }
-
-        // Stage 3: Portal Ready — cleaner profile is active and has a phone
-        const profile = profileMap.get(job.cleanerProfileId!);
-        const portalReady = !!(profile && profile.isActive === 1 && profile.phone);
-
-        // Determine health tier
-        let health: "critical" | "warning" | "healthy";
-        let failureStage: string | undefined;
-        let failureReason: string | undefined;
-        let impact: string | undefined;
-        let recommendation: string | undefined;
-
-        if (!portalReady) {
-          health = "warning";
-          failureStage = "portalReady";
-          if (!profile) {
-            failureReason = "Cleaner profile not found (ghost profile ID)";
-            impact = "Cleaner cannot log into portal — profile record is missing";
-            recommendation = "Verify cleanerProfileId references a valid cleaner_profiles row";
-          } else if (profile.isActive !== 1) {
-            failureReason = `Cleaner profile is inactive (isActive=${profile.isActive})`;
-            impact = "Cleaner is marked inactive and may not have portal access";
-            recommendation = "Reactivate the cleaner profile if they are still working";
-          } else {
-            failureReason = "Cleaner profile has no phone number";
-            impact = "Cleaner cannot receive SMS notifications for this job";
-            recommendation = "Add a phone number to the cleaner's profile";
-          }
+        if (job.cleanerProfileId == null) {
+          unassignedJobs.push(`#${job.bookingId ?? job.id} ${job.customerName}`);
+          // Not portal visible — no cleaner linked
         } else {
-          health = "healthy";
+          const profile = profileMap.get(job.cleanerProfileId);
+          if (profile && profile.isActive === 1) {
+            entry.portalVisible++;
+          } else {
+            entry.missingProfiles.push(
+              `#${job.bookingId ?? job.id} ${job.customerName} — profile ${
+                profile ? `inactive (id=${profile.id})` : `not found (id=${job.cleanerProfileId})`
+              }`
+            );
+          }
         }
-
-        bookingResults.push({
-          bookingId: b.id,
-          customerName: b.fullName,
-          health,
-          stages: { imported, assigned, scheduled: true, portalReady },
-          failureStage,
-          failureReason,
-          impact,
-          recommendation,
-        });
       }
 
-      const total = bookingResults.length;
-      const critical = bookingResults.filter((b) => b.health === "critical").length;
-      const warning = bookingResults.filter((b) => b.health === "warning").length;
-      const healthy = bookingResults.filter((b) => b.health === "healthy").length;
-      const healthScore = total > 0 ? Math.round((healthy / total) * 1000) / 10 : 100;
+      const check3Teams: Check3Team[] = [];
+      let check3Pass = true;
+      for (const [teamName, data] of Array.from(teamMap.entries())) {
+        const teamPass = data.assigned === data.portalVisible;
+        if (!teamPass) check3Pass = false;
+        check3Teams.push({
+          teamName,
+          jobsPageCount: data.assigned,
+          portalCount: data.portalVisible,
+          pass: teamPass,
+          issues: data.missingProfiles,
+        });
+      }
+      if (unassignedJobs.length > 0) {
+        check3Pass = false;
+      }
+
+      // ── Summary ──
+      const allPass = check1Pass && check2Pass && check3Pass;
+      const issueCount = [!check1Pass, !check2Pass, !check3Pass].filter(Boolean).length;
 
       return {
         date: input.date,
-        healthScore,
-        critical,
-        warning,
-        healthy,
-        total,
-        bookings: bookingResults,
+        allPass,
+        issueCount,
         runAt: new Date().toISOString(),
+        check1: {
+          label: "L27 count matches Jobs page",
+          pass: check1Pass,
+          l27Count,
+          jobsPageCount,
+          detail: check1Detail,
+        },
+        check2: {
+          label: "Schedule page count matches Jobs page",
+          pass: check2Pass,
+          schedulePageCount,
+          jobsPageCount,
+          detail: check2Detail,
+        },
+        check3: {
+          label: "Jobs page assignments match Cleaner portal (by team)",
+          pass: check3Pass,
+          teams: check3Teams,
+          unassignedJobs,
+        },
       };
     }),
 });
 
 // ---- Types ----
-export interface BookingHealth {
-  bookingId: number;
-  customerName: string;
-  health: "critical" | "warning" | "healthy";
-  stages: {
-    imported: boolean;
-    assigned: boolean;
-    scheduled: boolean;
-    portalReady: boolean;
-  };
-  failureStage?: string;
-  failureReason?: string;
-  impact?: string;
-  recommendation?: string;
+export interface Check3Team {
+  teamName: string;
+  jobsPageCount: number;
+  portalCount: number;
+  pass: boolean;
+  issues: string[];
 }
