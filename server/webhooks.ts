@@ -824,7 +824,7 @@ export function registerWebhookRoutes(app: Express) {
       // The history will be updated again later with the assistant reply appended.
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now } as any)
+        .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now, lastReadAt: null } as any)
         .where(eq(conversationSessions.id, session.id));
 
       // Log the inbound reply as an activity event
