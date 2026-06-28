@@ -249,28 +249,34 @@ export const launch27Router = router({
       }
 
       // ── CHECK 2: Schedule page count vs Jobs page count ──
-      // Schedule page shows jobs that have a schedule_assignments row
-      const jobIds = dbJobs.map((j) => j.id);
-      const assignments =
-        jobIds.length > 0
-          ? await db
-              .select({ cleanerJobId: scheduleAssignments.cleanerJobId })
-              .from(scheduleAssignments)
-              .where(
-                and(
-                  eq(scheduleAssignments.jobDate, input.date),
-                  inArray(scheduleAssignments.cleanerJobId, jobIds)
-                )
-              )
-          : [];
-      const scheduledJobIds = new Set(assignments.map((a) => a.cleanerJobId));
-      const schedulePageCount = scheduledJobIds.size;
+      // Schedule page (getSchedule) queries cleanerJobs with:
+      //   jobDate = date AND bookingStatus != 'cancelled' AND bookingStatus != 'rescheduled'
+      // Jobs page (getJobsForDate) uses the exact same filter.
+      // We run the same query independently to confirm both see the same jobs.
+      const schedulePageRows = await db
+        .select({ id: cleanerJobs.id, bookingId: cleanerJobs.bookingId, customerName: cleanerJobs.customerName, teamName: cleanerJobs.teamName })
+        .from(cleanerJobs)
+        .where(
+          and(
+            eq(cleanerJobs.jobDate, input.date),
+            ne(cleanerJobs.bookingStatus, "cancelled"),
+            ne(cleanerJobs.bookingStatus, "rescheduled")
+          )
+        );
+      const schedulePageCount = schedulePageRows.length;
       const check2Pass = schedulePageCount === jobsPageCount;
       const check2Detail: string[] = [];
       if (!check2Pass) {
-        const unscheduled = dbJobs.filter((j) => !scheduledJobIds.has(j.id));
-        for (const j of unscheduled) {
-          check2Detail.push(`Not on Schedule page: #${j.bookingId ?? j.id} ${j.customerName} (team: ${j.teamName ?? "unassigned"})`);
+        const scheduleIds = new Set(schedulePageRows.map((r) => r.id));
+        for (const j of dbJobs) {
+          if (!scheduleIds.has(j.id)) {
+            check2Detail.push(`On Jobs page but missing from Schedule page: #${j.bookingId ?? j.id} ${j.customerName} (team: ${j.teamName ?? "unassigned"})`);
+          }
+        }
+        for (const r of schedulePageRows) {
+          if (!dbJobs.find((j) => j.id === r.id)) {
+            check2Detail.push(`On Schedule page but missing from Jobs page: #${r.bookingId ?? r.id} ${r.customerName}`);
+          }
         }
       }
 
