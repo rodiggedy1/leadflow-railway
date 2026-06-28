@@ -248,18 +248,7 @@ export const launch27Router = router({
           : [];
       const profileMap = new Map(profiles.map((p) => [p.id, p]));
 
-      // Load all schedule_assignments for these cleaner_jobs (one query)
-      const jobIds = dbJobs.map((j) => j.id);
-      const assignments =
-        jobIds.length > 0
-          ? await db
-              .select({ cleanerJobId: scheduleAssignments.cleanerJobId })
-              .from(scheduleAssignments)
-              .where(inArray(scheduleAssignments.cleanerJobId, jobIds))
-          : [];
-      const assignedJobIds = new Set(assignments.map((a) => a.cleanerJobId));
-
-      // Run 4-stage pipeline per L27 booking
+      // Run 3-stage pipeline per L27 booking
       const bookingResults: BookingHealth[] = [];
 
       for (const b of l27Bookings) {
@@ -302,10 +291,7 @@ export const launch27Router = router({
           continue;
         }
 
-        // Stage 3: Scheduled
-        const scheduled = assignedJobIds.has(job.id);
-
-        // Stage 4: Portal Ready
+        // Stage 3: Portal Ready — cleaner profile is active and has a phone
         const profile = profileMap.get(job.cleanerProfileId!);
         const portalReady = !!(profile && profile.isActive === 1 && profile.phone);
 
@@ -316,13 +302,7 @@ export const launch27Router = router({
         let impact: string | undefined;
         let recommendation: string | undefined;
 
-        if (!scheduled) {
-          health = "warning";
-          failureStage = "scheduled";
-          failureReason = "No schedule_assignments row found for this cleanerJobId";
-          impact = "Job is assigned but not yet scheduled in the route optimizer";
-          recommendation = "Run the route optimizer for this date to generate schedule assignments";
-        } else if (!portalReady) {
+        if (!portalReady) {
           health = "warning";
           failureStage = "portalReady";
           if (!profile) {
@@ -346,7 +326,7 @@ export const launch27Router = router({
           bookingId: b.id,
           customerName: b.fullName,
           health,
-          stages: { imported, assigned, scheduled, portalReady },
+          stages: { imported, assigned, scheduled: true, portalReady },
           failureStage,
           failureReason,
           impact,
