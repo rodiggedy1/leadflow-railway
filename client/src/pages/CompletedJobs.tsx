@@ -39,6 +39,8 @@ import {
 import {
   Upload,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Send,
   RefreshCw,
   Star,
@@ -59,6 +61,11 @@ import {
   Frown,
   Award,
   MessageCircle,
+  Activity,
+  ShieldCheck,
+  ShieldAlert,
+  ShieldX,
+  Pause,
 } from "lucide-react";
 import { toast } from "sonner";
 import AdminHeader from "@/components/AdminHeader";
@@ -498,6 +505,44 @@ function BatchesTab() {
     },
   });
 
+  // ── Schedule Health Engine ─────────────────────────────────────────────────
+  type BookingHealth = {
+    bookingId: number;
+    customerName: string;
+    health: "critical" | "warning" | "healthy";
+    stages: { imported: boolean; assigned: boolean; scheduled: boolean; portalReady: boolean };
+    failureStage?: string;
+    failureReason?: string;
+    impact?: string;
+    recommendation?: string;
+  };
+  type HealthReport = {
+    date: string;
+    healthScore: number;
+    critical: number;
+    warning: number;
+    healthy: number;
+    total: number;
+    bookings: BookingHealth[];
+    runAt: string;
+  };
+  const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
+  const [healthReportExpanded, setHealthReportExpanded] = useState(true);
+  const [expandedBookings, setExpandedBookings] = useState<Set<number>>(new Set());
+  const [showHealthyBookings, setShowHealthyBookings] = useState(false);
+
+  const verifySyncMutation = trpc.launch27.verifySync.useMutation({
+    onSuccess: (result) => {
+      setHealthReport(result as HealthReport);
+      setExpandedBookings(new Set());
+      setShowHealthyBookings(false);
+    },
+    onError: (err) => {
+      toast.error(`Health check failed: ${err.message}`);
+    },
+  });
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const [syncDate, setSyncDate] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 1);
@@ -515,6 +560,8 @@ function BatchesTab() {
       );
       refetch();
       refetchLastSync();
+      // Auto-trigger schedule health check after sync
+      verifySyncMutation.mutate({ date: result.date });
     },
     onError: (err) => {
       toast.error(`Launch27 sync failed: ${err.message}`);
@@ -678,6 +725,195 @@ function BatchesTab() {
           </CardContent>
         )}
       </Card>
+
+      {/* ── Schedule Health Report ─────────────────────────────────────────── */}
+      {(verifySyncMutation.isPending || healthReport) && (
+        <Card style={{ borderColor: healthReport && healthReport.critical > 0 ? "#fca5a5" : healthReport && healthReport.warning > 0 ? "#fde68a" : "#bbf7d0" }}>
+          <CardHeader
+            className="pb-2 cursor-pointer select-none"
+            onClick={() => setHealthReportExpanded((v) => !v)}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4" style={{ color: healthReport && healthReport.critical > 0 ? "#dc2626" : healthReport && healthReport.warning > 0 ? "#d97706" : "#16a34a" }} />
+                <CardTitle className="text-sm font-semibold" style={{ color: "#0D0D0D" }}>
+                  Schedule Health
+                  {healthReport && (
+                    <span
+                      className="ml-2 text-base font-bold"
+                      style={{ color: healthReport.healthScore >= 90 ? "#16a34a" : healthReport.healthScore >= 70 ? "#d97706" : "#dc2626" }}
+                    >
+                      {healthReport.healthScore}%
+                    </span>
+                  )}
+                </CardTitle>
+                {verifySyncMutation.isPending && (
+                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Checking…
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                {healthReport && (
+                  <>
+                    {healthReport.critical > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium" style={{ color: "#dc2626" }}>
+                        <ShieldX className="w-3.5 h-3.5" />
+                        {healthReport.critical} Critical
+                      </span>
+                    )}
+                    {healthReport.warning > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium" style={{ color: "#d97706" }}>
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        {healthReport.warning} Warning
+                      </span>
+                    )}
+                    {healthReport.healthy > 0 && (
+                      <span className="flex items-center gap-1 text-xs font-medium" style={{ color: "#16a34a" }}>
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        {healthReport.healthy} Healthy
+                      </span>
+                    )}
+                  </>
+                )}
+                {healthReportExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+              </div>
+            </div>
+          </CardHeader>
+
+          {healthReportExpanded && healthReport && (
+            <CardContent className="pt-0 space-y-2">
+              {/* Failed bookings (critical + warning) */}
+              {healthReport.bookings
+                .filter((b) => b.health !== "healthy")
+                .sort((a, b) => (a.health === "critical" ? -1 : b.health === "critical" ? 1 : 0))
+                .map((b) => (
+                  <div
+                    key={b.bookingId}
+                    className="rounded-md border text-sm"
+                    style={{
+                      borderColor: b.health === "critical" ? "#fca5a5" : "#fde68a",
+                      background: b.health === "critical" ? "#fff5f5" : "#fffbeb",
+                    }}
+                  >
+                    {/* Booking header row */}
+                    <button
+                      className="w-full flex items-center justify-between px-3 py-2 text-left"
+                      onClick={() =>
+                        setExpandedBookings((prev) => {
+                          const next = new Set(prev);
+                          next.has(b.bookingId) ? next.delete(b.bookingId) : next.add(b.bookingId);
+                          return next;
+                        })
+                      }
+                    >
+                      <div className="flex items-center gap-2">
+                        {b.health === "critical" ? (
+                          <ShieldX className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#dc2626" }} />
+                        ) : (
+                          <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#d97706" }} />
+                        )}
+                        <span className="font-medium" style={{ color: "#0D0D0D" }}>{b.customerName}</span>
+                        <span className="text-gray-400">#{b.bookingId}</span>
+                        {b.failureReason && (
+                          <span className="text-xs" style={{ color: b.health === "critical" ? "#dc2626" : "#d97706" }}>
+                            — {b.failureReason}
+                          </span>
+                        )}
+                      </div>
+                      {expandedBookings.has(b.bookingId) ? (
+                        <ChevronUp className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      )}
+                    </button>
+
+                    {/* Expanded trace */}
+                    {expandedBookings.has(b.bookingId) && (
+                      <div className="px-3 pb-3 space-y-3 border-t" style={{ borderColor: b.health === "critical" ? "#fca5a5" : "#fde68a" }}>
+                        {/* 4-stage pipeline */}
+                        <div className="flex items-center gap-1 pt-2 flex-wrap">
+                          {([
+                            { key: "imported", label: "Imported" },
+                            { key: "assigned", label: "Assigned" },
+                            { key: "scheduled", label: "Scheduled" },
+                            { key: "portalReady", label: "Portal Ready" },
+                          ] as const).map(({ key, label }, idx) => {
+                            const passed = b.stages[key];
+                            const isBlocked = !passed && idx > 0 && !b.stages[([
+                              "imported", "assigned", "scheduled", "portalReady",
+                            ] as const)[idx - 1]];
+                            return (
+                              <div key={key} className="flex items-center gap-1">
+                                {idx > 0 && <span className="text-gray-300 text-xs">→</span>}
+                                <span
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                  style={{
+                                    background: passed ? "#dcfce7" : isBlocked ? "#f3f4f6" : "#fee2e2",
+                                    color: passed ? "#166534" : isBlocked ? "#6b7280" : "#991b1b",
+                                  }}
+                                >
+                                  {passed ? "✅" : isBlocked ? <Pause className="w-3 h-3" /> : "❌"}
+                                  {label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Impact + recommendation */}
+                        {b.impact && (
+                          <div className="text-xs" style={{ color: "#374151" }}>
+                            <span className="font-semibold">Impact:</span> {b.impact}
+                          </div>
+                        )}
+                        {b.recommendation && (
+                          <div className="text-xs" style={{ color: "#374151" }}>
+                            <span className="font-semibold">Fix:</span> {b.recommendation}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+              {/* Healthy bookings — collapsed */}
+              {healthReport.healthy > 0 && (
+                <div>
+                  <button
+                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1 mt-1"
+                    onClick={() => setShowHealthyBookings((v) => !v)}
+                  >
+                    {showHealthyBookings ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {showHealthyBookings ? "Hide" : `View ${healthReport.healthy} healthy booking${healthReport.healthy !== 1 ? "s" : ""}`}
+                  </button>
+                  {showHealthyBookings && (
+                    <div className="mt-2 space-y-1">
+                      {healthReport.bookings
+                        .filter((b) => b.health === "healthy")
+                        .map((b) => (
+                          <div
+                            key={b.bookingId}
+                            className="flex items-center gap-2 px-3 py-1.5 rounded-md text-xs"
+                            style={{ background: "#f0fdf4", color: "#166534" }}
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="font-medium">{b.customerName}</span>
+                            <span className="text-green-400">#{b.bookingId}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Footer: run time */}
+              <div className="text-xs text-gray-400 pt-1">
+                Checked {healthReport.total} booking{healthReport.total !== 1 ? "s" : ""} · {new Date(healthReport.runAt).toLocaleTimeString()}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Info banner */}
       <div

@@ -9,8 +9,14 @@ import { TRPCError } from "@trpc/server";
 import { agentProcedure, router } from "./_core/trpc";
 import { getCompletedBookingsForDate } from "./launch27";
 import { getDb } from "./db";
-import { completedJobBatches, completedJobs } from "../drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import {
+  completedJobBatches,
+  completedJobs,
+  cleanerJobs,
+  cleanerProfiles,
+  scheduleAssignments,
+} from "../drizzle/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { extractUSDigits, isValidUSPhone } from "./routers";
 
 export const launch27Router = router({
@@ -176,4 +182,210 @@ export const launch27Router = router({
 
     return syncBatches[0] ?? null;
   }),
+
+  /**
+   * Verify the scheduling layer for a given date against what Launch27 reports.
+   * Runs 4-stage pipeline check per booking:
+   *   1. Imported    — cleaner_jobs row exists with this bookingId
+   *   2. Assigned    — cleanerProfileId is non-null
+   *   3. Scheduled   — schedule_assignments row exists for cleanerJobId
+   *   4. Portal Ready — profile isActive=1 AND phone is not null
+   *
+   * Returns a health report with per-booking trace details.
+   * No DB writes — read-only check.
+   */
+  verifySync: agentProcedure
+    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD") }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Fetch all bookings (assigned + completed) from L27 for this date
+      const l27Result = await getCompletedBookingsForDate(input.date, { includeAll: true });
+      if (l27Result.error) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: `Launch27 fetch failed: ${l27Result.error}`,
+        });
+      }
+
+      const l27Bookings = l27Result.bookings;
+      if (l27Bookings.length === 0) {
+        return {
+          date: input.date,
+          healthScore: 100,
+          critical: 0,
+          warning: 0,
+          healthy: 0,
+          total: 0,
+          bookings: [] as BookingHealth[],
+          runAt: new Date().toISOString(),
+        };
+      }
+
+      // Load all cleaner_jobs rows for this date in one query
+      const dbJobs = await db
+        .select()
+        .from(cleanerJobs)
+        .where(eq(cleanerJobs.jobDate, input.date));
+
+      // Build a map: bookingId -> cleaner_jobs row(s)
+      const jobsByBookingId = new Map<number, (typeof dbJobs)[number][]>();
+      for (const job of dbJobs) {
+        if (job.bookingId == null) continue;
+        const arr = jobsByBookingId.get(job.bookingId) ?? [];
+        arr.push(job);
+        jobsByBookingId.set(job.bookingId, arr);
+      }
+
+      // Load all cleaner profiles referenced by these jobs (one query)
+      const profileIds = Array.from(
+        new Set(dbJobs.map((j) => j.cleanerProfileId).filter((id): id is number => id != null))
+      );
+      const profiles =
+        profileIds.length > 0
+          ? await db.select().from(cleanerProfiles).where(inArray(cleanerProfiles.id, profileIds))
+          : [];
+      const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+      // Load all schedule_assignments for these cleaner_jobs (one query)
+      const jobIds = dbJobs.map((j) => j.id);
+      const assignments =
+        jobIds.length > 0
+          ? await db
+              .select({ cleanerJobId: scheduleAssignments.cleanerJobId })
+              .from(scheduleAssignments)
+              .where(inArray(scheduleAssignments.cleanerJobId, jobIds))
+          : [];
+      const assignedJobIds = new Set(assignments.map((a) => a.cleanerJobId));
+
+      // Run 4-stage pipeline per L27 booking
+      const bookingResults: BookingHealth[] = [];
+
+      for (const b of l27Bookings) {
+        const matchedJobs = jobsByBookingId.get(b.id) ?? [];
+
+        // Stage 1: Imported
+        const imported = matchedJobs.length > 0;
+
+        if (!imported) {
+          bookingResults.push({
+            bookingId: b.id,
+            customerName: b.fullName,
+            health: "critical",
+            stages: { imported: false, assigned: false, scheduled: false, portalReady: false },
+            failureStage: "imported",
+            failureReason: "No cleaner_jobs row found for this booking ID",
+            impact: "Cleaner has no record of this job — will not appear in portal",
+            recommendation: "Re-run the scheduling sync for this date",
+          });
+          continue;
+        }
+
+        // Use the first matched job (primary assignment)
+        const job = matchedJobs[0];
+
+        // Stage 2: Assigned
+        const assigned = job.cleanerProfileId != null;
+
+        if (!assigned) {
+          bookingResults.push({
+            bookingId: b.id,
+            customerName: b.fullName,
+            health: "critical",
+            stages: { imported: true, assigned: false, scheduled: false, portalReady: false },
+            failureStage: "assigned",
+            failureReason: "cleanerProfileId is null — no cleaner linked to this job",
+            impact: "Job exists in DB but has no cleaner assignment",
+            recommendation: "Assign a cleaner profile to this job in the scheduling engine",
+          });
+          continue;
+        }
+
+        // Stage 3: Scheduled
+        const scheduled = assignedJobIds.has(job.id);
+
+        // Stage 4: Portal Ready
+        const profile = profileMap.get(job.cleanerProfileId!);
+        const portalReady = !!(profile && profile.isActive === 1 && profile.phone);
+
+        // Determine health tier
+        let health: "critical" | "warning" | "healthy";
+        let failureStage: string | undefined;
+        let failureReason: string | undefined;
+        let impact: string | undefined;
+        let recommendation: string | undefined;
+
+        if (!scheduled) {
+          health = "warning";
+          failureStage = "scheduled";
+          failureReason = "No schedule_assignments row found for this cleanerJobId";
+          impact = "Job is assigned but not yet scheduled in the route optimizer";
+          recommendation = "Run the route optimizer for this date to generate schedule assignments";
+        } else if (!portalReady) {
+          health = "warning";
+          failureStage = "portalReady";
+          if (!profile) {
+            failureReason = "Cleaner profile not found (ghost profile ID)";
+            impact = "Cleaner cannot log into portal — profile record is missing";
+            recommendation = "Verify cleanerProfileId references a valid cleaner_profiles row";
+          } else if (profile.isActive !== 1) {
+            failureReason = `Cleaner profile is inactive (isActive=${profile.isActive})`;
+            impact = "Cleaner is marked inactive and may not have portal access";
+            recommendation = "Reactivate the cleaner profile if they are still working";
+          } else {
+            failureReason = "Cleaner profile has no phone number";
+            impact = "Cleaner cannot receive SMS notifications for this job";
+            recommendation = "Add a phone number to the cleaner's profile";
+          }
+        } else {
+          health = "healthy";
+        }
+
+        bookingResults.push({
+          bookingId: b.id,
+          customerName: b.fullName,
+          health,
+          stages: { imported, assigned, scheduled, portalReady },
+          failureStage,
+          failureReason,
+          impact,
+          recommendation,
+        });
+      }
+
+      const total = bookingResults.length;
+      const critical = bookingResults.filter((b) => b.health === "critical").length;
+      const warning = bookingResults.filter((b) => b.health === "warning").length;
+      const healthy = bookingResults.filter((b) => b.health === "healthy").length;
+      const healthScore = total > 0 ? Math.round((healthy / total) * 1000) / 10 : 100;
+
+      return {
+        date: input.date,
+        healthScore,
+        critical,
+        warning,
+        healthy,
+        total,
+        bookings: bookingResults,
+        runAt: new Date().toISOString(),
+      };
+    }),
 });
+
+// ---- Types ----
+export interface BookingHealth {
+  bookingId: number;
+  customerName: string;
+  health: "critical" | "warning" | "healthy";
+  stages: {
+    imported: boolean;
+    assigned: boolean;
+    scheduled: boolean;
+    portalReady: boolean;
+  };
+  failureStage?: string;
+  failureReason?: string;
+  impact?: string;
+  recommendation?: string;
+}
