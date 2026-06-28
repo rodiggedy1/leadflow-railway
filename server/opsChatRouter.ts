@@ -2639,7 +2639,6 @@ export const opsChatRouter = router({
     .input(z.object({
       phone: z.string().min(7).max(20),  // raw phone — will be normalised to E.164
       firstMessage: z.string().min(1).max(1600),
-      isLeadChat: z.boolean().optional(), // When true, send from leads line (OPENPHONE_PHONE_NUMBER_ID) instead of CS line
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -2724,13 +2723,11 @@ export const opsChatRouter = router({
         sessionId = (result as any).insertId;
       }
 
-      // Send the first SMS — lead chats use the leads line, CS uses the CS line
+      // Send the first SMS via the CS OpenPhone number
       const { sendSms } = await import("./openphone");
       const env = await import("./_core/env");
-      const fromNumberId = input.isLeadChat
-        ? (env.ENV.openPhoneNumberId || env.ENV.openPhoneCsNumberId || undefined)
-        : (env.ENV.openPhoneCsNumberId || undefined);
-      await sendSms({ to: e164, content: input.firstMessage, ...(fromNumberId ? { fromNumberId } : {}) });
+      const csNumberId = env.ENV.openPhoneCsNumberId;
+      await sendSms({ to: e164, content: input.firstMessage, ...(csNumberId ? { fromNumberId: csNumberId } : {}) });
 
       // Append the message to history
       const [session] = await db
