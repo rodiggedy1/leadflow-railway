@@ -559,7 +559,7 @@ function Testimonial() {
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            objectPosition: "center 30%",
+            objectPosition: "center center",
             display: "block",
           }}
         />
@@ -1224,7 +1224,7 @@ function CardAuthInner({
             min-height: unset !important;
           }
           .testimonial-photo {
-            height: 320px !important;
+            height: 420px !important;
           }
           .testimonial-copy {
             padding: 28px 24px !important;
@@ -1284,7 +1284,7 @@ function CardAuthInner({
             grid-template-columns: 1fr 1fr !important;
           }
           .testimonial-photo {
-            height: 220px !important;
+            height: 380px !important;
           }
         }
       `}</style>
