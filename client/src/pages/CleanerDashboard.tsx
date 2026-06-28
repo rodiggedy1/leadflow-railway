@@ -1835,19 +1835,17 @@ export default function CleanerDashboard() {
   const { data: pendingList, refetch: refetchPending } = trpc.quality.listPendingRatingSms.useQuery();
 
   // ── Schedule Health Engine ──────────────────────────────────────────────────
-  type BookingHealthStage = { imported: boolean; assigned: boolean; scheduled: boolean; portalReady: boolean };
-  type BookingHealth = { bookingId: number; customerName: string; health: "critical" | "warning" | "healthy"; stages: BookingHealthStage; failureStage?: string; failureReason?: string; impact?: string; recommendation?: string };
-  type HealthReport = { date: string; healthScore: number; critical: number; warning: number; healthy: number; total: number; bookings: BookingHealth[]; runAt: string };
+  type Check3Team = { teamName: string; jobsPageCount: number; portalCount: number; pass: boolean; issues: string[] };
+  type HealthReport = {
+    date: string; allPass: boolean; issueCount: number; runAt: string;
+    check1: { label: string; pass: boolean; l27Count: number; jobsPageCount: number; detail: string[] };
+    check2: { label: string; pass: boolean; schedulePageCount: number; jobsPageCount: number; detail: string[] };
+    check3: { label: string; pass: boolean; teams: Check3Team[]; unassignedJobs: string[] };
+  };
   const [healthReport, setHealthReport] = useState<HealthReport | null>(null);
   const [healthExpanded, setHealthExpanded] = useState(true);
-  const [expandedHealthBookings, setExpandedHealthBookings] = useState<Set<number>>(new Set());
-  const [showHealthyBookings, setShowHealthyBookings] = useState(false);
   const verifySyncMutation = trpc.launch27.verifySync.useMutation({
-    onSuccess: (result) => {
-      setHealthReport(result as HealthReport);
-      setExpandedHealthBookings(new Set());
-      setShowHealthyBookings(false);
-    },
+    onSuccess: (result) => setHealthReport(result as HealthReport),
     onError: (err) => toast.error(`Health check failed: ${err.message}`),
   });
   // ─────────────────────────────────────────────────────────────────────────────
@@ -2014,11 +2012,11 @@ export default function CleanerDashboard() {
           );
         })()}
 
-        {/* ── Schedule Health Report ──────────────────────────────────────── */}
+        {/* ── Schedule Health Report ────────────────────────────────────────────────────── */}
         {(verifySyncMutation.isPending || healthReport) && (
           <div
             className="rounded-xl border-2 shadow-sm overflow-hidden"
-            style={{ borderColor: healthReport && healthReport.critical > 0 ? "#fca5a5" : healthReport && healthReport.warning > 0 ? "#fde68a" : "#bbf7d0" }}
+            style={{ borderColor: healthReport ? (healthReport.allPass ? "#bbf7d0" : "#fde68a") : "#e5e7eb" }}
           >
             {/* Header */}
             <button
@@ -2028,112 +2026,98 @@ export default function CleanerDashboard() {
               <div className="flex items-center gap-2">
                 <Activity
                   className="w-4 h-4"
-                  style={{ color: healthReport && healthReport.critical > 0 ? "#dc2626" : healthReport && healthReport.warning > 0 ? "#d97706" : "#16a34a" }}
+                  style={{ color: healthReport ? (healthReport.allPass ? "#16a34a" : "#d97706") : "#9ca3af" }}
                 />
                 <span className="text-sm font-semibold text-gray-900">Schedule Health</span>
-                {healthReport && (
-                  <span
-                    className="text-sm font-bold"
-                    style={{ color: healthReport.healthScore >= 90 ? "#16a34a" : healthReport.healthScore >= 70 ? "#d97706" : "#dc2626" }}
-                  >
-                    {healthReport.healthScore}%
-                  </span>
-                )}
                 {verifySyncMutation.isPending && (
                   <span className="flex items-center gap-1 text-xs text-gray-400">
                     <Loader2 className="w-3 h-3 animate-spin" /> Checking…
                   </span>
                 )}
                 {healthReport && (
-                  <div className="flex items-center gap-1.5">
-                    {healthReport.critical > 0 && <span className="text-xs font-medium bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{healthReport.critical} Critical</span>}
-                    {healthReport.warning > 0 && <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{healthReport.warning} Warning</span>}
-                    {healthReport.healthy > 0 && <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{healthReport.healthy} Healthy</span>}
-                  </div>
+                  healthReport.allPass
+                    ? <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✓ All checks passed</span>
+                    : <span className="text-xs font-medium bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{healthReport.issueCount} check{healthReport.issueCount !== 1 ? "s" : ""} failed</span>
                 )}
               </div>
               <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${healthExpanded ? "rotate-90" : ""}`} />
             </button>
             {/* Body */}
             {healthExpanded && healthReport && (
-              <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-2">
-                {/* Failed bookings — critical first */}
-                {healthReport.bookings
-                  .filter(b => b.health !== "healthy")
-                  .sort((a, b) => (a.health === "critical" ? -1 : 1))
-                  .map(b => (
-                    <div key={b.bookingId} className={`rounded-lg border bg-white overflow-hidden ${b.health === "critical" ? "border-red-200" : "border-amber-200"}`}>
-                      <button
-                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-gray-50 transition-colors"
-                        onClick={() => setExpandedHealthBookings(prev => {
-                          const next = new Set(prev);
-                          next.has(b.bookingId) ? next.delete(b.bookingId) : next.add(b.bookingId);
-                          return next;
-                        })}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${b.health === "critical" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                            {b.health === "critical" ? "CRITICAL" : "WARNING"}
-                          </span>
-                          <span className="text-sm font-medium text-gray-900 truncate">{b.customerName}</span>
-                          <span className="text-xs text-gray-400">#{b.bookingId}</span>
-                          <span className="text-xs text-gray-500 truncate">— {b.failureReason}</span>
-                        </div>
-                        <ChevronRight className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${expandedHealthBookings.has(b.bookingId) ? "rotate-90" : ""}`} />
-                      </button>
-                      {expandedHealthBookings.has(b.bookingId) && (
-                        <div className="border-t border-gray-100 px-3 py-2 space-y-2">
-                          {/* Stage pills */}
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {(["imported", "assigned", "scheduled", "portalReady"] as const).map(stage => {
-                              const stageLabels = { imported: "Imported", assigned: "Assigned", scheduled: "Scheduled", portalReady: "Portal Ready" };
-                              const passed = b.stages[stage];
-                              const isFailStage = b.failureStage === stage;
-                              const isBlocked = !passed && !isFailStage;
-                              return (
-                                <span key={stage} className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                  passed ? "bg-green-100 text-green-700" : isBlocked ? "bg-gray-100 text-gray-400" : "bg-red-100 text-red-700"
-                                }`}>
-                                  {passed ? "✅" : isBlocked ? "⏸" : "❌"} {stageLabels[stage]}
-                                </span>
-                              );
-                            })}
-                          </div>
-                          {b.impact && <p className="text-xs text-gray-600"><span className="font-medium">Impact:</span> {b.impact}</p>}
-                          {b.recommendation && <p className="text-xs text-gray-600"><span className="font-medium">Fix:</span> {b.recommendation}</p>}
-                        </div>
-                      )}
+              <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-3">
+                {/* Check 1: L27 vs Jobs page */}
+                <div className={`rounded-lg border bg-white px-3 py-2.5 ${healthReport.check1.pass ? "border-green-200" : "border-amber-200"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span>{healthReport.check1.pass ? "✅" : "⚠️"}</span>
+                      <span className="text-sm font-medium text-gray-900">L27 ↔ Jobs page</span>
                     </div>
-                  ))}
-                {/* Healthy bookings toggle */}
-                {healthReport.healthy > 0 && (
-                  <div>
-                    <button
-                      className="text-xs text-gray-400 hover:text-gray-600 underline"
-                      onClick={() => setShowHealthyBookings(v => !v)}
-                    >
-                      {showHealthyBookings ? "Hide" : `View ${healthReport.healthy} healthy booking${healthReport.healthy !== 1 ? "s" : ""}`}
-                    </button>
-                    {showHealthyBookings && (
-                      <div className="mt-2 space-y-1">
-                        {healthReport.bookings.filter(b => b.health === "healthy").map(b => (
-                          <div key={b.bookingId} className="flex items-center gap-2 text-xs text-gray-500 px-2 py-1 bg-white rounded border border-gray-100">
-                            <span className="text-green-500">✅</span>
-                            <span>{b.customerName}</span>
-                            <span className="text-gray-300">#{b.bookingId}</span>
-                          </div>
+                    <span className={`text-xs font-mono ${healthReport.check1.pass ? "text-green-700" : "text-amber-700"}`}>
+                      L27: {healthReport.check1.l27Count} · DB: {healthReport.check1.jobsPageCount}
+                    </span>
+                  </div>
+                  {!healthReport.check1.pass && healthReport.check1.detail.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {healthReport.check1.detail.map((d: string, i: number) => (
+                        <li key={i} className="text-xs text-amber-700 pl-6">{d}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {/* Check 2: Schedule page vs Jobs page */}
+                <div className={`rounded-lg border bg-white px-3 py-2.5 ${healthReport.check2.pass ? "border-green-200" : "border-amber-200"}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span>{healthReport.check2.pass ? "✅" : "⚠️"}</span>
+                      <span className="text-sm font-medium text-gray-900">Schedule page ↔ Jobs page</span>
+                    </div>
+                    <span className={`text-xs font-mono ${healthReport.check2.pass ? "text-green-700" : "text-amber-700"}`}>
+                      Sched: {healthReport.check2.schedulePageCount} · Jobs: {healthReport.check2.jobsPageCount}
+                    </span>
+                  </div>
+                  {!healthReport.check2.pass && healthReport.check2.detail.length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5">
+                      {healthReport.check2.detail.map((d: string, i: number) => (
+                        <li key={i} className="text-xs text-amber-700 pl-6">{d}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {/* Check 3: Jobs page assignments vs Cleaner portal (by team) */}
+                <div className={`rounded-lg border bg-white px-3 py-2.5 ${healthReport.check3.pass ? "border-green-200" : "border-amber-200"}`}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span>{healthReport.check3.pass ? "✅" : "⚠️"}</span>
+                    <span className="text-sm font-medium text-gray-900">Jobs page assignments ↔ Cleaner portal (by team)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {healthReport.check3.teams.map((team: { teamName: string; jobsPageCount: number; portalCount: number; pass: boolean; issues: string[] }) => (
+                      <div key={team.teamName} className="flex items-center justify-between">
+                        <span className="text-xs text-gray-700">{team.teamName}</span>
+                        <span className={`text-xs font-mono ${team.pass ? "text-green-700" : "text-amber-700"}`}>
+                          {team.pass ? "✓" : "⚠"} Jobs: {team.jobsPageCount} · Portal: {team.portalCount}
+                        </span>
+                      </div>
+                    ))}
+                    {healthReport.check3.unassignedJobs.length > 0 && (
+                      <div className="mt-1">
+                        <p className="text-xs text-amber-700 font-medium">{healthReport.check3.unassignedJobs.length} job(s) not assigned to any cleaner:</p>
+                        {healthReport.check3.unassignedJobs.map((j: string, i: number) => (
+                          <p key={i} className="text-xs text-amber-600 pl-4">{j}</p>
                         ))}
                       </div>
                     )}
+                    {!healthReport.check3.pass && healthReport.check3.teams.filter((t: { pass: boolean }) => !t.pass).flatMap((t: { issues: string[] }) => t.issues).map((issue: string, i: number) => (
+                      <p key={i} className="text-xs text-amber-700 pl-4">{issue}</p>
+                    ))}
                   </div>
-                )}
-                <p className="text-xs text-gray-400 pt-1">Checked {healthReport.total} booking{healthReport.total !== 1 ? "s" : ""} · {new Date(healthReport.runAt).toLocaleTimeString()}</p>
+                </div>
+                <p className="text-xs text-gray-400 pt-1">Checked at {new Date(healthReport.runAt).toLocaleTimeString()}</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Skeleton loading state */}
+                {/* Skeleton loading state */}
         {isLoading && (
           <div className="space-y-3">
             {[1, 2, 3].map(i => (
