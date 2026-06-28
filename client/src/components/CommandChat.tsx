@@ -150,8 +150,8 @@ function PaymentLinkModal({ open, onClose }: { open: boolean; onClose: () => voi
             <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5" /> Link ready — expires {_formatTs(result.expiresAt)}
             </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate">{result.url}</code>
+            <div className="flex items-center gap-2 w-full overflow-hidden">
+              <code className="flex-1 min-w-0 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate block">{result.url}</code>
               <_CopyBtn text={result.url} />
             </div>
           </div>
