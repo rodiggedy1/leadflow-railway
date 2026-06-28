@@ -29,7 +29,8 @@ import {
   ExternalLink, ChevronDown, Plus,
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
-  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw } from "lucide-react";
+  ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw,
+  DollarSign, Check, User, Calendar, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,6 +48,118 @@ import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AICallPanel from "@/components/AICallPanel";
 import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMentions } from "@/components/CustomerMentionChip";
+
+// ── Payment Link Modal ───────────────────────────────────────────────────────
+function _normalizePhone(raw: string) {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return raw.startsWith("+") ? raw : `+${raw}`;
+}
+function _formatTs(ts: number | null | undefined) {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleString();
+}
+function _CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 transition"
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+function PaymentLinkModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [phone, setPhone] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [jobDate, setJobDate] = React.useState("");
+  const [address, setAddress] = React.useState("");
+  const [result, setResult] = React.useState<{ url: string; expiresAt: number } | null>(null);
+
+  const generate = trpc.stripe.generateCardAuthToken.useMutation({
+    onSuccess: (data) => {
+      setResult({ url: data.url, expiresAt: data.expiresAt });
+      toast.success("Card link generated!");
+    },
+    onError: (err) => toast.error(err.message || "Failed to generate link"),
+  });
+
+  function handleClose() {
+    setPhone(""); setName(""); setJobDate(""); setAddress(""); setResult(null);
+    onClose();
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!phone.trim()) { toast.error("Phone number is required"); return; }
+    generate.mutate({
+      customerPhone: _normalizePhone(phone.trim()),
+      customerName: name.trim() || undefined,
+      jobDate: jobDate.trim() || undefined,
+      jobAddress: address.trim() || undefined,
+    });
+  }
+
+  const inputCls = "w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#E8735A]/30 focus:border-[#E8735A]";
+  const labelCls = "block text-xs font-semibold text-gray-600 mb-1";
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#E8735A]/10 grid place-items-center">
+              <CreditCard className="w-3.5 h-3.5 text-[#E8735A]" />
+            </div>
+            Generate Card Link
+          </DialogTitle>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-3 mt-1">
+          <div>
+            <label className={labelCls}><Phone className="w-3 h-3 inline mr-1" />Customer Phone *</label>
+            <Input className={inputCls} placeholder="+1 (555) 000-0000" value={phone} onChange={e => setPhone(e.target.value)} required />
+          </div>
+          <div>
+            <label className={labelCls}><User className="w-3 h-3 inline mr-1" />Customer Name</label>
+            <Input className={inputCls} placeholder="Jane Smith" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls}><Calendar className="w-3 h-3 inline mr-1" />Job Date</label>
+            <Input className={inputCls} placeholder="Thursday, July 10 at 10 AM" value={jobDate} onChange={e => setJobDate(e.target.value)} />
+          </div>
+          <div>
+            <label className={labelCls}><MapPin className="w-3 h-3 inline mr-1" />Job Address</label>
+            <Input className={inputCls} placeholder="123 Main St, Washington DC" value={address} onChange={e => setAddress(e.target.value)} />
+          </div>
+          <div className="col-span-2">
+            <Button type="submit" disabled={generate.isPending} className="w-full bg-[#E8735A] hover:bg-[#d4604a] text-white font-bold rounded-xl">
+              {generate.isPending
+                ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Generating…</span>
+                : <span className="flex items-center gap-2"><CreditCard className="w-4 h-4" /> Generate Secure Card Link</span>}
+            </Button>
+          </div>
+        </form>
+
+        {result && (
+          <div className="mt-3 bg-green-50 border border-green-200 rounded-xl p-4">
+            <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Link ready — expires {_formatTs(result.expiresAt)}
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate">{result.url}</code>
+              <_CopyBtn text={result.url} />
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -3851,6 +3964,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // Mention history drawer state
   const [showMentionHistory, setShowMentionHistory] = useState(false);
   const [showCallPanel, setShowCallPanel] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   // Live floating pill: shown when a new @mention arrives while the panel IS visible
   const [livePill, setLivePill] = useState<{ from: string; body: string } | null>(null);
   const livePillTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -5386,19 +5500,29 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </span>
                 )}
               </button>
-              {/* Make Call button — pushed to far right */}
+              {/* Payment Link button */}
+              <button
+                onClick={() => setShowPaymentModal(true)}
+                className="ml-auto flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition shrink-0"
+                title="Generate payment link"
+              >
+                <DollarSign className="h-3.5 w-3.5" />
+              </button>
+              {/* Make Call button */}
               <button
                 onClick={() => setShowCallPanel(true)}
-                className="ml-auto flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition shrink-0"
+                className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 transition shrink-0"
+                title="Make AI call"
               >
                 <Bot className="h-3.5 w-3.5" />
-                + Make Call
+                <Smartphone className="h-3 w-3" />
               </button>
             </div>
           )}
 
           {/* AI Call Panel — slide-in from right */}
           <AICallPanel open={showCallPanel} onClose={() => setShowCallPanel(false)} />
+          <PaymentLinkModal open={showPaymentModal} onClose={() => setShowPaymentModal(false)} />
 
           {/* Mention History Drawer — slide-in from right */}
           {showMentionHistory && (
