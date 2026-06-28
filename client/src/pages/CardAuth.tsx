@@ -255,6 +255,7 @@ function ReservationTimeline() {
         gridTemplateColumns: "repeat(4,1fr)",
         gap: "8px",
       }}
+      className="reservation-timeline"
     >
       {steps.map((s, i) => (
         <div
@@ -327,7 +328,7 @@ function StoryCard() {
         className="relative"
         style={{ minHeight: "220px", overflow: "hidden" }}
       >
-        {/* Review animation — autoplay loop, shown until play */}
+        {/* Review animation — autoplay loop, no play button */}
         <div
           className="absolute inset-0 transition-opacity duration-500"
           style={{
@@ -345,27 +346,6 @@ function StoryCard() {
             <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
             <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
           </video>
-          <div
-            className="absolute inset-0"
-            style={{ background: "linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16))" }}
-          />
-          <button
-            onClick={handlePlay}
-            className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
-            aria-label="Play video"
-          >
-            <span
-              className="w-[72px] h-[72px] rounded-full grid place-items-center transition-transform duration-200 hover:scale-110"
-              style={{
-                background: "rgba(255,255,255,0.92)",
-                color: T.orange,
-                fontSize: "26px",
-                boxShadow: "0 16px 38px rgba(0,0,0,.25)",
-              }}
-            >
-              ▶
-            </span>
-          </button>
         </div>
 
         {/* Inline player — fades in on play */}
@@ -426,7 +406,7 @@ function StoryCardMobile() {
       className="rounded-[24px] overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
       style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
     >
-      {/* Review animation → inline player on click */}
+      {/* Review animation — autoplay loop, no play button */}
       <div className="relative" style={{ minHeight: "200px", overflow: "hidden" }}>
         <div
           className="absolute inset-0 transition-opacity duration-500"
@@ -445,19 +425,6 @@ function StoryCardMobile() {
             <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
             <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
           </video>
-          <div className="absolute inset-0" style={{ background: "linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16))" }} />
-          <button
-            onClick={handlePlay}
-            className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
-            aria-label="Play video"
-          >
-            <span
-              className="w-[64px] h-[64px] rounded-full grid place-items-center transition-transform duration-200 hover:scale-110"
-              style={{ background: "rgba(255,255,255,0.92)", color: T.orange, fontSize: "22px", boxShadow: "0 16px 38px rgba(0,0,0,.25)" }}
-            >
-              ▶
-            </span>
-          </button>
         </div>
         <div
           ref={playerRef}
@@ -540,7 +507,7 @@ function TrustVideoCard() {
           style={{ background: T.cream, border: `1px solid ${T.line}` }}
         >
           <p className="text-[13px] font-black mb-4" style={{ color: T.ink }}>In this quick welcome I'll explain:</p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 trust-checklist">
             {checkItems.map((item) => (
               <div
                 key={item.label}
@@ -575,7 +542,7 @@ function TrustVideoCard() {
 function Testimonial() {
   return (
     <div
-      className="rounded-[28px] overflow-hidden my-6"
+      className="rounded-[28px] overflow-hidden my-6 testimonial-card"
       style={{
         display: "grid",
         gridTemplateColumns: "420px 1fr",
@@ -585,7 +552,7 @@ function Testimonial() {
       }}
     >
       {/* Left: full-bleed photo */}
-      <div className="relative" style={{ overflow: "hidden" }}>
+      <div className="relative testimonial-photo" style={{ overflow: "hidden" }}>
         <img
           src="/mib-cleaner-photo.webp"
           alt="Maids in Black cleaner"
@@ -599,14 +566,14 @@ function Testimonial() {
         />
         {/* Right-edge gradient to blend into copy panel */}
         <div
-          className="absolute inset-y-0 right-0"
+          className="absolute inset-y-0 right-0 testimonial-gradient"
           style={{ width: "80px", background: `linear-gradient(to right, transparent, ${T.navy})` }}
         />
       </div>
 
       {/* Right: dark copy panel */}
       <div
-        className="flex flex-col justify-center p-10"
+        className="flex flex-col justify-center p-10 testimonial-copy"
         style={{ background: T.navy, color: "white" }}
       >
         {/* Location pill */}
@@ -622,7 +589,7 @@ function Testimonial() {
 
         {/* Quote */}
         <blockquote
-          className="text-[22px] leading-snug tracking-tight mb-5"
+          className="text-[22px] leading-snug tracking-tight mb-5 testimonial-quote"
           style={{ fontFamily: "'Playfair Display', Georgia, serif", margin: 0, color: "white" }}
         >
           “I’ve tried three other cleaning services. Maids in Black is the only one where the team actually showed up on time, did exactly what was promised, and left my kitchen looking brand new.”
@@ -632,7 +599,7 @@ function Testimonial() {
         <p className="text-[13px] font-bold mb-8" style={{ color: "#94a3b8" }}>Verified Maids in Black customer</p>
 
         {/* Stat row */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 testimonial-stats">
           {[
             { value: "4.9★", label: "Average rating" },
             { value: "500+", label: "Homes cleaned" },
@@ -759,7 +726,7 @@ function StripeCardForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-[32px] p-6"
+      className="rounded-[32px] p-6 stripe-card"
       style={{
         background: "rgba(255,255,255,0.92)",
         border: "1px solid rgba(255,255,255,0.62)",
@@ -1006,6 +973,7 @@ function CardAuthInner({
 
         {/* Nav */}
         <nav
+          className="page-nav"
           style={{
             position: "relative", zIndex: 2,
             maxWidth: "1320px", margin: "0 auto",
@@ -1072,6 +1040,7 @@ function CardAuthInner({
             </div>
 
             <h1
+              className="hero-headline"
               style={{
                 margin: 0,
                 fontFamily: "'Playfair Display', Georgia, serif",
@@ -1085,6 +1054,7 @@ function CardAuthInner({
             </h1>
 
             <p
+              className="hero-sub"
               style={{
                 maxWidth: "675px", margin: "28px 0 32px",
                 fontSize: "22px", lineHeight: 1.58,
@@ -1107,6 +1077,7 @@ function CardAuthInner({
 
       {/* ── CONTENT SECTION ── */}
       <div
+        className="content-section"
         style={{
           maxWidth: "1320px", margin: "0 auto",
           padding: "0 28px 92px",
@@ -1128,7 +1099,7 @@ function CardAuthInner({
 
           {/* Social proof stat card */}
           <div
-            className="rounded-[28px] p-7 flex flex-col justify-between"
+            className="rounded-[28px] p-7 flex flex-col justify-between stat-card"
             style={{ background: T.navy, border: "1px solid rgba(255,255,255,.08)", boxShadow: T.soft }}
           >
             <div>
@@ -1170,7 +1141,7 @@ function CardAuthInner({
         <Testimonial />
 
         {/* FAQ */}
-        <div style={{ maxWidth: "680px", margin: "36px auto 0" }}>
+        <div className="faq-section" style={{ maxWidth: "680px", margin: "36px auto 0" }}>
           <h2
             className="text-[28px] tracking-tight mb-5"
             style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink }}
@@ -1192,6 +1163,8 @@ function CardAuthInner({
         dialog::backdrop {
           background: rgba(17,24,39,.56);
         }
+
+        /* ── Tablet (1040px) ── */
         @media (max-width: 1040px) {
           .hero-grid {
             grid-template-columns: 1fr !important;
@@ -1200,6 +1173,101 @@ function CardAuthInner({
           .story-row {
             grid-template-columns: 1fr !important;
             margin-top: -20px !important;
+          }
+        }
+
+        /* ── Mobile (768px) ── */
+        @media (max-width: 768px) {
+          /* Hero section */
+          .hero-grid {
+            padding: 48px 16px 100px !important;
+            gap: 28px !important;
+          }
+          .hero-headline {
+            font-size: clamp(36px, 9vw, 52px) !important;
+            line-height: 0.96 !important;
+          }
+          .hero-sub {
+            font-size: 16px !important;
+            margin: 20px 0 24px !important;
+          }
+
+          /* Nav */
+          .page-nav {
+            padding: 20px 16px 0 !important;
+          }
+
+          /* Content section */
+          .content-section {
+            padding: 0 16px 60px !important;
+          }
+
+          /* ReservationTimeline — 2-col on mobile */
+          .reservation-timeline {
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 6px !important;
+          }
+
+          /* Story row already collapses at 1040px, but tighten margin */
+          .story-row {
+            margin-top: -16px !important;
+            gap: 16px !important;
+          }
+
+          /* TrustVideoCard checklist — 1-col on mobile */
+          .trust-checklist {
+            grid-template-columns: 1fr !important;
+          }
+
+          /* Testimonial — stack photo on top, copy below */
+          .testimonial-card {
+            grid-template-columns: 1fr !important;
+            min-height: unset !important;
+          }
+          .testimonial-photo {
+            height: 260px !important;
+          }
+          .testimonial-copy {
+            padding: 28px 24px !important;
+          }
+          .testimonial-quote {
+            font-size: 18px !important;
+          }
+          .testimonial-stats {
+            gap: 20px !important;
+          }
+          /* Hide right-edge gradient on mobile (no longer needed when stacked) */
+          .testimonial-gradient {
+            display: none !important;
+          }
+
+          /* Stat card — stays 2-col but reduce padding */
+          .stat-card {
+            padding: 20px !important;
+          }
+
+          /* FAQ */
+          .faq-section {
+            margin: 28px auto 0 !important;
+          }
+
+          /* Stripe form card */
+          .stripe-card {
+            border-radius: 24px !important;
+            padding: 24px 20px !important;
+          }
+        }
+
+        /* ── Small mobile (480px) ── */
+        @media (max-width: 480px) {
+          .hero-headline {
+            font-size: 34px !important;
+          }
+          .reservation-timeline {
+            grid-template-columns: 1fr 1fr !important;
+          }
+          .testimonial-photo {
+            height: 220px !important;
           }
         }
       `}</style>
