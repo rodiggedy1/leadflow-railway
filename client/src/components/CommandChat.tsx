@@ -2810,6 +2810,80 @@ function CsSmsHistoryPopover({
   );
 }
 
+// ─── Lead Chat History Hover Popover (uses ConversationViewport) ───────────────
+function LeadChatHistoryPopover({
+  sessionId,
+  children,
+  onOpenFull,
+}: {
+  sessionId: number;
+  children: React.ReactNode;
+  onOpenFull: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [right, setRight] = useState<number | null>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const { data: sessionData, isLoading } = trpc.leads.getById.useQuery(
+    { id: sessionId },
+    { enabled: hovered, staleTime: 60_000 }
+  );
+  const messages = useMemo((): CVMessage[] => {
+    if (!sessionData?.messageHistory) return [];
+    try {
+      const parsed: Array<{ role: string; content?: string; ts?: number }> = JSON.parse(
+        sessionData.messageHistory as string
+      );
+      const updatedAt = String(sessionData.updatedAt ?? sessionData.id);
+      return parsed
+        .filter(
+          (m) =>
+            (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string" &&
+            m.content.trim()
+        )
+        .map((m, idx) => ({
+          id: `${sessionId}:${idx}`,
+          versionKey: `${sessionId}:${idx}:${updatedAt}`,
+          author: {
+            name: m.role === "assistant" ? "You" : "Customer",
+            role: m.role === "assistant" ? "agent" : "customer",
+          },
+          content: m.content!,
+          createdAt: m.ts ? new Date(m.ts) : new Date(0),
+        }));
+    } catch {
+      return [];
+    }
+  }, [sessionData?.messageHistory, sessionData?.updatedAt, sessionId]);
+  const handleMouseEnter = () => {
+    if (rowRef.current) {
+      const rect = rowRef.current.getBoundingClientRect();
+      setRight(window.innerWidth - rect.left + 8);
+    }
+    setHovered(true);
+  };
+  return (
+    <div ref={rowRef} onMouseEnter={handleMouseEnter} onMouseLeave={() => setHovered(false)}>
+      {children}
+      {hovered && right !== null && (
+        <div
+          className="fixed z-[9999] w-[420px] rounded-2xl border border-slate-200 bg-white shadow-2xl"
+          style={{ top: 80, right }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+        >
+          <ConversationViewport
+            messages={messages}
+            isLoading={isLoading}
+            title="Recent conversation"
+            ctaLabel="Open conversation →"
+            onOpenFull={onOpenFull}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 // ─── Email History Hover Popover (uses ConversationViewport) ─────────────────
 function EmailHistoryPopover({
   threadId,
@@ -2967,12 +3041,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
   const activeThreadCount = (activeThreads as any[]).length;
   const unreadThreadCount = (activeThreads as any[]).filter((t: any) => t.hasUnread).length;
-  const { data: leadReplies = [] } = trpc.leads.getLeadReplies.useQuery(undefined, {
+  const [hiddenLeadIds, setHiddenLeadIds] = useState<Set<number>>(new Set());
+  const { data: rawLeadReplies = [] } = trpc.leads.getLeadReplies.useQuery(undefined, {
     refetchInterval: 30_000,
     staleTime: 0,
   });
+  const leadReplies = (rawLeadReplies as any[]).filter((l: any) => !hiddenLeadIds.has(l.id));
   const leadRepliesCount = leadReplies.length;
-  const unreadLeadRepliesCount = (leadReplies as any[]).filter((l: any) => l.isUnread).length;
+  const unreadLeadRepliesCount = leadReplies.filter((l: any) => l.isUnread).length;
   // ── Email inbox unread count ─────────────────────────────────────────────────
   const { data: emailUnreadData } = trpc.gmail.getUnreadCount.useQuery(undefined, {
     refetchInterval: 60_000,
@@ -3023,6 +3099,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     onSuccess: () => {
       utils.leads.getUnansweredCsCount.invalidate();
       utils.leads.listCsInbox.invalidate();
+      utils.leads.getLeadReplies.invalidate();
     },
   });
   const [hiddenEmailThreadIds, setHiddenEmailThreadIds] = useState<Set<string>>(new Set());
@@ -7876,63 +7953,84 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     form: 'Website', widget: 'Widget', voice: 'Phone',
                   };
                   const src = lead.leadSource ? (sourceLabel[lead.leadSource] ?? lead.leadSource) : 'Direct';
+                  const openConversation = () => {
+                    setLeadRepliesOpen(false);
+                    const phone = lead.leadPhone ?? "";
+                    const name = lead.leadName ?? phone;
+                    if (phone) {
+                      setQuickReplyTarget({
+                        customer: {
+                          phone,
+                          name,
+                          email: null,
+                          address: null,
+                          frequency: null,
+                          lastJobDate: null,
+                          ltv: 0,
+                          totalCleans: 0,
+                          isVip: false,
+                          city: "",
+                        },
+                        view: "sms",
+                        lastMessage: undefined,
+                      });
+                    } else {
+                      window.location.href = `/admin/leads?session=${lead.id}`;
+                    }
+                  };
                   return (
-                    <button
+                    <LeadChatHistoryPopover
                       key={lead.id}
-                      onClick={() => {
-                        setLeadRepliesOpen(false);
-                        const phone = lead.leadPhone ?? "";
-                        const name = lead.leadName ?? phone;
-                        if (phone) {
-                          setQuickReplyTarget({
-                            customer: {
-                              phone,
-                              name,
-                              email: null,
-                              address: null,
-                              frequency: null,
-                              lastJobDate: null,
-                              ltv: 0,
-                              totalCleans: 0,
-                              isVip: false,
-                              city: "",
-                            },
-                            view: "sms",
-                            lastMessage: lead.lastMessagePreview ?? undefined,
-                          });
-                        } else {
-                          window.location.href = `/admin/leads?session=${lead.id}`;
-                        }
-                      }}
-                      className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors group"
+                      sessionId={lead.id}
+                      onOpenFull={openConversation}
                     >
-                      <div className="flex items-start gap-3">
-                        {/* Unread dot */}
-                        <div className={cn(
-                          "mt-1.5 h-2 w-2 rounded-full shrink-0",
-                          lead.isUnread ? "bg-emerald-500" : "bg-slate-200"
-                        )} />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-slate-900 truncate">{lead.leadName}</span>
-                            <span className={cn(
-                              "text-[10px] font-semibold shrink-0",
-                              ageMin < 10 ? "text-red-500" : ageMin < 60 ? "text-amber-500" : "text-slate-400"
-                            )}>{ageLabel}</span>
+                      <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
+                        {/* Main row — opens SMS composer */}
+                        <button
+                          onClick={openConversation}
+                          className="flex-1 text-left px-4 py-3 min-w-0"
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Unread dot */}
+                            <div className={cn(
+                              "mt-1.5 h-2 w-2 rounded-full shrink-0",
+                              lead.isUnread ? "bg-emerald-500" : "bg-slate-200"
+                            )} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-semibold text-slate-900 truncate">{lead.leadName}</span>
+                                <span className={cn(
+                                  "text-[10px] font-semibold shrink-0",
+                                  ageMin < 10 ? "text-red-500" : ageMin < 60 ? "text-amber-500" : "text-slate-400"
+                                )}>{ageLabel}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] text-slate-400">{src}</span>
+                                {lead.assignedAgentName && (
+                                  <>
+                                    <span className="text-[10px] text-slate-300">·</span>
+                                    <span className="text-[10px] text-slate-400">{lead.assignedAgentName}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0 mt-1" />
                           </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] text-slate-400">{src}</span>
-                            {lead.assignedAgentName && (
-                              <>
-                                <span className="text-[10px] text-slate-300">·</span>
-                                <span className="text-[10px] text-slate-400">{lead.assignedAgentName}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-emerald-500 transition-colors shrink-0 mt-1" />
+                        </button>
+                        {/* Quick-resolve button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHiddenLeadIds(prev => new Set(Array.from(prev).concat(lead.id)));
+                            resolveSessionFromBanner.mutate({ sessionId: lead.id });
+                          }}
+                          title="Resolve"
+                          className="flex items-center justify-center w-10 shrink-0 border-l border-slate-100 text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 transition-colors"
+                        >
+                          <CircleCheckBig className="h-4 w-4" />
+                        </button>
                       </div>
-                    </button>
+                    </LeadChatHistoryPopover>
                   );
                 })}
               </div>
