@@ -65,11 +65,15 @@ function _CopyBtn({ text }: { text: string }) {
   return (
     <button
       onClick={() => { navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
-      className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-gray-100 hover:bg-gray-200 text-gray-600 transition"
-      title="Copy to clipboard"
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+        copied
+          ? "bg-green-100 text-green-700 border border-green-200"
+          : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50"
+      }`}
+      title="Copy link to clipboard"
     >
-      {copied ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
-      {copied ? "Copied" : "Copy"}
+      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+      {copied ? "Copied" : "Copy Link"}
     </button>
   );
 }
@@ -146,12 +150,15 @@ function PaymentLinkModal({ open, onClose }: { open: boolean; onClose: () => voi
         </form>
 
         {result && (
-          <div className="mt-3 bg-green-50 border border-green-200 rounded-xl p-4">
-            <p className="text-xs font-bold text-green-700 mb-2 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Link ready — expires {_formatTs(result.expiresAt)}
-            </p>
-            <div className="flex items-center gap-2 w-full overflow-hidden">
-              <code className="flex-1 min-w-0 text-xs bg-white border border-green-200 rounded-lg px-3 py-2 text-gray-700 truncate block">{result.url}</code>
+          <div className="mt-3 rounded-xl border border-green-200 bg-green-50 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="flex items-center gap-2 text-sm font-semibold text-green-800">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  Secure link created
+                </p>
+                <p className="mt-1 text-xs text-green-700">Valid for 7 days · expires {_formatTs(result.expiresAt)}</p>
+              </div>
               <_CopyBtn text={result.url} />
             </div>
           </div>
