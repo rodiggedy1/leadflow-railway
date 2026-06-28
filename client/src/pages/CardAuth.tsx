@@ -322,24 +322,32 @@ function StoryCard() {
         gridTemplateColumns: "280px 1fr",
       }}
     >
-      {/* Left: thumbnail → inline player */}
+      {/* Left: review animation gif → inline player on click */}
       <div
         className="relative"
         style={{ minHeight: "220px", overflow: "hidden" }}
       >
-        {/* Wistia swatch thumbnail — animated gif-like, shown until play */}
+        {/* Review animation — autoplay loop, shown until play */}
         <div
           className="absolute inset-0 transition-opacity duration-500"
           style={{
             opacity: playing ? 0 : 1,
             pointerEvents: playing ? "none" : "auto",
-            background: `url("https://fast.wistia.com/embed/medias/jtv8f50ale/swatch") center/cover no-repeat`,
-            filter: playing ? "blur(4px)" : "none",
           }}
         >
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          >
+            <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
+            <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
+          </video>
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(rgba(0,0,0,.06),rgba(0,0,0,.20))" }}
+            style={{ background: "linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16))" }}
           />
           <button
             onClick={handlePlay}
@@ -419,18 +427,26 @@ function StoryCardMobile() {
       className="rounded-[24px] overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
       style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
     >
-      {/* Thumbnail → inline player */}
+      {/* Review animation → inline player on click */}
       <div className="relative" style={{ minHeight: "200px", overflow: "hidden" }}>
         <div
           className="absolute inset-0 transition-opacity duration-500"
           style={{
             opacity: playing ? 0 : 1,
             pointerEvents: playing ? "none" : "auto",
-            background: `url("https://fast.wistia.com/embed/medias/jtv8f50ale/swatch") center/cover no-repeat`,
-            filter: playing ? "blur(4px)" : "none",
           }}
         >
-          <div className="absolute inset-0" style={{ background: "linear-gradient(rgba(0,0,0,.06),rgba(0,0,0,.20))" }} />
+          <video
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="absolute inset-0 w-full h-full object-cover"
+          >
+            <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_ecc264ea.webm" type="video/webm" />
+            <source src="https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/review-animation_7c44ae8d.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute inset-0" style={{ background: "linear-gradient(rgba(0,0,0,.04),rgba(0,0,0,.16))" }} />
           <button
             onClick={handlePlay}
             className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
