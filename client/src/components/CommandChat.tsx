@@ -3026,7 +3026,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [csSmsOpen, setCsSmsOpen] = useState(false);
   const [missedCallsOpen, setMissedCallsOpen] = useState(false);
   const [emailsOpen, setEmailsOpen] = useState(false);
-  const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email"; lastMessage?: string; emailSubject?: string; isLeadChat?: boolean } | null>(null);
+  const [quickReplyTarget, setQuickReplyTarget] = useState<{ customer: CustomerData; view: "sms" | "email"; lastMessage?: string; emailSubject?: string; isLeadChat?: boolean; sessionId?: number } | null>(null);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [taskRefetchTick, setTaskRefetchTick] = useState(0);
   const [dueTaskPopupDismissed, setDueTaskPopupDismissed] = useState<Set<number>>(() => new Set());
@@ -7978,6 +7978,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         view: "sms",
                         lastMessage: lead.lastMessagePreview ?? undefined,
                         isLeadChat: true,
+                        sessionId: lead.id,
                       });
                     } else {
                       openLeadsPage();
@@ -8297,6 +8298,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           lastMessage={quickReplyTarget.lastMessage}
           emailSubject={quickReplyTarget.emailSubject}
           isLeadChat={quickReplyTarget.isLeadChat}
+          sessionId={quickReplyTarget.sessionId}
         />
       )}
     </div>
