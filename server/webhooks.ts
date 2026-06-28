@@ -824,9 +824,12 @@ export function registerWebhookRoutes(app: Express) {
       // The history will be updated again later with the assistant reply appended.
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now } as any)
+                .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now } as any)
         .where(eq(conversationSessions.id, session.id));
-
+      // Broadcast lead_update immediately so CommandChat notification fires while last message is still 'user'.
+      // Must happen BEFORE the AI reply is appended — otherwise last role becomes 'assistant' and the tray misses it.
+      const { broadcastOpsUpdate: bcastInbound } = await import("./sseBroadcast");
+      bcastInbound("lead_update");
       // Log the inbound reply as an activity event
       logActivity({
         eventType: "lead_reply",
