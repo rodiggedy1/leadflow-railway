@@ -694,6 +694,20 @@ function BatchesTab() {
               <Button
                 size="sm"
                 variant="outline"
+                onClick={() => verifySyncMutation.mutate({ date: syncDate })}
+                disabled={verifySyncMutation.isPending}
+                className="gap-1.5"
+              >
+                {verifySyncMutation.isPending ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Activity className="w-3.5 h-3.5" />
+                )}
+                {verifySyncMutation.isPending ? "Checking…" : "Health Check"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => {
                   const dates = Array.from({ length: 7 }, (_, i) => {
                     const d = new Date();
