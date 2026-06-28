@@ -175,10 +175,13 @@ function BoardingPass({ name, date, address }: { name: string; date?: string; ad
 
       {/* Bottom half */}
       <div
-        className="px-5 py-3 flex items-center justify-between text-[13px] font-bold"
-        style={{ background: "#fbfcfb", color: T.muted }}
+        className="px-5 py-3 flex items-center justify-between"
+        style={{ background: "#fbfcfb" }}
       >
-        <span>{name}</span>
+        <span
+          className="text-[17px] font-black tracking-tight"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink }}
+        >{name}</span>
         <span
           className="px-2.5 py-1 rounded-full text-[11px] font-black"
           style={{ background: "#ecfdf3", color: T.green }}
@@ -288,173 +291,187 @@ function ReservationTimeline() {
 
 // ── Story Card (video thumbnail + modal) ─────────────────────────────────────
 function StoryCard() {
-  const [open, setOpen] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const playerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (open) dialogRef.current?.showModal();
-    else dialogRef.current?.close();
-  }, [open]);
+  const handlePlay = () => {
+    setPlaying(true);
+    // Mount wistia-player once into the stable ref div
+    setTimeout(() => {
+      const el = playerRef.current;
+      if (!el || el.querySelector("wistia-player")) return;
+      const player = document.createElement("wistia-player");
+      player.setAttribute("media-id", "jtv8f50ale");
+      player.setAttribute("seo", "false");
+      player.setAttribute("aspect", "1.7777777777777777");
+      player.style.display = "block";
+      player.style.width = "100%";
+      player.style.height = "100%";
+      el.appendChild(player);
+    }, 0);
+  };
 
   return (
-    <>
+    <div
+      className="rounded-[28px] overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
+      style={{
+        background: "white",
+        border: `1px solid ${T.line}`,
+        boxShadow: T.soft,
+        display: "grid",
+        gridTemplateColumns: "280px 1fr",
+      }}
+    >
+      {/* Left: thumbnail → inline player */}
       <div
-        className="rounded-[28px] overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
-        style={{
-          background: "white",
-          border: `1px solid ${T.line}`,
-          boxShadow: T.soft,
-          display: "grid",
-          gridTemplateColumns: "280px 1fr",
-        }}
+        className="relative"
+        style={{ minHeight: "220px", overflow: "hidden" }}
       >
-        {/* Thumbnail */}
+        {/* Wistia swatch thumbnail — animated gif-like, shown until play */}
         <div
-          className="relative"
+          className="absolute inset-0 transition-opacity duration-500"
           style={{
-            minHeight: "220px",
-            background: `linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.22)), url("https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80") center/cover`,
-            display: "grid",
-            placeItems: "center",
+            opacity: playing ? 0 : 1,
+            pointerEvents: playing ? "none" : "auto",
+            background: `url("https://fast.wistia.com/embed/medias/jtv8f50ale/swatch") center/cover no-repeat`,
+            filter: playing ? "blur(4px)" : "none",
           }}
         >
+          <div
+            className="absolute inset-0"
+            style={{ background: "linear-gradient(rgba(0,0,0,.06),rgba(0,0,0,.20))" }}
+          />
           <button
-            onClick={() => setOpen(true)}
-            className="w-[72px] h-[72px] rounded-full border-0 grid place-items-center transition-transform duration-200 hover:scale-110 cursor-pointer"
-            style={{
-              background: "rgba(255,255,255,0.92)",
-              color: T.orange,
-              fontSize: "26px",
-              boxShadow: "0 16px 38px rgba(0,0,0,.25)",
-            }}
+            onClick={handlePlay}
+            className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
             aria-label="Play video"
           >
-            ▶
+            <span
+              className="w-[72px] h-[72px] rounded-full grid place-items-center transition-transform duration-200 hover:scale-110"
+              style={{
+                background: "rgba(255,255,255,0.92)",
+                color: T.orange,
+                fontSize: "26px",
+                boxShadow: "0 16px 38px rgba(0,0,0,.25)",
+              }}
+            >
+              ▶
+            </span>
           </button>
         </div>
 
-        {/* Copy */}
-        <div className="p-7 flex flex-col justify-center">
-          <h2
-            className="text-[26px] tracking-tight mb-2"
-            style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
-          >
-            Why our customers trust us
-          </h2>
-          <p className="text-[14px] leading-relaxed" style={{ color: T.muted, margin: 0 }}>
-            Hear directly from homeowners who've experienced the Maids in Black difference — professional, insured, and always on time.
-          </p>
+        {/* Inline player — fades in on play */}
+        <div
+          ref={playerRef}
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{ opacity: playing ? 1 : 0, pointerEvents: playing ? "auto" : "none" }}
+        />
+      </div>
+
+      {/* Copy */}
+      <div className="p-7 flex flex-col justify-center">
+        <h2
+          className="text-[26px] tracking-tight mb-2"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
+        >
+          Why our customers trust us
+        </h2>
+        <p className="text-[14px] leading-relaxed" style={{ color: T.muted, margin: 0 }}>
+          Hear directly from homeowners who've experienced the Maids in Black difference — professional, insured, and always on time.
+        </p>
+        {!playing && (
           <button
-            onClick={() => setOpen(true)}
+            onClick={handlePlay}
             className="mt-5 inline-flex items-center gap-2 text-[13px] font-bold border-0 bg-transparent cursor-pointer p-0 transition-opacity hover:opacity-70"
             style={{ color: T.orange }}
           >
             Watch the story →
           </button>
-        </div>
-      </div>
-
-      {/* Video modal */}
-      <dialog
-        ref={dialogRef}
-        className="rounded-[28px] overflow-hidden p-0 border-0 max-w-[820px] w-[calc(100vw-32px)]"
-        style={{ boxShadow: "0 40px 100px rgba(0,0,0,.38)" }}
-        onClick={(e) => { if (e.target === dialogRef.current) setOpen(false); }}
-      >
-        <button
-          onClick={() => setOpen(false)}
-          className="absolute right-4 top-4 w-10 h-10 rounded-full border-0 grid place-items-center text-xl cursor-pointer z-10"
-          style={{ background: "rgba(255,255,255,0.9)" }}
-          aria-label="Close video"
-        >
-          ×
-        </button>
-        {open && (
-          <div className="relative" style={{ paddingTop: "56.25%" }}>
-            <wistia-player
-              media-id="jtv8f50ale"
-              seo="false"
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-            />
-          </div>
         )}
-      </dialog>
-    </>
+      </div>
+    </div>
   );
 }
 
 // ── Story Card — mobile version (stacked) ────────────────────────────────────
 function StoryCardMobile() {
-  const [open, setOpen] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const playerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (open) dialogRef.current?.showModal();
-    else dialogRef.current?.close();
-  }, [open]);
+  const handlePlay = () => {
+    setPlaying(true);
+    setTimeout(() => {
+      const el = playerRef.current;
+      if (!el || el.querySelector("wistia-player")) return;
+      const player = document.createElement("wistia-player");
+      player.setAttribute("media-id", "jtv8f50ale");
+      player.setAttribute("seo", "false");
+      player.setAttribute("aspect", "1.7777777777777777");
+      player.style.display = "block";
+      player.style.width = "100%";
+      player.style.height = "100%";
+      el.appendChild(player);
+    }, 0);
+  };
 
   return (
-    <>
-      <div
-        className="rounded-[24px] overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
-        style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
-      >
+    <div
+      className="rounded-[24px] overflow-hidden transition-transform duration-200 hover:-translate-y-0.5"
+      style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
+    >
+      {/* Thumbnail → inline player */}
+      <div className="relative" style={{ minHeight: "200px", overflow: "hidden" }}>
         <div
-          className="relative"
+          className="absolute inset-0 transition-opacity duration-500"
           style={{
-            minHeight: "200px",
-            background: `linear-gradient(rgba(0,0,0,.08),rgba(0,0,0,.22)), url("https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80") center/cover`,
-            display: "grid",
-            placeItems: "center",
+            opacity: playing ? 0 : 1,
+            pointerEvents: playing ? "none" : "auto",
+            background: `url("https://fast.wistia.com/embed/medias/jtv8f50ale/swatch") center/cover no-repeat`,
+            filter: playing ? "blur(4px)" : "none",
           }}
         >
+          <div className="absolute inset-0" style={{ background: "linear-gradient(rgba(0,0,0,.06),rgba(0,0,0,.20))" }} />
           <button
-            onClick={() => setOpen(true)}
-            className="w-[64px] h-[64px] rounded-full border-0 grid place-items-center transition-transform duration-200 hover:scale-110 cursor-pointer"
-            style={{ background: "rgba(255,255,255,0.92)", color: T.orange, fontSize: "22px", boxShadow: "0 16px 38px rgba(0,0,0,.25)" }}
+            onClick={handlePlay}
+            className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
             aria-label="Play video"
           >
-            ▶
+            <span
+              className="w-[64px] h-[64px] rounded-full grid place-items-center transition-transform duration-200 hover:scale-110"
+              style={{ background: "rgba(255,255,255,0.92)", color: T.orange, fontSize: "22px", boxShadow: "0 16px 38px rgba(0,0,0,.25)" }}
+            >
+              ▶
+            </span>
           </button>
         </div>
-        <div className="p-5">
-          <h2
-            className="text-[22px] tracking-tight mb-2"
-            style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
-          >
-            Why our customers trust us
-          </h2>
-          <p className="text-[13px] leading-relaxed" style={{ color: T.muted, margin: 0 }}>
-            Hear directly from homeowners who've experienced the Maids in Black difference.
-          </p>
-        </div>
+        <div
+          ref={playerRef}
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{ opacity: playing ? 1 : 0, pointerEvents: playing ? "auto" : "none" }}
+        />
       </div>
 
-      <dialog
-        ref={dialogRef}
-        className="rounded-[24px] overflow-hidden p-0 border-0 max-w-[820px] w-[calc(100vw-32px)]"
-        style={{ boxShadow: "0 40px 100px rgba(0,0,0,.38)" }}
-        onClick={(e) => { if (e.target === dialogRef.current) setOpen(false); }}
-      >
-        <button
-          onClick={() => setOpen(false)}
-          className="absolute right-3 top-3 w-9 h-9 rounded-full border-0 grid place-items-center text-lg cursor-pointer z-10"
-          style={{ background: "rgba(255,255,255,0.9)" }}
-          aria-label="Close video"
+      <div className="p-5">
+        <h2
+          className="text-[22px] tracking-tight mb-2"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
         >
-          ×
-        </button>
-        {open && (
-          <div className="relative" style={{ paddingTop: "56.25%" }}>
-            <wistia-player
-              media-id="jtv8f50ale"
-              seo="false"
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }}
-            />
-          </div>
+          Why our customers trust us
+        </h2>
+        <p className="text-[13px] leading-relaxed" style={{ color: T.muted, margin: 0 }}>
+          Hear directly from homeowners who've experienced the Maids in Black difference.
+        </p>
+        {!playing && (
+          <button
+            onClick={handlePlay}
+            className="mt-4 inline-flex items-center gap-2 text-[13px] font-bold border-0 bg-transparent cursor-pointer p-0 transition-opacity hover:opacity-70"
+            style={{ color: T.orange }}
+          >
+            Watch the story →
+          </button>
         )}
-      </dialog>
-    </>
+      </div>
+    </div>
   );
 }
 
