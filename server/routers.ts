@@ -1343,10 +1343,12 @@ export const appRouter = router({
         history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
 
 
-        // Save to DB first, then send SMS
+        // Save to DB first, then send SMS.
+        // Also set lastReadAt = lastCustomerReplyAt atomically so the notification clears
+        // immediately after a human sends — no second update needed.
         await db
           .update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(history) })
+          .set({ messageHistory: JSON.stringify(history), lastReadAt: sql`lastCustomerReplyAt` } as any)
           .where(eq(conversationSessions.id, input.sessionId));
 
         // Send via OpenPhone (use fromNumberId override for CS line replies)
@@ -1486,13 +1488,10 @@ export const appRouter = router({
         // leaving lastReadAt = NULL and causing persistent unread notifications.
         const db = await getDb();
         if (!db) return { success: false };
-        await db
-          .update(conversationSessions)
-          .set({ lastReadAt: Date.now() })
-          .where(eq(conversationSessions.id, input.sessionId));
+                // lastReadAt is intentionally NOT updated here.
+        // Opening the drawer is not "handled" — only a human reply or explicit resolve clears the notification.
         return { success: true };
       }),
-
     /**
      * leads.deleteLead — permanently delete a lead and all associated call logs.
      * Admin only.
