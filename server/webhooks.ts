@@ -698,11 +698,9 @@ export function registerWebhookRoutes(app: Express) {
         return;
       }
 
-      // Don't respond to completed conversations (only if no active session exists)
-      if (session.stage === "DONE") {
-        console.log(`[Webhook] All conversations for ${fromPhone} are DONE. Skipping.`);
-        return;
-      }
+      // NOTE: Do NOT skip DONE sessions. A customer can text back after a session is
+      // marked DONE — we must store the message and process it. Dropping inbound
+      // messages based on stage silently breaks conversations for returning customers.
 
       // ── Atomic idempotency claim ───────────────────────────────────────────────
       // OpenPhone has at-least-once delivery and can fire the same webhook 2-3x
