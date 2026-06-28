@@ -245,7 +245,7 @@ function ReservationTimeline() {
   ];
   return (
     <div
-      className="rounded-[24px] p-4 mt-7"
+      className="rounded-[24px] p-4 mt-7 reservation-timeline"
       style={{
         background: "rgba(255,255,255,0.83)",
         border: "1px solid rgba(255,255,255,0.54)",
@@ -255,7 +255,6 @@ function ReservationTimeline() {
         gridTemplateColumns: "repeat(4,1fr)",
         gap: "8px",
       }}
-      className="reservation-timeline"
     >
       {steps.map((s, i) => (
         <div
