@@ -4838,13 +4838,14 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       const db = await getDb();
       if (!db) return [];
 
-      // Raw SQL: find all sessions where the last SMS is from the customer and not yet read.
+      // Raw SQL: find all sessions where the customer has texted in and it hasn't been read yet.
+      // Uses lastCustomerReplyAt so every inbound message notifies regardless of what the last message is.
       // Only real phone numbers. Excludes internal sources (cs-inbound, hiring, schedule_confirm, review).
       const nonLeadSourceList = NON_LEAD_SOURCES.map((s: string) => `'${s}'`).join(',');
       const rawRows = await db.execute(sql`
         SELECT
           id, leadName, leadPhone, leadSource, stage,
-          assignedAgentName, messageHistory, lastReadAt, createdAt
+          assignedAgentName, messageHistory, lastReadAt, lastCustomerReplyAt, createdAt
         FROM conversation_sessions
         WHERE
           leadPhone IS NOT NULL
@@ -4852,14 +4853,12 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           AND LENGTH(REGEXP_REPLACE(leadPhone, '[^0-9]', '')) >= 10
           AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           AND (leadSource IS NULL OR leadSource NOT IN (${sql.raw(nonLeadSourceList)}))
-          AND JSON_VALID(messageHistory)
-          AND JSON_LENGTH(messageHistory) > 0
-          AND JSON_UNQUOTE(JSON_EXTRACT(messageHistory, CONCAT('$[', JSON_LENGTH(messageHistory)-1, '].role'))) IN ('user','customer')
+          AND lastCustomerReplyAt IS NOT NULL
           AND (
             lastReadAt IS NULL
-            OR CAST(JSON_UNQUOTE(JSON_EXTRACT(messageHistory, CONCAT('$[', JSON_LENGTH(messageHistory)-1, '].ts'))) AS UNSIGNED) > lastReadAt
+            OR lastCustomerReplyAt > lastReadAt
           )
-        ORDER BY createdAt DESC
+        ORDER BY lastCustomerReplyAt DESC
         LIMIT 200
       `);
 
@@ -4872,17 +4871,13 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         assignedAgentName: string | null;
         messageHistory: string | null;
         lastReadAt: number | null;
+        lastCustomerReplyAt: number | null;
         createdAt: Date;
       }>;
 
       const now = Date.now();
       const results = rows.map(r => {
-        let lastInboundAt = 0;
-        try {
-          const history: Array<{ role: string; ts?: number }> = JSON.parse(r.messageHistory ?? '[]');
-          const lastMsg = history[history.length - 1];
-          lastInboundAt = lastMsg?.ts ?? 0;
-        } catch { /* skip */ }
+        const lastInboundAt = r.lastCustomerReplyAt ?? 0;
         return {
           id: r.id,
           leadName: r.leadName ?? 'Unknown',
