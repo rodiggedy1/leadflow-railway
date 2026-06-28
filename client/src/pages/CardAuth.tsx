@@ -475,27 +475,147 @@ function StoryCardMobile() {
   );
 }
 
-// ── Trust / info cards ───────────────────────────────────────────────────────
-function TrustCards() {
-  const cards = [
-    { icon: "🔒", title: "Card never stored", body: "Your full card number is never visible to our team. Stripe handles everything." },
-    { icon: "⏳", title: "Charged after service", body: "No deposit. Your card is only charged after your cleaning is completed." },
-    { icon: "🛡", title: "Fully insured", body: "Your appointment is handled by a professional, fully insured cleaning team." },
-    { icon: "✅", title: "200% Satisfaction Guarantee", body: "We stand behind the quality of every cleaning. Not happy? We make it right." },
+// ── Trust video card ─────────────────────────────────────────────────────────
+function TrustVideoCard() {
+  const [playing, setPlaying] = useState(false);
+  const playerRef = useRef<HTMLDivElement>(null);
+
+  const handlePlay = () => {
+    setPlaying(true);
+    setTimeout(() => {
+      const el = playerRef.current;
+      if (!el || el.querySelector("wistia-player")) return;
+      const player = document.createElement("wistia-player");
+      player.setAttribute("media-id", "jtv8f50ale");
+      player.setAttribute("seo", "false");
+      player.setAttribute("aspect", "1.7777777777777777");
+      player.style.display = "block";
+      player.style.width = "100%";
+      player.style.height = "100%";
+      el.appendChild(player);
+    }, 0);
+  };
+
+  const checkItems = [
+    { label: "Why we request a card", sub: "No deposit. No charge before your cleaning." },
+    { label: "When you'll be charged", sub: "Only after the cleaning is complete." },
+    { label: "Our satisfaction guarantee", sub: "Exactly what happens if anything isn't perfect." },
+    { label: "What happens next", sub: "Arrival windows, confirmations and your team." },
   ];
+
   return (
-    <div className="grid grid-cols-2 gap-4 my-6">
-      {cards.map((c) => (
+    <div
+      className="rounded-[28px] overflow-hidden my-6"
+      style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
+    >
+      {/* Video thumbnail → inline player */}
+      <div className="relative" style={{ paddingBottom: "56.25%", overflow: "hidden" }}>
+        {/* Swatch thumbnail */}
         <div
-          key={c.title}
-          className="rounded-[24px] p-5 transition-transform duration-200 hover:-translate-y-0.5"
-          style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: "0 12px 32px rgba(17,24,39,.055)" }}
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{
+            opacity: playing ? 0 : 1,
+            pointerEvents: playing ? "none" : "auto",
+            background: `url("https://fast.wistia.com/embed/medias/jtv8f50ale/swatch") center/cover no-repeat`,
+          }}
         >
-          <div className="text-2xl mb-3">{c.icon}</div>
-          <h3 className="font-black text-[15px] mb-1.5" style={{ color: T.ink }}>{c.title}</h3>
-          <p className="text-[13px] leading-relaxed" style={{ color: T.muted }}>{c.body}</p>
+          {/* Badge: 43 second welcome */}
+          <div
+            className="absolute top-3 left-3 text-[12px] font-bold px-3 py-1 rounded-full"
+            style={{ background: "rgba(255,255,255,0.92)", color: T.ink, backdropFilter: "blur(4px)" }}
+          >
+            43 second welcome
+          </div>
+          {/* Duration badge */}
+          <div
+            className="absolute bottom-3 right-3 text-[12px] font-bold px-2.5 py-1 rounded-full"
+            style={{ background: "rgba(17,24,39,0.78)", color: "white" }}
+          >
+            0:43
+          </div>
+          {/* Play button */}
+          <button
+            onClick={handlePlay}
+            className="absolute inset-0 w-full h-full flex items-center justify-center border-0 bg-transparent cursor-pointer"
+            aria-label="Play video"
+          >
+            <span
+              className="w-[72px] h-[72px] rounded-full grid place-items-center transition-transform duration-200 hover:scale-110"
+              style={{
+                background: "rgba(255,255,255,0.95)",
+                color: T.orange,
+                fontSize: "24px",
+                boxShadow: "0 16px 48px rgba(0,0,0,.28)",
+              }}
+            >
+              ▶
+            </span>
+          </button>
         </div>
-      ))}
+        {/* Inline player */}
+        <div
+          ref={playerRef}
+          className="absolute inset-0 transition-opacity duration-500"
+          style={{ opacity: playing ? 1 : 0, pointerEvents: playing ? "auto" : "none" }}
+        />
+      </div>
+
+      {/* Copy + checklist */}
+      <div className="p-7 pt-6">
+        <h2
+          className="text-[28px] tracking-tight mb-2"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
+        >
+          Meet your cleaning coordinator.
+        </h2>
+        <p className="text-[14px] leading-relaxed mb-5" style={{ color: T.muted }}>
+          Hi, I'm Madison. Before you reserve your appointment, I wanted to personally explain how everything works. In less than a minute you'll know exactly what happens next.
+        </p>
+
+        {/* Checklist box */}
+        <div
+          className="rounded-[18px] p-5"
+          style={{ background: T.cream, border: `1px solid ${T.line}` }}
+        >
+          <p className="text-[13px] font-black mb-4" style={{ color: T.ink }}>In this quick welcome I'll explain:</p>
+          <div className="grid grid-cols-2 gap-3">
+            {checkItems.map((item) => (
+              <div
+                key={item.label}
+                className="flex items-start gap-3 rounded-[14px] p-3.5"
+                style={{ background: "white", border: `1px solid ${T.line}` }}
+              >
+                <span
+                  className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5"
+                  style={{ background: "#dcfce7", color: T.green, fontSize: "11px", fontWeight: 900 }}
+                >
+                  ✓
+                </span>
+                <div>
+                  <div className="text-[13px] font-black leading-snug" style={{ color: T.ink }}>{item.label}</div>
+                  <div className="text-[12px] mt-0.5 leading-snug" style={{ color: T.muted }}>{item.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer row */}
+        <div className="mt-5 flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <p className="text-[12px] mb-1" style={{ color: T.muted }}>Thousands of homeowners reserve their appointments every month.</p>
+            {!playing && (
+              <button
+                onClick={handlePlay}
+                className="inline-flex items-center gap-1.5 text-[12px] font-bold border-0 bg-transparent cursor-pointer p-0 transition-opacity hover:opacity-70"
+                style={{ color: T.orange }}
+              >
+                ▶ Watch the welcome again
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1057,8 +1177,8 @@ function CardAuthInner({
           </div>
         </div>
 
-        {/* Trust cards */}
-        <TrustCards />
+        {/* Trust video card */}
+        <TrustVideoCard />
 
         {/* Testimonial */}
         <Testimonial />
