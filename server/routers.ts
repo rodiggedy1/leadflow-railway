@@ -4854,6 +4854,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           AND (leadSource IS NULL OR leadSource NOT IN (${sql.raw(nonLeadSourceList)}))
           AND lastCustomerReplyAt IS NOT NULL
+          AND lastCustomerReplyAt >= UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 24 HOUR)) * 1000
           AND (
             lastReadAt IS NULL
             OR lastCustomerReplyAt > lastReadAt
