@@ -356,7 +356,7 @@ function StoryCard() {
       </div>
 
       {/* Copy */}
-      <div className="p-7 flex flex-col justify-center">
+      <div className="p-7 flex flex-col justify-center story-copy">
         <h2
           className="text-[26px] tracking-tight mb-2"
           style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
@@ -559,7 +559,7 @@ function Testimonial() {
             width: "100%",
             height: "100%",
             objectFit: "cover",
-            objectPosition: "center top",
+            objectPosition: "center 10%",
             display: "block",
           }}
         />
@@ -1023,7 +1023,7 @@ function CardAuthInner({
           className="hero-grid"
         >
           {/* Left — headline + trust + timeline */}
-          <div>
+          <div className="hero-left">
             <div
               style={{
                 display: "inline-flex", alignItems: "center", gap: "8px",
@@ -1068,7 +1068,7 @@ function CardAuthInner({
           </div>
 
           {/* Right — sticky form */}
-          <aside style={{ position: "sticky", top: "24px" }}>
+          <aside className="hero-form" style={{ position: "sticky", top: "24px" }}>
             {formContent}
           </aside>
         </div>
@@ -1254,6 +1254,24 @@ function CardAuthInner({
           .stripe-card {
             border-radius: 24px !important;
             padding: 24px 20px !important;
+          }
+
+          /* Form first on mobile */
+          .hero-form {
+            order: -1 !important;
+            position: static !important;
+          }
+          .hero-left {
+            order: 0 !important;
+          }
+
+          /* StoryCard copy — prevent text overflow */
+          .story-copy {
+            overflow: hidden !important;
+            word-break: break-word !important;
+          }
+          .story-copy h2 {
+            font-size: 20px !important;
           }
         }
 
