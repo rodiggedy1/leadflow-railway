@@ -520,7 +520,7 @@ function TrustVideoCard() {
       style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
     >
       {/* Wistia player — mounted directly, no cover */}
-      <div ref={playerRef} style={{ width: "100%" }} />
+      <div ref={playerRef} style={{ width: "100%", borderRadius: "28px 28px 0 0", overflow: "hidden" }} />
 
       {/* Copy + checklist */}
       <div className="p-7 pt-6">
@@ -575,37 +575,75 @@ function TrustVideoCard() {
 function Testimonial() {
   return (
     <div
-      className="rounded-[28px] p-8 my-6"
+      className="rounded-[28px] overflow-hidden my-6"
       style={{
-        background: T.navy,
-        color: "white",
-        boxShadow: T.shadow,
         display: "grid",
-        gridTemplateColumns: "1fr 200px",
-        gap: "24px",
-        alignItems: "center",
+        gridTemplateColumns: "420px 1fr",
+        minHeight: "360px",
+        boxShadow: T.shadow,
+        border: `1px solid ${T.line}`,
       }}
     >
-      <div>
-        <div className="text-[#f59e0b] tracking-widest mb-3 text-sm">★★★★★</div>
-        <h2
-          className="text-[26px] leading-snug mb-3 tracking-tight"
-          style={{ fontFamily: "'Playfair Display', Georgia, serif", margin: "0 0 12px" }}
-        >
-          "I felt comfortable booking because everything was clear."
-        </h2>
-        <p className="text-[14px]" style={{ color: "#cbd5e1", margin: 0 }}>
-          No charge upfront, card handled securely, and the team showed up professionally.
-        </p>
-        <p className="text-[12px] mt-2 font-bold" style={{ color: "#94a3b8" }}>Verified Maids in Black customer</p>
+      {/* Left: full-bleed photo */}
+      <div className="relative" style={{ overflow: "hidden" }}>
+        <img
+          src="/mib-cleaner-photo.webp"
+          alt="Maids in Black cleaner"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: "center top",
+            display: "block",
+          }}
+        />
+        {/* Right-edge gradient to blend into copy panel */}
+        <div
+          className="absolute inset-y-0 right-0"
+          style={{ width: "80px", background: `linear-gradient(to right, transparent, ${T.navy})` }}
+        />
       </div>
+
+      {/* Right: dark copy panel */}
       <div
-        className="rounded-[20px] p-5 text-center"
-        style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.12)" }}
+        className="flex flex-col justify-center p-10"
+        style={{ background: T.navy, color: "white" }}
       >
-        <b className="block text-[40px] font-black text-white leading-none">4.9</b>
-        <div className="text-[#f59e0b] mt-1">★★★★★</div>
-        <div className="text-[12px] mt-1 font-bold" style={{ color: "#94a3b8" }}>Average rating</div>
+        {/* Location pill */}
+        <div
+          className="inline-flex items-center gap-2 mb-6 self-start px-3 py-1.5 rounded-full text-[11px] font-black tracking-widest uppercase"
+          style={{ background: "rgba(255,107,26,.18)", color: T.orange, border: "1px solid rgba(255,107,26,.3)" }}
+        >
+          📍 Adams Morgan, DC
+        </div>
+
+        {/* Stars */}
+        <div className="text-[#f59e0b] tracking-widest mb-4 text-base">★★★★★</div>
+
+        {/* Quote */}
+        <blockquote
+          className="text-[22px] leading-snug tracking-tight mb-5"
+          style={{ fontFamily: "'Playfair Display', Georgia, serif", margin: 0, color: "white" }}
+        >
+          “I’ve tried three other cleaning services. Maids in Black is the only one where the team actually showed up on time, did exactly what was promised, and left my kitchen looking brand new.”
+        </blockquote>
+
+        {/* Attribution */}
+        <p className="text-[13px] font-bold mb-8" style={{ color: "#94a3b8" }}>Verified Maids in Black customer</p>
+
+        {/* Stat row */}
+        <div className="flex items-center gap-6">
+          {[
+            { value: "4.9★", label: "Average rating" },
+            { value: "500+", label: "Homes cleaned" },
+            { value: "100%", label: "Insured & bonded" },
+          ].map((s) => (
+            <div key={s.label}>
+              <div className="text-[22px] font-black text-white leading-none">{s.value}</div>
+              <div className="text-[11px] mt-1 font-bold" style={{ color: "#94a3b8" }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -616,10 +654,10 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div
-      className="rounded-[18px] mb-2.5 overflow-hidden transition-shadow duration-200"
+      className="rounded-[18px] mb-2.5 overflow-hidden transition-all duration-200"
       style={{
-        background: "white",
-        border: `1px solid ${T.line}`,
+        background: open ? T.cream : "white",
+        border: `1px solid ${open ? T.orange + "44" : T.line}`,
         boxShadow: open ? "0 16px 40px rgba(17,24,39,.07)" : "0 8px 24px rgba(17,24,39,.04)",
       }}
     >
@@ -1088,40 +1126,37 @@ function CardAuthInner({
         >
           <StoryCard />
 
-          {/* Why card */}
+          {/* Social proof stat card */}
           <div
-            className="rounded-[28px] p-7"
-            style={{ background: "white", border: `1px solid ${T.line}`, boxShadow: T.soft }}
+            className="rounded-[28px] p-7 flex flex-col justify-between"
+            style={{ background: T.navy, border: "1px solid rgba(255,255,255,.08)", boxShadow: T.soft }}
           >
-            <h2
-              className="text-[26px] tracking-tight mb-2"
-              style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink, margin: "0 0 8px" }}
-            >
-              Why customers choose us
-            </h2>
-            <p className="text-[14px] leading-relaxed mb-5" style={{ color: T.muted, margin: "0 0 20px" }}>
-              Professional, insured, and trusted by hundreds of homeowners.
-            </p>
-            <div style={{ display: "grid", gap: "14px" }}>
+            <div>
+              <div className="text-[#f59e0b] tracking-widest mb-3 text-sm">★★★★★</div>
+              <h2
+                className="text-[22px] leading-snug tracking-tight mb-2"
+                style={{ fontFamily: "'Playfair Display', Georgia, serif", color: "white", margin: "0 0 8px" }}
+              >
+                Trusted by DC homeowners
+              </h2>
+              <p className="text-[13px] leading-relaxed" style={{ color: "#94a3b8", margin: 0 }}>
+                Professional, insured, and on time — every single visit.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-6">
               {[
-                "Professional, background-checked team",
-                "Fully insured and bonded service",
-                "No charge until cleaning is complete",
-                "Satisfaction guaranteed — we make it right",
-              ].map((item) => (
-                <div key={item} style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-                  <div
-                    style={{
-                      width: "26px", height: "26px", borderRadius: "50%",
-                      background: "#ecfdf3", color: T.green,
-                      display: "grid", placeItems: "center",
-                      fontWeight: 950, fontSize: "13px",
-                      flexShrink: 0,
-                    }}
-                  >
-                    ✓
-                  </div>
-                  <span className="text-[14px] font-bold" style={{ color: T.ink, lineHeight: 1.5 }}>{item}</span>
+                { value: "4.9★", label: "Average rating" },
+                { value: "500+", label: "Homes cleaned" },
+                { value: "100%", label: "Insured & bonded" },
+                { value: "0¢", label: "Charged today" },
+              ].map((s) => (
+                <div
+                  key={s.label}
+                  className="rounded-[14px] p-4"
+                  style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)" }}
+                >
+                  <div className="text-[26px] font-black text-white leading-none">{s.value}</div>
+                  <div className="text-[11px] mt-1.5 font-bold" style={{ color: "#94a3b8" }}>{s.label}</div>
                 </div>
               ))}
             </div>
@@ -1135,7 +1170,7 @@ function CardAuthInner({
         <Testimonial />
 
         {/* FAQ */}
-        <div style={{ maxWidth: "820px", marginTop: "36px" }}>
+        <div style={{ maxWidth: "680px", margin: "36px auto 0" }}>
           <h2
             className="text-[28px] tracking-tight mb-5"
             style={{ fontFamily: "'Playfair Display', Georgia, serif", color: T.ink }}
