@@ -2807,11 +2807,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     {selected.initials}
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                    <div style={{fontSize:'32px',fontWeight:800,color:'#101828',lineHeight:1.1}}>{selected.name}</div>
-                    <div style={{fontSize:'15px',color:'#7B8797',fontWeight:400}}>Team Member</div>
+                    <div style={{fontSize:'22px',fontWeight:800,color:'#101828',lineHeight:1.15}}>{selected.name}</div>
+                    <div style={{fontSize:'13px',color:'#7B8797',fontWeight:400}}>Team Member</div>
                     <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
-                      <Phone style={{width:'15px',height:'15px',color:'#10b981',flexShrink:0}} />
-                      <span style={{fontSize:'16px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
+                      <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
+                      <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
                     </div>
                   </div>
                 </div>
@@ -2840,11 +2840,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         {ini}
                       </div>
                       <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                        <div style={{fontSize:'32px',fontWeight:800,color:'#101828',lineHeight:1.1}}>{name}</div>
-                        <div style={{fontSize:'15px',color:'#7B8797',fontWeight:400}}>{since ? `Customer since ${since}` : 'Customer'}</div>
+                        <div style={{fontSize:'22px',fontWeight:800,color:'#101828',lineHeight:1.15}}>{name}</div>
+                        <div style={{fontSize:'13px',color:'#7B8797',fontWeight:400}}>{since ? `Customer since ${since}` : 'Customer'}</div>
                         <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
-                          <Phone style={{width:'15px',height:'15px',color:'#10b981',flexShrink:0}} />
-                          <span style={{fontSize:'16px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
+                          <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
+                          <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
                         </div>
                       </div>
                     </div>
