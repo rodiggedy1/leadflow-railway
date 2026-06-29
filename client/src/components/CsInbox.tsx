@@ -2219,80 +2219,92 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         return elements;
                       }
 
-                      elements.push(
-                        <motion.div
-                          key={`${message.time}-${idx}`}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                          className={`group max-w-[78%] rounded-[22px] border px-7 py-6 shadow-sm ${bubbleStyles(message.sender)}`}
-                        >
-                          {(() => {
-                            const displayName = message.senderName && message.senderName !== "OpenPhone"
-                              ? message.senderName
-                              : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : (message.sender as string);
-                            const isAgent = message.sender === "agent";
-                            const photoUrl = isAgent && displayName !== "Agent" ? (agentPhotoMap[displayName] ?? null) : null;
-                            const initials = displayName.split(/\s+/).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                            const color = senderHex(displayName);
-                            return (
-                              <div className="flex items-center gap-1.5 mb-1">
-                                {isAgent && (
-                                  <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 shadow-sm">
-                                    {photoUrl ? (
-                                      <img src={photoUrl} alt={displayName} className="w-full h-full object-cover" />
-                                    ) : (
-                                      <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: color }}>
-                                        {initials}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                                <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
-                              </div>
-                            );
-                          })()}
-                          {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
-                          {message.media && message.media.length > 0 && (
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              {message.media.map((url, mi) => (
+                      const isClient = message.sender === "client";
+                      const displayName = message.senderName && message.senderName !== "OpenPhone"
+                        ? message.senderName
+                        : message.sender === "agent" ? "Agent" : message.sender === "client" ? "Customer" : (message.sender as string);
+                      const isAgent = message.sender === "agent";
+                      const photoUrl = isAgent && displayName !== "Agent" ? (agentPhotoMap[displayName] ?? null) : null;
+                      const initials = displayName.split(/\s+/).map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                      const color = senderHex(displayName);
+
+                      if (isClient) {
+                        elements.push(
+                          <div key={`${message.time}-${idx}`} style={{maxWidth:'66%',display:'flex',flexDirection:'column',gap:'6px'}}>
+                            {/* Label outside bubble */}
+                            <div style={{fontSize:'12px',fontWeight:700,color:'#8b95a5',textTransform:'uppercase',letterSpacing:'.08em'}}>Customer</div>
+                            {/* Bubble */}
+                            <motion.div
+                              className="group"
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                              style={{background:'white',borderRadius:'24px',padding:'20px',boxShadow:'0 10px 30px rgba(17,24,39,.05)'}}
+                            >
+                              {message.text && <div style={{fontSize:'15px',lineHeight:1.6,color:'#101828'}}>{message.text}</div>}
+                              {message.media && message.media.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {message.media.map((url, mi) => (
+                                    <button key={mi} type="button" onClick={() => openLightbox(message.media!, mi)} className="focus:outline-none" title="Click to enlarge">
+                                      <img src={url} alt="MMS photo" className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity" />
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {message.text && message.text.trim().length > 0 && (
                                 <button
-                                  key={mi}
-                                  type="button"
-                                  onClick={() => openLightbox(message.media!, mi)}
-                                  className="focus:outline-none"
-                                  title="Click to enlarge"
+                                  onClick={() => { setComplaintApplyCharge(true); setComplaintDialogMsg({ text: message.text!, cleanerJobId: clientProfile?.todayJob?.id ?? null }); }}
+                                  className="mt-2 flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition opacity-0 group-hover:opacity-100"
+                                  title="Flag as customer complaint"
                                 >
-                                  <img
-                                    src={url}
-                                    alt="MMS photo"
-                                    className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity"
-                                  />
+                                  <MessageSquareWarning className="h-3 w-3" />
+                                  Flag complaint
                                 </button>
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-2 flex items-center justify-between gap-2">
-                            <div className="text-xs opacity-60">{message.time}</div>
-                            {message.sender === "client" && message.text && message.text.trim().length > 0 && (
-                              <button
-                                onClick={() => {
-                                  setComplaintApplyCharge(true);
-                                  setComplaintDialogMsg({
-                                    text: message.text!,
-                                    cleanerJobId: clientProfile?.todayJob?.id ?? null,
-                                  });
-                                }}
-                                className="flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 hover:bg-rose-100 hover:border-rose-300 transition opacity-0 group-hover:opacity-100"
-                                title="Flag as customer complaint"
-                              >
-                                <MessageSquareWarning className="h-3 w-3" />
-                                Flag complaint
-                              </button>
-                            )}
+                              )}
+                            </motion.div>
+                            {/* Timestamp outside bubble */}
+                            <div style={{fontSize:'13px',color:'#98a2b3'}}>{message.time}</div>
                           </div>
-                        </motion.div>
-                      );
+                        );
+                      } else {
+                        elements.push(
+                          <motion.div
+                            key={`${message.time}-${idx}`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                            className={`group max-w-[78%] rounded-[22px] border px-7 py-6 shadow-sm ${bubbleStyles(message.sender)}`}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1">
+                              {isAgent && (
+                                <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 shadow-sm">
+                                  {photoUrl ? (
+                                    <img src={photoUrl} alt={displayName} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: color }}>
+                                      {initials}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
+                            </div>
+                            {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
+                            {message.media && message.media.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {message.media.map((url, mi) => (
+                                  <button key={mi} type="button" onClick={() => openLightbox(message.media!, mi)} className="focus:outline-none" title="Click to enlarge">
+                                    <img src={url} alt="MMS photo" className="max-w-[200px] max-h-[200px] rounded-xl object-cover border border-slate-200 cursor-zoom-in hover:opacity-90 transition-opacity" />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <div className="text-xs opacity-60">{message.time}</div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
                       return elements;
                     });
                   })()}
