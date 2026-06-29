@@ -1323,6 +1323,20 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 )}
               </div>
 
+              {/* Active filter banner — shown when not viewing All */}
+              {activeFilter !== 'All' && (
+                <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'6px', padding:'6px 10px', borderRadius:'999px', background:'#111318', color:'white', fontSize:'12px', fontWeight:600}}>
+                  <span style={{flex:1}}>Showing: {activeFilter}</span>
+                  <button
+                    onClick={() => setActiveFilter('All')}
+                    style={{display:'flex', alignItems:'center', gap:'3px', fontSize:'11px', fontWeight:700, color:'rgba(255,255,255,0.7)', background:'none', border:'none', cursor:'pointer', padding:'0'}}
+                    title="Clear filter — show all"
+                  >
+                    <X className="h-3 w-3" /> All
+                  </button>
+                </div>
+              )}
+
               {/* Client conversation list */}
               <div style={{marginTop:'16px'}}>
                 <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
