@@ -1205,51 +1205,52 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     <>
     <div className="h-full overflow-hidden flex flex-col text-slate-900" style={{background: 'transparent'}}>
       <div className="w-full flex flex-col flex-1 min-h-0 p-6">
-        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '12px'}}>
+        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_390px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[390px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '12px'}}>
           {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'white', border: 'none', boxShadow: '0 8px 40px rgba(15,23,42,.06)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-6 space-y-6 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              <div className="flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,.08)] [&::-webkit-scrollbar-thumb]:rounded-[999px]" style={{scrollBehavior:'smooth', padding: '28px'}}>
 
               {/* Revenue Lane header */}
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Revenue Lane</div>
-                  <div className="text-[26px] font-bold tracking-tight text-slate-900 leading-none">Clients</div>
+                  <div style={{fontSize:'11px', fontWeight:700, letterSpacing:'.18em', color:'#A1A8B8', textTransform:'uppercase', marginBottom:'4px'}}>Revenue Lane</div>
+                  <div style={{fontSize:'52px', fontWeight:700, lineHeight:1, color:'#111827'}}>Clients</div>
                 </div>
-                <div className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
+                <div style={{background:'#111827', color:'white', padding:'12px 18px', borderRadius:'999px', fontSize:'17px', fontWeight:600, flexShrink:0, marginTop:'8px'}}>
                   {clientConvs.length} open
                 </div>
               </div>
 
               {/* Search bar */}
-              <div className="relative">
-                <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <div className="relative" style={{marginTop:'28px'}}>
+                <Search className="h-4 w-4 absolute text-slate-400" style={{left:'18px', top:'50%', transform:'translateY(-50%)'}} />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search clients, leads, bookings"
-                  className="pl-9 h-10 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-300 focus-visible:ring-slate-300 text-[11px] shadow-none"
+                  style={{height:'52px', borderRadius:'16px', background:'#FAFBFC', border:'1px solid rgba(0,0,0,.05)', paddingLeft:'48px', paddingRight:'18px', fontSize:'14px', color:'#111827', boxShadow:'none'}}
+                  className="placeholder:text-slate-300 focus-visible:ring-0 focus-visible:shadow-[0_0_0_4px_rgba(255,106,0,.08)]"
                 />
               </div>
 
               {/* AI priority queue — collapsed by default, hover to expand */}
-              <div className="group rounded-[20px] bg-[#EEF2FF] p-4 cursor-default transition-all">
+              <div className="group cursor-default transition-all" style={{marginTop:'24px', borderRadius:'22px', padding:'22px', background:'linear-gradient(180deg,#F7F9FF,#F3F5FF)', boxShadow:'0 8px 28px rgba(15,23,42,.05)'}}>
                 <div className="flex items-start gap-3">
-                  <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
+                  <div className="shrink-0 rounded-full bg-blue-500 flex items-center justify-center shadow-sm" style={{width:'44px', height:'44px'}}>
                     <Sparkles className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-[14px] font-bold text-slate-900">Client priority queue</div>
+                      <div style={{fontSize:'18px', fontWeight:600, color:'#111827'}}>Client priority queue</div>
                       {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
                     </div>
                     {priorityItems.length === 0 && !priorityLoading && (
-                      <div className="mt-1 text-[13px] text-slate-500 leading-snug">No urgent items right now.</div>
+                      <div style={{marginTop:'4px', fontSize:'15px', fontWeight:500, color:'#6B7280', lineHeight:'1.4'}}>No urgent items right now.</div>
                     )}
                     {priorityItems.length > 0 && (
-                      <div className="mt-1 text-[13px] text-slate-600 leading-snug">
+                      <div style={{marginTop:'4px', fontSize:'15px', fontWeight:500, color:'#6B7280', lineHeight:'1.4'}}>
                         {priorityItems.length} high-intent {priorityItems.length === 1 ? "opportunity" : "opportunities"}. {priorityItems.slice(0, 2).map(i => i.reason).join(" ")}
                       </div>
                     )}
@@ -1294,8 +1295,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* Client conversation list */}
-              <div>
-                <div className="space-y-4">
+              <div style={{marginTop:'24px'}}>
+                <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
@@ -1430,7 +1431,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         layout
                         animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                         transition={{ duration: 0.45 }}
-                        className="group relative overflow-hidden rounded-[20px]"
+                        className="group relative overflow-hidden rounded-[22px]"
                       >
                       <motion.button
                         whileHover={{ y: -1 }}
@@ -1439,25 +1440,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className={`w-full rounded-[20px] border px-4 py-4 text-left transition-all ${
-                          isSelected
-                            ? "border-slate-800 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.10)]"
-                            : isUnread
-                            ? "border-slate-200 bg-blue-50/50 hover:border-slate-300 hover:shadow-sm"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                        } ${
-                          !isSelected && isUnread
-                            ? "border-l-[3px] border-l-blue-500"
-                            : !isSelected && hasUnanswered
-                            ? "border-l-[3px] border-l-amber-400"
-                            : ""
-                        }`}
+                        className="w-full text-left transition-all"
+                        style={{
+                          borderRadius: '22px',
+                          padding: '22px',
+                          border: 'none',
+                          boxShadow: isSelected ? '0 6px 22px rgba(0,0,0,.08)' : '0 6px 22px rgba(0,0,0,.05)',
+                          background: isSelected ? '#FFFDFC' : 'white',
+                          borderLeft: isSelected ? '4px solid #FF6B00' : isUnread ? '4px solid #FF6B00' : hasUnanswered ? '4px solid #F59E0B' : '4px solid transparent',
+                        }}
                       >
-                        {/* Row 1: Avatar + Name + Unread badge + Status pill */}
-                        <div className="flex items-start gap-3">
+                        {/* Row 1: Avatar + Name + Time */}
+                        <div className="flex items-start" style={{gap:'12px'}}>
                           {/* Avatar */}
                           <div className="relative shrink-0">
-                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-base font-bold text-white`}>
+                            <div className={`relative flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-base font-bold text-white`} style={{width:'48px', height:'48px'}}>
                               {initials}
                             </div>
                             {pc.label ? (
@@ -1467,23 +1464,22 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             ) : null}
                           </div>
 
-                          {/* Name + phone + queue */}
+                          {/* Name + subtitle */}
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center" style={{gap:'6px'}}>
                               {isUnread && (
-                                <span className="relative flex h-2 w-2 shrink-0">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                                <span className="relative flex shrink-0" style={{width:'8px', height:'8px'}}>
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
                                 </span>
                               )}
-                              <span className="text-[15px] font-bold leading-tight text-slate-900">{conversation.name}</span>
+                              <span style={{fontSize:'20px', fontWeight:700, lineHeight:'1.2', color:'#111827'}}>{conversation.name}</span>
                               {unreadCount > 0 && (
-                                <span className="inline-flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold min-w-[20px] h-5 px-1.5">{unreadCount}</span>
+                                <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount}</span>
                               )}
                             </div>
-                            <div className="mt-0.5 flex items-center gap-1 text-[12px] text-slate-400">
-                              <span>{conversation.phone || conversation.location}</span>
-                              {conversation.service && <><span>·</span><span>{conversation.service}</span></>}
+                            <div style={{marginTop:'2px', fontSize:'15px', fontWeight:500, color:'#667085'}}>
+                              {conversation.phone || conversation.location}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
                           </div>
 
@@ -1506,12 +1502,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
 
                         {/* Row 2: Message preview */}
-                        <div className="mt-3 text-[14px] text-slate-700 leading-snug line-clamp-2">{conversation.lastMessage || noteText}</div>
+                        <div style={{marginTop:'16px', fontSize:'16px', color:'#6B7280', lineHeight:'1.4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
-                        {/* Row 3: Status pill + job value + linked badge */}
-                        <div className="mt-3 flex items-center gap-2">
-                          {/* Status pill — moved from top right */}
-                          <div className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap ${sc.pill}`}>
+                        {/* Row 3: Status capsule + job value + linked badge */}
+                        <div style={{marginTop:'16px', display:'flex', alignItems:'center', gap:'8px'}}>
+                          {/* Status capsule — tiny, 28px height */}
+                          <div className={`shrink-0 whitespace-nowrap ${sc.pill}`} style={{borderRadius:'999px', border:'1px solid', height:'28px', display:'inline-flex', alignItems:'center', padding:'0 10px', fontSize:'12px', fontWeight:600}}>
                             {sc.label}
                           </div>
                           {/* Job value */}
@@ -1757,7 +1753,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       layout
                       animate={isResolvingThis2 ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                       transition={{ duration: 0.45 }}
-                      className="group relative overflow-hidden rounded-[20px]"
+                      className="group relative overflow-hidden rounded-[22px]"
                     >
                       <motion.button
                         whileHover={{ y: -1 }}
