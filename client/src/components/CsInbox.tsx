@@ -1879,19 +1879,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const ini = selected.initials || "?";
                       const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                       return (
-                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'56px',height:'56px',borderRadius:'18px',fontSize:'18px',fontWeight:800}}>
+                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'40px',height:'40px',borderRadius:'12px',fontSize:'14px',fontWeight:700}}>
                           {ini}
                         </div>
                       );
                     })()}
                     {/* Name + meta stack */}
                     <div className="min-w-0">
-                      {/* Tiny uppercase label */}
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 leading-none mb-0.5">
-                        {selected.queue === "Teams" ? "TEAM CONVERSATION" : "CLIENT CONVERSATION"}
-                        {selected.service && <span className="text-slate-300"> · {selected.service}</span>}
-                      </p>
-                      {/* Large bold name with inline edit */}
+                      {/* Name with inline edit */}
                       {editingName ? (
                         <form
                           className="flex items-center gap-2"
@@ -1904,32 +1899,32 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             autoFocus
                             value={nameInput}
                             onChange={(e) => setNameInput(e.target.value)}
-                            className="h-8 text-base font-semibold w-44"
+                            className="h-7 text-sm font-semibold w-40"
                             placeholder="Enter name…"
                           />
-                          <Button type="submit" size="icon" variant="ghost" className="h-7 w-7 text-emerald-600" disabled={updateCsName.isPending}>
-                            <Check className="h-3.5 w-3.5" />
+                          <Button type="submit" size="icon" variant="ghost" className="h-6 w-6 text-emerald-600" disabled={updateCsName.isPending}>
+                            <Check className="h-3 w-3" />
                           </Button>
-                          <Button type="button" size="icon" variant="ghost" className="h-7 w-7 text-slate-400" onClick={() => setEditingName(false)}>
-                            <X className="h-3.5 w-3.5" />
+                          <Button type="button" size="icon" variant="ghost" className="h-6 w-6 text-slate-400" onClick={() => setEditingName(false)}>
+                            <X className="h-3 w-3" />
                           </Button>
                         </form>
                       ) : (
                         <div className="flex items-center gap-1.5 group">
-                          <h2 style={{fontSize:'30px',fontWeight:800,color:'#101828',lineHeight:1.1,letterSpacing:'-0.02em'}} className="truncate">{selected.name}</h2>
+                          <h2 style={{fontSize:'16px',fontWeight:700,color:'#111827',lineHeight:1.2,letterSpacing:'-0.01em'}} className="truncate">{selected.name}</h2>
                           <button
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-500"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
                             title="Edit name"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Pencil className="h-3 w-3" />
                           </button>
                         </div>
                       )}
                       {/* Sub-line: phone + queue badge */}
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {selected.phone && <span style={{fontSize:'16px',color:'#7b8394',fontWeight:400}}>{selected.phone}</span>}
-                        {selected.phone && selected.queue && <span style={{color:'#7b8394',margin:'0 4px'}}>·</span>}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {selected.phone && <span style={{fontSize:'12px',color:'#9aa3b2',fontWeight:400}}>{selected.phone}</span>}
+                        {selected.phone && selected.queue && <span style={{color:'#c0c6d0',fontSize:'12px'}}>·</span>}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Badge className={`rounded-full border cursor-pointer text-[10px] px-2 py-0 h-4 ${tone.tone} hover:opacity-80 transition-opacity`}>
