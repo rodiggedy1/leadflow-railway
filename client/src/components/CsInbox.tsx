@@ -1757,7 +1757,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       layout
                       animate={isResolvingThis2 ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                       transition={{ duration: 0.45 }}
-                      className="group relative rounded-[18px]"
+                      className="group relative rounded-[20px]"
                     >
                       <motion.button
                         whileHover={{ y: -1 }}
@@ -1768,12 +1768,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className="w-full text-left relative"
                         style={{
-                          borderRadius: '18px',
-                          padding: '10px 8px',
+                          borderRadius: '20px',
+                          padding: '14px 14px 14px 18px',
                           border: 'none',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 2px 8px rgba(17,19,24,.04), 0 8px 24px rgba(17,19,24,.08), 0 20px 40px rgba(17,19,24,.07)' : 'none',
-                          background: isSelected ? 'white' : 'transparent',
+                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : '0 1px 4px rgba(17,24,39,.04)',
+                          background: isSelected ? '#ffffff' : '#faf9f7',
                         }}
                       >
                         {/* Selected accent bar */}
@@ -1783,7 +1783,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         {/* Row grid: avatar | content | time */}
                         <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'8px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className={`flex items-center justify-center bg-gradient-to-br ${gradient} font-bold text-white`} style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0}}>
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient}}>
                             {initials}
                           </div>
                           {/* Content */}
@@ -1805,16 +1805,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             </div>
                           </div>
                           {/* Time */}
-                          <div style={{fontSize:'11px', fontWeight:600, color:'#9aa3b2', whiteSpace:'nowrap'}}>{conversation.wait}</div>
+                          <div style={{fontSize:'12px', fontWeight:500, color:'#b0b8c4', whiteSpace:'nowrap'}}>{conversation.wait}</div>
                         </div>
-                        {/* Row 2: preview — spans full card width like client column */}
+                        {/* Row 2: preview */}
                         <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
-                        {/* Status pill row */}
+                        {/* Status pill row — matches client column style */}
                         <div style={{marginTop:'8px'}}>
-                          <span style={{display:'inline-flex', alignItems:'center', gap:'4px', borderRadius:'999px', border:'1px solid', padding:'2px 10px', fontSize:'11px', fontWeight:600, height:'22px'}} className={sc2.pill}>
-                            <sc2.Icon className="h-3 w-3" />
-                            {sc2.label.replace(/^[^ ]+ /, '')}
-                          </span>
+                          <div style={{
+                            height:'24px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:600, display:'inline-flex', alignItems:'center', gap:'4px',
+                            color: statusKey2 === 'resolved' || statusKey2 === 'solved' ? '#16a34a' : statusKey2 === 'act_now' || statusKey2 === 'your_turn' || statusKey2 === 'waiting_on_you' || statusKey2 === 'hot_lead' || statusKey2 === 'slow_response' || statusKey2 === 'objection' || statusKey2 === 'job_at_risk' || statusKey2 === 'otw_missing' || statusKey2 === 'arrival_issue' ? '#ea580c' : '#6b7280',
+                            background: (statusKey2 === 'resolved' || statusKey2 === 'solved') ? '#f0fdf4' : 'transparent',
+                            border: (statusKey2 === 'resolved' || statusKey2 === 'solved') ? 'none' : '1.5px solid currentColor',
+                          }}>
+                            {(statusKey2 === 'resolved' || statusKey2 === 'solved') && <span style={{fontSize:'13px', lineHeight:1}}>✓</span>}
+                            {sc2.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
+                          </div>
                         </div>
                       </motion.button>
                       {/* Resolve button */}
