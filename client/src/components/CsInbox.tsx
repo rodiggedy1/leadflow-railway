@@ -1471,12 +1471,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
                                 </span>
                               )}
-                              <span style={{fontSize:'13px', fontWeight:700, lineHeight:'1.2', letterSpacing:'-0.01em', color:'#111318'}}>{conversation.name}</span>
+                              <span style={{fontSize:'18px', fontWeight:800, lineHeight:'1.2', letterSpacing:'-0.03em', color:'#111827'}}>{conversation.name}</span>
                               {unreadCount > 0 && (
                                 <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount}</span>
                               )}
                             </div>
-                            <div style={{marginTop:'1px', fontSize:'11px', fontWeight:500, color:'#98a2b3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            <div style={{marginTop:'2px', fontSize:'15px', fontWeight:500, color:'#98A2B3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                               {conversation.phone || conversation.location}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
                           </div>
@@ -1500,7 +1500,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
 
                         {/* Row 2: Message preview — spans content + time columns */}
-                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+                        <div style={{marginTop:'6px', fontSize:'17px', fontWeight:600, color:'#404756', lineHeight:'1.45', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
                         {/* Row 3: Status pill — spans content + time columns */}
                         <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
