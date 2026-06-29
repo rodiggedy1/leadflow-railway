@@ -1440,7 +1440,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           userNavigatedToId.current = conversation.id;
                           triggerAutoDraft(conversation);
                         }}
-                        className="w-full text-left transition-all relative"
+                        className="w-full text-left relative"
                         style={{
                           borderRadius: '18px',
                           padding: '12px',
