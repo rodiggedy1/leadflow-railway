@@ -1205,7 +1205,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     <>
     <div className="h-full overflow-hidden flex flex-col text-slate-900" style={{background: 'transparent'}}>
       <div className="w-full flex flex-col flex-1 min-h-0 p-6">
-        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_390px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[390px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '12px'}}>
+        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '12px'}}>
           {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'white', border: 'none', boxShadow: '0 8px 40px rgba(15,23,42,.06)'}}>
