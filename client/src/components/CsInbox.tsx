@@ -3111,14 +3111,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             })() },
                           ].map(({ label, value }, i) => (
                             <div key={label} style={{
-                              padding: '16px 0 16px 0',
-                              paddingLeft: i % 2 === 0 ? '0' : '24px',
-                              paddingRight: i % 2 === 0 ? '24px' : '0',
+                              padding: '14px 12px',
                               borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
                               borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                              minWidth: 0,
+                              overflow: 'hidden',
                             }}>
-                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', whiteSpace:'nowrap'}}>{label}</div>
-                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{value}</div>
+                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{label}</div>
+                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{value}</div>
                             </div>
                           ))}
                         </div>
