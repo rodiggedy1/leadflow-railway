@@ -1236,16 +1236,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* AI priority queue — collapsed by default, hover to expand */}
-              <div className="group cursor-default transition-all" style={{marginTop:'24px', borderRadius:'22px', padding:'22px', background:'linear-gradient(180deg,#F7F9FF,#F3F5FF)', boxShadow:'0 8px 28px rgba(15,23,42,.05)'}}>
-                <div className="flex items-start gap-3">
-                  <div className="shrink-0 rounded-full bg-blue-500 flex items-center justify-center shadow-sm" style={{width:'44px', height:'44px'}}>
-                    <Sparkles className="h-5 w-5 text-white" />
+              <div className="group cursor-default transition-all" style={{marginTop:'24px', borderRadius:'22px', padding:'22px', background:'#F5F5F0', boxShadow:'0 2px 8px rgba(15,23,42,.04)'}}>
+                <div className="flex flex-col" style={{gap:'16px'}}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-center" style={{width:'44px', height:'44px', borderRadius:'14px', background:'#111827'}}>
+                      <Sparkles className="h-5 w-5 text-white" />
+                    </div>
+                    {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div style={{fontSize:'18px', fontWeight:600, color:'#111827'}}>Client priority queue</div>
-                      {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
-                    </div>
+                    <div style={{fontSize:'18px', fontWeight:700, color:'#111827'}}>Client priority queue</div>
                     {priorityItems.length === 0 && !priorityLoading && (
                       <div style={{marginTop:'4px', fontSize:'15px', fontWeight:500, color:'#6B7280', lineHeight:'1.4'}}>No urgent items right now.</div>
                     )}
@@ -1454,14 +1454,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <div className="flex items-start" style={{gap:'12px'}}>
                           {/* Avatar */}
                           <div className="relative shrink-0">
-                            <div className={`relative flex items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-base font-bold text-white`} style={{width:'48px', height:'48px'}}>
+                            <div className={`relative flex items-center justify-center bg-gradient-to-br ${gradient} text-base font-bold text-white`} style={{width:'48px', height:'48px', borderRadius:'15px'}}>
                               {initials}
                             </div>
-                            {pc.label ? (
-                              <div className={`absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold shadow ${pc.className}`}>
-                                {pc.label}
-                              </div>
-                            ) : null}
+                            {null /* priority badge removed per design */}
                           </div>
 
                           {/* Name + subtitle */}
@@ -1507,7 +1503,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         {/* Row 3: Status capsule + job value + linked badge */}
                         <div style={{marginTop:'16px', display:'flex', alignItems:'center', gap:'8px'}}>
                           {/* Status capsule — tiny, 28px height */}
-                          <div className={`shrink-0 whitespace-nowrap ${sc.pill}`} style={{borderRadius:'999px', border:'1px solid', height:'28px', display:'inline-flex', alignItems:'center', padding:'0 10px', fontSize:'12px', fontWeight:600}}>
+                          <div style={{fontSize:'13px', fontWeight:600, color: statusKey === 'resolved' || statusKey === 'solved' ? '#16a34a' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#EA580C' : '#6B7280'}}>
                             {sc.label}
                           </div>
                           {/* Job value */}
