@@ -1800,13 +1800,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div style={{fontSize:'11px', fontWeight:500, color:'#9aa3b2', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                               {conversation.phone}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
-                            <div style={{fontSize:'12px', fontWeight:600, color:'#374151', marginTop:'4px', overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical'}}>{conversation.lastMessage}</div>
                           </div>
                           {/* Time */}
                           <div style={{fontSize:'11px', fontWeight:600, color:'#9aa3b2', whiteSpace:'nowrap'}}>{conversation.wait}</div>
                         </div>
+                        {/* Row 2: preview — spans full card width like client column */}
+                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
                         {/* Status pill row */}
-                        <div style={{marginTop:'8px', paddingLeft:'42px'}}>
+                        <div style={{marginTop:'8px'}}>
                           <span style={{display:'inline-flex', alignItems:'center', gap:'4px', borderRadius:'999px', border:'1px solid', padding:'2px 10px', fontSize:'11px', fontWeight:600, height:'22px'}} className={sc2.pill}>
                             <sc2.Icon className="h-3 w-3" />
                             {sc2.label.replace(/^[^ ]+ /, '')}
