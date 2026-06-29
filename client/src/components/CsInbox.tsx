@@ -2801,52 +2801,55 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           <div className="h-full rounded-[30px] overflow-hidden flex flex-col" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
-              <div className="shrink-0 px-6 pt-6 pb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12 border-2 border-teal-200">
-                    <AvatarFallback className="bg-teal-100 text-teal-700 font-semibold text-lg">
-                      {selected.initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <div className="font-semibold text-lg text-slate-900">{selected.name}</div>
-                    <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
-                      <Phone className="h-3.5 w-3.5" />
-                      {selected.phone}
+              <div style={{padding:'32px',background:'linear-gradient(180deg,#eefcf8,#ffffff)',borderRadius:'32px 32px 0 0',borderBottom:'1px solid rgba(17,24,39,.06)',flexShrink:0}}>
+                <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
+                  <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'linear-gradient(135deg,#14b8a6,#10b981)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 24px rgba(16,185,129,.25)'}}>
+                    {selected.initials}
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                    <div style={{fontSize:'32px',fontWeight:800,color:'#101828',lineHeight:1.1}}>{selected.name}</div>
+                    <div style={{fontSize:'15px',color:'#7B8797',fontWeight:400}}>Team Member</div>
+                    <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
+                      <Phone style={{width:'15px',height:'15px',color:'#10b981',flexShrink:0}} />
+                      <span style={{fontSize:'16px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="shrink-0 px-6 pt-6 pb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
-                <div className="flex items-center gap-3">
-                  {(() => {
-                    const gradientPalette = [
-                      "from-violet-500 to-fuchsia-500",
-                      "from-rose-500 to-orange-400",
-                      "from-emerald-500 to-teal-500",
-                      "from-sky-500 to-cyan-500",
-                      "from-amber-500 to-yellow-400",
-                      "from-pink-500 to-rose-400",
-                      "from-indigo-500 to-blue-500",
-                      "from-teal-500 to-green-500",
-                    ];
-                    const ini = selected.initials || "?";
-                    const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
-                    return (
-                      <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
+              <div style={{padding:'32px',background:'linear-gradient(180deg,#eefcf8,#ffffff)',borderRadius:'32px 32px 0 0',borderBottom:'1px solid rgba(17,24,39,.06)',flexShrink:0}}>
+                {(() => {
+                  const gradientPalette = [
+                    "from-violet-500 to-fuchsia-500",
+                    "from-rose-500 to-orange-400",
+                    "from-emerald-500 to-teal-500",
+                    "from-sky-500 to-cyan-500",
+                    "from-amber-500 to-yellow-400",
+                    "from-pink-500 to-rose-400",
+                    "from-indigo-500 to-blue-500",
+                    "from-teal-500 to-green-500",
+                  ];
+                  const ini = selected.initials || "?";
+                  const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
+                  const gradClass = gradientPalette[idx];
+                  const name = clientProfile?.name ?? selected.name;
+                  const since = clientProfile?.createdAt ? new Date(clientProfile.createdAt).getFullYear() : null;
+                  return (
+                    <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
+                      <div className={`bg-gradient-to-br ${gradClass}`} style={{width:'64px',height:'64px',borderRadius:'20px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 24px rgba(0,0,0,.12)'}}>
                         {ini}
                       </div>
-                    );
-                  })()}
-                  <div>
-                    <div className="font-semibold text-lg text-slate-900">{clientProfile?.name ?? selected.name}</div>
-                    <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
-                      <Phone className="h-3.5 w-3.5" />
-                      {selected.phone}
+                      <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+                        <div style={{fontSize:'32px',fontWeight:800,color:'#101828',lineHeight:1.1}}>{name}</div>
+                        <div style={{fontSize:'15px',color:'#7B8797',fontWeight:400}}>{since ? `Customer since ${since}` : 'Customer'}</div>
+                        <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
+                          <Phone style={{width:'15px',height:'15px',color:'#10b981',flexShrink:0}} />
+                          <span style={{fontSize:'16px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </div>
             )}
             <div className="cs-inbox-scroll overflow-y-auto flex-1">
