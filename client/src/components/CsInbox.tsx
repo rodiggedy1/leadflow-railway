@@ -2429,11 +2429,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               )}
               {/* ── Compose area ── */}
-              <div className={`shrink-0 border-t transition-colors duration-200 ${
-                  composeMode === "note"
-                    ? "border-amber-200 bg-amber-50/95"
-                    : "border-slate-100 bg-white"
-                }`}>
+              <div
+                className={`shrink-0 transition-colors duration-200 ${composeMode === "note" ? "bg-amber-50/95" : "bg-white"}`}
+                style={{borderTop:`1px solid ${composeMode === "note" ? 'rgba(251,191,36,.25)' : 'rgba(17,24,39,.06)'}`,paddingTop:'32px'}}
+              >
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
