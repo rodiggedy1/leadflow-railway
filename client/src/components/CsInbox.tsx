@@ -1451,8 +1451,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           background: isSelected ? '#ffffff' : isUnread ? '#ffffff' : '#fcfbf8',
                         }}
                       >
-                        {/* Unread / selected accent bar */}
-                        {(isUnread || isSelected) && (
+                        {/* Selected accent bar */}
+                        {isSelected && (
                           <div style={{position:'absolute', left:0, top:'18px', bottom:'18px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
@@ -1768,8 +1768,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           background: isSelected ? '#ffffff' : isUnread ? '#ffffff' : '#fcfbf8',
                         }}
                       >
-                        {/* Unread / selected accent bar */}
-                        {(isUnread || isSelected) && (
+                        {/* Selected accent bar */}
+                        {isSelected && (
                           <div style={{position:'absolute', left:0, top:'18px', bottom:'18px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
