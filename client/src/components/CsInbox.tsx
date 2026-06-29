@@ -1431,7 +1431,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         layout
                         animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                         transition={{ duration: 0.45 }}
-                        className="group relative overflow-hidden rounded-[18px]"
+                        className="group relative rounded-[18px]"
                       >
                       <motion.button
                         whileHover={{ y: -1 }}
