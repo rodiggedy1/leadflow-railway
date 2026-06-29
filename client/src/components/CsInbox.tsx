@@ -1869,8 +1869,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header: single-row, clean typography hierarchy ── */}
-              <div className="border-b border-slate-100 px-6 py-4 bg-white">
-                <div className="flex items-center justify-between gap-3">
+              <div style={{height:'88px',padding:'0 24px',background:'white',borderBottom:'1px solid rgba(17,24,39,.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'16px',flexShrink:0}}>
+                <div className="flex items-center justify-between gap-3 w-full">
                   {/* Left: avatar + name stack */}
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Circular avatar */}
@@ -1888,7 +1888,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const ini = selected.initials || "?";
                       const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                       return (
-                        <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
+                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'56px',height:'56px',borderRadius:'18px',fontSize:'18px',fontWeight:800}}>
                           {ini}
                         </div>
                       );
@@ -1925,7 +1925,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </form>
                       ) : (
                         <div className="flex items-center gap-1.5 group">
-                          <h2 className="text-[17px] font-bold tracking-tight text-slate-900 leading-tight truncate">{selected.name}</h2>
+                          <h2 style={{fontSize:'30px',fontWeight:800,color:'#101828',lineHeight:1.1,letterSpacing:'-0.02em'}} className="truncate">{selected.name}</h2>
                           <button
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-500"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
@@ -1937,8 +1937,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       )}
                       {/* Sub-line: phone + queue badge */}
                       <div className="flex items-center gap-2 mt-0.5">
-                        {selected.phone && <span className="text-[11px] font-mono text-slate-400 tracking-wide">{selected.phone}</span>}
-                        {selected.phone && selected.queue && <span className="text-slate-200">·</span>}
+                        {selected.phone && <span style={{fontSize:'16px',color:'#7b8394',fontWeight:400}}>{selected.phone}</span>}
+                        {selected.phone && selected.queue && <span style={{color:'#7b8394',margin:'0 4px'}}>·</span>}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Badge className={`rounded-full border cursor-pointer text-[10px] px-2 py-0 h-4 ${tone.tone} hover:opacity-80 transition-opacity`}>
@@ -1966,14 +1966,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   </div>
 
                   {/* Right: action icons in a compact rounded pill row */}
-                  <div className="flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-1">
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',flexShrink:0}}>
                     {/* Call via OpenPhone */}
                     {selected?.phone && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <a
                             href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                           >
                             <Phone className="h-4 w-4" />
                           </a>
@@ -1989,7 +1991,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             type="button"
                             onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
                             disabled={syncOutbound.isPending}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                           >
                             <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
                           </button>
@@ -2003,7 +2007,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <button
                           type="button"
                           onClick={() => setNewConvOpen(true)}
-                          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                          style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                         >
                           <PenSquare className="h-4 w-4" />
                         </button>
@@ -2018,7 +2024,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             type="button"
                             onClick={() => resolveSession.mutate({ sessionId: selected.id })}
                             disabled={resolveSession.isPending}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                           >
                             <CheckCircle2 className="h-4 w-4" />
                           </button>
