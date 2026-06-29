@@ -157,11 +157,11 @@ function bubbleStyles(sender: MsgSender) {
     case "client":
       return "bg-white border-slate-200 text-slate-900";
     case "agent":
-      return "bg-[#1C1C1E] border-[#1C1C1E] text-white ml-auto";
+      return "bg-slate-900 border-slate-900 text-white ml-auto";
     case "system":
-      return "bg-[#FFF8F0] border-amber-200 text-amber-900";
+      return "bg-blue-50 border-blue-200 text-blue-800";
     case "cleaner":
-      return "bg-[#FFF8F0] border-amber-200 text-amber-900";
+      return "bg-amber-50 border-amber-200 text-amber-800";
     case "note":
       return "bg-amber-50 border-amber-300 text-amber-900";
   }
@@ -1202,11 +1202,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col text-slate-900 bg-[#FAFAF8]">
-      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0 px-3 py-3">
-        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-3 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+    <div className="h-full overflow-hidden flex flex-col text-slate-900">
+      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
+        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-[14px] flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] border-0 shadow-[0_2px_20px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
+          <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
 
@@ -1216,7 +1216,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Revenue Lane</div>
                   <div className="text-[26px] font-bold tracking-tight text-slate-900 leading-none">Clients</div>
                 </div>
-                <div className="rounded-full bg-[#FF6B35] px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
+                <div className="rounded-full bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
                   {clientConvs.length} open
                 </div>
               </div>
@@ -1233,9 +1233,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* AI priority queue — collapsed by default, hover to expand */}
-              <div className="group rounded-[20px] bg-[#FFF5F0] p-4 cursor-default transition-all">
+              <div className="group rounded-[20px] bg-[#EEF2FF] p-4 cursor-default transition-all">
                 <div className="flex items-start gap-3">
-                  <div className="shrink-0 w-10 h-10 rounded-[10px] bg-[#FF6B35] flex items-center justify-center shadow-sm">
+                  <div className="shrink-0 w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
                     <Sparkles className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1439,15 +1439,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className={`w-full rounded-[20px] border px-4 py-4 text-left transition-all ${
                           isSelected
-                            ? "border-transparent bg-white shadow-[0_4px_16px_rgba(0,0,0,0.10)]"
+                            ? "border-slate-800 bg-white shadow-[0_4px_20px_rgba(15,23,42,0.10)]"
                             : isUnread
-                            ? "border-slate-100 bg-white hover:shadow-sm"
-                            : "border-slate-100 bg-white hover:shadow-sm"
+                            ? "border-slate-200 bg-blue-50/50 hover:border-slate-300 hover:shadow-sm"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
                         } ${
-                          isSelected
-                            ? "border-l-[3px] border-l-[#FF6B35]"
-                            : !isSelected && isUnread
-                            ? "border-l-[3px] border-l-[#FF6B35]"
+                          !isSelected && isUnread
+                            ? "border-l-[3px] border-l-blue-500"
                             : !isSelected && hasUnanswered
                             ? "border-l-[3px] border-l-amber-400"
                             : ""
@@ -1457,7 +1455,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
                           <div className="relative shrink-0">
-                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-[15px] bg-gradient-to-br ${gradient} text-base font-bold text-white`}>
+                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br ${gradient} text-base font-bold text-white`}>
                               {initials}
                             </div>
                             {pc.label ? (
@@ -1472,13 +1470,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div className="flex items-center gap-1.5">
                               {isUnread && (
                                 <span className="relative flex h-2 w-2 shrink-0">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF6B35] opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF6B35]" />
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
                                 </span>
                               )}
                               <span className="text-[15px] font-bold leading-tight text-slate-900">{conversation.name}</span>
                               {unreadCount > 0 && (
-                                <span className="inline-flex items-center justify-center rounded-full bg-[#FF6B35] text-white text-[11px] font-bold min-w-[20px] h-5 px-1.5">{unreadCount}</span>
+                                <span className="inline-flex items-center justify-center rounded-full bg-blue-500 text-white text-[11px] font-bold min-w-[20px] h-5 px-1.5">{unreadCount}</span>
                               )}
                             </div>
                             <div className="mt-0.5 flex items-center gap-1 text-[12px] text-slate-400">
@@ -1554,7 +1552,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
                               transition={{ duration: 0.18 }}
-                              className="absolute inset-0 bg-orange-400/10"
+                              className="absolute inset-0 bg-violet-400/10"
                             />
                             {[...Array(18)].map((_, i) => {
                               const x = ((i % 6) - 2.5) * 28;
@@ -1566,7 +1564,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   animate={{ x, y: -40 - y, opacity: [0, 1, 0], scale: [0.4, 1, 0.8], rotate: 140 }}
                                   exit={{ opacity: 0 }}
                                   transition={{ duration: 0.8, delay: i * 0.015 }}
-                                  className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-orange-500"
+                                  className="absolute left-1/2 top-1/2 -ml-2 -mt-2 text-violet-500"
                                 >
                                   <Sparkles className="h-4 w-4" />
                                 </motion.div>
@@ -1579,7 +1577,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               transition={{ duration: 0.45 }}
                               className="absolute inset-0 flex items-center justify-center"
                             >
-                              <div className="rounded-full border border-orange-200 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 shadow-lg">
+                              <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">
                                 Resolved ✨
                               </div>
                             </motion.div>
@@ -1596,7 +1594,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] border-0 shadow-[0_2px_20px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
+          <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
               {/* Operations Lane header */}
@@ -1605,7 +1603,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Operations Lane</div>
                   <div className="text-[26px] font-bold tracking-tight text-slate-900 leading-none">Team</div>
                 </div>
-                <div className="rounded-full bg-[#FF6B35] px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
+                <div className="rounded-full bg-violet-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm">
                   {teamConvs.filter((c) => !!(c as any).hasUnanswered).length} active
                 </div>
               </div>
@@ -1622,9 +1620,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* Team priority queue — collapsed by default, hover to expand */}
-              <div className="group rounded-[20px] bg-[#FFF5F0] p-4 cursor-default transition-all">
+              <div className="group rounded-[20px] bg-[#F3F0FF] p-4 cursor-default transition-all">
                 <div className="flex items-start gap-3">
-                  <div className="shrink-0 w-10 h-10 rounded-[10px] bg-[#FF6B35] flex items-center justify-center shadow-sm">
+                  <div className="shrink-0 w-10 h-10 rounded-full bg-violet-500 flex items-center justify-center shadow-sm">
                     <Users className="h-5 w-5 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1644,7 +1642,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       return (
                         <button
                           key={item.id}
-                          className="w-full flex items-center gap-2 text-left rounded-xl px-2 py-1.5 hover:bg-orange-50 transition-colors"
+                          className="w-full flex items-center gap-2 text-left rounded-xl px-2 py-1.5 hover:bg-violet-100/60 transition-colors"
                           onClick={() => {
                             setSelectedId(item.id);
                             userNavigatedToId.current = item.id;
@@ -1652,11 +1650,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           }}
                         >
                           <span className="relative flex h-2 w-2 shrink-0">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF6B35] opacity-60" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF6B35]" />
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-60" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
                           </span>
                           <span className="text-xs font-semibold text-slate-800 truncate">{item.name}</span>
-                          <span className="ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700">{item.service || "Field ops"}</span>
+                          <span className="ml-auto shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">{item.service || "Field ops"}</span>
                         </button>
                       );
                     })}
@@ -1768,13 +1766,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className={`w-full rounded-[20px] border px-4 py-3 text-left transition-all ${
                           isSelected
-                            ? "border-transparent bg-white shadow-[0_4px_16px_rgba(0,0,0,0.10)]"
-                            : "border-slate-100 bg-white hover:shadow-sm"
+                            ? "border-violet-400 bg-violet-50 shadow-[0_6px_20px_rgba(109,40,217,0.08)]"
+                            : "border-slate-200 bg-white hover:border-violet-200 hover:bg-violet-50/30"
                         } ${
-                          isSelected
-                            ? "border-l-[3px] border-l-[#FF6B35]"
-                            : !isSelected && isUnread
-                            ? "border-l-[3px] border-l-[#FF6B35]"
+                          !isSelected && isUnread
+                            ? "border-l-[3px] border-l-violet-500"
                             : !isSelected && hasUnanswered
                             ? "border-l-[3px] border-l-amber-400"
                             : ""
@@ -1783,10 +1779,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <div className="flex gap-3">
                           {/* Avatar */}
                           <div className="relative shrink-0 pt-0.5">
-                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-[15px] bg-gradient-to-br ${gradient} text-base font-bold text-white shadow-sm`}>
+                            <div className={`relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-base font-bold text-white ring-2 ring-violet-200 shadow-md`}>
                               {initials}
                               <span className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white ${sc2.dot}`} />
                             </div>
+                            {isSelected && (
+                              <motion.div
+                                layoutId="selectedGlowTeam"
+                                className="absolute inset-0 rounded-xl ring-2 ring-violet-400/30"
+                              />
+                            )}
                           </div>
 
                           {/* Content */}
@@ -1794,9 +1796,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <div className="truncate text-sm font-semibold text-slate-900">{conversation.name}</div>
+                                  <div className={`truncate text-sm font-semibold ${
+                                    isSelected ? "text-violet-900" : "text-slate-800"
+                                  }`}>{conversation.name}</div>
                                   {unreadCount2 > 0 && (
-                                    <div className="rounded-full bg-[#FF6B35] px-1.5 py-0.5 text-[10px] font-semibold text-white">{unreadCount2}</div>
+                                    <div className="rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">{unreadCount2}</div>
                                   )}
                                 </div>
                                 <div className="mt-0.5 text-[11px] text-slate-400">
@@ -1846,7 +1850,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               animate={{ opacity: 1 }}
                               exit={{ opacity: 0 }}
                               transition={{ duration: 0.18 }}
-                              className="absolute inset-0 bg-orange-400/10"
+                              className="absolute inset-0 bg-violet-400/10"
                             />
                             <motion.div
                               initial={{ scale: 0.6, opacity: 0, y: 6 }}
@@ -1855,7 +1859,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               transition={{ duration: 0.45 }}
                               className="absolute inset-0 flex items-center justify-center"
                             >
-                              <div className="rounded-full border border-orange-200 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 shadow-lg">
+                              <div className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-sm font-semibold text-violet-700 shadow-lg">
                                 Resolved ✨
                               </div>
                             </motion.div>
@@ -1871,7 +1875,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-0 shadow-[0_2px_20px_rgba(0,0,0,0.06)] flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
+          <Card className="rounded-[28px] border-0 shadow-none flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header: single-row, clean typography hierarchy ── */}
               <div className="border-b border-slate-100 px-5 py-3 md:px-6 bg-white">
@@ -1893,7 +1897,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const ini = selected.initials || "?";
                       const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                       return (
-                        <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-[12px] bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
+                        <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
                           {ini}
                         </div>
                       );
@@ -1971,7 +1975,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   </div>
 
                   {/* Right: action icons in a compact rounded pill row */}
-                  <div className="flex items-center gap-0.5 shrink-0 bg-white border border-slate-100 rounded-full px-1.5 py-1 shadow-sm">
+                  <div className="flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-1">
                     {/* Call via OpenPhone */}
                     {selected?.phone && (
                       <Tooltip>
@@ -2035,7 +2039,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-5 md:px-6 bg-[#FAFAF8]" ref={scrollRef}>
+              <div className="flex-1 overflow-y-auto px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
@@ -2082,10 +2086,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const showSeparator = item.ts > 100 && dateStr !== lastDateStr;
                       if (showSeparator) lastDateStr = dateStr;
                       const separator = showSeparator ? (
-                        <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-4">
-                          <div className="flex-1 h-px bg-slate-100" />
-                          <span className="text-[10px] font-medium text-slate-400 whitespace-nowrap tracking-wide">{displayDate}</span>
-                          <div className="flex-1 h-px bg-slate-100" />
+                        <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-2">
+                          <div className="flex-1 h-px bg-slate-200" />
+                          <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{displayDate}</span>
+                          <div className="flex-1 h-px bg-slate-200" />
                         </div>
                       ) : null;
                       const elements: React.ReactNode[] = separator ? [separator] : [];
@@ -2222,9 +2226,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                          className={`flex ${message.sender === 'agent' ? 'justify-end' : 'justify-start'}`}
+                          className={`group max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
                         >
-                        <div className={`group max-w-[78%] rounded-[18px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}>
                           {(() => {
                             const displayName = message.senderName && message.senderName !== "OpenPhone"
                               ? message.senderName
@@ -2289,7 +2292,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               </button>
                             )}
                           </div>
-                        </div>
                         </motion.div>
                       );
                       return elements;
@@ -2399,7 +2401,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* ── Compose area ── */}
               <div className={`shrink-0 border-t transition-colors duration-200 ${
                   composeMode === "note"
-                    ? "border-amber-100 bg-white"
+                    ? "border-amber-200 bg-amber-50/95"
                     : "border-slate-100 bg-white"
                 }`}>
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
@@ -2430,10 +2432,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 )}
 
                 {/* Compose card */}
-                <div className={`mx-4 my-3 rounded-[18px] border transition-all duration-200 shadow-[0_4px_24px_rgba(0,0,0,0.07)] ${
+                <div className={`mx-4 my-3 rounded-[18px] border transition-all duration-200 ${
                   composeMode === "note"
-                    ? "border-amber-200 bg-white"
-                    : autoDraftLoading ? "border-orange-200 bg-white" : "border-slate-100 bg-white"
+                    ? "border-amber-300 bg-amber-50 shadow-sm"
+                    : autoDraftLoading ? "border-violet-300 bg-violet-50/40 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/60"
                 }`}>
 
                   {/* Top bar: note mode indicator OR world-class draft badge */}
@@ -2445,16 +2447,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     </div>
                   )}
                   {composeMode === "reply" && autoDraftLoading && (
-                    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 text-xs font-medium text-orange-600">
+                    <div className="flex items-center gap-1.5 px-4 pt-3 pb-0 text-xs font-medium text-violet-600">
                       <RefreshCw className="h-3 w-3 animate-spin" />
                       <span>AI is drafting a reply…</span>
                     </div>
                   )}
                   {composeMode === "reply" && !autoDraftLoading && compose && (
                     <div className="flex items-center gap-2 px-4 pt-3 pb-0">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-orange-600 bg-[#FFF5F0] border border-orange-200 rounded-full px-2 py-0.5">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
                         <Sparkles className="h-3 w-3" />
-                        AI draft
+                        World-class draft
                       </span>
                       <span className="text-xs text-slate-400">Review before sending</span>
                       <button
@@ -2495,8 +2497,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               }}
                               className={`rounded-full h-6 w-6 flex items-center justify-center transition-colors ${
                                 worldClassOpen
-                                  ? "bg-orange-100 text-orange-700"
-                                  : "text-slate-400 hover:text-orange-600 hover:bg-orange-50"
+                                  ? "bg-violet-100 text-violet-700"
+                                  : "text-slate-400 hover:text-violet-600 hover:bg-violet-50"
                               }`}
                             >
                               <Sparkles className="h-3.5 w-3.5 animate-sparkle-shake" />
@@ -2602,7 +2604,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           <Button
                             variant="outline"
                             size="icon"
-                            className="rounded-full h-8 w-8 border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 shrink-0"
+                            className="rounded-full h-8 w-8 border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700 shrink-0"
                             disabled={loadingAction !== null || !selected}
                             onClick={() => fireQuickReply("ai_suggest")}
                             type="button"
@@ -2684,7 +2686,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ) : (
                         <div className="flex items-stretch shrink-0">
                           <Button
-                            className="rounded-l-full rounded-r-none h-9 px-5 bg-[#1C1C1E] hover:bg-[#2C2C2E] text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-[#3C3C3E]"
+                            className="rounded-l-full rounded-r-none h-9 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
                             onClick={() => handleCsSend()}
                           >
@@ -2697,7 +2699,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
-                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-[#1C1C1E] hover:bg-[#2C2C2E] text-white disabled:opacity-30 transition-all duration-150"
+                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
                                 disabled={!compose.trim() || sendMessage.isPending || !selected}
                                 onPointerDown={(e) => e.stopPropagation()}
                               >
@@ -2762,19 +2764,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full bg-white rounded-[28px] border-0 shadow-[0_2px_20px_rgba(0,0,0,0.06)] overflow-hidden flex flex-col">
+          <div className="h-full bg-white rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col">
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
-              <div className="shrink-0 px-5 pt-5 pb-4 bg-white border-b border-slate-100">
+              <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback className="bg-[#FFF5F0] text-[#FF6B35] font-semibold text-lg rounded-[15px]">
+                  <Avatar className="h-12 w-12 border-2 border-teal-200">
+                    <AvatarFallback className="bg-teal-100 text-teal-700 font-semibold text-lg">
                       {selected.initials}
                     </AvatarFallback>
                   </Avatar>
                   <div>
                     <div className="font-semibold text-lg text-slate-900">{selected.name}</div>
-                    <div className="text-sm text-slate-500 flex items-center gap-1 mt-0.5">
+                    <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
                       <Phone className="h-3.5 w-3.5" />
                       {selected.phone}
                     </div>
@@ -2782,7 +2784,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
             ) : (
-              <div className="shrink-0 px-5 pt-5 pb-4 bg-white border-b border-slate-100">
+              <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
                 <div className="flex items-center gap-3">
                   {(() => {
                     const gradientPalette = [
@@ -2798,14 +2800,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     const ini = selected.initials || "?";
                     const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                     return (
-                      <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-[15px] bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
+                      <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
                         {ini}
                       </div>
                     );
                   })()}
                   <div>
                     <div className="font-semibold text-lg text-slate-900">{clientProfile?.name ?? selected.name}</div>
-                    <div className="text-sm text-slate-500 flex items-center gap-1 mt-0.5">
+                    <div className="text-sm text-teal-700 flex items-center gap-1 mt-0.5">
                       <Phone className="h-3.5 w-3.5" />
                       {selected.phone}
                     </div>
@@ -3063,7 +3065,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             const ini = selected.initials || "?";
                             const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                             return (
-                              <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-[15px] bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
+                              <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
                                 {ini}
                               </div>
                             );
@@ -3087,28 +3089,28 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
 
                       {/* Stats grid */}
-                      <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 gap-2">
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <div className="text-[11px] text-slate-400">Frequency</div>
-                          <div className="mt-1 font-semibold text-sm text-slate-900">
+                      <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Frequency</div>
+                          <div className="mt-1 font-semibold text-sm">
                             {clientProfile?.frequency ?? selected.service ?? "—"}
                           </div>
                         </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <div className="text-[11px] text-slate-400">Avg price</div>
-                          <div className="mt-1 font-semibold text-slate-900">
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Avg price</div>
+                          <div className="mt-1 font-semibold">
                             {clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || "—")}
                           </div>
                         </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <div className="text-[11px] text-slate-400">Total bookings</div>
-                          <div className="mt-1 font-semibold text-slate-900">
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Total bookings</div>
+                          <div className="mt-1 font-semibold">
                             {clientProfile ? clientProfile.totalBookings : selected.stats.bookings}
                           </div>
                         </div>
-                        <div className="rounded-xl bg-[#FAFAF8] p-3">
-                          <div className="text-[11px] text-slate-400">Last booking</div>
-                          <div className="mt-1 font-semibold text-sm text-slate-900">
+                        <div className="rounded-2xl border border-slate-200 p-3">
+                          <div className="text-xs text-slate-400">Last booking</div>
+                          <div className="mt-1 font-semibold text-sm">
                             {clientProfile?.lastBookingDate ?? "—"}
                           </div>
                         </div>
@@ -3124,23 +3126,23 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100 mb-2">Today's job</div>
                             <TjCard
                               {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
-                              className={`rounded-2xl border border-slate-200 bg-[#FAFAF8] p-3 space-y-1.5 block${tjUrl ? " hover:border-[#FF6B35]/30 hover:bg-[#FFF5F0] cursor-pointer transition" : ""}`}
+                              className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
                             >
                               <div className="flex items-start justify-between gap-2">
-                                <div className="font-semibold text-sm text-slate-900">
+                                <div className="font-semibold text-sm text-emerald-900">
                                   {new Date(tj.serviceDateTime!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {tj.serviceType}
                                 </div>
-                                {tjUrl && <ExternalLink className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />}
+                                {tjUrl && <ExternalLink className="w-3 h-3 text-emerald-500 shrink-0 mt-0.5" />}
                               </div>
-                              <div className="text-xs text-slate-500 flex items-center gap-1">
+                              <div className="text-xs text-emerald-700 flex items-center gap-1">
                                 <MapPin className="h-3 w-3" />{tj.jobAddress}
                               </div>
                               {(tj as any).teamName && (
-                                <div className="text-xs text-slate-500 flex items-center gap-1">
+                                <div className="text-xs text-emerald-700 flex items-center gap-1">
                                   <Users className="h-3 w-3" />{(tj as any).teamName}
                                 </div>
                               )}
-                              <Badge className="text-xs rounded-full bg-slate-100 text-slate-700 border-slate-200">
+                              <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-800 border-emerald-200">
                                 {jobStatusLabel((tj.jobStatus ?? tj.bookingStatus ?? "assigned") as JobStatus)}
                               </Badge>
                             </TjCard>
@@ -3270,21 +3272,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         );
                       })()}
 
-                      <div className="mt-6 pt-5 border-t border-slate-100 rounded-[24px] border border-slate-200 bg-[#FAFAF8] p-4">
-                        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                          <Bot className="h-4 w-4 text-[#FF6B35]" /> AI insight
-                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-slate-400" />}
+                      <div className="mt-6 pt-5 border-t border-slate-100 rounded-[24px] border border-blue-200 bg-blue-50 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+                          <Bot className="h-4 w-4" /> AI insight
+                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-blue-400" />}
                         </div>
                         {insightLoading && !insightData?.insight ? (
                           <div className="mt-2 space-y-1.5">
-                            <div className="h-3 w-full rounded bg-slate-200/60 animate-pulse" />
-                            <div className="h-3 w-4/5 rounded bg-slate-200/60 animate-pulse" />
-                            <div className="h-3 w-3/5 rounded bg-slate-200/60 animate-pulse" />
+                            <div className="h-3 w-full rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-4/5 rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-3/5 rounded bg-blue-200/60 animate-pulse" />
                           </div>
                         ) : insightData?.insight ? (
-                          <div className="mt-2 text-sm leading-6 text-slate-700">{insightData.insight}</div>
+                          <div className="mt-2 text-sm leading-6 text-blue-900">{insightData.insight}</div>
                         ) : (
-                          <div className="mt-2 text-xs text-slate-400 italic">Select a conversation with messages to generate insight.</div>
+                          <div className="mt-2 text-xs text-blue-400 italic">Select a conversation with messages to generate insight.</div>
                         )}
                       </div>
                     </div>
@@ -3293,14 +3295,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                 {/* ─── AI Upsell Opportunity card ─────────────────── */}
                 {showUpsellCard && (
-                  <Card className="rounded-xl border border-slate-200 bg-[#FAFAF8] shadow-none mx-4 mb-4">
+                  <Card className="rounded-xl border border-emerald-200 bg-emerald-50 shadow-none mx-4 mb-4">
                     <CardContent className="p-4">
-                      <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                        <TrendingUp className="h-4 w-4 text-[#FF6B35]" /> Upsell opportunity
-                        {upsellLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-slate-400" />}
+                      <div className="flex items-center gap-2 text-sm font-medium text-emerald-800">
+                        <TrendingUp className="h-4 w-4" /> Upsell opportunity
+                        {upsellLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-emerald-400" />}
                         {showUpsell && (
                           <button
-                            className="ml-auto text-slate-400 hover:text-slate-600 transition-colors"
+                            className="ml-auto text-emerald-400 hover:text-emerald-600 transition-colors"
                             onClick={() => setUpsellDismissed(selected?.id ?? null)}
                             title="Dismiss"
                           >
@@ -3310,19 +3312,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
                       {upsellLoading && !upsellData?.upsell ? (
                         <div className="mt-2 space-y-1.5">
-                          <div className="h-3 w-full rounded bg-slate-200/60 animate-pulse" />
-                          <div className="h-3 w-4/5 rounded bg-slate-200/60 animate-pulse" />
+                          <div className="h-3 w-full rounded bg-emerald-200/60 animate-pulse" />
+                          <div className="h-3 w-4/5 rounded bg-emerald-200/60 animate-pulse" />
                         </div>
                       ) : showUpsell && upsellData?.upsell ? (
                         <div className="mt-2 space-y-2">
-                          <div className="text-xs text-[#FF6B35] font-medium">{upsellData.upsell.upsellType}</div>
-                          <div className="text-xs text-slate-500 italic">{upsellData.upsell.signal}</div>
-                          <div className="rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-800 leading-5">
+                          <div className="text-xs text-emerald-600 font-medium">{upsellData.upsell.upsellType}</div>
+                          <div className="text-xs text-emerald-700 italic">{upsellData.upsell.signal}</div>
+                          <div className="rounded-xl bg-white border border-emerald-200 px-3 py-2 text-sm text-emerald-900 leading-5">
                             &ldquo;{upsellData.upsell.pitch}&rdquo;
                           </div>
                           <Button
                             size="sm"
-                            className="w-full rounded-xl bg-[#1C1C1E] hover:bg-[#2C2C2E] text-white text-xs h-8"
+                            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8"
                             onClick={() => {
                               setCompose(upsellData.upsell!.pitch);
                               toast.success("Upsell pitch copied to compose box");
@@ -3348,15 +3350,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   };
                   const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
                   return (
-                    <Card className="rounded-xl border border-slate-200 bg-[#FAFAF8] shadow-none mx-4 mb-4">
+                    <Card className="rounded-xl border border-purple-200 bg-purple-50 shadow-none mx-4 mb-4">
                       <CardContent className="p-5">
                         {/* Header row */}
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2.5">
-                            <div className="flex items-center justify-center w-7 h-7 rounded-[8px] bg-[#FFF5F0] border border-orange-200">
-                              <Phone className="h-3.5 w-3.5 text-[#FF6B35]" />
+                            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-100 border border-purple-200">
+                              <Phone className="h-3.5 w-3.5 text-purple-600" />
                             </div>
-                            <span className="text-xs font-semibold text-slate-600 uppercase tracking-widest">Call Debrief</span>
+                            <span className="text-xs font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
                           </div>
                           <div className="flex items-center gap-2">
                             {grade && (
@@ -3366,7 +3368,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             )}
                             <button
                               onClick={() => setDebriefDismissed((prev) => ({ ...prev, [selected!.id]: true }))}
-                              className="flex items-center justify-center w-6 h-6 rounded-full text-slate-300 hover:text-slate-600 hover:bg-slate-100 transition-colors text-base leading-none"
+                              className="flex items-center justify-center w-6 h-6 rounded-full text-purple-300 hover:text-purple-600 hover:bg-purple-100 transition-colors text-base leading-none"
                             >
                               ×
                             </button>
@@ -3380,13 +3382,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               controls
                               src={callDebrief!.audioUrl}
                               className="w-full h-8 rounded-xl"
-                              style={{ accentColor: '#FF6B35' }}
+                              style={{ accentColor: '#7c3aed' }}
                             />
                           </div>
                         )}
 
                         {/* Divider */}
-                        <div className="border-t border-slate-200 mb-4" />
+                        <div className="border-t border-purple-200/70 mb-4" />
 
                         {/* Went well */}
                         <div className="mb-3">
@@ -3394,11 +3396,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <span className="text-green-500 text-xs">✔</span>
                             <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
                           </div>
-                          <p className="text-xs text-slate-700 leading-relaxed pl-4">{callDebrief!.wentWell}</p>
+                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.wentWell}</p>
                         </div>
 
                         {/* Divider */}
-                        <div className="border-t border-slate-100 mb-3" />
+                        <div className="border-t border-purple-200/50 mb-3" />
 
                         {/* Improve */}
                         <div className="mb-4">
@@ -3406,13 +3408,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <span className="text-amber-500 text-xs">▲</span>
                             <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
                           </div>
-                          <p className="text-xs text-slate-700 leading-relaxed pl-4">{callDebrief!.improve}</p>
+                          <p className="text-xs text-purple-800 leading-relaxed pl-4">{callDebrief!.improve}</p>
                         </div>
 
                         {/* Next line suggestion */}
-                        <div className="rounded-2xl bg-white border border-slate-200 px-4 py-3">
-                          <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest mb-1.5">Next time, say:</p>
-                          <p className="text-sm text-slate-800 italic leading-relaxed">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
+                        <div className="rounded-2xl bg-white border border-purple-200 px-4 py-3">
+                          <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1.5">Next time, say:</p>
+                          <p className="text-sm text-purple-900 italic leading-relaxed">&ldquo;{callDebrief!.nextLine}&rdquo;</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -3427,25 +3429,25 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                       {/* Call client */}
                       <button
-                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-100 bg-[#FAFAF8] px-4 py-3 text-left hover:border-[#FF6B35]/30 hover:bg-[#FFF5F0] transition-all duration-150"
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-violet-300 hover:bg-violet-50 transition-all duration-150"
                         onClick={() => {
                           const phone = selected?.phone?.replace(/\D/g, "").slice(-10);
                           if (phone) window.location.href = `openphone://call?to=+1${phone}`;
                         }}
                       >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-[10px] bg-white border border-slate-200 group-hover:border-[#FF6B35]/30 transition-colors shrink-0">
-                          <Phone className="h-4 w-4 text-slate-500 group-hover:text-[#FF6B35] transition-colors" />
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-violet-100 group-hover:bg-violet-200 transition-colors shrink-0">
+                          <Phone className="h-4 w-4 text-violet-600" />
                         </div>
                         <div>
                           <div className="text-sm font-medium text-slate-800">Call client</div>
                           <div className="text-[11px] text-slate-400">Open in OpenPhone</div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-[#FF6B35] transition-colors" />
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-violet-400 transition-colors" />
                       </button>
 
                       {/* Share booking link */}
                       <button
-                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-100 bg-[#FAFAF8] px-4 py-3 text-left hover:border-[#FF6B35]/30 hover:bg-[#FFF5F0] transition-all duration-150"
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-blue-300 hover:bg-blue-50 transition-all duration-150"
                         onClick={() => {
                           const link = `${window.location.origin}/book`;
                           navigator.clipboard.writeText(link).then(() => {
@@ -3454,29 +3456,29 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           });
                         }}
                       >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-[10px] bg-white border border-slate-200 group-hover:border-[#FF6B35]/30 transition-colors shrink-0">
-                          <Mail className="h-4 w-4 text-slate-500 group-hover:text-[#FF6B35] transition-colors" />
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-blue-100 group-hover:bg-blue-200 transition-colors shrink-0">
+                          <Mail className="h-4 w-4 text-blue-600" />
                         </div>
                         <div>
                           <div className="text-sm font-medium text-slate-800">Share booking link</div>
                           <div className="text-[11px] text-slate-400">Copy to clipboard</div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-[#FF6B35] transition-colors" />
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors" />
                       </button>
 
                       {/* Add follow-up */}
                       <button
-                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-100 bg-[#FAFAF8] px-4 py-3 text-left hover:border-[#FF6B35]/30 hover:bg-[#FFF5F0] transition-all duration-150"
+                        className="group flex items-center gap-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-amber-300 hover:bg-amber-50 transition-all duration-150"
                         onClick={() => setAddFollowUpOpen(true)}
                       >
-                        <div className="flex items-center justify-center w-8 h-8 rounded-[10px] bg-white border border-slate-200 group-hover:border-[#FF6B35]/30 transition-colors shrink-0">
-                          <ClipboardList className="h-4 w-4 text-slate-500 group-hover:text-[#FF6B35] transition-colors" />
+                        <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-amber-100 group-hover:bg-amber-200 transition-colors shrink-0">
+                          <ClipboardList className="h-4 w-4 text-amber-600" />
                         </div>
                         <div>
                           <div className="text-sm font-medium text-slate-800">Add follow-up</div>
                           <div className="text-[11px] text-slate-400">Schedule a reminder</div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-[#FF6B35] transition-colors" />
+                        <ChevronRight className="h-4 w-4 text-slate-300 ml-auto group-hover:text-amber-400 transition-colors" />
                       </button>
 
                     </div>
@@ -3486,7 +3488,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
                   <CardContent className="p-5">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-4 space-y-3">
                       {[
                         { label: selected.queue, icon: AlertTriangle },
                         { label: selected.status, icon: CircleDot },
@@ -3494,10 +3496,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ].map((item) => (
                         <div
                           key={item.label}
-                          className="rounded-xl bg-[#FAFAF8] px-3 py-2.5 flex items-center gap-2 text-sm text-slate-700"
+                          className="rounded-2xl border border-slate-200 px-3 py-3 flex items-center justify-between gap-3"
                         >
-                          <item.icon className="h-4 w-4 text-slate-400 shrink-0" />
-                          {item.label}
+                          <div className="flex items-center gap-2 text-sm">
+                            <item.icon className="h-4 w-4 text-slate-400" />
+                            {item.label}
+                          </div>
+                          <ChevronRight className="h-4 w-4 text-slate-300" />
                         </div>
                       ))}
                     </div>
