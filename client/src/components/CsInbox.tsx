@@ -2424,7 +2424,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
-                  <InsertResponseModal open={insertResponseOpen} onClose={() => setInsertResponseOpen(false)} onInsert={(text) => { setCompose(text); setInsertResponseOpen(false); }} />
+                  <InsertResponseModal open={insertResponseOpen} onClose={() => setInsertResponseOpen(false)} onInsert={(text) => { setCompose(text); setInsertResponseOpen(false); }} customerFirstName={selected?.name ? selected.name.split(' ')[0] : undefined} />
                   <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
                   <WorldClassReplyPanel
                     open={worldClassOpen}

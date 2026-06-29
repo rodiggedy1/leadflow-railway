@@ -115,9 +115,10 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onInsert: (text: string) => void;
+  customerFirstName?: string;
 }
 
-export default function InsertResponseModal({ open, onClose, onInsert }: Props) {
+export default function InsertResponseModal({ open, onClose, onInsert, customerFirstName }: Props) {
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
   const [selected, setSelected] = useState<Response>(RESPONSES[0]);
@@ -155,7 +156,9 @@ export default function InsertResponseModal({ open, onClose, onInsert }: Props) 
   }, [filtered]);
 
   const handleInsert = () => {
-    onInsert(selected.message);
+    const firstName = customerFirstName?.trim() || "{first_name}";
+    const text = selected.message.replace(/\{first_name\}/g, firstName);
+    onInsert(text);
     onClose();
   };
 
