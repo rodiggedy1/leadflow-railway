@@ -1215,42 +1215,42 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Revenue Lane header */}
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div style={{fontSize:'11px', fontWeight:700, letterSpacing:'.18em', color:'#A1A8B8', textTransform:'uppercase', marginBottom:'4px'}}>Revenue Lane</div>
-                  <div style={{fontSize:'52px', fontWeight:700, lineHeight:1, color:'#111827'}}>Clients</div>
+                  <div style={{fontSize:'10px', fontWeight:700, letterSpacing:'.18em', color:'#A1A8B8', textTransform:'uppercase', marginBottom:'4px'}}>Revenue Lane</div>
+                  <div style={{fontSize:'28px', fontWeight:700, lineHeight:1, color:'#111827'}}>Clients</div>
                 </div>
-                <div style={{background:'#111827', color:'white', padding:'12px 18px', borderRadius:'999px', fontSize:'17px', fontWeight:600, flexShrink:0, marginTop:'8px'}}>
+                <div style={{background:'#111827', color:'white', padding:'6px 14px', borderRadius:'999px', fontSize:'13px', fontWeight:600, flexShrink:0, marginTop:'4px'}}>
                   {clientConvs.length} open
                 </div>
               </div>
 
               {/* Search bar */}
-              <div className="relative" style={{marginTop:'28px'}}>
-                <Search className="h-4 w-4 absolute text-slate-400" style={{left:'18px', top:'50%', transform:'translateY(-50%)'}} />
+              <div className="relative" style={{marginTop:'16px'}}>
+                <Search className="h-3.5 w-3.5 absolute text-slate-400" style={{left:'12px', top:'50%', transform:'translateY(-50%)'}} />
                 <Input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search clients, leads, bookings"
-                  style={{height:'52px', borderRadius:'16px', background:'#FAFBFC', border:'1px solid rgba(0,0,0,.05)', paddingLeft:'48px', paddingRight:'18px', fontSize:'14px', color:'#111827', boxShadow:'none'}}
-                  className="placeholder:text-slate-300 focus-visible:ring-0 focus-visible:shadow-[0_0_0_4px_rgba(255,106,0,.08)]"
+                  style={{height:'36px', borderRadius:'999px', background:'#F5F5F3', border:'1px solid rgba(0,0,0,.06)', paddingLeft:'32px', paddingRight:'12px', fontSize:'12px', color:'#111827', boxShadow:'none'}}
+                  className="placeholder:text-slate-400 focus-visible:ring-0"
                 />
               </div>
 
               {/* AI priority queue — collapsed by default, hover to expand */}
-              <div className="group cursor-default transition-all" style={{marginTop:'24px', borderRadius:'22px', padding:'22px', background:'#F5F5F0', boxShadow:'0 2px 8px rgba(15,23,42,.04)'}}>
+              <div className="group cursor-default transition-all" style={{marginTop:'12px', borderRadius:'16px', padding:'16px', background:'#F5F5F0', boxShadow:'none'}}>
                 <div className="flex flex-col" style={{gap:'16px'}}>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center justify-center" style={{width:'44px', height:'44px', borderRadius:'14px', background:'#111827'}}>
-                      <Sparkles className="h-5 w-5 text-white" />
+                    <div className="flex items-center justify-center" style={{width:'36px', height:'36px', borderRadius:'10px', background:'#111827'}}>
+                      <Sparkles className="h-4 w-4 text-white" />
                     </div>
                     {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div style={{fontSize:'18px', fontWeight:700, color:'#111827'}}>Client priority queue</div>
+                    <div style={{fontSize:'14px', fontWeight:700, color:'#111827'}}>Client priority queue</div>
                     {priorityItems.length === 0 && !priorityLoading && (
-                      <div style={{marginTop:'4px', fontSize:'15px', fontWeight:500, color:'#6B7280', lineHeight:'1.4'}}>No urgent items right now.</div>
+                      <div style={{marginTop:'4px', fontSize:'12px', fontWeight:400, color:'#6B7280', lineHeight:'1.4'}}>No urgent items right now.</div>
                     )}
                     {priorityItems.length > 0 && (
-                      <div style={{marginTop:'4px', fontSize:'15px', fontWeight:500, color:'#6B7280', lineHeight:'1.4'}}>
+                      <div style={{marginTop:'4px', fontSize:'12px', fontWeight:400, color:'#6B7280', lineHeight:'1.4'}}>
                         {priorityItems.length} high-intent {priorityItems.length === 1 ? "opportunity" : "opportunities"}. {priorityItems.slice(0, 2).map(i => i.reason).join(" ")}
                       </div>
                     )}
@@ -1295,8 +1295,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* Client conversation list */}
-              <div style={{marginTop:'24px'}}>
-                <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+              <div style={{marginTop:'12px'}}>
+                <div style={{display:'flex', flexDirection:'column', gap:'8px'}}>
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
@@ -1442,19 +1442,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className="w-full text-left transition-all"
                         style={{
-                          borderRadius: '22px',
-                          padding: '22px',
+                          borderRadius: '16px',
+                          padding: '14px',
                           border: 'none',
-                          boxShadow: isSelected ? '0 6px 22px rgba(0,0,0,.08)' : '0 6px 22px rgba(0,0,0,.05)',
+                          boxShadow: isSelected ? '0 2px 12px rgba(0,0,0,.08)' : '0 1px 4px rgba(0,0,0,.05)',
                           background: isSelected ? '#FFFDFC' : 'white',
-                          borderLeft: isSelected ? '4px solid #FF6B00' : isUnread ? '4px solid #FF6B00' : hasUnanswered ? '4px solid #F59E0B' : '4px solid transparent',
+                          borderLeft: isSelected ? '3px solid #FF6B00' : isUnread ? '3px solid #FF6B00' : hasUnanswered ? '3px solid #F59E0B' : '3px solid transparent',
                         }}
                       >
                         {/* Row 1: Avatar + Name + Time */}
                         <div className="flex items-start" style={{gap:'12px'}}>
                           {/* Avatar */}
                           <div className="relative shrink-0">
-                            <div className={`relative flex items-center justify-center bg-gradient-to-br ${gradient} text-base font-bold text-white`} style={{width:'48px', height:'48px', borderRadius:'15px'}}>
+                            <div className={`relative flex items-center justify-center bg-gradient-to-br ${gradient} text-sm font-bold text-white`} style={{width:'40px', height:'40px', borderRadius:'12px'}}>
                               {initials}
                             </div>
                             {null /* priority badge removed per design */}
@@ -1469,12 +1469,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
                                 </span>
                               )}
-                              <span style={{fontSize:'20px', fontWeight:700, lineHeight:'1.2', color:'#111827'}}>{conversation.name}</span>
+                              <span style={{fontSize:'14px', fontWeight:700, lineHeight:'1.2', color:'#111827'}}>{conversation.name}</span>
                               {unreadCount > 0 && (
                                 <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount}</span>
                               )}
                             </div>
-                            <div style={{marginTop:'2px', fontSize:'15px', fontWeight:500, color:'#667085'}}>
+                            <div style={{marginTop:'1px', fontSize:'11px', fontWeight:400, color:'#9CA3AF'}}>
                               {conversation.phone || conversation.location}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
                           </div>
@@ -1498,12 +1498,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
 
                         {/* Row 2: Message preview */}
-                        <div style={{marginTop:'16px', fontSize:'16px', color:'#6B7280', lineHeight:'1.4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+                        <div style={{marginTop:'6px', fontSize:'12px', color:'#6B7280', lineHeight:'1.4', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
                         {/* Row 3: Status capsule + job value + linked badge */}
-                        <div style={{marginTop:'16px', display:'flex', alignItems:'center', gap:'8px'}}>
+                        <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
                           {/* Status capsule — tiny, 28px height */}
-                          <div style={{fontSize:'13px', fontWeight:600, color: statusKey === 'resolved' || statusKey === 'solved' ? '#16a34a' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#EA580C' : '#6B7280'}}>
+                          <div style={{fontSize:'11px', fontWeight:600, color: statusKey === 'resolved' || statusKey === 'solved' ? '#16a34a' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#EA580C' : '#6B7280'}}>
                             {sc.label}
                           </div>
                           {/* Job value */}
