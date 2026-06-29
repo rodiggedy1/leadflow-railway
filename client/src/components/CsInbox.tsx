@@ -1468,7 +1468,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               <span style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.02em', color: isUnread ? '#111827' : '#4b5563'}}>{conversation.name}</span>
                             </div>
                             <div style={{marginTop:'1px', fontSize:'11px', fontWeight:500, color: isUnread ? '#667085' : '#b1b9c6', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
-                              {conversation.phone || conversation.location}{conversation.service ? ` · ${conversation.service}` : ''}
+                              {conversation.service || conversation.location || ''}
                             </div>
                           </div>
 
@@ -1784,7 +1784,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               <span style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.02em', color: isUnread ? '#111827' : '#4b5563'}}>{conversation.name}</span>
                             </div>
                             <div style={{fontSize:'11px', fontWeight:500, color: isUnread ? '#667085' : '#b1b9c6', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
-                              {conversation.phone}{conversation.service ? ` · ${conversation.service}` : ''}
+                              {conversation.service || ''}
                             </div>
                           </div>
                           {/* Time */}
