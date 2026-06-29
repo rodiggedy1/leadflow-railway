@@ -3366,7 +3366,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
     }),
     /**
      * resolveSession — marks a CS inbox session as resolved (archived).
-     * Sets csResolvedAt to the current timestamp.
+     * Sets csResolvedAt to the current timestamp and clears the notification
+     * by setting lastReadAt = lastCustomerReplyAt (same invariant as sendMessage
+     * and markHandled — any "handled" action must clear the notification state).
      */
     resolveSession: opsChatProcedure
       .input(z.object({ sessionId: z.number() }))
@@ -3375,7 +3377,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         if (!db) throw new Error("Database unavailable");
         await db
           .update(conversationSessions)
-          .set({ csResolvedAt: Date.now() } as any)
+          .set({ csResolvedAt: Date.now(), lastReadAt: sql`lastCustomerReplyAt` } as any)
           .where(eq(conversationSessions.id, input.sessionId));
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastResolve } = await import("./sseBroadcast");
