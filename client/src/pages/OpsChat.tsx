@@ -1910,23 +1910,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <aside className={cn(
-          "shrink-0 rounded-[30px] flex flex-col items-center py-4 gap-3 overflow-visible transition-all",
-          activeTab === "cs"
-            ? "w-[50px] bg-white border border-slate-200 px-1.5 shadow-sm"
-            : "w-[84px] bg-slate-950 border border-white/10 px-3 shadow-2xl shadow-slate-900/20"
-        )}>
+        <aside className="shrink-0 w-[52px] rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#1C1C1E', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 8px 32px rgba(0,0,0,0.18)'}}>
           <button
             onClick={() => setSidebarCollapsed(false)}
-            className={cn(
-              "mb-1 flex items-center justify-center rounded-2xl transition",
-              activeTab === "cs"
-                ? "h-8 w-8 bg-slate-100 text-slate-700 hover:bg-slate-200 shadow-sm"
-                : "h-12 w-12 bg-white text-slate-900 shadow-lg hover:bg-slate-100"
-            )}
+            className="mb-1 h-8 w-8 flex items-center justify-center rounded-[12px] text-white/40 hover:text-white/80 hover:bg-white/10 transition"
             title="Expand sidebar"
           >
-            <ChevronRight className="w-5 h-5" />
+            <ChevronRight className="w-4 h-4" />
           </button>
           {activeTab === "cs" ? (
             /* CS filter buttons: A P N A R */
@@ -1941,12 +1931,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 key={f.id}
                 onClick={() => setCsFilter(f.id)}
                 className={cn(
-                  cn("relative flex items-center justify-center rounded-2xl font-bold transition",
-                    activeTab === "cs" ? "w-8 h-8 text-[10px]" : "w-12 h-12 text-[11px]"
-                  ),
-                  activeTab === "cs"
-                    ? (csFilter === f.id ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900")
-                    : (csFilter === f.id ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white")
+                  "relative w-8 h-8 flex items-center justify-center rounded-[12px] font-bold text-[10px] transition",
+                  csFilter === f.id
+                    ? "bg-white text-[#1C1C1E] shadow-sm"
+                    : "text-white/50 hover:text-white hover:bg-white/10"
                 )}
                 title={f.label}
               >
@@ -1964,8 +1952,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     key={ch.key}
                     onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
                     className={cn(
-                      "relative w-12 h-12 rounded-2xl flex items-center justify-center text-[11px] font-bold transition",
-                      activeChannel === ch.key ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
+                      "relative w-8 h-8 rounded-[12px] flex items-center justify-center text-[10px] font-bold transition",
+                      activeChannel === ch.key && activeTab === "channels"
+                        ? "bg-white text-[#1C1C1E] shadow-sm"
+                        : "text-white/50 hover:text-white hover:bg-white/10"
                     )}
                     title={ch.label}
                   >
@@ -1982,12 +1972,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               <button
                 onClick={() => { handleSetActiveTab("today"); }}
                 className={cn(
-                  "w-12 h-12 rounded-2xl flex items-center justify-center text-xs font-bold transition",
-                  activeTab === "today" ? "bg-white/20 text-white" : "bg-white/8 text-white/80 hover:bg-white/14 hover:text-white"
+                  "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                  activeTab === "today"
+                    ? "bg-white text-[#1C1C1E] shadow-sm"
+                    : "text-white/50 hover:text-white hover:bg-white/10"
                 )}
                 title="Today Ops"
               >
-                <CalendarDays className="w-5 h-5" />
+                <CalendarDays className="w-4 h-4" />
               </button>
             </>
           )}
@@ -1996,15 +1988,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             <button
               onClick={() => setAgentStatusOpen(v => !v)}
               className={cn(
-                "rounded-2xl flex items-center justify-center transition border",
-                activeTab === "cs" ? "w-8 h-8" : "w-12 h-12",
-                activeTab === "cs"
-                  ? (agentStatusOpen ? "border-slate-300 bg-slate-200 text-slate-900" : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900")
-                  : (agentStatusOpen ? "border-white/30 bg-white/20 text-white" : "border-white/15 bg-white/8 text-white/80 hover:bg-white/14 hover:text-white")
+                "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                agentStatusOpen
+                  ? "bg-white text-[#1C1C1E] shadow-sm"
+                  : "text-white/50 hover:text-white hover:bg-white/10"
               )}
               title="Agent status"
             >
-              <Users className="w-5 h-5" />
+              <Users className="w-4 h-4" />
             </button>
             {/* DM unread badge */}
             {totalDmUnread > 0 && (
@@ -2112,66 +2103,46 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             )}
           </div>
           {/* ── Page navigation shortcuts ── */}
-          <div className="mt-auto flex flex-col items-center gap-2 pb-1">
-            <div className={cn("h-px bg-slate-200 mb-1", activeTab === "cs" ? "w-5" : "w-7")} />
-            <a
-              href="/admin/leads"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
-              title="Leads / Admin Dashboard"
-            >
+          <div className="flex flex-col items-center gap-1.5 pb-1">
+            <div className="h-px w-5 bg-white/10 mb-1" />
+            <a href="/admin/leads" target="_blank" rel="noopener noreferrer"
+              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
+              title="Leads / Admin Dashboard">
               <LayoutDashboard className="w-4 h-4" />
             </a>
-            <a
-              href="/admin/command-center"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
-              title="Control Tower"
-            >
+            <a href="/admin/command-center" target="_blank" rel="noopener noreferrer"
+              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
+              title="Control Tower">
               <Radio className="w-4 h-4" />
             </a>
-            <a
-              href="/admin/field-management"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
-              title="Field Mgmt Day Board"
-            >
+            <a href="/admin/field-management" target="_blank" rel="noopener noreferrer"
+              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
+              title="Field Mgmt Day Board">
               <ClipboardList className="w-4 h-4" />
             </a>
-            <a
-              href="/admin/hiring"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
-              title="Hiring Pipeline"
-            >
+            <a href="/admin/hiring" target="_blank" rel="noopener noreferrer"
+              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
+              title="Hiring Pipeline">
               <Briefcase className="w-4 h-4" />
             </a>
-            <a
-              href="/agent"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition"
-              title="Agent Workspace"
-            >
+            <a href="/agent" target="_blank" rel="noopener noreferrer"
+              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
+              title="Agent Workspace">
               <UserCircle className="w-4 h-4" />
             </a>
           </div>
-          {/* Profile photo avatar — always visible even when collapsed */}
+          {/* Profile photo avatar */}
           <div className="pb-1">
             <button
               onClick={() => setProfilePhotoOpen(true)}
-              className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-white shadow hover:ring-slate-300 transition"
+              className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow"
               title={`${callerName} — edit profile photo`}
             >
               {profilePhotoUrl ? (
                 <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
               ) : (
                 <div
-                  className="w-full h-full flex items-center justify-center text-xs font-bold text-white"
+                  className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white"
                   style={{ backgroundColor: senderHex(callerName) }}
                 >
                   {(callerName ?? "?")[0].toUpperCase()}
