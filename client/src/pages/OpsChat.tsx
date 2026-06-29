@@ -1904,11 +1904,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? 'py-5 pl-5 gap-4' : 'p-5 gap-5'}`}>
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? '' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
-      {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
-      {sidebarCollapsed ? (
+      {/* ── LEFT SIDEBAR — only shown outside CS tab (CS tab gets rail via prop) ── */}
+      {activeTab !== 'cs' && sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
         <aside className="shrink-0 w-[57px] self-stretch rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           <button
@@ -2151,7 +2151,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             </button>
           </div>
         </aside>
-      ) : (
+      ) : activeTab !== 'cs' ? (
       <div className="w-[300px] shrink-0 h-full bg-white rounded-3xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-3">
@@ -2347,7 +2347,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </p>
         </button>
       </div>
-      )} {/* end sidebarCollapsed ternary */}
+      ) : null} {/* end sidebarCollapsed ternary — null on CS tab (rail is passed as prop) */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       <div className={`flex-1 flex flex-row overflow-hidden min-h-0 ${activeTab === 'cs' ? '' : 'gap-5'}`}>
@@ -2928,7 +2928,80 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: CS Inbox */}
         {activeTab === "cs" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <CsInbox onSwitchTab={handleSetActiveTab} activeFilter={csFilter} setActiveFilter={setCsFilter} focusSessionId={focusCsSessionId} />
+            <CsInbox
+              onSwitchTab={handleSetActiveTab}
+              activeFilter={csFilter}
+              setActiveFilter={setCsFilter}
+              focusSessionId={focusCsSessionId}
+              rail={
+                <aside className="rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                  <button
+                    onClick={() => setSidebarCollapsed(false)}
+                    className="mb-1 h-8 w-8 flex items-center justify-center rounded-[12px] text-white/40 hover:text-white/80 hover:bg-white/10 transition"
+                    title="Expand sidebar"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                  {([  
+                    { id: "All"      as InboxFilter, label: "All" },
+                    { id: "Priority" as InboxFilter, label: "Priority" },
+                    { id: "New"      as InboxFilter, label: "New" },
+                    { id: "Active"   as InboxFilter, label: "Active" },
+                    { id: "Resolved" as InboxFilter, label: "Resolved" },
+                  ] as const).map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setCsFilter(f.id)}
+                      className={cn(
+                        "relative w-8 h-8 flex items-center justify-center rounded-[12px] font-bold text-[10px] transition",
+                        csFilter === f.id
+                          ? "bg-white text-[#1C1C1E] shadow-sm"
+                          : "text-white/50 hover:text-white hover:bg-white/10"
+                      )}
+                      title={f.label}
+                    >
+                      {f.label.charAt(0)}
+                    </button>
+                  ))}
+                  <div className="relative mt-auto">
+                    <button
+                      onClick={() => setAgentStatusOpen(v => !v)}
+                      className={cn(
+                        "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                        agentStatusOpen ? "bg-white text-[#1C1C1E] shadow-sm" : "text-white/50 hover:text-white hover:bg-white/10"
+                      )}
+                      title="Agent status"
+                    >
+                      <Users className="w-4 h-4" />
+                    </button>
+                    {totalDmUnread > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
+                        {totalDmUnread > 9 ? "9+" : totalDmUnread}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-center gap-1.5 pb-1">
+                    <div className="h-px w-5 bg-white/10 mb-1" />
+                    <a href="/admin/leads" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Leads"><LayoutDashboard className="w-4 h-4" /></a>
+                    <a href="/admin/command-center" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Control Tower"><Radio className="w-4 h-4" /></a>
+                    <a href="/admin/field-management" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Field Mgmt"><ClipboardList className="w-4 h-4" /></a>
+                    <a href="/admin/hiring" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Hiring"><Briefcase className="w-4 h-4" /></a>
+                    <a href="/agent" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Agent Workspace"><UserCircle className="w-4 h-4" /></a>
+                  </div>
+                  <div className="pb-3">
+                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow" title={`${callerName} — edit profile`}>
+                      {profilePhotoUrl ? (
+                        <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: senderHex(callerName) }}>
+                          {(callerName ?? "?")[0].toUpperCase()}
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </aside>
+              }
+            />
           </div>
         )}
 

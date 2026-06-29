@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import Picker from "@emoji-mart/react";
@@ -204,8 +204,9 @@ type CsInboxProps = {
   activeFilter?: InboxFilter;
   setActiveFilter?: (f: InboxFilter) => void;
   focusSessionId?: number | null;
+  rail?: React.ReactNode;
 };
-export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActiveFilter: setFilterProp, focusSessionId }: CsInboxProps) {
+export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActiveFilter: setFilterProp, focusSessionId, rail }: CsInboxProps) {
   const [activeFilterLocal, setActiveFilterLocal] = useState<InboxFilter>("All");
   const activeFilter = filterProp ?? activeFilterLocal;
   const setActiveFilter = setFilterProp ?? setActiveFilterLocal;
@@ -1203,8 +1204,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   return (
     <>
     <div className="h-full overflow-hidden flex flex-col text-slate-900" style={{background: 'transparent'}}>
-      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0 pr-6">
-        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-6 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+      <div className="w-full flex flex-col flex-1 min-h-0 p-6">
+        <div className={`grid flex-1 min-h-0 overflow-hidden gap-6 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+          {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
