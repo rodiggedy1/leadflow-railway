@@ -1202,11 +1202,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col text-slate-900">
-      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0">
-        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-[14px] flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+    <div className="h-full overflow-hidden flex flex-col text-slate-900" style={{background: 'radial-gradient(ellipse at 20% 10%, #fdf6ee 0%, #f5f0eb 40%, #ede8e3 100%)'}}>
+      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0 px-5 py-5">
+        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
+          <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
 
@@ -1594,7 +1594,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col h-full py-0 gap-0 bg-white">
+          <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
               {/* Operations Lane header */}
@@ -1875,7 +1875,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] border-0 shadow-none flex flex-col h-full py-0 gap-0 bg-white overflow-hidden">
+          <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header: single-row, clean typography hierarchy ── */}
               <div className="border-b border-slate-100 px-5 py-3 md:px-6 bg-white">
@@ -2764,7 +2764,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full bg-white rounded-[28px] border-0 shadow-none overflow-hidden flex flex-col">
+          <div className="h-full rounded-[30px] overflow-hidden flex flex-col" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
               <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
