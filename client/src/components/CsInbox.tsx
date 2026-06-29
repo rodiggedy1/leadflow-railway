@@ -1444,45 +1444,36 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         className="w-full text-left relative"
                         style={{
                           borderRadius: '20px',
-                          padding: '12px 10px 12px 12px',
-                          border: 'none',
+                          padding: isUnread ? '14px 10px 14px 14px' : '12px 10px 12px 12px',
+                          border: isUnread ? 'none' : '1px solid rgba(17,24,39,.03)',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : '0 1px 4px rgba(17,24,39,.04)',
-                          background: isSelected ? '#ffffff' : '#faf9f7',
+                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : isUnread ? '0 18px 50px rgba(17,24,39,.10)' : 'none',
+                          background: isSelected ? '#ffffff' : isUnread ? '#ffffff' : '#fcfbf8',
                         }}
                       >
-                        {/* Selected accent bar */}
-                        {isSelected && (
-                          <div style={{position:'absolute', left:0, top:'20px', bottom:'20px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
+                        {/* Unread / selected accent bar */}
+                        {(isUnread || isSelected) && (
+                          <div style={{position:'absolute', left:0, top:'18px', bottom:'18px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
                         <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'6px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient}}>
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.75) brightness(.98)'}}>
                             {initials}
                           </div>
 
                           {/* Content: name + metadata + preview + status */}
                           <div className="min-w-0">
                             <div className="flex items-center" style={{gap:'6px'}}>
-                              {isUnread && (
-                                <span className="relative flex shrink-0" style={{width:'8px', height:'8px'}}>
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
-                                </span>
-                              )}
-                              <span style={{fontSize:'13px', fontWeight:900, lineHeight:'1.2', letterSpacing:'-0.02em', color:'#111318'}}>{conversation.name}</span>
-                              {unreadCount > 0 && (
-                                <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount}</span>
-                              )}
+                              <span style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.02em', color: isUnread ? '#111827' : '#4b5563'}}>{conversation.name}</span>
                             </div>
-                            <div style={{marginTop:'1px', fontSize:'11px', fontWeight:500, color:'#98a2b3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            <div style={{marginTop:'1px', fontSize:'11px', fontWeight:500, color: isUnread ? '#667085' : '#b1b9c6', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                               {conversation.phone || conversation.location}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
                           </div>
 
                           {/* Timestamp — top right */}
-                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:500, color:'#b0b8c4'}}>
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight: isUnread ? 800 : 500, color: isUnread ? '#667085' : '#c0c6d0'}}>
                             {conversation.lastMsgTs
                               ? (() => {
                                   const d = new Date(conversation.lastMsgTs);
@@ -1500,7 +1491,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
 
                         {/* Row 2: Message preview — spans content + time columns */}
-                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#2f3747' : '#9aa3b2', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
                         {/* Row 3: Status pill — minimal outlined style matching target screenshot */}
                         <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
@@ -1770,46 +1761,37 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         className="w-full text-left relative"
                         style={{
                           borderRadius: '20px',
-                          padding: '12px 10px 12px 12px',
-                          border: 'none',
+                          padding: isUnread ? '14px 10px 14px 14px' : '12px 10px 12px 12px',
+                          border: isUnread ? 'none' : '1px solid rgba(17,24,39,.03)',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : '0 1px 4px rgba(17,24,39,.04)',
-                          background: isSelected ? '#ffffff' : '#faf9f7',
+                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : isUnread ? '0 18px 50px rgba(17,24,39,.10)' : 'none',
+                          background: isSelected ? '#ffffff' : isUnread ? '#ffffff' : '#fcfbf8',
                         }}
                       >
-                        {/* Selected accent bar */}
-                        {isSelected && (
-                          <div style={{position:'absolute', left:0, top:'20px', bottom:'20px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
+                        {/* Unread / selected accent bar */}
+                        {(isUnread || isSelected) && (
+                          <div style={{position:'absolute', left:0, top:'18px', bottom:'18px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
                         <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'6px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient}}>
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.75) brightness(.98)'}}>
                             {initials}
                           </div>
                           {/* Content */}
                           <div className="min-w-0">
                             <div className="flex items-center" style={{gap:'6px'}}>
-                              {isUnread && (
-                                <span className="relative flex shrink-0" style={{width:'8px', height:'8px'}}>
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
-                                </span>
-                              )}
-                              <span style={{fontSize:'13px', fontWeight:900, lineHeight:'1.2', letterSpacing:'-0.02em', color:'#111318'}}>{conversation.name}</span>
-                              {unreadCount2 > 0 && (
-                                <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount2}</span>
-                              )}
+                              <span style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.02em', color: isUnread ? '#111827' : '#4b5563'}}>{conversation.name}</span>
                             </div>
-                            <div style={{fontSize:'11px', fontWeight:500, color:'#9aa3b2', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                            <div style={{fontSize:'11px', fontWeight:500, color: isUnread ? '#667085' : '#b1b9c6', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                               {conversation.phone}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
                           </div>
                           {/* Time */}
-                          <div style={{fontSize:'12px', fontWeight:500, color:'#b0b8c4', whiteSpace:'nowrap'}}>{conversation.wait}</div>
+                          <div style={{fontSize:'12px', fontWeight: isUnread ? 800 : 500, color: isUnread ? '#667085' : '#c0c6d0', whiteSpace:'nowrap'}}>{conversation.wait}</div>
                         </div>
                         {/* Row 2: preview */}
-                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
+                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#2f3747' : '#9aa3b2', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
                         {/* Status pill row — matches client column style */}
                         <div style={{marginTop:'8px'}}>
                           <div style={{
