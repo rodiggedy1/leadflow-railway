@@ -2461,11 +2461,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 )}
 
                 {/* Compose card */}
-                <div className={`mx-6 my-4 rounded-[18px] border transition-all duration-200 ${
-                  composeMode === "note"
-                    ? "border-amber-300 bg-amber-50 shadow-sm"
-                    : autoDraftLoading ? "border-violet-300 bg-violet-50/40 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/60"
-                }`}>
+                <div
+                  className="transition-all duration-200"
+                  style={{
+                    margin:'0 24px 16px',
+                    borderRadius:'28px',
+                    background: composeMode === 'note' ? '#fffbeb' : 'white',
+                    boxShadow:'0 20px 60px rgba(17,24,39,.06)',
+                    border:`1px solid ${composeMode === 'note' ? 'rgba(251,191,36,.3)' : 'rgba(17,24,39,.06)'}`,
+                  }}
+                >
 
                   {/* Top bar: note mode indicator OR world-class draft badge */}
                   {composeMode === "note" && (
