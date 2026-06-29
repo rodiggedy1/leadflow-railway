@@ -1203,14 +1203,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   return (
     <>
     <div className="h-full overflow-hidden flex flex-col text-slate-900" style={{background: 'transparent'}}>
-      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0 px-5 pr-5">
-        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-4 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
+      <div className="mx-auto max-w-[1600px] w-full flex flex-col flex-1 min-h-0 pr-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px] gap-6 flex-1 min-h-0 overflow-hidden" style={{gridAutoRows: '100%', alignItems: 'stretch'}}>
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              <div className="p-6 space-y-6 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
 
-              {/* Revenue Lane header */}
+              {/* Revenue Lane header */
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Revenue Lane</div>
@@ -1293,7 +1293,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
               {/* Client conversation list */}
               <div>
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
@@ -1596,8 +1596,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-4 md:p-5 space-y-4 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
-              {/* Operations Lane header */}
+              <div className="p-6 space-y-6 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              {/* Operations Lane header */
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Operations Lane</div>
@@ -1663,7 +1663,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* Team conversation list */}
-              <div className="space-y-2">
+              <div className="space-y-4">
                 {teamConvs.length === 0 && (
                   <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-6 text-center">
                     <SprayCan className="h-8 w-8 text-slate-300 mx-auto mb-2" />
@@ -1878,7 +1878,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header: single-row, clean typography hierarchy ── */}
-              <div className="border-b border-slate-100 px-5 py-3 md:px-6 bg-white">
+              <div className="border-b border-slate-100 px-6 py-4 bg-white">
                 <div className="flex items-center justify-between gap-3">
                   {/* Left: avatar + name stack */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -2039,13 +2039,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-5 py-5 md:px-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <div className="flex-1 overflow-y-auto px-6 py-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.15 }}
-                  className="space-y-3"
+                  className="space-y-4"
                 >
                   {/* Merge SMS messages and call recordings into a single chronological timeline */}
                   {(() => {
@@ -2086,7 +2086,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const showSeparator = item.ts > 100 && dateStr !== lastDateStr;
                       if (showSeparator) lastDateStr = dateStr;
                       const separator = showSeparator ? (
-                        <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-2">
+                        <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-6">
                           <div className="flex-1 h-px bg-slate-200" />
                           <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{displayDate}</span>
                           <div className="flex-1 h-px bg-slate-200" />
@@ -2226,7 +2226,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                          className={`group max-w-[78%] rounded-[22px] border px-4 py-3 shadow-sm ${bubbleStyles(message.sender)}`}
+                          className={`group max-w-[78%] rounded-[22px] border px-7 py-6 shadow-sm ${bubbleStyles(message.sender)}`}
                         >
                           {(() => {
                             const displayName = message.senderName && message.senderName !== "OpenPhone"
@@ -2432,7 +2432,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 )}
 
                 {/* Compose card */}
-                <div className={`mx-4 my-3 rounded-[18px] border transition-all duration-200 ${
+                <div className={`mx-6 my-4 rounded-[18px] border transition-all duration-200 ${
                   composeMode === "note"
                     ? "border-amber-300 bg-amber-50 shadow-sm"
                     : autoDraftLoading ? "border-violet-300 bg-violet-50/40 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/60"
@@ -2511,7 +2511,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   )}
 
                   {/* Full-width textarea */}
-                  <div className="relative px-4 pt-2.5 pb-1">
+                  <div className="relative px-6 pt-3 pb-2">
                     {/* Emoji picker popup — only in reply mode */}
                     {showEmojiPicker && composeMode === "reply" && (
                       <div ref={emojiPickerRef} className="absolute bottom-full mb-2 left-0 z-50 shadow-xl rounded-2xl overflow-hidden">
@@ -2596,7 +2596,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
 
                   {/* Bottom toolbar */}
-                  <div className="flex items-center justify-between gap-2 px-3 pb-3 pt-1">
+                  <div className="flex items-center justify-between gap-2 px-6 pb-4 pt-2">
                     {/* Left: AI Suggest + FAQ + Objections */}
                     <div className="flex items-center gap-1.5">
                       <Tooltip>
@@ -2767,7 +2767,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           <div className="h-full rounded-[30px] overflow-hidden flex flex-col" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
-              <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
+              <div className="shrink-0 px-6 pt-6 pb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
                 <div className="flex items-center gap-3">
                   <Avatar className="h-12 w-12 border-2 border-teal-200">
                     <AvatarFallback className="bg-teal-100 text-teal-700 font-semibold text-lg">
@@ -2784,7 +2784,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
             ) : (
-              <div className="shrink-0 px-5 pt-5 pb-5 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
+              <div className="shrink-0 px-6 pt-6 pb-6 bg-gradient-to-br from-teal-50 to-emerald-50 border-b border-teal-100">
                 <div className="flex items-center gap-3">
                   {(() => {
                     const gradientPalette = [
@@ -3046,7 +3046,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               <>
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
                   <CardContent className="p-0">
-                    <div className="p-5 space-y-0 bg-white">
+                    <div className="p-6 space-y-0 bg-white">
                       {/* Name + phone + address */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
@@ -3089,7 +3089,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
 
                       {/* Stats grid */}
-                      <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-2 gap-3">
+                      <div className="mt-8 pt-6 border-t border-slate-100 grid grid-cols-2 gap-4">
                         <div className="rounded-2xl border border-slate-200 p-3">
                           <div className="text-xs text-slate-400">Frequency</div>
                           <div className="mt-1 font-semibold text-sm">
@@ -3123,7 +3123,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const TjCard = tjUrl ? "a" : "div";
                         return (
                           <div>
-                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100 mb-2">Today's job</div>
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Today's job</div>
                             <TjCard
                               {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
                               className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
@@ -3153,7 +3153,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Recent job history */}
                       {clientProfile && clientProfile.recentJobs.length > 0 && (
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100 mb-2">Recent history</div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Recent history</div>
                           <div className="space-y-2">
                             {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
                               const l27Url = job.bookingId
@@ -3193,8 +3193,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Context flags */}
                       {!clientProfile && (
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-6 pt-5 border-t border-slate-100">Context flags</div>
-                          <div className="mt-3 space-y-2">
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100">Context flags</div>
+                          <div className="mt-4 space-y-3">
                             {[
                               selected.stats.bookings === 0
                                 ? "First-time customer"
@@ -3423,9 +3423,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                 {/* ─── Actions card (merged: follow-up + call + share link) ─── */}
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
-                  <CardContent className="p-5">
+                  <CardContent className="p-6">
                     <div className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-4">Actions</div>
-                    <div className="flex flex-col gap-2.5">
+                    <div className="flex flex-col gap-3">
 
                       {/* Call client */}
                       <button
@@ -3486,7 +3486,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </Card>
 
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none">
-                  <CardContent className="p-5">
+                  <CardContent className="p-6">
                     <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Thread status</div>
                     <div className="mt-4 space-y-3">
                       {[
