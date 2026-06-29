@@ -1878,8 +1878,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen overflow-hidden" style={{background: '#eef3f8'}}>
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(99,102,241,0.10),transparent_28%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.08),transparent_24%)]" />
+    <div className="flex flex-col h-full overflow-hidden" style={{background: 'transparent'}}>
+      <div className="pointer-events-none absolute inset-0" />
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
         <div className="flex items-center justify-between gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 shrink-0">
@@ -1904,7 +1904,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className="flex flex-1 min-h-0 overflow-hidden p-5 gap-5">
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? '' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
@@ -2379,7 +2379,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       )} {/* end sidebarCollapsed ternary */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-row overflow-hidden min-h-0 gap-5">
+      <div className={`flex-1 flex flex-row overflow-hidden min-h-0 ${activeTab === 'cs' ? '' : 'gap-5'}`}>
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
              This keeps scrollTop, refs, and query caches alive across tab switches.
              No save/restore needed — the DOM node simply never dies. ── */}

@@ -188,7 +188,7 @@ function GlobalOpsChat() {
       {shouldRenderOpsChat && (
         <div
           className="fixed inset-0 z-50 overflow-hidden"
-          style={{ background: '#eef3f8', display: state === "open" ? "flex" : "none" }}
+          style={{ background: 'radial-gradient(ellipse at 20% 10%, #fdf6ee 0%, #f5f0eb 40%, #ede8e3 100%)', display: state === "open" ? "flex" : "none" }}
         >
           <OpsChat onMinimize={minimize} onClose={close} />
         </div>
