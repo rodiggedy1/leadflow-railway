@@ -2038,13 +2038,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto px-6 py-6" style={{background:'linear-gradient(180deg,#fffdfc,#faf8f4)'}} ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'linear-gradient(180deg,#fffdfc,#faf8f4)',padding:'36px 32px 24px'}} ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.15 }}
-                  className="space-y-4"
+                  style={{display:'flex',flexDirection:'column',gap:'24px'}}
                 >
                   {/* Merge SMS messages and call recordings into a single chronological timeline */}
                   {(() => {
