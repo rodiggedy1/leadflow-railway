@@ -3093,49 +3093,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 <Card className="rounded-none border-0 border-b border-slate-100 shadow-none overflow-hidden">
                   <CardContent className="p-0">
                     <div className="p-6 space-y-0 bg-white">
-                      {/* Name + phone + address */}
+                      {/* CLIENT PROFILE label + metrics */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        <div className="mt-3 flex items-center gap-3">
-                          {(() => {
-                            const gradientPalette = [
-                              "from-violet-500 to-fuchsia-500",
-                              "from-rose-500 to-orange-400",
-                              "from-emerald-500 to-teal-500",
-                              "from-sky-500 to-cyan-500",
-                              "from-amber-500 to-yellow-400",
-                              "from-pink-500 to-rose-400",
-                              "from-indigo-500 to-blue-500",
-                              "from-teal-500 to-green-500",
-                            ];
-                            const ini = selected.initials || "?";
-                            const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
-                            return (
-                              <div className={`shrink-0 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientPalette[idx]} text-base font-bold text-white shadow-sm`}>
-                                {ini}
-                              </div>
-                            );
-                          })()}
-                          <div className="text-2xl font-semibold">
-                            {clientProfile?.name ?? selected.name}
-                          </div>
-                        </div>
-                        <div className="mt-2 flex flex-wrap gap-2 text-sm text-slate-500">
-                          <span className="inline-flex items-center gap-1">
-                            <Phone className="h-4 w-4" />
-                            {selected.phone}
-                          </span>
-                          {(clientProfile?.address ?? selected.location) && (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
-                              {clientProfile?.address ?? selected.location}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Stats grid */}
-                      <div className="mt-8 pt-6 border-t border-slate-100 grid grid-cols-2 gap-4">
+                        {/* Stats grid */}
+                        <div className="mt-4 grid grid-cols-2 gap-4">
                         <div className="rounded-2xl border border-slate-200 p-3">
                           <div className="text-xs text-slate-400">Frequency</div>
                           <div className="mt-1 font-semibold text-sm">
@@ -3160,7 +3122,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             {clientProfile?.lastBookingDate ?? "—"}
                           </div>
                         </div>
-                      </div>
+                      </div>{/* end stats grid */}
+                      </div>{/* end CLIENT PROFILE wrapper */}
 
                       {/* Today's job if any */}
                       {clientProfile?.todayJob && (() => {
