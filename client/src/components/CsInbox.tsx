@@ -1471,7 +1471,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
                                 </span>
                               )}
-                              <span style={{fontSize:'13px', fontWeight:800, lineHeight:'1.2', letterSpacing:'-0.02em', color:'#111318'}}>{conversation.name}</span>
+                              <span style={{fontSize:'13px', fontWeight:900, lineHeight:'1.2', letterSpacing:'-0.03em', color:'#0d1117'}}>{conversation.name}</span>
                               {unreadCount > 0 && (
                                 <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount}</span>
                               )}
@@ -1796,7 +1796,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
                                 </span>
                               )}
-                              <span style={{fontSize:'13px', fontWeight:800, lineHeight:'1.2', letterSpacing:'-0.02em', color:'#111318'}}>{conversation.name}</span>
+                              <span style={{fontSize:'13px', fontWeight:900, lineHeight:'1.2', letterSpacing:'-0.03em', color:'#0d1117'}}>{conversation.name}</span>
                               {unreadCount2 > 0 && (
                                 <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount2}</span>
                               )}
