@@ -1210,7 +1210,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-6 space-y-6 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
 
-              {/* Revenue Lane header */
+              {/* Revenue Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Revenue Lane</div>
@@ -1597,7 +1597,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="p-6 space-y-6 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
-              {/* Operations Lane header */
+              {/* Operations Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 mb-0.5">Operations Lane</div>
