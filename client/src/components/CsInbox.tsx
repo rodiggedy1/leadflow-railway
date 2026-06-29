@@ -1305,15 +1305,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     const isResolved = !!(conversation as any).csResolvedAt;
 
                     // ── Color-hash gradient from initials ──
+                    // Softer, desaturated gradients — Stripe/Linear aesthetic
                     const gradientPalette = [
-                      "from-violet-500 to-fuchsia-500",
-                      "from-rose-500 to-orange-400",
-                      "from-emerald-500 to-teal-500",
-                      "from-sky-500 to-cyan-500",
-                      "from-amber-500 to-yellow-400",
-                      "from-pink-500 to-rose-400",
-                      "from-indigo-500 to-blue-500",
-                      "from-teal-500 to-green-500",
+                      "linear-gradient(135deg,#7C4DFF,#C05CFF)",  // muted purple
+                      "linear-gradient(135deg,#FF7242,#FF9D1C)",  // warm orange
+                      "linear-gradient(135deg,#0EA76D,#24C98A)",  // soft green
+                      "linear-gradient(135deg,#5B6CFF,#4AA3FF)",  // slate blue
+                      "linear-gradient(135deg,#E06B8B,#F4A0B0)",  // dusty rose
+                      "linear-gradient(135deg,#6B7CFF,#9B8CFF)",  // periwinkle
+                      "linear-gradient(135deg,#2EB8A6,#4DD9C5)",  // teal
+                      "linear-gradient(135deg,#F5A623,#F7C35F)",  // amber
                     ];
                     const initials = conversation.initials || "?";
                     const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
@@ -1457,7 +1458,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         {/* Row grid: avatar | content | time */}
                         <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'8px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className={`flex items-center justify-center bg-gradient-to-br ${gradient} font-bold text-white`} style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0}}>
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient}}>
                             {initials}
                           </div>
 
