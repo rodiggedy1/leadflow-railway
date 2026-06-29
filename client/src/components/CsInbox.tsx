@@ -1287,7 +1287,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
                 {/* Expanded items — visible on hover */}
                 {priorityItems.length > 0 && (
-                  <div className="mt-3 space-y-1.5 max-h-0 overflow-hidden group-hover:max-h-96 transition-all duration-300">
+                  <div className="mt-3 space-y-1.5">
                     {priorityItems.map((item, idx) => {
                       const style = priorityTagStyle(item.tag);
                       return (
@@ -1658,7 +1658,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
                 {/* Expanded items — visible on hover */}
                 {teamConvs.filter((c) => !!(c as any).hasUnanswered).length > 0 && (
-                  <div className="mt-3 space-y-1.5 max-h-0 overflow-hidden group-hover:max-h-96 transition-all duration-300">
+                  <div className="mt-3 space-y-1.5">
                     {teamConvs.filter((c) => !!(c as any).hasUnanswered).slice(0, 5).map((item) => {
                       const initials2 = item.initials || "?";
                       return (
