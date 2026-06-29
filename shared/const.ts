@@ -30,6 +30,8 @@ export const ADMIN_PAGES = [
   { id: "hiring",            label: "Hiring",        group: "Operations" },
   { id: "team-pay",           label: "Team Pay",      group: "Operations" },
   { id: "confirmation-calls", label: "Confirm Calls", group: "Operations" },
+  { id: "cleaner-calls",       label: "Cleaner Calls", group: "Operations" },
+  { id: "payments",            label: "Payments",      group: "Operations" },
   { id: "missed-calls",        label: "Missed Calls",  group: "Voice" },
 ] as const;
 
