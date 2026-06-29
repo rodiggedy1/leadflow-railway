@@ -3096,23 +3096,29 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* CLIENT PROFILE label + metrics */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        {/* Stats rows — Apple Settings style */}
-                        <div className="mt-4" style={{borderTop:'1px solid rgba(17,24,39,.06)'}}>
+                        {/* Snapshot grid — 2 cols, label above value */}
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0', marginTop:'16px', borderTop:'1px solid rgba(17,24,39,.06)', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
                           {[
-                            { label: 'Frequency',     value: clientProfile?.frequency ?? selected.service ?? '—' },
-                            { label: 'Avg Price',     value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
-                            { label: 'Lifetime Jobs', value: clientProfile ? clientProfile.totalBookings : selected.stats.bookings },
-                            { label: 'Last Booking',  value: (() => {
+                            { label: 'Frequency',      value: clientProfile?.frequency ?? selected.service ?? '—' },
+                            { label: 'Avg price',      value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
+                            { label: 'Total bookings', value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
+                            { label: 'Last booking',   value: (() => {
                               const raw = clientProfile?.lastBookingDate;
                               if (!raw) return '—';
                               const d = new Date(raw);
                               if (isNaN(d.getTime())) return raw;
                               return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
                             })() },
-                          ].map(({ label, value }) => (
-                            <div key={label} style={{display:'flex', justifyContent:'space-between', alignItems:'center', height:'58px', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
-                              <span style={{fontSize:'14px', fontWeight:500, color:'#6b7280'}}>{label}</span>
-                              <span style={{fontSize:'14px', fontWeight:600, color:'#111827'}}>{value}</span>
+                          ].map(({ label, value }, i) => (
+                            <div key={label} style={{
+                              padding: '16px 0 16px 0',
+                              paddingLeft: i % 2 === 0 ? '0' : '24px',
+                              paddingRight: i % 2 === 0 ? '24px' : '0',
+                              borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                              borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                            }}>
+                              <div style={{fontSize:'11px', fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase', color:'#9ca3af', marginBottom:'6px'}}>{label}</div>
+                              <div style={{fontSize:'22px', fontWeight:700, color:'#111827', lineHeight:1.1}}>{value}</div>
                             </div>
                           ))}
                         </div>
