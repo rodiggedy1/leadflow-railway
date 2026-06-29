@@ -1304,16 +1304,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     const hasUnanswered = !!(conversation as any).hasUnanswered;
                     const isResolved = !!(conversation as any).csResolvedAt;
 
-                    // ── Color-hash gradient from initials — softer, desaturated per spec ──
+                    // ── Color-hash gradient from initials ──
                     const gradientPalette = [
-                      "linear-gradient(135deg,#7C4DFF,#C05CFF)",  // purple
-                      "linear-gradient(135deg,#FF7242,#FF9D1C)",  // orange
-                      "linear-gradient(135deg,#0EA76D,#24C98A)",  // green
-                      "linear-gradient(135deg,#5B6CFF,#4AA3FF)",  // blue
-                      "linear-gradient(135deg,#FF7242,#FF9D1C)",  // orange (repeat)
-                      "linear-gradient(135deg,#7C4DFF,#C05CFF)",  // purple (repeat)
-                      "linear-gradient(135deg,#5B6CFF,#4AA3FF)",  // blue (repeat)
-                      "linear-gradient(135deg,#0EA76D,#24C98A)",  // green (repeat)
+                      "from-violet-500 to-fuchsia-500",
+                      "from-rose-500 to-orange-400",
+                      "from-emerald-500 to-teal-500",
+                      "from-sky-500 to-cyan-500",
+                      "from-amber-500 to-yellow-400",
+                      "from-pink-500 to-rose-400",
+                      "from-indigo-500 to-blue-500",
+                      "from-teal-500 to-green-500",
                     ];
                     const initials = conversation.initials || "?";
                     const hashIdx = (initials.charCodeAt(0) * 31 + (initials.charCodeAt(1) || 0)) % gradientPalette.length;
@@ -1431,7 +1431,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         layout
                         animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                         transition={{ duration: 0.45 }}
-                        className="group relative rounded-[24px]"
+                        className="group relative rounded-[18px]"
                       >
                       <motion.button
                         whileHover={{ y: -1 }}
@@ -1442,22 +1442,22 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className="w-full text-left relative"
                         style={{
-                          borderRadius: '24px',
-                          padding: '14px 12px',
+                          borderRadius: '18px',
+                          padding: '10px 8px',
                           border: 'none',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 18px 40px rgba(17,24,39,.07)' : '0 12px 32px rgba(17,24,39,.06)',
-                          background: isSelected ? 'white' : 'linear-gradient(180deg,#FFFFFF,#FEFDFC)',
+                          boxShadow: isSelected ? '0 2px 8px rgba(17,19,24,.04), 0 8px 24px rgba(17,19,24,.08), 0 20px 40px rgba(17,19,24,.07)' : 'none',
+                          background: isSelected ? 'white' : 'transparent',
                         }}
                       >
-                        {/* Selected accent bar — spec point 8: gradient #FF6A1A→#FF8B38, 4px, radius 999px */}
+                        {/* Selected accent bar */}
                         {isSelected && (
-                          <div style={{position:'absolute', left:0, top:'20px', bottom:'20px', width:'4px', borderRadius:'999px', background:'linear-gradient(180deg,#FF6A1A,#FF8B38)'}} />
+                          <div style={{position:'absolute', left:0, top:'20px', bottom:'20px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
-                        {/* Row grid: avatar | content | time — 22px gap per spec point 10 */}
-                        <div style={{display:'grid', gridTemplateColumns:'42px 1fr auto', columnGap:'22px', alignItems:'start'}}>
-                          {/* Avatar — 42×42, softer gradient per spec point 1 */}
-                          <div className="flex items-center justify-center font-bold text-white" style={{width:'42px', height:'42px', borderRadius:'12px', fontSize:'14px', fontWeight:700, flexShrink:0, background:gradient}}>
+                        {/* Row grid: avatar | content | time */}
+                        <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'8px', alignItems:'start'}}>
+                          {/* Avatar */}
+                          <div className={`flex items-center justify-center bg-gradient-to-br ${gradient} font-bold text-white`} style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0}}>
                             {initials}
                           </div>
 
@@ -1470,18 +1470,18 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   <span className="relative inline-flex rounded-full bg-orange-500" style={{width:'8px', height:'8px'}} />
                                 </span>
                               )}
-                              <span style={{fontSize:'18px', fontWeight:800, lineHeight:'1.2', letterSpacing:'-0.03em', color:'#111827'}}>{conversation.name}</span>
+                              <span style={{fontSize:'13px', fontWeight:700, lineHeight:'1.2', letterSpacing:'-0.01em', color:'#111318'}}>{conversation.name}</span>
                               {unreadCount > 0 && (
                                 <span style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#FF6B00', color:'white', fontSize:'11px', fontWeight:700, minWidth:'20px', height:'20px', padding:'0 6px'}}>{unreadCount}</span>
                               )}
                             </div>
-                            <div style={{marginTop:'3px', fontSize:'15px', fontWeight:500, color:'#98A2B3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            <div style={{marginTop:'1px', fontSize:'11px', fontWeight:500, color:'#98a2b3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                               {conversation.phone || conversation.location}{conversation.service ? ` · ${conversation.service}` : ''}
                             </div>
                           </div>
 
-                          {/* Timestamp — top right, spec point 4 */}
-                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'15px', fontWeight:700, color:'#A2A9B6'}}>
+                          {/* Timestamp — top right */}
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'11px', fontWeight:600, color:'#98a2b3'}}>
                             {conversation.lastMsgTs
                               ? (() => {
                                   const d = new Date(conversation.lastMsgTs);
@@ -1498,12 +1498,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           </div>
                         </div>
 
-                        {/* Row 2: Status pill — above preview per spec point 10 */}
-                        <div style={{marginTop:'10px', display:'flex', alignItems:'center', gap:'6px'}}>
+                        {/* Row 2: Message preview — spans content + time columns */}
+                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+
+                        {/* Row 3: Status pill — spans content + time columns */}
+                        <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
                           <div style={{
                             height:'22px', padding:'0 8px', borderRadius:'999px', fontSize:'11px', fontWeight:700, display:'inline-flex', alignItems:'center',
-                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#15803D' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#C2410C' : '#4B5563',
-                            background: statusKey === 'resolved' || statusKey === 'solved' ? '#EDF8F2' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#FFF5EB' : '#F5F5F5',
+                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#0f8f63' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#EA580C' : '#6B7280',
+                            background: statusKey === 'resolved' || statusKey === 'solved' ? '#ecfdf3' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#fff5f0' : '#f3f4f6',
                           }}>
                             {sc.label}
                           </div>
@@ -1519,10 +1522,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             </div>
                           )}
                         </div>
-
-                        {/* Row 3: Message preview — below status per spec point 10 */}
-                        <div style={{marginTop:'8px', fontSize:'17px', fontWeight:600, color:'#404756', lineHeight:'1.45', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
-
                       </motion.button>
                       {/* Subtle resolve button — only on unresolved cards */}
                       {!isResolved && (
