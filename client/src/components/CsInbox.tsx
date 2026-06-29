@@ -1443,7 +1443,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         className="w-full text-left relative"
                         style={{
                           borderRadius: '18px',
-                          padding: '12px',
+                          padding: '10px 8px',
                           border: 'none',
                           minHeight: 'unset',
                           boxShadow: isSelected ? '0 2px 8px rgba(17,19,24,.04), 0 8px 24px rgba(17,19,24,.08), 0 20px 40px rgba(17,19,24,.07)' : 'none',
@@ -1455,9 +1455,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           <div style={{position:'absolute', left:0, top:'20px', bottom:'20px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
-                        <div style={{display:'grid', gridTemplateColumns:'40px 1fr auto', columnGap:'10px', alignItems:'start'}}>
+                        <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'8px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className={`flex items-center justify-center bg-gradient-to-br ${gradient} font-bold text-white`} style={{width:'40px', height:'40px', borderRadius:'13px', fontSize:'15px', fontWeight:700, flexShrink:0}}>
+                          <div className={`flex items-center justify-center bg-gradient-to-br ${gradient} font-bold text-white`} style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0}}>
                             {initials}
                           </div>
 
