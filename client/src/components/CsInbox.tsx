@@ -3096,33 +3096,26 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* CLIENT PROFILE label + metrics */}
                       <div>
                         <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        {/* Stats grid */}
-                        <div className="mt-4 grid grid-cols-2 gap-4">
-                        <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Frequency</div>
-                          <div className="mt-1 font-semibold text-sm">
-                            {clientProfile?.frequency ?? selected.service ?? "—"}
-                          </div>
+                        {/* Stats rows — Apple Settings style */}
+                        <div className="mt-4" style={{borderTop:'1px solid rgba(17,24,39,.06)'}}>
+                          {[
+                            { label: 'Frequency',     value: clientProfile?.frequency ?? selected.service ?? '—' },
+                            { label: 'Avg Price',     value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
+                            { label: 'Lifetime Jobs', value: clientProfile ? clientProfile.totalBookings : selected.stats.bookings },
+                            { label: 'Last Booking',  value: (() => {
+                              const raw = clientProfile?.lastBookingDate;
+                              if (!raw) return '—';
+                              const d = new Date(raw);
+                              if (isNaN(d.getTime())) return raw;
+                              return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                            })() },
+                          ].map(({ label, value }) => (
+                            <div key={label} style={{display:'flex', justifyContent:'space-between', alignItems:'center', height:'58px', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
+                              <span style={{fontSize:'14px', fontWeight:500, color:'#6b7280'}}>{label}</span>
+                              <span style={{fontSize:'14px', fontWeight:600, color:'#111827'}}>{value}</span>
+                            </div>
+                          ))}
                         </div>
-                        <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Avg price</div>
-                          <div className="mt-1 font-semibold">
-                            {clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || "—")}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Total bookings</div>
-                          <div className="mt-1 font-semibold">
-                            {clientProfile ? clientProfile.totalBookings : selected.stats.bookings}
-                          </div>
-                        </div>
-                        <div className="rounded-2xl border border-slate-200 p-3">
-                          <div className="text-xs text-slate-400">Last booking</div>
-                          <div className="mt-1 font-semibold text-sm">
-                            {clientProfile?.lastBookingDate ?? "—"}
-                          </div>
-                        </div>
-                      </div>{/* end stats grid */}
                       </div>{/* end CLIENT PROFILE wrapper */}
 
                       {/* Today's job if any */}
