@@ -2396,32 +2396,26 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
                     );
                   })()}
-                  {/* ── Conversation Memory — inline system annotation ── */}
+                  {/* ── Conversation Memory — horizontal pill chips ── */}
                   {(memoryLoading || memoryBullets.length > 0) && (
-                    <div className="pt-1 pb-3">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Sparkles className="h-3 w-3 text-violet-400 shrink-0" />
-                        <span className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest">Conversation Memory</span>
-                        {memoryLoading && <div className="h-1.5 w-1.5 rounded-full bg-violet-300 animate-pulse ml-1" />}
+                    <div style={{paddingTop:'4px',paddingBottom:'16px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
+                        <Sparkles style={{width:'11px',height:'11px',color:'#a78bfa',flexShrink:0}} />
+                        <span style={{fontSize:'10px',fontWeight:700,color:'#a78bfa',textTransform:'uppercase',letterSpacing:'.1em'}}>Conversation Memory</span>
+                        {memoryLoading && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#c4b5fd',animation:'pulse 1.5s infinite',marginLeft:'2px'}} />}
                       </div>
                       {memoryLoading && memoryBullets.length === 0 ? (
-                        <div className="space-y-1.5 pl-1">
-                          {[1,2,3].map(i => (
-                            <div key={i} className="flex items-center gap-2">
-                              <div className="h-1 w-1 rounded-full bg-violet-200 animate-pulse shrink-0" />
-                              <div className={`h-2 rounded bg-violet-100 animate-pulse ${i === 1 ? "w-44" : i === 2 ? "w-36" : "w-40"}`} />
-                            </div>
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                          {[80,110,90].map((w,i) => (
+                            <div key={i} style={{height:'26px',width:`${w}px`,borderRadius:'100px',background:'#ede9fe',animation:'pulse 1.5s infinite'}} />
                           ))}
                         </div>
                       ) : (
-                        <ul className="space-y-1 pl-1">
+                        <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
                           {memoryBullets.map((bullet, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="text-violet-300 mt-0.5 shrink-0 text-[10px]">✦</span>
-                              <span className="text-xs text-slate-500 leading-4">{bullet}</span>
-                            </li>
+                            <span key={i} style={{display:'inline-flex',alignItems:'center',height:'26px',padding:'0 10px',borderRadius:'100px',background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',fontSize:'12px',fontWeight:500,color:'#6d5acd',whiteSpace:'nowrap'}}>{bullet}</span>
                           ))}
-                        </ul>
+                        </div>
                       )}
                     </div>
                   )}
