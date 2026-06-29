@@ -153,6 +153,33 @@ const conversations: Conversation[] = [
   },
 ];
 
+/** Converts plain-text URLs in a string into clickable <a> elements, with overflow-safe word-break. */
+function linkifyText(text: string, isLight: boolean): React.ReactNode {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) =>
+    urlRegex.test(part) ? (
+      <a
+        key={i}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          color: isLight ? '#4f6ef7' : '#93c5fd',
+          textDecoration: 'underline',
+          wordBreak: 'break-all',
+          overflowWrap: 'anywhere',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {part}
+      </a>
+    ) : (
+      <span key={i} style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{part}</span>
+    )
+  );
+}
+
 function bubbleStyles(sender: MsgSender) {
   switch (sender) {
     case "client":
@@ -2200,7 +2227,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                 )}
                                 <span className="ml-auto text-[10px] text-amber-400">{message.time}</span>
                               </div>
-                              <div className="text-sm text-amber-900 leading-relaxed">{message.text}</div>
+                              <div className="text-sm text-amber-900 leading-relaxed" style={{wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>
                             </div>
                           </motion.div>
                         );
@@ -2229,7 +2256,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
                               style={{background:'white',borderRadius:'24px',padding:'20px',boxShadow:'0 10px 30px rgba(17,24,39,.05)'}}
                             >
-                              {message.text && <div style={{fontSize:'15px',lineHeight:1.6,color:'#101828'}}>{message.text}</div>}
+                              {message.text && <div style={{fontSize:'15px',lineHeight:1.6,color:'#101828',wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
                               {message.media && message.media.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {message.media.map((url, mi) => (
@@ -2275,7 +2302,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
                               style={{background:'#101828',borderRadius:'24px',padding:'20px',boxShadow:'0 16px 40px rgba(16,24,40,.18)'}}
                             >
-                              {message.text && <div style={{fontSize:'17px',fontWeight:600,color:'white',lineHeight:1.55}}>{message.text}</div>}
+                              {message.text && <div style={{fontSize:'17px',fontWeight:600,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, false)}</div>}
                               {message.media && message.media.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {message.media.map((url, mi) => (
@@ -2302,7 +2329,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
                             </div>
-                            {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
+                            {message.text && <div className="mt-1.5 text-sm leading-6" style={{wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
                             {message.media && message.media.length > 0 && (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {message.media.map((url, mi) => (
