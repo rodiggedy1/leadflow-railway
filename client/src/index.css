@@ -1111,3 +1111,7 @@
 
 /* Hide scrollbar in Daily Recap modal (Webkit/Chrome/Safari) */
 .daily-recap-modal::-webkit-scrollbar { display: none; }
+
+/* ── CsInbox: hide scrollbars, keep scrolling functional ─────────── */
+.cs-inbox-scroll::-webkit-scrollbar { display: none; }
+.cs-inbox-scroll { scrollbar-width: none; -ms-overflow-style: none; }

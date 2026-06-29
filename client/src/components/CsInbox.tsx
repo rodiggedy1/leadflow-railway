@@ -1210,7 +1210,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
           <Card className="rounded-[32px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: '#fffdfb', border: 'none', boxShadow: '0 8px 40px rgba(17,19,24,.07)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-[6px] [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-[rgba(0,0,0,.08)] [&::-webkit-scrollbar-thumb]:rounded-[999px]" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
 
               {/* Revenue Lane header */}
               <div className="flex items-start justify-between gap-3">
@@ -1594,7 +1594,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="p-6 space-y-6 flex-1 overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full" style={{scrollBehavior:'smooth'}}>
+              <div className="cs-inbox-scroll p-6 space-y-6 flex-1 overflow-y-auto" style={{scrollBehavior:'smooth'}}>
               {/* Operations Lane header */}
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -2037,7 +2037,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto px-6 py-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
@@ -2813,7 +2813,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
             )}
-            <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+            <div className="cs-inbox-scroll overflow-y-auto flex-1">
             {selected.queue === "Teams" ? (
               /* ── TEAMS PANEL ── */
               <>
