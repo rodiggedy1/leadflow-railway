@@ -155,16 +155,35 @@ const conversations: Conversation[] = [
 function bubbleStyles(sender: MsgSender) {
   switch (sender) {
     case "client":
-      return "bg-white border-slate-200 text-slate-900";
+      return "text-slate-900";
     case "agent":
-      return "bg-slate-900 border-slate-900 text-white ml-auto";
+      return "text-white ml-auto";
     case "system":
-      return "bg-blue-50 border-blue-200 text-blue-800";
+      return "bg-blue-50 border-slate-200 text-blue-800";
     case "cleaner":
       return "bg-amber-50 border-amber-200 text-amber-800";
     case "note":
       return "bg-amber-50 border-amber-300 text-amber-900";
   }
+}
+function bubbleInlineStyle(sender: MsgSender): React.CSSProperties {
+  if (sender === 'client') return {
+    background: 'white',
+    border: 'none',
+    borderRadius: '24px',
+    padding: '20px',
+    boxShadow: '0 10px 30px rgba(17,24,39,.05)',
+    maxWidth: '64%',
+  };
+  if (sender === 'agent') return {
+    background: '#101828',
+    border: 'none',
+    borderRadius: '24px',
+    padding: '20px',
+    boxShadow: '0 16px 40px rgba(16,24,40,.18)',
+    maxWidth: '64%',
+  };
+  return {};
 }
 
 function queueTone(queue: Queue) {
@@ -1868,12 +1887,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           {/* ── CENTER: Thread ── */}
           <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              {/* ── Chat header: single-row, clean typography hierarchy ── */}
-              <div className="border-b border-slate-100 px-6 py-4 bg-white">
-                <div className="flex items-center justify-between gap-3">
+              {/* ── Chat header ── */}
+              <div style={{height:'88px', padding:'0 24px', background:'white', borderBottom:'1px solid rgba(17,24,39,.06)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'16px', flexShrink:0}}>
                   {/* Left: avatar + name stack */}
-                  <div className="flex items-center gap-3 min-w-0">
-                    {/* Circular avatar */}
+                  <div className="flex items-center gap-4 min-w-0">
+                    {/* Avatar */}
                     {selected && (() => {
                       const gradientPalette = [
                         "from-violet-500 to-fuchsia-500",
@@ -1888,7 +1906,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const ini = selected.initials || "?";
                       const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                       return (
-                        <div className={`shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br ${gradientPalette[idx]} text-sm font-bold text-white shadow-sm`}>
+                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'56px', height:'56px', borderRadius:'18px', fontSize:'18px', fontWeight:800}}>
                           {ini}
                         </div>
                       );
@@ -1925,7 +1943,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </form>
                       ) : (
                         <div className="flex items-center gap-1.5 group">
-                          <h2 className="text-[17px] font-bold tracking-tight text-slate-900 leading-tight truncate">{selected.name}</h2>
+                          <h2 style={{fontSize:'30px', fontWeight:800, color:'#111827', lineHeight:1.1}} className="tracking-tight leading-tight truncate">{selected.name}</h2>
                           <button
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-500"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
@@ -1937,8 +1955,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       )}
                       {/* Sub-line: phone + queue badge */}
                       <div className="flex items-center gap-2 mt-0.5">
-                        {selected.phone && <span className="text-[11px] font-mono text-slate-400 tracking-wide">{selected.phone}</span>}
-                        {selected.phone && selected.queue && <span className="text-slate-200">·</span>}
+                        {selected.phone && <span style={{fontSize:'16px', color:'#7b8394', fontWeight:400}}>{selected.phone}</span>}
+                        {selected.phone && selected.queue && <span style={{color:'#7b8394', margin:'0 4px'}}>·</span>}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Badge className={`rounded-full border cursor-pointer text-[10px] px-2 py-0 h-4 ${tone.tone} hover:opacity-80 transition-opacity`}>
@@ -1965,15 +1983,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     </div>
                   </div>
 
-                  {/* Right: action icons in a compact rounded pill row */}
-                  <div className="flex items-center gap-0.5 shrink-0 bg-slate-50 border border-slate-200 rounded-full px-1.5 py-1">
+                  {/* Right: action icons */}
+                  <div className="flex items-center gap-2 shrink-0">
                     {/* Call via OpenPhone */}
                     {selected?.phone && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <a
                             href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                           >
                             <Phone className="h-4 w-4" />
                           </a>
@@ -1989,7 +2009,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             type="button"
                             onClick={() => syncOutbound.mutate({ sessionId: selected.id, leadPhone: selected.phone })}
                             disabled={syncOutbound.isPending}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-colors disabled:opacity-40"
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                           >
                             <RefreshCw className={`h-4 w-4 ${syncOutbound.isPending ? 'animate-spin' : ''}`} />
                           </button>
@@ -2003,7 +2025,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <button
                           type="button"
                           onClick={() => setNewConvOpen(true)}
-                          className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-violet-600 hover:bg-violet-50 transition-colors"
+                          style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                          onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                          onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                         >
                           <PenSquare className="h-4 w-4" />
                         </button>
@@ -2018,7 +2042,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             type="button"
                             onClick={() => resolveSession.mutate({ sessionId: selected.id })}
                             disabled={resolveSession.isPending}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40"
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                           >
                             <CheckCircle2 className="h-4 w-4" />
                           </button>
@@ -2030,13 +2056,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto px-6 py-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{padding:'36px 32px 24px', background:'linear-gradient(180deg,#fffdfc,#faf8f4)'}} ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.15 }}
-                  className="space-y-4"
+                  className="space-y-6"
                 >
                   {/* Merge SMS messages and call recordings into a single chronological timeline */}
                   {(() => {
@@ -2217,7 +2243,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                          className={`group max-w-[78%] rounded-[22px] border px-7 py-6 shadow-sm ${bubbleStyles(message.sender)}`}
+                          className={`group ${bubbleStyles(message.sender)}`}
+                          style={bubbleInlineStyle(message.sender)}
                         >
                           {(() => {
                             const displayName = message.senderName && message.senderName !== "OpenPhone"
@@ -2240,11 +2267,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                     )}
                                   </div>
                                 )}
-                                <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
+                                <span style={{fontSize: isAgent ? '13px' : '12px', fontWeight:700, color:'#8b95a5', textTransform:'uppercase', letterSpacing:'.08em'}}>{displayName}</span>
                               </div>
                             );
                           })()}
-                          {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
+                          {message.text && <div style={{marginTop:'6px', fontSize: message.sender === 'agent' ? '17px' : '15px', fontWeight: message.sender === 'agent' ? 600 : 400, lineHeight:1.6}}>{message.text}</div>}
                           {message.media && message.media.length > 0 && (
                             <div className="mt-2 flex flex-wrap gap-2">
                               {message.media.map((url, mi) => (
@@ -2265,7 +2292,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             </div>
                           )}
                           <div className="mt-2 flex items-center justify-between gap-2">
-                            <div className="text-xs opacity-60">{message.time}</div>
+                            <div style={{fontSize:'13px', color:'#98a2b3', fontWeight:400}}>{message.time}</div>
                             {message.sender === "client" && message.text && message.text.trim().length > 0 && (
                               <button
                                 onClick={() => {
@@ -2353,30 +2380,26 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   })()}
                   {/* ── Conversation Memory — inline system annotation ── */}
                   {(memoryLoading || memoryBullets.length > 0) && (
-                    <div className="pt-1 pb-3">
+                    <div style={{paddingTop:'8px', paddingBottom:'16px'}}>
                       <div className="flex items-center gap-1.5 mb-2">
                         <Sparkles className="h-3 w-3 text-violet-400 shrink-0" />
-                        <span className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest">Conversation Memory</span>
+                        <span style={{fontSize:'10px', fontWeight:600, color:'#a78bfa', textTransform:'uppercase', letterSpacing:'.1em'}}>Conversation Memory</span>
                         {memoryLoading && <div className="h-1.5 w-1.5 rounded-full bg-violet-300 animate-pulse ml-1" />}
                       </div>
                       {memoryLoading && memoryBullets.length === 0 ? (
-                        <div className="space-y-1.5 pl-1">
+                        <div className="flex flex-wrap gap-1.5">
                           {[1,2,3].map(i => (
-                            <div key={i} className="flex items-center gap-2">
-                              <div className="h-1 w-1 rounded-full bg-violet-200 animate-pulse shrink-0" />
-                              <div className={`h-2 rounded bg-violet-100 animate-pulse ${i === 1 ? "w-44" : i === 2 ? "w-36" : "w-40"}`} />
-                            </div>
+                            <div key={i} style={{height:'26px', borderRadius:'100px', background:'#ede9fe', width: i===1?'80px':i===2?'64px':'72px'}} className="animate-pulse" />
                           ))}
                         </div>
                       ) : (
-                        <ul className="space-y-1 pl-1">
+                        <div className="flex flex-wrap gap-1.5">
                           {memoryBullets.map((bullet, i) => (
-                            <li key={i} className="flex items-start gap-2">
-                              <span className="text-violet-300 mt-0.5 shrink-0 text-[10px]">✦</span>
-                              <span className="text-xs text-slate-500 leading-4">{bullet}</span>
-                            </li>
+                            <span key={i} style={{display:'inline-flex', alignItems:'center', height:'26px', padding:'0 10px', borderRadius:'100px', background:'#f5f3ff', border:'1px solid #ede9fe', fontSize:'11px', fontWeight:500, color:'#6d28d9', whiteSpace:'nowrap'}}>
+                              {bullet}
+                            </span>
                           ))}
-                        </ul>
+                        </div>
                       )}
                     </div>
                   )}
@@ -2392,9 +2415,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* ── Compose area ── */}
               <div className={`shrink-0 border-t transition-colors duration-200 ${
                   composeMode === "note"
-                    ? "border-amber-200 bg-amber-50/95"
-                    : "border-slate-100 bg-white"
-                }`}>
+                    ? "bg-amber-50/95"
+                    : "bg-white"
+                }`} style={{borderTopColor: composeMode === 'note' ? 'rgba(251,191,36,.3)' : 'rgba(17,24,39,.06)', paddingTop:'0'}}>
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
@@ -2423,11 +2446,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 )}
 
                 {/* Compose card */}
-                <div className={`mx-6 my-4 rounded-[18px] border transition-all duration-200 ${
+                <div className={`mx-6 my-4 transition-all duration-200 ${
                   composeMode === "note"
-                    ? "border-amber-300 bg-amber-50 shadow-sm"
-                    : autoDraftLoading ? "border-violet-300 bg-violet-50/40 shadow-sm" : compose ? "border-slate-300 bg-white shadow-sm" : "border-slate-200 bg-slate-50/60"
-                }`}>
+                    ? "border border-amber-300 bg-amber-50"
+                    : ""
+                }`} style={composeMode !== 'note' ? {borderRadius:'28px', background:'white', boxShadow:'0 20px 60px rgba(17,24,39,.06)', border:'1px solid rgba(17,24,39,.04)'} : {borderRadius:'28px'}}>
 
                   {/* Top bar: note mode indicator OR world-class draft badge */}
                   {composeMode === "note" && (
@@ -2445,7 +2468,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   )}
                   {composeMode === "reply" && !autoDraftLoading && compose && (
                     <div className="flex items-center gap-2 px-4 pt-3 pb-0">
-                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-violet-500 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
+                      <span style={{display:'inline-flex', alignItems:'center', gap:'4px', height:'28px', padding:'0 10px', borderRadius:'100px', background:'#f5f3ff', border:'1px solid #ddd6fe', fontSize:'11px', fontWeight:600, color:'#7c3aed', letterSpacing:'.02em'}}>
                         <Sparkles className="h-3 w-3" />
                         World-class draft
                       </span>
@@ -2612,7 +2635,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       <div className="h-5 w-px bg-slate-200" />
                       <Button
                         variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 hover:bg-[#fafafa]"
+                        style={{border:'1px solid rgba(17,24,39,.08)', background:'white', color:'#374151'}}
                         onClick={() => { setFaqOpen(true); setObjectionsOpen(false); setWorldClassOpen(false); }}
                         type="button"
                       >
@@ -2621,7 +2645,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </Button>
                       <Button
                         variant="outline"
-                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-rose-200 text-rose-700 hover:bg-rose-50"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 hover:bg-[#fafafa]"
+                        style={{border:'1px solid rgba(17,24,39,.08)', background:'white', color:'#374151'}}
                         onClick={() => { setObjectionsOpen(true); setFaqOpen(false); setWorldClassOpen(false); }}
                         type="button"
                       >
@@ -2677,12 +2702,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ) : (
                         <div className="flex items-stretch shrink-0">
                           <Button
-                            className="rounded-l-full rounded-r-none h-9 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
+                            className="disabled:opacity-30 transition-all duration-150 gap-1.5 text-white font-semibold text-sm"
+                            style={{height:'52px', width:'110px', borderRadius:'18px 0 0 18px', background:'#111827', border:'none', boxShadow:'none'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.transform='translateY(-1px)';(e.currentTarget as HTMLElement).style.boxShadow='0 14px 30px rgba(17,24,39,.18)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.transform='';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
                             onClick={() => handleCsSend()}
                           >
                             {sendMessage.isPending ? (
-                              <><Send className="h-4 w-4" /> Sending…</>
+                              <><Send className="h-4 w-4 animate-spin" /> Sending…</>
                             ) : (
                               <><Send className="h-4 w-4" /> Send</>
                             )}
@@ -2690,7 +2718,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
-                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
+                                className="text-white disabled:opacity-30 transition-all duration-150"
+                                style={{height:'52px', width:'36px', borderRadius:'0 18px 18px 0', background:'#111827', borderLeft:'1px solid rgba(255,255,255,.1)', padding:'0 10px'}}
                                 disabled={!compose.trim() || sendMessage.isPending || !selected}
                                 onPointerDown={(e) => e.stopPropagation()}
                               >
