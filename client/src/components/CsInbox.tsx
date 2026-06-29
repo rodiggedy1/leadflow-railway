@@ -1432,7 +1432,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         layout
                         animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
                         transition={{ duration: 0.45 }}
-                        className="group relative rounded-[18px]"
+                        className="group relative rounded-[20px]"
                       >
                       <motion.button
                         whileHover={{ y: -1 }}
@@ -1443,12 +1443,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className="w-full text-left relative"
                         style={{
-                          borderRadius: '18px',
-                          padding: '10px 8px',
+                          borderRadius: '20px',
+                          padding: '14px 14px 14px 18px',
                           border: 'none',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 2px 8px rgba(17,19,24,.04), 0 8px 24px rgba(17,19,24,.08), 0 20px 40px rgba(17,19,24,.07)' : 'none',
-                          background: isSelected ? 'white' : 'transparent',
+                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : '0 1px 4px rgba(17,24,39,.04)',
+                          background: isSelected ? '#ffffff' : '#faf9f7',
                         }}
                       >
                         {/* Selected accent bar */}
@@ -1482,7 +1482,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           </div>
 
                           {/* Timestamp — top right */}
-                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'11px', fontWeight:600, color:'#98a2b3'}}>
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:500, color:'#b0b8c4'}}>
                             {conversation.lastMsgTs
                               ? (() => {
                                   const d = new Date(conversation.lastMsgTs);
@@ -1502,14 +1502,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         {/* Row 2: Message preview — spans content + time columns */}
                         <div style={{marginTop:'6px', fontSize:'12px', fontWeight:600, color:'#3f4856', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
-                        {/* Row 3: Status pill — spans content + time columns */}
+                        {/* Row 3: Status pill — minimal outlined style matching target screenshot */}
                         <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
                           <div style={{
-                            height:'22px', padding:'0 8px', borderRadius:'999px', fontSize:'11px', fontWeight:700, display:'inline-flex', alignItems:'center',
-                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#0f8f63' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#EA580C' : '#6B7280',
-                            background: statusKey === 'resolved' || statusKey === 'solved' ? '#ecfdf3' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#fff5f0' : '#f3f4f6',
+                            height:'24px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:600, display:'inline-flex', alignItems:'center', gap:'4px',
+                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#16a34a' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#ea580c' : '#6b7280',
+                            background: (statusKey === 'resolved' || statusKey === 'solved') ? '#f0fdf4' : 'transparent',
+                            border: (statusKey === 'resolved' || statusKey === 'solved') ? 'none' : '1.5px solid currentColor',
                           }}>
-                            {sc.label}
+                            {(statusKey === 'resolved' || statusKey === 'solved') && <span style={{fontSize:'13px', lineHeight:1}}>✓</span>}
+                            {sc.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
                           </div>
                           {/* Job value */}
                           {conversation.amount && (
