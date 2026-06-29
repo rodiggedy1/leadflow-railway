@@ -2266,6 +2266,42 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             <div style={{fontSize:'13px',color:'#98a2b3'}}>{message.time}</div>
                           </div>
                         );
+                      } else if (isAgent) {
+                        elements.push(
+                          <div key={`${message.time}-${idx}`} style={{maxWidth:'66%',display:'flex',flexDirection:'column',gap:'6px',alignSelf:'flex-end',alignItems:'flex-end'}}>
+                            {/* Label outside bubble */}
+                            <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                              <div className="w-4 h-4 rounded-full overflow-hidden shrink-0" style={{boxShadow:'0 1px 3px rgba(0,0,0,.15)'}}>
+                                {photoUrl ? (
+                                  <img src={photoUrl} alt={displayName} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: color }}>{initials}</div>
+                                )}
+                              </div>
+                              <span style={{fontSize:'12px',fontWeight:700,color:'#8b95a5',textTransform:'uppercase',letterSpacing:'.08em'}}>{displayName}</span>
+                            </div>
+                            {/* Bubble */}
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                              style={{background:'#101828',borderRadius:'24px',padding:'20px',boxShadow:'0 16px 40px rgba(16,24,40,.18)'}}
+                            >
+                              {message.text && <div style={{fontSize:'17px',fontWeight:600,color:'white',lineHeight:1.55}}>{message.text}</div>}
+                              {message.media && message.media.length > 0 && (
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {message.media.map((url, mi) => (
+                                    <button key={mi} type="button" onClick={() => openLightbox(message.media!, mi)} className="focus:outline-none" title="Click to enlarge">
+                                      <img src={url} alt="MMS photo" className="max-w-[200px] max-h-[200px] rounded-xl object-cover cursor-zoom-in hover:opacity-90 transition-opacity" />
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </motion.div>
+                            {/* Timestamp outside bubble */}
+                            <div style={{fontSize:'13px',color:'#98a2b3'}}>{message.time}</div>
+                          </div>
+                        );
                       } else {
                         elements.push(
                           <motion.div
@@ -2276,17 +2312,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             className={`group max-w-[78%] rounded-[22px] border px-7 py-6 shadow-sm ${bubbleStyles(message.sender)}`}
                           >
                             <div className="flex items-center gap-1.5 mb-1">
-                              {isAgent && (
-                                <div className="w-5 h-5 rounded-full overflow-hidden shrink-0 shadow-sm">
-                                  {photoUrl ? (
-                                    <img src={photoUrl} alt={displayName} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-[9px] font-bold text-white" style={{ backgroundColor: color }}>
-                                      {initials}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
                               <span className="text-xs uppercase tracking-wide opacity-60">{displayName}</span>
                             </div>
                             {message.text && <div className="mt-1.5 text-sm leading-6">{message.text}</div>}
