@@ -1446,7 +1446,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           padding: '12px',
                           border: 'none',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 18px 48px rgba(17,19,24,.075)' : 'none',
+                          boxShadow: isSelected ? '0 2px 8px rgba(17,19,24,.04), 0 8px 24px rgba(17,19,24,.08), 0 20px 40px rgba(17,19,24,.07)' : 'none',
                           background: isSelected ? 'white' : 'transparent',
                         }}
                       >
