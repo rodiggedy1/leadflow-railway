@@ -2038,7 +2038,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto px-6 py-6 bg-[linear-gradient(180deg,#fcfcfd_0%,#f8fafc_100%)]" ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto px-6 py-6" style={{background:'linear-gradient(180deg,#fffdfc,#faf8f4)'}} ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
