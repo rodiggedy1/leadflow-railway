@@ -1904,13 +1904,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? 'p-5 gap-4' : 'p-5 gap-5'}`}>
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? 'py-5 pl-5 gap-4' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────────────── */}
       {sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
-        <aside className="shrink-0 w-[52px] self-stretch rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+        <aside className="shrink-0 w-[57px] self-stretch rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           <button
             onClick={() => setSidebarCollapsed(false)}
             className="mb-1 h-8 w-8 flex items-center justify-center rounded-[12px] text-white/40 hover:text-white/80 hover:bg-white/10 transition"
@@ -1938,7 +1938,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 )}
                 title={f.label}
               >
-                <span className={cn("absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full", f.dot)} />
+
                 {f.label.charAt(0)}
               </button>
             ))
