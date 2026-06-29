@@ -88,6 +88,7 @@ import FollowUpsModal from "@/components/FollowUpsModal";
 import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
+import InsertResponseModal from "@/components/InsertResponseModal";
 
 type Queue = "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
@@ -228,6 +229,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [faqOpen, setFaqOpen] = useState(false);
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
+  const [insertResponseOpen, setInsertResponseOpen] = useState(false);
   // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -2422,6 +2424,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
                   <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="CS Chat" />
+                  <InsertResponseModal open={insertResponseOpen} onClose={() => setInsertResponseOpen(false)} onInsert={(text) => { setCompose(text); setInsertResponseOpen(false); }} />
                   <ObjectionsPanel open={objectionsOpen} onClose={() => setObjectionsOpen(false)} />
                   <WorldClassReplyPanel
                     open={worldClassOpen}
@@ -2647,6 +2650,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       >
                         <BookOpen className="h-3.5 w-3.5" />
                         FAQ
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="rounded-full text-xs gap-1.5 h-8 px-3 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                        onClick={() => setInsertResponseOpen(true)}
+                        type="button"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        Responses
                       </Button>
                       <Button
                         variant="outline"
