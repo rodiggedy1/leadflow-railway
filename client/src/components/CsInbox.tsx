@@ -3117,8 +3117,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
                               borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
                             }}>
-                              <div style={{fontSize:'11px', fontWeight:500, color:'#9ca3af', marginBottom:'4px', whiteSpace:'nowrap'}}>{label}</div>
-                              <div style={{fontSize:'16px', fontWeight:700, color:'#111827', lineHeight:1.2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{value}</div>
+                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', whiteSpace:'nowrap'}}>{label}</div>
+                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>{value}</div>
                             </div>
                           ))}
                         </div>
