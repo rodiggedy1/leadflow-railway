@@ -13,12 +13,12 @@
  * Security:
  *  - Card data NEVER touches this server — Stripe Elements handles it entirely.
  *  - Public procedures only accept a token (not a phone number directly).
- *  - Admin procedures require adminAgentProcedure (cookie session + isAdmin).
+ *  - Admin procedures require agentProcedure (cookie session + isAdmin).
  */
 import { z } from "zod";
 import { randomBytes } from "crypto";
 import Stripe from "stripe";
-import { publicProcedure, adminAgentProcedure, router } from "./_core/trpc";
+import { publicProcedure, agentProcedure, router } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { cardAuthTokens, stripeCustomers, paymentAuthorizations } from "../drizzle/schema";
@@ -43,7 +43,7 @@ export const stripeRouter = router({
   // ────────────────────────────────────────────────────────────────────────────
   // 1. generateCardAuthToken (admin) — creates a /pay/:token link for a customer
   // ────────────────────────────────────────────────────────────────────────────
-  generateCardAuthToken: adminAgentProcedure
+  generateCardAuthToken: agentProcedure
     .input(
       z.object({
         customerPhone: z.string().min(7).max(30),
@@ -279,7 +279,7 @@ export const stripeRouter = router({
   // ────────────────────────────────────────────────────────────────────────────
   // 5. listCustomerCards (admin) — returns saved card info for a customer phone
   // ────────────────────────────────────────────────────────────────────────────
-  listCustomerCards: adminAgentProcedure
+  listCustomerCards: agentProcedure
     .input(z.object({ customerPhone: z.string().min(7).max(30) }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -312,7 +312,7 @@ export const stripeRouter = router({
   // ────────────────────────────────────────────────────────────────────────────
   // 6. createPreauth (admin) — places a manual-capture PaymentIntent (holds funds)
   // ────────────────────────────────────────────────────────────────────────────
-  createPreauth: adminAgentProcedure
+  createPreauth: agentProcedure
     .input(
       z.object({
         customerPhone: z.string().min(7).max(30),
@@ -416,7 +416,7 @@ export const stripeRouter = router({
   // ────────────────────────────────────────────────────────────────────────────
   // 7. capturePayment (admin) — captures a preauthorized PaymentIntent
   // ────────────────────────────────────────────────────────────────────────────
-  capturePayment: adminAgentProcedure
+  capturePayment: agentProcedure
     .input(
       z.object({
         authorizationId: z.number().int(),
@@ -483,7 +483,7 @@ export const stripeRouter = router({
   // ────────────────────────────────────────────────────────────────────────────
   // 8. cancelPreauth (admin) — cancels a preauthorized PaymentIntent
   // ────────────────────────────────────────────────────────────────────────────
-  cancelPreauth: adminAgentProcedure
+  cancelPreauth: agentProcedure
     .input(z.object({ authorizationId: z.number().int() }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -528,7 +528,7 @@ export const stripeRouter = router({
   // ────────────────────────────────────────────────────────────────────────────
   // 9. listPaymentAuthorizations (admin) — lists payment history for a customer
   // ────────────────────────────────────────────────────────────────────────────
-  listPaymentAuthorizations: adminAgentProcedure
+  listPaymentAuthorizations: agentProcedure
     .input(
       z.object({
         customerPhone: z.string().min(7).max(30).optional(),
@@ -560,7 +560,7 @@ export const stripeRouter = router({
 
   // 10. listAllCustomers (admin) — lists all stripe_customers rows
   // ────────────────────────────────────────────────────────────────────────────
-  listAllCustomers: adminAgentProcedure
+  listAllCustomers: agentProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(100) }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -575,7 +575,7 @@ export const stripeRouter = router({
 
   // 11. listAllCardAuthTokens (admin) — lists recent card auth tokens
   // ────────────────────────────────────────────────────────────────────────────
-  listAllCardAuthTokens: adminAgentProcedure
+  listAllCardAuthTokens: agentProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
     .query(async ({ input }) => {
       const db = await getDb();
