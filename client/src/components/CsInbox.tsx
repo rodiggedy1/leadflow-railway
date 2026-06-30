@@ -616,6 +616,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // This is the architectural split: the inbox list no longer needs to carry
   // full histories. getCsConversation fetches on demand when a session is opened.
   console.log('[DETAIL] start', effectiveSelectedId);
+  const detailEnabled =
+    effectiveSelectedId != null &&
+    effectiveSelectedId > 0 &&
+    liveConversations.length > 0;
+  console.log('[DETAIL ENABLED]', {
+    detailEnabled,
+    effectiveSelectedId,
+    liveConversationsLength: liveConversations.length,
+    csDataUndefined: csData === undefined,
+    csDataLength: csData?.length,
+  });
   const {
     data: conversationDetail,
     isLoading: conversationDetailLoading,
@@ -629,7 +640,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   } = trpc.leads.getCsConversation.useQuery(
     { sessionId: effectiveSelectedId! },
     {
-      enabled: effectiveSelectedId != null && effectiveSelectedId > 0 && liveConversations.length > 0,
+      enabled: detailEnabled,
       staleTime: 0,           // always fresh when switching conversations
       refetchOnWindowFocus: false,
       // Poll at the same cadence as the inbox list so new inbound messages appear
