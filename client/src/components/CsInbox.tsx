@@ -688,7 +688,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     const result = (() => {
       if (!conversationDetail?.messageHistory) return selected?.messages ?? [];
       let raw: RawMsg[] = [];
-      try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
+      try { raw = JSON.parse(conversationDetail.messageHistory); } catch (e) { raw = []; console.error('[PARSE] exception', e); }
+      console.log('[PARSE]', typeof conversationDetail.messageHistory, conversationDetail.messageHistory.length, 'parsed:', raw.length);
       return raw.map((m) => ({
         sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
         text: m.content,
@@ -698,6 +699,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         senderName: m.senderName,
       }));
     })();
+    console.log('[PARSE] guard hit:', !conversationDetail?.messageHistory, '| messageHistory type:', typeof conversationDetail?.messageHistory);
+    console.log('[DETAIL MESSAGES]', result.length, result);
     console.log('[CsInbox][lifecycle] detailMessages recomputed', {
       sessionId: effectiveSelectedId,
       count: result.length,
@@ -714,6 +717,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const selectedWithDetail: Conversation | undefined = useMemo(() => {
     if (!selected) return undefined;
     const result = { ...selected, messages: detailMessages };
+    console.log('[SELECTED]', result.messages.length, result);
     console.log('[CsInbox][lifecycle] selectedWithDetail recomputed', {
       sessionId: selected.id,
       messageCount: result.messages.length,
@@ -2405,7 +2409,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                     // Build SMS items with real ts from messageHistory (already passed through)
                     const smsMsgs = selectedWithDetail?.messages ?? [];
-                    console.log('[CHAT] render', smsMsgs.length);
+                    console.log('[CHAT]', smsMsgs.length);
                     const smsItems: SmsItem[] = smsMsgs.map((message, idx) => ({
                       kind: "sms" as const,
                       ts: message.ts ?? idx, // real epoch ms if available, else index
