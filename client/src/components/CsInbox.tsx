@@ -422,6 +422,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     });
   }, [csData, nameMap]);
 
+  // Measurement: how many conversations does liveConversations actually contain?
+  useEffect(() => {
+    if (liveConversations.length > 0) {
+      console.log('[liveConversations] length:', liveConversations.length);
+    }
+  }, [liveConversations.length]);
+
   const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
   // Once data arrives, apply any pending focus (handles the case where data wasn't
   // loaded yet when the tab switched and focusSessionId fired)
