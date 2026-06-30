@@ -1399,16 +1399,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* AI priority queue — collapsed by default, hover to expand */}
-              <div className="group cursor-default transition-all" style={{marginTop:'16px', borderRadius:'22px', padding:'16px', background:'#FFFFFF', boxShadow:'0 8px 22px rgba(15,23,42,.05)', border:'1px solid rgba(16,24,40,.06)'}}>
-                <div className="flex flex-col" style={{gap:'16px'}}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center justify-center" style={{width:'32px', height:'32px', borderRadius:'10px', background:'#111318'}}>
-                      <Sparkles className="h-5 w-5 text-white" />
-                    </div>
-                    {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
+              <div className="group cursor-default transition-all" style={{marginTop:'16px', borderRadius:'16px', padding:'12px 14px', background:'rgba(139,92,246,.04)', border:'1px solid rgba(139,92,246,.10)'}}>
+                <div className="flex flex-col" style={{gap:'8px'}}>
+                  <div className="flex items-center gap-2">
+                    <Sparkles style={{width:'13px',height:'13px',color:'#8B5CF6',flexShrink:0}} />
+                    <div style={{fontSize:'11px', fontWeight:900, color:'#6D28D9', letterSpacing:'.12em', textTransform:'uppercase'}}>Client priority queue</div>
+                    {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA',flexShrink:0}} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div style={{fontSize:'13px', fontWeight:800, color:'#101828'}}>Client priority queue</div>
                     {priorityItems.length === 0 && !priorityLoading && (
                       <div style={{marginTop:'4px', fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:'1.4'}}>No urgent items right now.</div>
                     )}
@@ -1799,14 +1797,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* Team priority queue — collapsed by default, hover to expand */}
-              <div className="group cursor-default transition-all" style={{marginBottom:'16px', borderRadius:'22px', padding:'16px', background:'#FFFFFF', boxShadow:'0 8px 22px rgba(15,23,42,.05)', border:'1px solid rgba(16,24,40,.06)'}}>
-                <div className="flex items-start gap-3">
-                  <div className="shrink-0 flex items-center justify-center bg-black" style={{width:'32px', height:'32px', borderRadius:'8px'}}>
-                    <Users className="h-4 w-4 text-white" />
+              <div className="group cursor-default transition-all" style={{marginBottom:'16px', borderRadius:'16px', padding:'12px 14px', background:'rgba(139,92,246,.04)', border:'1px solid rgba(139,92,246,.10)'}}>
+                <div className="flex flex-col" style={{gap:'8px'}}>
+                  <div className="flex items-center gap-2">
+                    <Users style={{width:'13px',height:'13px',color:'#8B5CF6',flexShrink:0}} />
+                    <div style={{fontSize:'11px', fontWeight:900, color:'#6D28D9', letterSpacing:'.12em', textTransform:'uppercase'}}>Team priority queue</div>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div style={{fontSize:'13px', fontWeight:700, color:'#111318', lineHeight:1.2}}>Team priority queue</div>
-                    <div style={{marginTop:'4px', fontSize:'12px', color:'#6b7280', lineHeight:1.4}}>
+                    <div style={{fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:1.4}}>
                       {teamConvs.filter((c) => !!(c as any).hasUnanswered).length > 0
                         ? `${teamConvs.filter((c) => !!(c as any).hasUnanswered).length} route ${teamConvs.filter((c) => !!(c as any).hasUnanswered).length === 1 ? 'issue' : 'issues'} may impact a customer. ${teamConvs.filter((c) => (c as any).csPriorityTag).length > 0 ? `${teamConvs.filter((c) => (c as any).csPriorityTag).length} cleaner waiting on approval before replying.` : ''}`
                         : "No urgent team items right now."}

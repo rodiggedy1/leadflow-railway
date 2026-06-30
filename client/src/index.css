@@ -1112,18 +1112,9 @@
 /* Hide scrollbar in Daily Recap modal (Webkit/Chrome/Safari) */
 .daily-recap-modal::-webkit-scrollbar { display: none; }
 
-/* ── CsInbox: premium 8px scrollbars — fade until hover ─────────── */
-.cs-inbox-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
-.cs-inbox-scroll::-webkit-scrollbar-track { background: transparent; }
-.cs-inbox-scroll::-webkit-scrollbar-thumb {
-  background: rgba(16,24,40,.10);
-  border-radius: 999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.cs-inbox-scroll:hover::-webkit-scrollbar-thumb { background: rgba(16,24,40,.16); }
-.cs-inbox-scroll::-webkit-scrollbar-thumb:hover { background: rgba(16,24,40,.28); }
-.cs-inbox-scroll { scrollbar-width: thin; scrollbar-color: rgba(16,24,40,.10) transparent; }
+/* ── CsInbox: hidden scrollbars (scroll still works) ──────────── */
+.cs-inbox-scroll::-webkit-scrollbar { display: none; }
+.cs-inbox-scroll { scrollbar-width: none; -ms-overflow-style: none; }
 
 /* ── Focus ring: soft purple glow ──────────────────────────────── */
 .cs-inbox-scope *:focus-visible {
