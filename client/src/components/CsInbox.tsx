@@ -1446,6 +1446,30 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     }
   }, [effectiveSelectedId, selectedWithDetail?.messages?.length]);
 
+  // DOM measurement: log scroll container and first message layout on every message count change
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const container = scrollRef.current;
+    const firstMsg = container.querySelector('[data-msg-idx="0"]') as HTMLElement | null;
+    const containerStyle = window.getComputedStyle(container);
+    const msgStyle = firstMsg ? window.getComputedStyle(firstMsg) : null;
+    console.log('[DOM]', {
+      containerClientHeight: container.clientHeight,
+      containerScrollHeight: container.scrollHeight,
+      containerDisplay: containerStyle.display,
+      containerOpacity: containerStyle.opacity,
+      containerVisibility: containerStyle.visibility,
+      containerOverflow: containerStyle.overflow,
+      containerOverflowY: containerStyle.overflowY,
+      firstMsgExists: !!firstMsg,
+      firstMsgColor: msgStyle?.color,
+      firstMsgBackground: msgStyle?.backgroundColor,
+      firstMsgRect: firstMsg?.getBoundingClientRect(),
+      firstMsgOpacity: msgStyle?.opacity,
+      firstMsgVisibility: msgStyle?.visibility,
+    });
+  }, [selectedWithDetail?.messages?.length]);
+
   // Close emoji picker on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
