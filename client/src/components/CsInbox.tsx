@@ -493,7 +493,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     // ── Date/time sanity check ──────────────────────────────────────────────
     // Run only if the agent hasn't already acknowledged these exact warnings.
     if (sanityApprovedText === null || compose.trim() !== sanityApprovedText) {
-      const recentCustomerMsgs = (selected.messages ?? [])
+      const recentCustomerMsgs = (selectedWithDetail?.messages ?? [])
         .filter((m) => m.sender === "client")
         .slice(-5)
         .map((m) => m.text);
@@ -562,6 +562,42 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // For effectiveSelectedId: prefer client lane first, then team lane
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
+
+  // ── Detail query: fetch full messageHistory only for the open conversation ──────
+  // This is the architectural split: the inbox list no longer needs to carry
+  // full histories. getCsConversation fetches on demand when a session is opened.
+  const { data: conversationDetail, isLoading: conversationDetailLoading } = trpc.leads.getCsConversation.useQuery(
+    { sessionId: effectiveSelectedId! },
+    {
+      enabled: effectiveSelectedId != null && effectiveSelectedId > 0,
+      staleTime: 0,           // always fresh when switching conversations
+      refetchOnWindowFocus: false,
+    }
+  );
+
+  // Parse the detail query result into the messages array format used by the detail panel.
+  // Falls back to selected.messages (from listCsInbox) while the detail query is loading.
+  type RawMsg = { role: string; content: string; ts?: number; senderName?: string; media?: string[] };
+  const detailMessages: Conversation["messages"] = useMemo(() => {
+    if (!conversationDetail?.messageHistory) return selected?.messages ?? [];
+    let raw: RawMsg[] = [];
+    try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
+    return raw.map((m) => ({
+      sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
+      text: m.content,
+      time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+      ts: m.ts as number | undefined,
+      media: (m.media ?? []) as string[],
+      senderName: m.senderName,
+    }));
+  }, [conversationDetail?.messageHistory, selected?.messages]);
+
+  // selectedWithDetail: the selected conversation augmented with messages from the detail query.
+  // All detail-panel code reads from this instead of selected.messages directly.
+  const selectedWithDetail: Conversation | undefined = useMemo(() => {
+    if (!selected) return undefined;
+    return { ...selected, messages: detailMessages };
+  }, [selected, detailMessages]);
 
   // Typing presence — broadcast when this agent is composing, show others typing
   const csChannelKey = effectiveSelectedId ? `cs:${effectiveSelectedId}` : "";
@@ -859,7 +895,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       action,
       clientName: selected.name ?? undefined,
       queue: selected.queue ?? undefined,
-      messageHistory: JSON.stringify(selected.messages.map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
+      messageHistory: JSON.stringify((selectedWithDetail?.messages ?? []).map((m) => ({ role: m.sender === "client" ? "user" : "assistant", content: m.text }))),
     });
   }
   // Derive tone badge from last few client messages
@@ -902,7 +938,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // ── Next Best Action Engine ──────────────────────────────────────────────────
   const nbaActions = useMemo(() => {
     if (!selected || selected.queue === "Teams") return null;
-    const msgs = selected.messages ?? [];
+    const msgs = selectedWithDetail?.messages ?? [];
     if (msgs.length < 1) return null;
     // Only show NBA when the last message is from the client (agent already replied → hide)
     const lastMsg = msgs[msgs.length - 1];
@@ -994,14 +1030,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // Uses useMutation (POST) instead of useQuery (GET) to avoid HTTP 414 URI-too-large
   // errors when messageHistory is long.
   const insightMsgHistory = useMemo(() => {
-    if (!selected?.messages?.length) return "[]";
+    if (!selectedWithDetail?.messages?.length) return "[]";
     return JSON.stringify(
-      selected.messages.map((m) => ({
+      selectedWithDetail.messages.map((m) => ({
         role: m.sender === "client" ? "user" : "assistant",
         content: m.text,
       }))
     );
-  }, [selected?.id, selected?.messages?.length, clientProfile?.frequency]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedWithDetail?.id, selectedWithDetail?.messages?.length, clientProfile?.frequency]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
   const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
@@ -1012,25 +1048,25 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   // Trigger insight fetch when conversation changes or new messages arrive
   useEffect(() => {
-    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
+    if (!selectedWithDetail || selectedWithDetail.id <= 0 || selectedWithDetail.messages.length === 0) return;
     // Clear stale insight immediately when switching conversations
-    if (insightFetchedForId !== selected.id) {
+    if (insightFetchedForId !== selectedWithDetail.id) {
       setInsightData(null);
     }
     // Re-fetch if conversation changed or message count changed (new message arrived)
-    const key = `${selected.id}:${selected.messages.length}`;
-    if (insightFetchedForId === selected.id && insightMutation.variables &&
+    const key = `${selectedWithDetail.id}:${selectedWithDetail.messages.length}`;
+    if (insightFetchedForId === selectedWithDetail.id && insightMutation.variables &&
         `${insightMutation.variables.sessionId}:${JSON.parse(insightMutation.variables.messageHistory ?? '[]').length}` === key) return;
-    setInsightFetchedForId(selected.id);
+    setInsightFetchedForId(selectedWithDetail.id);
     insightMutation.mutate({
-      sessionId: selected.id,
+      sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
-      clientName: selected.name ?? undefined,
-      queue: selected.queue ?? undefined,
+      clientName: selectedWithDetail.name ?? undefined,
+      queue: selectedWithDetail.queue ?? undefined,
       clientProfile: clientProfileSummary,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
+  }, [selectedWithDetail?.id, selectedWithDetail?.messages?.length, insightMsgHistory]);
 
   // ── LLM-powered NBA analysis ──────────────────────────────────────────────
   const [nbaLlmResult, setNbaLlmResult] = useState<{ label: string; instruction: string; ctaType: string; reason: string; prefillScript?: string | null } | null>(null);
@@ -1058,10 +1094,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!selected || selected.queue === "Teams" || selected.messages.length === 0) return;
-    const lastMsg = selected.messages[selected.messages.length - 1];
+    if (!selectedWithDetail || selectedWithDetail.queue === "Teams" || selectedWithDetail.messages.length === 0) return;
+    const lastMsg = selectedWithDetail.messages[selectedWithDetail.messages.length - 1];
     if (lastMsg?.sender !== "client") return; // only run when client sent last msg
-    const key = `${selected.id}:${selected.messages.length}`;
+    const key = `${selectedWithDetail.id}:${selectedWithDetail.messages.length}`;
     if (nbaLlmFetchedKey === key) return;
     setNbaLlmFetchedKey(key);
     setNbaLlmResult(null);
@@ -1069,16 +1105,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     const freq = clientProfile?.frequency ?? "";
     const isOneTimeFreq = /one.time|one time|1.time|single/i.test(freq);
     const isAlreadyRecurring = !!freq && !isOneTimeFreq;
-    nbaInflightSessionIdRef.current = selected.id;
+    nbaInflightSessionIdRef.current = selectedWithDetail.id;
     nbaLlmMutation.mutate({
-      sessionId: selected.id,
+      sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
       clientName: selected.name ?? undefined,
       clientProfile: clientProfileSummary,
       isAlreadyRecurring,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
+  }, [selectedWithDetail?.id, selectedWithDetail?.messages?.length, insightMsgHistory]);
 
   // Upsell opportunity detector — only fires for non-Teams, non-Deep-clean conversations
   const isTeamsConv = selected?.queue === "Teams";
@@ -1094,22 +1130,22 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   });
   // Trigger upsell check when conversation changes (if eligible)
   useEffect(() => {
-    if (!selected || selected.id <= 0 || selected.messages.length < 3 || isTeamsConv) return;
-    if (upsellFetchedForId === selected.id) return; // already fetched for this conversation
-    const service = (selected.service ?? "").toLowerCase();
+    if (!selectedWithDetail || selectedWithDetail.id <= 0 || selectedWithDetail.messages.length < 3 || isTeamsConv) return;
+    if (upsellFetchedForId === selectedWithDetail.id) return; // already fetched for this conversation
+    const service = (selectedWithDetail.service ?? "").toLowerCase();
     if (service.includes("deep clean")) return;
-    setUpsellFetchedForId(selected.id);
+    setUpsellFetchedForId(selectedWithDetail.id);
     setUpsellResult(null);
     setUpsellLoading(true);
     upsellMutation.mutate({
-      sessionId: selected.id,
+      sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
-      clientName: selected.name ?? undefined,
+      clientName: selectedWithDetail.name ?? undefined,
       clientProfile: clientProfileSummary ?? undefined,
-      serviceType: selected.service ?? undefined,
+      serviceType: selectedWithDetail.service ?? undefined,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, insightMsgHistory]);
+  }, [selectedWithDetail?.id, insightMsgHistory]);
   const [upsellDismissed, setUpsellDismissed] = useState<number | null>(null);
   const showUpsell = !!(upsellResult?.upsell && upsellDismissed !== selected?.id);
   // Show card while loading (first fetch) or when result is available
@@ -1184,19 +1220,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   });
   const memoryLoading = memoryMutation.isPending;
   useEffect(() => {
-    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
-    const key = `${selected.id}:${selected.messages.length}`;
+    if (!selectedWithDetail || selectedWithDetail.id <= 0 || selectedWithDetail.messages.length === 0) return;
+    const key = `${selectedWithDetail.id}:${selectedWithDetail.messages.length}`;
     if (memoryFetchedKey === key) return;
     setMemoryFetchedKey(key);
-    if (memoryFetchedKey.split(":")[0] !== String(selected.id)) setMemoryBullets([]);
+    if (memoryFetchedKey.split(":")[0] !== String(selectedWithDetail.id)) setMemoryBullets([]);
     memoryMutation.mutate({
-      sessionId: selected.id,
+      sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
       clientProfile: clientProfileSummary,
-      queue: selected.queue ?? undefined,
+      queue: selectedWithDetail.queue ?? undefined,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.id, selected?.messages?.length, insightMsgHistory]);
+  }, [selectedWithDetail?.id, selectedWithDetail?.messages?.length, insightMsgHistory]);
   // ── Conversation Memory — AI-generated bullets, cached by message count ──
   // ── Post-call AI Debrief — fetched from DB after call.transcript.completed webhook ──
   const { data: callDebrief, isLoading: debriefLoading } = trpc.leads.getLatestCallDebrief.useQuery(
@@ -1236,7 +1272,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       autoDraftAbortRef.current.abort();
       autoDraftAbortRef.current = null;
     }
-    const recentMsgs = conv.messages.slice(-5);
+    const recentMsgs = (selectedWithDetail?.messages ?? conv.messages).slice(-5);
     const conversationContext = recentMsgs
       .map((m) => `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`)
       .join("\n");
@@ -1253,17 +1289,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // Fires once per conversation. jobContext comes from clientProfile which may load
   // slightly after selection — the streamAutoDraft call captures jobContext at call time.
   useEffect(() => {
-    if (!selected || selected.id <= 0 || selected.messages.length === 0) return;
-    triggerAutoDraft(selected);
+    if (!selectedWithDetail || selectedWithDetail.id <= 0 || selectedWithDetail.messages.length === 0) return;
+    triggerAutoDraft(selectedWithDetail);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveSelectedId]);
+  }, [effectiveSelectedId, selectedWithDetail?.messages?.length]);
 
   // Auto-scroll to bottom when conversation changes or new messages arrive
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [effectiveSelectedId, selected?.messages?.length]);
+  }, [effectiveSelectedId, selectedWithDetail?.messages?.length]);
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -2147,7 +2183,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     type TimelineItem = SmsItem | CallItem;
 
                     // Build SMS items with real ts from messageHistory (already passed through)
-                    const smsMsgs = selected?.messages ?? [];
+                    const smsMsgs = selectedWithDetail?.messages ?? [];
                     const smsItems: SmsItem[] = smsMsgs.map((message, idx) => ({
                       kind: "sms" as const,
                       ts: message.ts ?? idx, // real epoch ms if available, else index
@@ -2536,7 +2572,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     open={worldClassOpen}
                     onClose={() => setWorldClassOpen(false)}
                     onInsert={(text) => { setCompose(text); setWorldClassOpen(false); }}
-                    conversationContext={selected.messages.slice(-5).map(m =>
+                    conversationContext={(selectedWithDetail?.messages ?? []).slice(-5).map(m =>
                       `${m.sender === "client" ? "Customer" : "Agent"}: ${m.text}`
                     ).join("\n")}
                     customerName={selected.name ?? ""}

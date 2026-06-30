@@ -3308,6 +3308,88 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         return result;
       }),
     /**
+     * getCsConversation — returns the merged messageHistory for a single CS session.
+     * Used by the detail panel so the inbox list query never needs to load full histories.
+     * Handles multi-session merge (same phone → merged chronological history).
+     */
+    getCsConversation: opsChatProcedure
+      .input(z.object({ sessionId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+
+        // Fetch the primary session
+        const [primary] = await db
+          .select()
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!primary) return null;
+
+        // Find all sessions for the same phone (same merge logic as listCsInbox)
+        const phone = primary.leadPhone?.trim();
+        if (!phone) {
+          // No phone — just return the single session's history
+          return {
+            sessionId: primary.id,
+            leadPhone: primary.leadPhone,
+            leadName: primary.leadName,
+            messageHistory: primary.messageHistory ?? "[]",
+          };
+        }
+
+        const siblings = await db
+          .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory, updatedAt: conversationSessions.updatedAt })
+          .from(conversationSessions)
+          .where(
+            and(
+              eq(conversationSessions.leadPhone, phone),
+              or(
+                eq(conversationSessions.leadSource, "cs-inbound"),
+                eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+                eq(conversationSessions.leadSource, "cs_initiated")
+              )
+            )
+          );
+
+        if (siblings.length <= 1) {
+          return {
+            sessionId: primary.id,
+            leadPhone: primary.leadPhone,
+            leadName: primary.leadName,
+            messageHistory: primary.messageHistory ?? "[]",
+          };
+        }
+
+        // Merge all sessions for this phone (same dedup logic as listCsInbox)
+        type MsgEntry = { role: string; content: string; ts?: number; senderName?: string; opMsgId?: string; media?: string[] };
+        const allMsgs: MsgEntry[] = [];
+        for (const s of siblings) {
+          let hist: MsgEntry[] = [];
+          try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
+          allMsgs.push(...hist);
+        }
+        const seenMsgIds = new Set<string>();
+        const merged: MsgEntry[] = [];
+        for (const m of allMsgs) {
+          if (m.opMsgId && seenMsgIds.has(m.opMsgId)) continue;
+          if (m.opMsgId) seenMsgIds.add(m.opMsgId);
+          const isDup = merged.some(
+            (x) => x.role === m.role && x.content === m.content && Math.abs((x.ts ?? 0) - (m.ts ?? 0)) < 15_000
+          );
+          if (isDup) continue;
+          merged.push(m);
+        }
+        merged.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+
+        return {
+          sessionId: primary.id,
+          leadPhone: primary.leadPhone,
+          leadName: primary.leadName,
+          messageHistory: JSON.stringify(merged),
+        };
+      }),
+    /**
      * getCsUnreadCount — returns count of CS sessions updated after lastSeenTs.
      * Used to show the red badge on the CS tab.
      */
