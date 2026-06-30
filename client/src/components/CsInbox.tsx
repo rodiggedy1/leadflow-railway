@@ -845,6 +845,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     autoDraftAbortRef.current = controller;
     setCompose("");
     setAutoDraftLoading(true);
+    const _t6 = performance.now();
+    console.log('[TIMELINE] T6 autoDraft start', { sessionId, t: _t6.toFixed(0) });
     try {
       const res = await fetch("/api/cs-reply-stream", {
         method: "POST",
@@ -895,8 +897,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       }
       setAutoDraftLoading(false);
       autoDraftAbortRef.current = null;
+      console.log('[TIMELINE] T7 autoDraft end (stream)', { ms: (performance.now() - _t6).toFixed(0) });
     } catch (err) {
       if ((err as Error).name === "AbortError") return; // intentional cancel
+      console.log('[TIMELINE] T7 autoDraft error (fallback to tRPC)', { ms: (performance.now() - _t6).toFixed(0) });
       // Fall back to tRPC mutation
       console.warn("[auto-draft stream] falling back to tRPC:", err);
       setCompose("");
@@ -1180,7 +1184,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
   const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
   const insightMutation = trpc.opsChat.getCsConvInsight.useMutation({
-    onSuccess: (data) => setInsightData(data),
+    onSuccess: (data) => { console.log('[TIMELINE] T9 insight end', { t: performance.now().toFixed(0) }); setInsightData(data); },
   });
   const insightLoading = insightMutation.isPending;
 
@@ -1196,6 +1200,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     if (insightFetchedForId === selectedWithDetail.id && insightMutation.variables &&
         `${insightMutation.variables.sessionId}:${JSON.parse(insightMutation.variables.messageHistory ?? '[]').length}` === key) return;
     setInsightFetchedForId(selectedWithDetail.id);
+    console.log('[TIMELINE] T8 insight start', { sessionId: selectedWithDetail.id, t: performance.now().toFixed(0) });
     insightMutation.mutate({
       sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
@@ -1354,7 +1359,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [memoryBullets, setMemoryBullets] = useState<string[]>([]);
   const [memoryFetchedKey, setMemoryFetchedKey] = useState<string>("");
   const memoryMutation = trpc.opsChat.getCsConvMemory.useMutation({
-    onSuccess: (data) => setMemoryBullets(data.bullets ?? []),
+    onSuccess: (data) => { console.log('[TIMELINE] T11 memory end', { t: performance.now().toFixed(0) }); setMemoryBullets(data.bullets ?? []); },
   });
   const memoryLoading = memoryMutation.isPending;
   useEffect(() => {
@@ -1363,6 +1368,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     if (memoryFetchedKey === key) return;
     setMemoryFetchedKey(key);
     if (memoryFetchedKey.split(":")[0] !== String(selectedWithDetail.id)) setMemoryBullets([]);
+    console.log('[TIMELINE] T10 memory start', { sessionId: selectedWithDetail.id, t: performance.now().toFixed(0) });
     memoryMutation.mutate({
       sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
