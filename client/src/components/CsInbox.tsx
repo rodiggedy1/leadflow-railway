@@ -367,7 +367,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     return csData.map((row) => {
       let msgs: { role: string; content: string; ts?: number; senderName?: string; media?: string[] }[] = [];
       try { msgs = JSON.parse(row.messageHistory ?? "[]"); } catch { msgs = []; }
-      const lastMsg = msgs.filter((m) => m.role === "user").slice(-1)[0];
+      const lastMsg = msgs.slice(-1)[0];
       const lastTs = msgs.slice(-1)[0]?.ts;
       const waitMs = lastTs ? Date.now() - lastTs : 0;
       const waitMin = Math.round(waitMs / 60000);

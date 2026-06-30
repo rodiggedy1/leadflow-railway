@@ -1116,10 +1116,15 @@
 .cs-inbox-scroll::-webkit-scrollbar { display: none; }
 .cs-inbox-scroll { scrollbar-width: none; -ms-overflow-style: none; }
 
-/* ── Focus ring: soft purple glow ──────────────────────────────── */
-.cs-inbox-scope *:focus-visible {
+/* ── Focus ring: soft purple glow (buttons/links only, not textarea) ── */
+.cs-inbox-scope *:focus-visible:not(textarea) {
   outline: none;
   box-shadow: 0 0 0 3px rgba(139,92,246,.25);
+}
+.cs-inbox-scope textarea:focus-visible,
+.cs-inbox-scope textarea:focus {
+  outline: none;
+  box-shadow: none;
 }
 
 /* ── Button press scale ──────────────────────────────────────────── */
