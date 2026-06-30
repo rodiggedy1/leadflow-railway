@@ -3109,6 +3109,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
     listCsInbox: opsChatProcedure
       .input(z.object({ showResolved: z.boolean().optional().default(false) }))
       .query(async ({ input }) => {
+        const _totalStart = performance.now();
+
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
         const sourceFilter = or(
@@ -3119,34 +3121,45 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const resolvedFilter = input.showResolved
           ? undefined  // show all
           : isNull(conversationSessions.csResolvedAt); // only open
+
+        // ── Stage 1: conversationSessions DB query ────────────────────────────
+        const _t1 = performance.now();
         const sessions = await db
           .select()
           .from(conversationSessions)
           .where(resolvedFilter ? and(sourceFilter, resolvedFilter) : sourceFilter)
           .orderBy(desc(conversationSessions.updatedAt));
+        const _d1 = performance.now() - _t1;
 
-        // Augment and sort by last message ts in messageHistory.
-        // We cannot rely on updatedAt because MySQL ON UPDATE CURRENT_TIMESTAMP fires
-        // on every .set() call (including agent replies), which bumps replied threads
-        // to the top and breaks recency order.
+        // ── Dataset stats ─────────────────────────────────────────────────────
+        const _totalJsonBytes = sessions.reduce((acc, s) => acc + (s.messageHistory?.length ?? 0), 0);
+
+        // ── Stage 2: JSON.parse messageHistory ────────────────────────────────
         type HistoryEntry = { role: string; ts?: number };
-        const augmented = sessions.map((s) => {
-          let history: HistoryEntry[] = [];
-          try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
+        const _t2 = performance.now();
+        const parsedHistories: HistoryEntry[][] = sessions.map((s) => {
+          try { return JSON.parse(s.messageHistory ?? "[]"); } catch { return []; }
+        });
+        const _d2 = performance.now() - _t2;
+
+        // ── Stage 3: last message extraction + unread calculation ─────────────
+        const _t3 = performance.now();
+        const augmented = sessions.map((s, i) => {
+          const history = parsedHistories[i];
           const lastEntry = history[history.length - 1];
           const lastMsgTs = lastEntry?.ts ?? s.updatedAt.getTime();
-          // Skip note/system roles — only user/assistant count for unanswered detection
           const lastRealEntry = [...history].reverse().find((e) => e.role === "user" || e.role === "assistant");
           const hasUnanswered = !!lastRealEntry && lastRealEntry.role === "user";
           const lastSenderRole: "user" | "assistant" | null = lastRealEntry?.role === "user" ? "user" : lastRealEntry?.role === "assistant" ? "assistant" : null;
           return { ...s, lastMsgTs, hasUnanswered, lastSenderRole };
         });
+        const _d3 = performance.now() - _t3;
 
         // Sort: most recent last message first
         augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
-        // One phone = one card. Group all sessions by phone, merge their message
-        // histories in chronological order, and keep the most recent session's metadata.
+        // ── Stage 4: dedupe/group by phone + merge histories ──────────────────
+        const _t4 = performance.now();
         type AugmentedSession = typeof augmented[number];
         const phoneGroups = new Map<string, AugmentedSession[]>();
         for (const s of augmented) {
@@ -3155,10 +3168,8 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           phoneGroups.get(phone)!.push(s);
         }
         const deduped = Array.from(phoneGroups.values()).map((group) => {
-          // group is already sorted desc by lastMsgTs — first entry is most recent
           const primary = group[0];
           if (group.length === 1) return primary;
-          // Merge all message histories across sessions for this phone
           type MsgEntry = { role: string; content: string; ts?: number; senderName?: string; opMsgId?: string };
           const allMsgs: MsgEntry[] = [];
           for (const s of group) {
@@ -3166,13 +3177,11 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
             allMsgs.push(...hist);
           }
-          // Deduplicate by opMsgId then by content+ts proximity, sort chronologically
           const seenMsgIds = new Set<string>();
           const merged: MsgEntry[] = [];
           for (const m of allMsgs) {
             if (m.opMsgId && seenMsgIds.has(m.opMsgId)) continue;
             if (m.opMsgId) seenMsgIds.add(m.opMsgId);
-            // Content+ts dedup: skip if identical content within 15s already present
             const isDup = merged.some(
               (x) => x.role === m.role && x.content === m.content && Math.abs((x.ts ?? 0) - (m.ts ?? 0)) < 15_000
             );
@@ -3191,19 +3200,19 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             lastSenderRole: (lastRealMerged?.role === "user" ? "user" : lastRealMerged?.role === "assistant" ? "assistant" : null) as "user" | "assistant" | null,
           };
         });
-        // Re-sort after merge (lastMsgTs may have changed)
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
+        const _d4 = performance.now() - _t4;
 
-        // Batch-augment with jobCount (VIP = 3+) and hasTodayJob (Today badge)
+        // ── Stage 5: cleanerJobs lookup (REGEXP_REPLACE) ──────────────────────
         const phones = deduped.map((s) => s.leadPhone?.trim()).filter(Boolean) as string[];
         const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
-
-        // Build jobCount map: phone10 → count from cleanerJobs (covers all jobs)
         const jobCountMap = new Map<string, number>();
         const todayJobMap = new Map<string, boolean>();
+        let _cleanerJobsCount = 0;
+        let _todayJobsCount = 0;
 
+        const _t5 = performance.now();
         if (phones.length > 0) {
-          // cleanerJobs stores customerPhone in various formats — normalize to 10-digit
           const d10Phones = phones.map((p) => digits10(p)).filter(Boolean);
           if (d10Phones.length > 0) {
             const jobCountRows = await db
@@ -3211,13 +3220,18 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
               .from(cleanerJobs)
               .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.raw(d10Phones.map((p) => `'${p}'`).join(','))})`)
               .groupBy(cleanerJobs.customerPhone);
+            _cleanerJobsCount = jobCountRows.reduce((acc, r) => acc + Number(r.cnt), 0);
             for (const row of jobCountRows) {
               const d10 = digits10(row.customerPhone ?? "");
               if (d10) jobCountMap.set(d10, (jobCountMap.get(d10) ?? 0) + Number(row.cnt));
             }
           }
+        }
+        const _d5 = performance.now() - _t5;
 
-          // cleanerJobs uses (xxx) xxx-xxxx format — check for today's date
+        // ── Stage 6: today's jobs lookup (REGEXP_REPLACE) ─────────────────────
+        const _t6 = performance.now();
+        if (phones.length > 0) {
           const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
           const todayET = nowET.toISOString().slice(0, 10);
           const todayJobRows = await db
@@ -3227,12 +3241,16 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
               sql`${cleanerJobs.jobDate} = ${todayET} AND REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') IN (${sql.raw(phones.map((p) => `'${digits10(p)}'`).join(','))})`
             )
             .limit(phones.length);
+          _todayJobsCount = todayJobRows.length;
           for (const row of todayJobRows) {
             const d10 = digits10(row.customerPhone ?? "");
             if (d10) todayJobMap.set(d10, true);
           }
         }
+        const _d6 = performance.now() - _t6;
 
+        // ── Stage 7: response mapping (spread + jobCount/hasTodayJob) ─────────
+        const _t7 = performance.now();
         const result = deduped.map((s) => {
           const d10 = digits10(s.leadPhone?.trim() ?? "");
           return {
@@ -3241,16 +3259,39 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
             hasTodayJob: todayJobMap.get(d10) ?? false,
           };
         });
+        const _d7 = performance.now() - _t7;
+
+        // ── Dataset stats ─────────────────────────────────────────────────────
+        const _totalMsgs = parsedHistories.reduce((acc, h) => acc + h.length, 0);
+        const _maxMsgs = parsedHistories.reduce((acc, h) => Math.max(acc, h.length), 0);
+        const _avgMsgs = sessions.length > 0 ? (_totalMsgs / sessions.length).toFixed(1) : "0";
+        const _totalKB = (_totalJsonBytes / 1024).toFixed(1);
+        const _totalMB = (_totalJsonBytes / 1024 / 1024).toFixed(2);
+
+        // ── Summary log ───────────────────────────────────────────────────────
+        const _total = performance.now() - _totalStart;
+        console.log(
+          `[listCsInbox perf]\n` +
+          `  Dataset: sessions=${sessions.length} deduped=${deduped.length} phones=${phones.length}\n` +
+          `           total_msgs=${_totalMsgs} avg_msgs/session=${_avgMsgs} max_msgs=${_maxMsgs}\n` +
+          `           json_bytes=${_totalKB}KB (${_totalMB}MB) cleaner_jobs=${_cleanerJobsCount} today_jobs=${_todayJobsCount}\n` +
+          `  Stage 1  conversationSessions query ............. ${_d1.toFixed(1)}ms\n` +
+          `  Stage 2  JSON.parse messageHistory .............. ${_d2.toFixed(1)}ms\n` +
+          `  Stage 3  last-msg extraction + unread calc ....... ${_d3.toFixed(1)}ms\n` +
+          `  Stage 4  dedupe/group/merge by phone ............. ${_d4.toFixed(1)}ms\n` +
+          `  Stage 5  cleanerJobs lookup (REGEXP_REPLACE) ..... ${_d5.toFixed(1)}ms\n` +
+          `  Stage 6  today's jobs lookup (REGEXP_REPLACE) .... ${_d6.toFixed(1)}ms\n` +
+          `  Stage 7  response mapping ........................ ${_d7.toFixed(1)}ms\n` +
+          `  TOTAL ............................................. ${_total.toFixed(1)}ms`
+        );
 
         // Fire async LLM status scoring for stale sessions — never blocks the response
-        // Import inline to avoid circular deps at module load time
         import("./csStatusScorer").then(({ scoreAndCacheStatus }) => {
           for (const s of result) {
             let hist: Array<{ role: string; content: string; ts?: number }> = [];
             try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
             const msgLen = hist.length;
             const isTeam = s.leadSource === "cs-inbound-cleaner";
-            // Only score if stale (msgLen changed since last score)
             if (s.csStatusMsgLen !== msgLen) {
               scoreAndCacheStatus(
                 s.id,
