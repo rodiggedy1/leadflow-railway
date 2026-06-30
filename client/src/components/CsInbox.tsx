@@ -296,6 +296,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   useOpsStream({
     onLeadUpdate: () => {
       utils.leads.listCsInbox.invalidate();
+      // Also refresh the open conversation's detail cache so new inbound messages appear immediately
+      if (effectiveSelectedIdRef.current != null && effectiveSelectedIdRef.current > 0) {
+        utils.leads.getCsConversation.invalidate({ sessionId: effectiveSelectedIdRef.current });
+      }
       // Auto-switch to New tab when an inbound message arrives — but only if the
       // user hasn't manually chosen a different tab in this session.
       if (!userPickedFilter.current) {
@@ -443,6 +447,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           };
         });
       });
+      // Also patch the detail query cache so the open conversation panel reflects the new message
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, (old) => {
+        if (!old) return old;
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+        try { history = JSON.parse(old.messageHistory ?? "[]"); } catch { history = []; }
+        history = [...history, { role: "assistant", content: variables.message, ts: now, ...(senderName ? { senderName } : {}) }];
+        return { ...old, messageHistory: JSON.stringify(history) };
+      });
     },
   });
 
@@ -465,6 +477,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           history = [...history, { role: "note", content: variables.note, ts: now, ...(senderName ? { senderName } : {}) }];
           return { ...s, messageHistory: JSON.stringify(history), lastMsgTs: now };
         });
+      });
+      // Also patch the detail query cache so the open conversation panel reflects the new note
+      utils.leads.getCsConversation.setData({ sessionId: variables.sessionId }, (old) => {
+        if (!old) return old;
+        let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+        try { history = JSON.parse(old.messageHistory ?? "[]"); } catch { history = []; }
+        history = [...history, { role: "note", content: variables.note, ts: now, ...(senderName ? { senderName } : {}) }];
+        return { ...old, messageHistory: JSON.stringify(history) };
       });
       toast.success("Note saved");
     },
