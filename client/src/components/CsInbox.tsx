@@ -2256,7 +2256,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'linear-gradient(180deg,#FCFCFD 0%,#F8F9FC 100%)', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               {/* ── Chat header ── */}
               <div style={{height:'88px',padding:'0 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'16px',flexShrink:0}}>
@@ -2423,7 +2423,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'#FBFCFD',padding:'32px 32px 24px'}} ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'linear-gradient(180deg,#FCFCFD 0%,#F8F9FC 100%)',padding:'32px 32px 24px'}} ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
