@@ -3361,14 +3361,69 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
-
         // Fetch the primary session
-        const [primary] = await db
-          .select()
-          .from(conversationSessions)
-          .where(eq(conversationSessions.id, input.sessionId))
-          .limit(1);
-        if (!primary) return null;
+        let primary: typeof conversationSessions.$inferSelect | undefined;
+        let fetchError: unknown = null;
+        try {
+          const rows = await db
+            .select()
+            .from(conversationSessions)
+            .where(eq(conversationSessions.id, input.sessionId))
+            .limit(1);
+          primary = rows[0];
+        } catch (err) {
+          fetchError = err;
+        }
+        // ── Diagnostic instrumentation ─────────────────────────────────────────
+        if (fetchError) {
+          console.error(
+            '--------------------------------------------------\n' +
+            '[getCsConversation] EXCEPTION\n' +
+            'sessionId requested:', input.sessionId, '\n' +
+            'Reason for null: exception\n' +
+            '--------------------------------------------------',
+            fetchError
+          );
+          throw fetchError;
+        }
+        if (!primary) {
+          console.log(
+            '--------------------------------------------------\n' +
+            '[getCsConversation]\n' +
+            'sessionId:', input.sessionId, '\n' +
+            'Found primary: false\n' +
+            'Query returned row id: null\n' +
+            'Phone: null\n' +
+            'Message count: 0\n' +
+            'messageHistory bytes: 0\n' +
+            'messageHistory parsed: 0\n' +
+            'Returning null: true\n' +
+            '\n' +
+            'SELECT sessionId requested:', input.sessionId, '\n' +
+            'Reason for null: not found\n' +
+            '--------------------------------------------------'
+          );
+          return null;
+        }
+        let parsedMsgCount = 0;
+        try {
+          const parsed = JSON.parse(primary.messageHistory ?? '[]');
+          parsedMsgCount = Array.isArray(parsed) ? parsed.length : 0;
+        } catch { parsedMsgCount = -1; }
+        console.log(
+          '--------------------------------------------------\n' +
+          '[getCsConversation]\n' +
+          'sessionId:', input.sessionId, '\n' +
+          'Found primary: true\n' +
+          'Query returned row id:', primary.id, '\n' +
+          'Phone:', primary.leadPhone ?? 'null', '\n' +
+          'Message count:', parsedMsgCount, '\n' +
+          'messageHistory bytes:', (primary.messageHistory ?? '').length, '\n' +
+          'messageHistory parsed:', parsedMsgCount, '\n' +
+          'Returning null: false\n' +
+          '--------------------------------------------------'
+        );
+        // ── End diagnostic instrumentation ─────────────────────────────────────
 
         // Find all sessions for the same phone (same merge logic as listCsInbox)
         const phone = primary.leadPhone?.trim();

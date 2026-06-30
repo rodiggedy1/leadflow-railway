@@ -610,7 +610,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // This is the architectural split: the inbox list no longer needs to carry
   // full histories. getCsConversation fetches on demand when a session is opened.
   console.log('[DETAIL] start', effectiveSelectedId);
-  const { data: conversationDetail, isLoading: conversationDetailLoading, isFetching: conversationDetailFetching } = trpc.leads.getCsConversation.useQuery(
+  const {
+    data: conversationDetail,
+    isLoading: conversationDetailLoading,
+    isFetching: conversationDetailFetching,
+    status: conversationDetailStatus,
+    fetchStatus: conversationDetailFetchStatus,
+    isPending: conversationDetailIsPending,
+    isSuccess: conversationDetailIsSuccess,
+    isError: conversationDetailIsError,
+    error: conversationDetailError,
+  } = trpc.leads.getCsConversation.useQuery(
     { sessionId: effectiveSelectedId! },
     {
       enabled: effectiveSelectedId != null && effectiveSelectedId > 0,
@@ -622,7 +632,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     }
   );
   console.log('[DETAIL] loading', conversationDetailLoading, '| fetching', conversationDetailFetching);
-  console.log('[DETAIL] success', conversationDetail?.id, '| messageHistory.length', conversationDetail?.messageHistory?.length ?? 0);
+  console.log('[DETAIL] success', conversationDetail?.sessionId, '| messageHistory.length', conversationDetail?.messageHistory?.length ?? 0);
+  console.log(
+    '[DETAIL QUERY]',
+    {
+      status: conversationDetailStatus,
+      fetchStatus: conversationDetailFetchStatus,
+      isPending: conversationDetailIsPending,
+      isLoading: conversationDetailLoading,
+      isFetching: conversationDetailFetching,
+      isSuccess: conversationDetailIsSuccess,
+      isError: conversationDetailIsError,
+      data: conversationDetail,
+      error: conversationDetailError,
+    }
+  );
 
   // Parse the detail query result into the messages array format used by the detail panel.
   // Falls back to selected.messages (from listCsInbox) while the detail query is loading.
