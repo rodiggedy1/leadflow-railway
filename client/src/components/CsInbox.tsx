@@ -604,26 +604,67 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // Parse the detail query result into the messages array format used by the detail panel.
   // Falls back to selected.messages (from listCsInbox) while the detail query is loading.
   type RawMsg = { role: string; content: string; ts?: number; senderName?: string; media?: string[] };
+
+  // ── INSTRUMENTATION: log every time conversationDetail changes ──────────────
+  const prevConversationDetailRef = useRef<typeof conversationDetail>(undefined);
+  if (prevConversationDetailRef.current !== conversationDetail) {
+    console.log('[CsInbox][lifecycle] conversationDetail changed', {
+      sessionId: effectiveSelectedId,
+      wasUndefined: prevConversationDetailRef.current === undefined,
+      isNowUndefined: conversationDetail === undefined,
+      messageHistoryLength: conversationDetail?.messageHistory?.length ?? 0,
+      isLoading: conversationDetailLoading,
+      ts: Date.now(),
+    });
+    prevConversationDetailRef.current = conversationDetail;
+  }
+
   const detailMessages: Conversation["messages"] = useMemo(() => {
-    if (!conversationDetail?.messageHistory) return selected?.messages ?? [];
-    let raw: RawMsg[] = [];
-    try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
-    return raw.map((m) => ({
-      sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
-      text: m.content,
-      time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
-      ts: m.ts as number | undefined,
-      media: (m.media ?? []) as string[],
-      senderName: m.senderName,
-    }));
-  }, [conversationDetail?.messageHistory, selected?.messages]);
+    const result = (() => {
+      if (!conversationDetail?.messageHistory) return selected?.messages ?? [];
+      let raw: RawMsg[] = [];
+      try { raw = JSON.parse(conversationDetail.messageHistory); } catch { raw = []; }
+      return raw.map((m) => ({
+        sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
+        text: m.content,
+        time: m.ts ? new Date(m.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "",
+        ts: m.ts as number | undefined,
+        media: (m.media ?? []) as string[],
+        senderName: m.senderName,
+      }));
+    })();
+    console.log('[CsInbox][lifecycle] detailMessages recomputed', {
+      sessionId: effectiveSelectedId,
+      count: result.length,
+      source: conversationDetail?.messageHistory ? 'getCsConversation' : 'selected.messages (fallback)',
+      selectedMsgCount: selected?.messages?.length ?? 0,
+      ts: Date.now(),
+    });
+    return result;
+  }, [conversationDetail?.messageHistory, selected?.messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // selectedWithDetail: the selected conversation augmented with messages from the detail query.
   // All detail-panel code reads from this instead of selected.messages directly.
   const selectedWithDetail: Conversation | undefined = useMemo(() => {
     if (!selected) return undefined;
-    return { ...selected, messages: detailMessages };
+    const result = { ...selected, messages: detailMessages };
+    console.log('[CsInbox][lifecycle] selectedWithDetail recomputed', {
+      sessionId: selected.id,
+      messageCount: result.messages.length,
+      ts: Date.now(),
+    });
+    return result;
   }, [selected, detailMessages]);
+
+  // ── INSTRUMENTATION: log every render ────────────────────────────────────────
+  console.log('[CsInbox][render]', {
+    effectiveSelectedId,
+    conversationDetailLoading,
+    hasConversationDetail: !!conversationDetail,
+    detailMsgCount: detailMessages.length,
+    selectedWithDetailMsgCount: selectedWithDetail?.messages?.length ?? 0,
+    ts: Date.now(),
+  });
 
   // Typing presence — broadcast when this agent is composing, show others typing
   const csChannelKey = effectiveSelectedId ? `cs:${effectiveSelectedId}` : "";
