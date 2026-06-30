@@ -592,6 +592,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       enabled: effectiveSelectedId != null && effectiveSelectedId > 0,
       staleTime: 0,           // always fresh when switching conversations
       refetchOnWindowFocus: false,
+      // Poll at the same cadence as the inbox list so new inbound messages appear
+      // even when SSE is not available (e.g. preview env without webhook forwarding).
+      refetchInterval: 30_000,
     }
   );
 

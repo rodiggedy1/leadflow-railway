@@ -3133,25 +3133,25 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const _d1 = performance.now() - _t1;
 
         // ── Dataset stats ─────────────────────────────────────────────────────
+        // messageHistory is still in the SELECT (Step 3A safety net) but we no longer parse it for inbox cards.
         const _totalJsonBytes = sessions.reduce((acc, s) => acc + (s.messageHistory?.length ?? 0), 0);
 
-        // ── Stage 2: JSON.parse messageHistory ────────────────────────────────
-        type HistoryEntry = { role: string; ts?: number };
+        // ── Stage 2: summary columns (no JSON parse) ──────────────────────────
         const _t2 = performance.now();
-        const parsedHistories: HistoryEntry[][] = sessions.map((s) => {
-          try { return JSON.parse(s.messageHistory ?? "[]"); } catch { return []; }
-        });
+        // No-op: summary fields are already on each session row — nothing to compute.
         const _d2 = performance.now() - _t2;
 
-        // ── Stage 3: last message extraction + unread calculation ─────────────
+        // ── Stage 3: last message extraction + unread calc (from summary cols) ─
         const _t3 = performance.now();
-        const augmented = sessions.map((s, i) => {
-          const history = parsedHistories[i];
-          const lastEntry = history[history.length - 1];
-          const lastMsgTs = lastEntry?.ts ?? s.updatedAt.getTime();
-          const lastRealEntry = [...history].reverse().find((e) => e.role === "user" || e.role === "assistant");
-          const hasUnanswered = !!lastRealEntry && lastRealEntry.role === "user";
-          const lastSenderRole: "user" | "assistant" | null = lastRealEntry?.role === "user" ? "user" : lastRealEntry?.role === "assistant" ? "assistant" : null;
+        const augmented = sessions.map((s) => {
+          // Use denormalized summary columns — no JSON parse needed.
+          const lastMsgTs = s.lastMessageTs && s.lastMessageTs > 0
+            ? s.lastMessageTs
+            : s.updatedAt.getTime();
+          const hasUnanswered = s.lastMessageRole === "user";
+          const lastSenderRole: "user" | "assistant" | null =
+            s.lastMessageRole === "user" ? "user" :
+            s.lastMessageRole === "assistant" ? "assistant" : null;
           return { ...s, lastMsgTs, hasUnanswered, lastSenderRole };
         });
         const _d3 = performance.now() - _t3;
@@ -3263,27 +3263,30 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const _d7 = performance.now() - _t7;
 
         // ── Dataset stats ─────────────────────────────────────────────────────
-        const _totalMsgs = parsedHistories.reduce((acc, h) => acc + h.length, 0);
-        const _maxMsgs = parsedHistories.reduce((acc, h) => Math.max(acc, h.length), 0);
+        // Dataset stats from summary columns (no JSON parse)
+        const _totalMsgs = sessions.reduce((acc, s) => acc + (s.messageCount ?? 0), 0);
+        const _maxMsgs = sessions.reduce((acc, s) => Math.max(acc, s.messageCount ?? 0), 0);
         const _avgMsgs = sessions.length > 0 ? (_totalMsgs / sessions.length).toFixed(1) : "0";
+        // messageHistory is still in SELECT (Step 3A safety net) — measure its wire cost
         const _totalKB = (_totalJsonBytes / 1024).toFixed(1);
         const _totalMB = (_totalJsonBytes / 1024 / 1024).toFixed(2);
 
-        // ── Summary log ───────────────────────────────────────────────────────
+        // ── Summary log ─────────────────────────────────────────────────────
         const _total = performance.now() - _totalStart;
         console.log(
           `[listCsInbox perf]\n` +
           `  Dataset: sessions=${sessions.length} deduped=${deduped.length} phones=${phones.length}\n` +
           `           total_msgs=${_totalMsgs} avg_msgs/session=${_avgMsgs} max_msgs=${_maxMsgs}\n` +
-          `           json_bytes=${_totalKB}KB (${_totalMB}MB) cleaner_jobs=${_cleanerJobsCount} today_jobs=${_todayJobsCount}\n` +
-          `  Stage 1  conversationSessions query ............. ${_d1.toFixed(1)}ms\n` +
-          `  Stage 2  JSON.parse messageHistory .............. ${_d2.toFixed(1)}ms\n` +
-          `  Stage 3  last-msg extraction + unread calc ....... ${_d3.toFixed(1)}ms\n` +
-          `  Stage 4  dedupe/group/merge by phone ............. ${_d4.toFixed(1)}ms\n` +
-          `  Stage 5  cleanerJobs lookup (REGEXP_REPLACE) ..... ${_d5.toFixed(1)}ms\n` +
-          `  Stage 6  today's jobs lookup (REGEXP_REPLACE) .... ${_d6.toFixed(1)}ms\n` +
-          `  Stage 7  response mapping ........................ ${_d7.toFixed(1)}ms\n` +
-          `  TOTAL ............................................. ${_total.toFixed(1)}ms`
+          `           messageHistory_wire=${_totalKB}KB (${_totalMB}MB) [SAFETY NET - still in SELECT]\n` +
+          `           cleaner_jobs=${_cleanerJobsCount} today_jobs=${_todayJobsCount}\n` +
+          `  Stage 1  conversationSessions query (incl messageHistory) .. ${_d1.toFixed(1)}ms\n` +
+          `  Stage 2  summary cols read (no JSON parse) .................. ${_d2.toFixed(1)}ms\n` +
+          `  Stage 3  last-msg/unread from summary cols .................. ${_d3.toFixed(1)}ms\n` +
+          `  Stage 4  dedupe/group/merge by phone ........................ ${_d4.toFixed(1)}ms\n` +
+          `  Stage 5  cleanerJobs lookup (REGEXP_REPLACE) ................ ${_d5.toFixed(1)}ms\n` +
+          `  Stage 6  today's jobs lookup (REGEXP_REPLACE) ............... ${_d6.toFixed(1)}ms\n` +
+          `  Stage 7  response mapping .................................. ${_d7.toFixed(1)}ms\n` +
+          `  TOTAL ...................................................... ${_total.toFixed(1)}ms`
         );
 
         // Fire async LLM status scoring for stale sessions — never blocks the response
