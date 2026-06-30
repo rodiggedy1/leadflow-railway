@@ -338,11 +338,24 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     [agentPhotoData?.photos]
   );
 
-  // Collect all phones from real sessions for batch name resolution
-  const allPhones = useMemo(
-    () => (csData ?? []).map((r) => r.leadPhone ?? "").filter(Boolean),
-    [csData]
-  );
+  // Collect unique phones from visible sessions only — deduplicated by phone number.
+  // Using csData but deduplicating by phone so we send at most one entry per unique phone.
+  // This mirrors the canonical-session dedup in listCsInbox and keeps the batchResolveNames
+  // payload small (one phone per conversation card, not one per historical session).
+  const allPhones = useMemo(() => {
+    if (!csData) return [];
+    const seen = new Set<string>();
+    const phones: string[] = [];
+    for (const r of csData) {
+      const phone = (r.leadPhone ?? "").trim();
+      if (phone && !seen.has(phone)) {
+        seen.add(phone);
+        phones.push(phone);
+      }
+    }
+    console.log('[batchResolveNames] csData.length:', csData.length, '| uniquePhones.length:', phones.length);
+    return phones;
+  }, [csData]);
   const { data: nameMap } = trpc.leads.batchResolveNames.useQuery(
     { phones: allPhones },
     { enabled: allPhones.length > 0, refetchOnWindowFocus: false }
