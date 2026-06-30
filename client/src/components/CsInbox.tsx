@@ -68,9 +68,6 @@ import {
   Calendar,
   CheckCheck,
   MessageSquareWarning,
-  Play,
-  Pause,
-  ChevronUp,
 } from "lucide-react";
 import {
   Tooltip,
@@ -121,7 +118,7 @@ type Conversation = {
 
 const queueStyles: Record<Queue, { tone: string; dot: string }> = {
   "Priority": { tone: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500" },
-  "New":      { tone: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-500" },
+  "New":      { tone: "bg-blue-50 text-blue-700 border-blue-200",    dot: "bg-blue-500" },
   "Active":   { tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
   "Resolved": { tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
   "Teams":    { tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
@@ -1271,13 +1268,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   );
   const [debriefDismissed, setDebriefDismissed] = useState<Record<number, boolean>>({});
   const showDebrief = !!callDebrief && selected?.id != null && !debriefDismissed[selected.id];
-  // Track which call bubbles are expanded (by rec.id)
-  const [expandedCallIds, setExpandedCallIds] = useState<Set<number>>(new Set());
-  const toggleCallExpanded = (id: number) =>
-    setExpandedCallIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  // Track which call is currently playing audio
-  const [playingCallId, setPlayingCallId] = useState<number | null>(null);
-  const callAudioRefs = useRef<Record<number, HTMLAudioElement | null>>({});
 
   // ── Call recordings — fetched for the selected session and merged inline ──
   const { data: callRecordings = [] } = trpc.leads.getCallRecordings.useQuery(
@@ -1366,22 +1356,22 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col cs-inbox-scope" style={{color:'#101828', background:'transparent'}}>
-      <div className="w-full flex flex-col flex-1 min-h-0" style={{padding:'20px'}}>
-        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
+    <div className="h-full overflow-hidden flex flex-col text-slate-900" style={{background: 'transparent'}}>
+      <div className="w-full flex flex-col flex-1 min-h-0 p-6">
+        <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '12px'}}>
           {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[32px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: '#fffdfb', border: 'none', boxShadow: '0 8px 40px rgba(17,19,24,.07)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '24px 24px 24px'}}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
 
               {/* Revenue Lane header */}
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div style={{fontSize:'10px', fontWeight:900, letterSpacing:'.22em', color:'#98A2B3', textTransform:'uppercase', marginBottom:'6px'}}>Revenue Lane</div>
-                  <div style={{fontSize:'34px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Clients</div>
+                  <div style={{fontSize:'10px', fontWeight:800, letterSpacing:'.18em', color:'#9aa3b2', textTransform:'uppercase', marginBottom:'6px'}}>Revenue Lane</div>
+                  <div style={{fontSize:'22px', fontWeight:850, lineHeight:1, letterSpacing:'-0.03em', color:'#111318'}}>Clients</div>
                 </div>
-                <div style={{background:'#101828', color:'white', height:'28px', padding:'0 12px', borderRadius:'999px', fontSize:'12px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
+                <div style={{background:'#111318', color:'white', height:'32px', padding:'0 14px', borderRadius:'999px', fontSize:'13px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
                   {clientConvs.length} open
                 </div>
               </div>
@@ -1393,13 +1383,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search clients, leads, bookings"
-                  style={{height:'36px', borderRadius:'999px', background:'#FAFBFC', border:'1px solid #E6E9EE', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', fontWeight:600, color:'#101828', boxShadow:'none'}}
+                  style={{height:'36px', borderRadius:'999px', background:'white', border:'1px solid rgba(17,24,39,.08)', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', fontWeight:600, color:'#111318', boxShadow:'none'}}
                   className="placeholder:text-[#9aa3b2] focus-visible:ring-0"
                 />
               </div>
 
               {/* AI priority queue — collapsed by default, hover to expand */}
-              <div className="group cursor-default transition-all" style={{marginTop:'16px', borderRadius:'22px', padding:'16px', background:'#FFFFFF', boxShadow:'0 8px 22px rgba(15,23,42,.05)', border:'1px solid rgba(16,24,40,.06)'}}>
+              <div className="group cursor-default transition-all" style={{marginTop:'16px', borderRadius:'18px', padding:'16px', background:'linear-gradient(180deg,#ffffff,#fbfaf7)', boxShadow:'0 8px 24px rgba(17,19,24,.055)'}}>
                 <div className="flex flex-col" style={{gap:'16px'}}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center justify-center" style={{width:'32px', height:'32px', borderRadius:'10px', background:'#111318'}}>
@@ -1408,7 +1398,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     {priorityLoading && <RefreshCw className="h-3 w-3 animate-spin text-slate-400 shrink-0" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div style={{fontSize:'13px', fontWeight:800, color:'#101828'}}>Client priority queue</div>
+                    <div style={{fontSize:'13px', fontWeight:750, color:'#111318'}}>Client priority queue</div>
                     {priorityItems.length === 0 && !priorityLoading && (
                       <div style={{marginTop:'4px', fontSize:'12px', fontWeight:500, color:'#7a8290', lineHeight:'1.4'}}>No urgent items right now.</div>
                     )}
@@ -1459,7 +1449,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
               {/* Active filter banner — shown when not viewing All */}
               {activeFilter !== 'All' && (
-                <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'999px', background:'#101828', color:'white', fontSize:'12px', fontWeight:700}}>
+                <div style={{marginTop:'12px', display:'flex', alignItems:'center', gap:'6px', padding:'6px 10px', borderRadius:'999px', background:'#111318', color:'white', fontSize:'12px', fontWeight:600}}>
                   <span style={{flex:1}}>Showing: {activeFilter}</span>
                   <button
                     onClick={() => setActiveFilter('All')}
@@ -1474,15 +1464,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Client conversation list */}
               <div style={{marginTop:'16px'}}>
                 <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-                  {clientConvs.length === 0 && (
-                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'64px 24px',textAlign:'center'}}>
-                      <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
-                        <MessageSquare style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
-                      </div>
-                      <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>Inbox is clear</div>
-                      <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>New client conversations will appear here</div>
-                    </div>
-                  )}
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
@@ -1534,7 +1515,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       // Mechanical fallbacks (used when llmTier is null)
                       act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
                       your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
-                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
+                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-400", Icon: Clock3 },
                       monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
                       resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
@@ -1603,7 +1584,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       solved:         "ring-slate-200 shadow-slate-100",
                       act_now:        "ring-rose-300 shadow-rose-100",
                       your_turn:      "ring-amber-400 shadow-amber-100",
-                      their_turn:     "ring-slate-300 shadow-slate-100",
+                      their_turn:     "ring-blue-300 shadow-blue-100",
                       monitor:        "ring-slate-300 shadow-slate-100",
                       resolved:       "ring-slate-200 shadow-slate-100",
                     };
@@ -1617,11 +1598,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         key={conversation.id}
                         layout
                         animate={isResolvingThis ? { scale: [1, 0.985, 1.01, 1] } : { scale: 1 }}
-                        transition={{ duration: 0.16, ease: [.2,.8,.2,1] }}
-                        className="group relative rounded-[22px]"
+                        transition={{ duration: 0.45 }}
+                        className="group relative rounded-[20px]"
                       >
                       <motion.button
-                        whileHover={{ y: -1, transition: { duration: 0.12, ease: [.2,.8,.2,1] } }}
+                        whileHover={{ y: -1 }}
                         onClick={() => {
                           setSelectedId(conversation.id);
                           userNavigatedToId.current = conversation.id;
@@ -1629,37 +1610,37 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         }}
                         className="w-full text-left relative"
                         style={{
-                          borderRadius: '22px',
-                          padding: '16px 14px 16px 16px',
-                          border: 'none',
+                          borderRadius: '20px',
+                          padding: isUnread ? '14px 10px 14px 14px' : '12px 10px 12px 12px',
+                          border: isUnread ? 'none' : '1px solid rgba(17,24,39,.03)',
                           minHeight: 'unset',
-                          boxShadow: isSelected ? '0 18px 45px rgba(15,23,42,.09)' : isUnread ? '0 8px 22px rgba(15,23,42,.05)' : 'none',
-                          background: isSelected ? '#FFFFFF' : isUnread ? '#FFFFFF' : 'transparent',
+                          boxShadow: isSelected ? '0 4px 20px rgba(17,24,39,.08)' : isUnread ? '0 18px 50px rgba(17,24,39,.10)' : 'none',
+                          background: isSelected ? '#ffffff' : isUnread ? '#ffffff' : '#fcfbf8',
                         }}
                       >
                         {/* Selected accent bar */}
                         {isSelected && (
-                          <div style={{position:'absolute', left:0, top:'16px', bottom:'16px', width:'4px', borderRadius:'999px', background:'linear-gradient(180deg,#FF5A1F,#FF8A4C)'}} />
+                          <div style={{position:'absolute', left:0, top:'18px', bottom:'18px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
-                        <div style={{display:'grid', gridTemplateColumns:'36px 1fr auto', columnGap:'8px', alignItems:'start'}}>
+                        <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'6px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className="flex items-center justify-center font-bold text-white" style={{width:'36px', height:'36px', borderRadius:'18px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.7) brightness(.97)'}}>
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.75) brightness(.98)'}}>
                             {initials}
                           </div>
 
                           {/* Content: name + metadata + preview + status */}
                           <div className="min-w-0">
                             <div className="flex items-center" style={{gap:'6px'}}>
-                              <span style={{fontSize:'17px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
+                              <span style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.02em', color: isUnread ? '#111827' : '#4b5563'}}>{conversation.name}</span>
                             </div>
-                            <div style={{marginTop:'2px', fontSize:'12px', fontWeight:650, color:'#98A2B3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            <div style={{marginTop:'1px', fontSize:'11px', fontWeight:500, color: isUnread ? '#667085' : '#b1b9c6', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                               {conversation.service || conversation.location || ''}
                             </div>
                           </div>
 
                           {/* Timestamp — top right */}
-                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:650, color:'#98A2B3'}}>
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight: isUnread ? 800 : 500, color: isUnread ? '#667085' : '#c0c6d0'}}>
                             {conversation.lastMsgTs
                               ? (() => {
                                   const d = new Date(conversation.lastMsgTs);
@@ -1677,15 +1658,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
 
                         {/* Row 2: Message preview — spans content + time columns */}
-                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight:700, color: isUnread ? '#344054' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#2f3747' : '#9aa3b2', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
                         {/* Row 3: Status pill — minimal outlined style matching target screenshot */}
                         <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
                           <div style={{
-                            height:'26px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:850, display:'inline-flex', alignItems:'center', gap:'4px',
-                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#0F8A52' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#C2410C' : '#475467',
-                            background: (statusKey === 'resolved' || statusKey === 'solved') ? '#EAF8F0' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#FFF1E8' : '#F2F4F7',
-                            border: 'none',
+                            height:'24px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:600, display:'inline-flex', alignItems:'center', gap:'4px',
+                            color: statusKey === 'resolved' || statusKey === 'solved' ? '#16a34a' : statusKey === 'act_now' || statusKey === 'your_turn' || statusKey === 'waiting_on_you' || statusKey === 'hot_lead' || statusKey === 'slow_response' || statusKey === 'objection' ? '#ea580c' : '#6b7280',
+                            background: (statusKey === 'resolved' || statusKey === 'solved') ? '#f0fdf4' : 'transparent',
+                            border: (statusKey === 'resolved' || statusKey === 'solved') ? 'none' : '1.5px solid currentColor',
                           }}>
                             {(statusKey === 'resolved' || statusKey === 'solved') && <span style={{fontSize:'13px', lineHeight:1}}>✓</span>}
                             {sc.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
@@ -1772,16 +1753,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[32px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: '#fffdfb', border: 'none', boxShadow: '0 8px 40px rgba(17,19,24,.07)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
               {/* Operations Lane header */}
               <div className="flex items-start justify-between gap-3" style={{marginBottom:'16px'}}>
                 <div>
-                  <div style={{fontSize:'10px', fontWeight:900, letterSpacing:'.22em', textTransform:'uppercase', color:'#98A2B3', marginBottom:'6px'}}>Operations Lane</div>
-                  <div style={{fontSize:'34px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Team</div>
+                  <div style={{fontSize:'10px', fontWeight:800, letterSpacing:'0.18em', textTransform:'uppercase', color:'#9aa3b2', marginBottom:'2px'}}>Operations Lane</div>
+                  <div style={{fontSize:'22px', fontWeight:850, letterSpacing:'-0.02em', color:'#111318', lineHeight:1}}>Team</div>
                 </div>
-                <div style={{background:'#101828', color:'white', height:'28px', padding:'0 12px', borderRadius:'999px', fontSize:'12px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
+                <div style={{display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:'999px', background:'#111318', color:'white', fontSize:'13px', fontWeight:700, height:'32px', padding:'0 12px'}}>
                   {teamConvs.filter((c) => !!(c as any).hasUnanswered).length} active
                 </div>
               </div>
@@ -1799,7 +1780,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               </div>
 
               {/* Team priority queue — collapsed by default, hover to expand */}
-              <div className="group cursor-default transition-all" style={{marginBottom:'16px', borderRadius:'22px', padding:'16px', background:'#FFFFFF', boxShadow:'0 8px 22px rgba(15,23,42,.05)', border:'1px solid rgba(16,24,40,.06)'}}>
+              <div className="group cursor-default transition-all" style={{background:'#fbfaf7', borderRadius:'18px', padding:'16px', marginBottom:'16px'}}>
                 <div className="flex items-start gap-3">
                   <div className="shrink-0 flex items-center justify-center bg-black" style={{width:'32px', height:'32px', borderRadius:'8px'}}>
                     <Users className="h-4 w-4 text-white" />
@@ -1844,12 +1825,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Team conversation list */}
               <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
                 {teamConvs.length === 0 && (
-                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'48px 24px',textAlign:'center'}}>
-                    <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
-                      <SprayCan style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
-                    </div>
-                    <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>All clear</div>
-                    <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>Cleaner messages will appear here when they come in</div>
+                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-6 text-center">
+                    <SprayCan className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <div className="text-sm text-slate-400">No team conversations</div>
+                    <div className="text-xs text-slate-300 mt-1">Cleaner messages appear here</div>
                   </div>
                 )}
                 {teamConvs.map((conversation) => {
@@ -1899,7 +1878,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     // Mechanical fallbacks
                     act_now:            { label: "⚡ Act Now",              action: waitingTooLong2 ? `Reply now · ${waitMinDisplay2}m wait` : "Needs attention · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500",   Icon: ShieldAlert },
                     your_turn:          { label: "👉 Your Turn",           action: "Team waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500",  Icon: MessageSquare },
-                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-slate-50 text-slate-600 border-slate-200",   dot: "bg-slate-400",   Icon: Clock3 },
+                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-400",   Icon: Clock3 },
                     monitor:            { label: "👀 Monitor",             action: "Low urgency · review when free",       pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400",  Icon: CheckCircle2 },
                     resolved:           { label: "✓ Resolved",             action: "Closed",                              pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
                   };
@@ -1958,35 +1937,35 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       >
                         {/* Selected accent bar */}
                         {isSelected && (
-                          <div style={{position:'absolute', left:0, top:'16px', bottom:'16px', width:'4px', borderRadius:'999px', background:'linear-gradient(180deg,#FF5A1F,#FF8A4C)'}} />
+                          <div style={{position:'absolute', left:0, top:'18px', bottom:'18px', width:'4px', borderRadius:'999px', background:'#ff6b1a'}} />
                         )}
                         {/* Row grid: avatar | content | time */}
-                        <div style={{display:'grid', gridTemplateColumns:'36px 1fr auto', columnGap:'8px', alignItems:'start'}}>
+                        <div style={{display:'grid', gridTemplateColumns:'34px 1fr auto', columnGap:'6px', alignItems:'start'}}>
                           {/* Avatar */}
-                          <div className="flex items-center justify-center font-bold text-white" style={{width:'36px', height:'36px', borderRadius:'18px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.7) brightness(.97)'}}>
+                          <div className="flex items-center justify-center font-bold text-white" style={{width:'34px', height:'34px', borderRadius:'10px', fontSize:'13px', fontWeight:700, flexShrink:0, background:gradient, filter: isUnread ? 'none' : 'saturate(.75) brightness(.98)'}}>
                             {initials}
                           </div>
                           {/* Content */}
                           <div className="min-w-0">
                             <div className="flex items-center" style={{gap:'6px'}}>
-                              <span style={{fontSize:'17px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
+                              <span style={{fontSize:'13px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.02em', color: isUnread ? '#111827' : '#4b5563'}}>{conversation.name}</span>
                             </div>
-                            <div style={{fontSize:'12px', fontWeight:650, color:'#98A2B3', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                            <div style={{fontSize:'11px', fontWeight:500, color: isUnread ? '#667085' : '#b1b9c6', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                               {conversation.service || ''}
                             </div>
                           </div>
                           {/* Time */}
-                          <div style={{fontSize:'12px', fontWeight:650, color:'#98A2B3', whiteSpace:'nowrap'}}>{conversation.wait}</div>
+                          <div style={{fontSize:'12px', fontWeight: isUnread ? 800 : 500, color: isUnread ? '#667085' : '#c0c6d0', whiteSpace:'nowrap'}}>{conversation.wait}</div>
                         </div>
                         {/* Row 2: preview */}
-                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight:700, color: isUnread ? '#344054' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
+                        <div style={{marginTop:'6px', fontSize:'12px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#2f3747' : '#9aa3b2', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
                         {/* Status pill row — matches client column style */}
                         <div style={{marginTop:'8px'}}>
                           <div style={{
-                            height:'26px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:850, display:'inline-flex', alignItems:'center', gap:'4px',
-                            color: statusKey2 === 'resolved' || statusKey2 === 'solved' ? '#0F8A52' : statusKey2 === 'act_now' || statusKey2 === 'your_turn' || statusKey2 === 'waiting_on_you' || statusKey2 === 'hot_lead' || statusKey2 === 'slow_response' || statusKey2 === 'objection' || statusKey2 === 'job_at_risk' || statusKey2 === 'otw_missing' || statusKey2 === 'arrival_issue' ? '#C2410C' : '#475467',
-                            background: (statusKey2 === 'resolved' || statusKey2 === 'solved') ? '#EAF8F0' : statusKey2 === 'act_now' || statusKey2 === 'your_turn' || statusKey2 === 'waiting_on_you' || statusKey2 === 'hot_lead' || statusKey2 === 'slow_response' || statusKey2 === 'objection' || statusKey2 === 'job_at_risk' || statusKey2 === 'otw_missing' || statusKey2 === 'arrival_issue' ? '#FFF1E8' : '#F2F4F7',
-                            border: 'none',
+                            height:'24px', padding:'0 10px', borderRadius:'999px', fontSize:'12px', fontWeight:600, display:'inline-flex', alignItems:'center', gap:'4px',
+                            color: statusKey2 === 'resolved' || statusKey2 === 'solved' ? '#16a34a' : statusKey2 === 'act_now' || statusKey2 === 'your_turn' || statusKey2 === 'waiting_on_you' || statusKey2 === 'hot_lead' || statusKey2 === 'slow_response' || statusKey2 === 'objection' || statusKey2 === 'job_at_risk' || statusKey2 === 'otw_missing' || statusKey2 === 'arrival_issue' ? '#ea580c' : '#6b7280',
+                            background: (statusKey2 === 'resolved' || statusKey2 === 'solved') ? '#f0fdf4' : 'transparent',
+                            border: (statusKey2 === 'resolved' || statusKey2 === 'solved') ? 'none' : '1.5px solid currentColor',
                           }}>
                             {(statusKey2 === 'resolved' || statusKey2 === 'solved') && <span style={{fontSize:'13px', lineHeight:1}}>✓</span>}
                             {sc2.label.replace(/^[\p{Emoji}\u200d\ufe0f\s]+/u, '').trim()}
@@ -2045,10 +2024,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── CENTER: Thread ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0}}>
+          <Card className="rounded-[30px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
-              {/* ── Chat header ── */}
-              <div style={{height:'88px',padding:'0 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'16px',flexShrink:0}}>
+              {/* ── Chat header: single-row, clean typography hierarchy ── */}
+              <div style={{height:'88px',padding:'0 24px',background:'white',borderBottom:'1px solid rgba(17,24,39,.06)',display:'flex',alignItems:'center',justifyContent:'space-between',gap:'16px',flexShrink:0}}>
                 <div className="flex items-center justify-between gap-3 w-full">
                   {/* Left: avatar + name stack */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -2067,7 +2046,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       const ini = selected.initials || "?";
                       const idx = (ini.charCodeAt(0) * 31 + (ini.charCodeAt(1) || 0)) % gradientPalette.length;
                       return (
-                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'44px',height:'44px',borderRadius:'18px',fontSize:'15px',fontWeight:700}}>
+                        <div className={`shrink-0 flex items-center justify-center bg-gradient-to-br ${gradientPalette[idx]} font-bold text-white`} style={{width:'40px',height:'40px',borderRadius:'12px',fontSize:'14px',fontWeight:700}}>
                           {ini}
                         </div>
                       );
@@ -2099,7 +2078,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </form>
                       ) : (
                         <div className="flex items-center gap-1.5 group">
-                          <h2 style={{fontSize:'18px',fontWeight:900,color:'#101828',lineHeight:1.2,letterSpacing:'-0.03em'}} className="truncate">{selected.name}</h2>
+                          <h2 style={{fontSize:'16px',fontWeight:700,color:'#111827',lineHeight:1.2,letterSpacing:'-0.01em'}} className="truncate">{selected.name}</h2>
                           <button
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-300 hover:text-slate-500"
                             onClick={() => { setNameInput((selected as any).rawName ?? ""); setEditingName(true); }}
@@ -2111,7 +2090,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       )}
                       {/* Sub-line: phone + queue badge */}
                       <div className="flex items-center gap-1.5 mt-0.5">
-                        {selected.phone && <span style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>{selected.phone}</span>}
+                        {selected.phone && <span style={{fontSize:'12px',color:'#9aa3b2',fontWeight:400}}>{selected.phone}</span>}
                         {selected.phone && selected.queue && <span style={{color:'#c0c6d0',fontSize:'12px'}}>·</span>}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -2212,13 +2191,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'#FBFCFD',padding:'32px 40px 24px'}} ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'linear-gradient(180deg,#fffdfc,#faf8f4)',padding:'36px 32px 24px'}} ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.15 }}
-                  style={{display:'flex',flexDirection:'column',gap:'28px'}}
+                  style={{display:'flex',flexDirection:'column',gap:'24px'}}
                 >
                   {/* Merge SMS messages and call recordings into a single chronological timeline */}
                   {(() => {
@@ -2260,9 +2239,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       if (showSeparator) lastDateStr = dateStr;
                       const separator = showSeparator ? (
                         <div key={`sep-${dateStr}`} className="flex items-center gap-3 my-6">
-                          <div className="flex-1 h-px" style={{background:'#E6E9EE'}} />
-                          <span style={{fontSize:'11px', fontWeight:900, letterSpacing:'.22em', textTransform:'uppercase', color:'#98A2B3', whiteSpace:'nowrap'}}>{displayDate}</span>
-                          <div className="flex-1 h-px" style={{background:'#E6E9EE'}} />
+                          <div className="flex-1 h-px bg-slate-200" />
+                          <span className="text-[11px] font-medium text-slate-400 whitespace-nowrap">{displayDate}</span>
+                          <div className="flex-1 h-px bg-slate-200" />
                         </div>
                       ) : null;
                       const elements: React.ReactNode[] = separator ? [separator] : [];
@@ -2290,13 +2269,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         let transcriptTurns: TranscriptTurn[] = [];
                         try { if (rec.transcript) transcriptTurns = JSON.parse(rec.transcript as string); } catch { /* ignore */ }
 
-                        const isExpanded = expandedCallIds.has(rec.id);
-                        const isPlaying = playingCallId === rec.id;
-                        const isInbound = rec.direction === "incoming";
-
-                        // Static waveform bar heights — decorative, WhatsApp-style
-                        const waveHeights = [3,5,8,12,16,20,14,18,22,16,10,14,20,24,18,12,16,20,14,8,12,18,22,16,10,6,10,14,18,12,8,5];
-
                         elements.push(
                           <motion.div
                             key={`call-${rec.id}`}
@@ -2305,164 +2277,66 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             transition={{ delay: Math.min(i * 0.02, 0.3) }}
                             className="flex justify-start"
                           >
-                            <div className="max-w-[72%] min-w-[220px]">
-                              {/* ── Compact bubble (always visible) ── */}
-                              <div
-                                className={`rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 ${
-                                  isInbound
-                                    ? "bg-blue-50 border border-blue-100 hover:bg-blue-100"
-                                    : "bg-slate-100 border border-slate-200 hover:bg-slate-200"
-                                }`}
-                                onClick={() => toggleCallExpanded(rec.id)}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  {/* Play/Pause button */}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (!hasRecording) return;
-                                      const audio = callAudioRefs.current[rec.id];
-                                      if (!audio) return;
-                                      if (isPlaying) {
-                                        audio.pause();
-                                        setPlayingCallId(null);
-                                      } else {
-                                        // Pause any other playing audio
-                                        Object.entries(callAudioRefs.current).forEach(([id, el]) => {
-                                          if (Number(id) !== rec.id && el) el.pause();
-                                        });
-                                        audio.play();
-                                        setPlayingCallId(rec.id);
-                                      }
-                                    }}
-                                    className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                                      hasRecording
-                                        ? isInbound
-                                          ? "bg-blue-500 hover:bg-blue-600 text-white"
-                                          : "bg-slate-600 hover:bg-slate-700 text-white"
-                                        : "bg-slate-300 text-slate-400 cursor-not-allowed"
-                                    }`}
-                                  >
-                                    {isPlaying
-                                      ? <Pause className="h-3.5 w-3.5" />
-                                      : <Play className="h-3.5 w-3.5 ml-0.5" />}
-                                  </button>
-
-                                  {/* Waveform */}
-                                  <div className="flex items-center gap-[2px] flex-1 h-7">
-                                    {waveHeights.map((h, wi) => (
-                                      <div
-                                        key={wi}
-                                        className={`rounded-full w-[3px] transition-all ${
-                                          isInbound ? "bg-blue-400" : "bg-slate-400"
-                                        }`}
-                                        style={{ height: `${h}px` }}
-                                      />
-                                    ))}
+                            <div className="max-w-[82%] rounded-xl overflow-hidden border border-slate-200 shadow-sm">
+                              {/* Header */}
+                              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 border-b border-slate-700">
+                                <Phone className="h-3 w-3 text-slate-300" />
+                                <span className="text-[10px] font-semibold text-slate-300 uppercase tracking-widest">Call {rec.direction === "incoming" ? "Inbound" : "Outbound"}</span>
+                                {durationStr && <span className="text-[10px] text-slate-400">&middot; {durationStr}</span>}
+                                {grade && (
+                                  <span className={`ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>
+                                    {grade}
+                                  </span>
+                                )}
+                                <span className="ml-auto text-[10px] text-slate-500">{callTime}</span>
+                              </div>
+                              {/* Headline */}
+                              <div className="px-3 pt-2.5 pb-1.5 bg-slate-50 border-b border-slate-100">
+                                <p className="text-sm font-medium text-slate-700">
+                                  {rec.direction === "incoming" ? "Inbound" : "Outbound"} call &middot; {rec.callerPhone}
+                                  {rec.status === "no-answer" && <span className="ml-2 text-xs text-red-500">No answer</span>}
+                                </p>
+                              </div>
+                              {/* Summary + recording + transcript */}
+                              <div className="px-3 py-2.5 bg-white">
+                                {summary && (
+                                  <p className="text-sm text-slate-600 leading-relaxed mb-2.5">{summary}</p>
+                                )}
+                                {hasRecording ? (
+                                  <div className="mb-2">
+                                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-1">🎙️ Recording</p>
+                                    <audio
+                                      controls
+                                      src={rec.recordingUrl as string}
+                                      className="w-full h-8 rounded-lg"
+                                    />
                                   </div>
-
-                                  {/* Duration + expand chevron */}
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className={`text-[11px] font-medium tabular-nums ${
-                                      isInbound ? "text-blue-600" : "text-slate-500"
-                                    }`}>
-                                      {durationStr || "0:00"}
-                                    </span>
-                                    {isExpanded
-                                      ? <ChevronUp className={`h-3.5 w-3.5 ${isInbound ? "text-blue-400" : "text-slate-400"}`} />
-                                      : <ChevronDown className={`h-3.5 w-3.5 ${isInbound ? "text-blue-400" : "text-slate-400"}`} />}
-                                  </div>
-                                </div>
-
-                                {/* Hidden audio element */}
-                                {hasRecording && (
-                                  <audio
-                                    ref={(el) => { callAudioRefs.current[rec.id] = el; }}
-                                    src={rec.recordingUrl as string}
-                                    onEnded={() => setPlayingCallId(null)}
-                                    onPause={() => { if (playingCallId === rec.id) setPlayingCallId(null); }}
-                                    className="hidden"
-                                  />
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 mb-2">
+                                    <Phone className="h-2.5 w-2.5" /> No recording
+                                  </span>
+                                )}
+                                {transcriptTurns.length > 0 && (
+                                  <details className="mt-1">
+                                    <summary className="cursor-pointer text-[10px] font-semibold text-violet-600 uppercase tracking-widest select-none hover:text-violet-800">
+                                      Transcript ({transcriptTurns.length} turns)
+                                    </summary>
+                                    <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                      {transcriptTurns.map((turn, ti) => (
+                                        <div key={ti} className="text-xs">
+                                          <span className={`font-semibold mr-1 ${turn.identifier?.toLowerCase().includes("agent") || turn.identifier?.toLowerCase().includes("assistant") ? "text-violet-600" : "text-slate-500"}`}>
+                                            {turn.identifier}:
+                                          </span>
+                                          <span className="text-slate-600">{turn.content}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                )}
+                                {!summary && !hasRecording && transcriptTurns.length === 0 && (
+                                  <p className="text-xs text-slate-400 italic">No summary available yet</p>
                                 )}
                               </div>
-
-                              {/* ── Expanded detail panel ── */}
-                              <AnimatePresence>
-                                {isExpanded && (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: "auto" }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    transition={{ duration: 0.18, ease: "easeOut" }}
-                                    className="overflow-hidden"
-                                  >
-                                    <div className={`mt-1 rounded-xl border px-3 py-2.5 ${
-                                      isInbound ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-200"
-                                    }`}>
-                                      {/* Call meta */}
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <Phone className={`h-3 w-3 shrink-0 ${isInbound ? "text-blue-500" : "text-slate-500"}`} />
-                                        <span className="text-xs font-medium text-slate-700">
-                                          {isInbound ? "Inbound" : "Outbound"} call &middot; {rec.callerPhone}
-                                        </span>
-                                        {rec.status === "no-answer" && (
-                                          <span className="text-[10px] text-red-500 font-medium">No answer</span>
-                                        )}
-                                        {grade && (
-                                          <span className={`ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>
-                                            {grade}
-                                          </span>
-                                        )}
-                                        <span className="ml-auto text-[10px] text-slate-400">{callTime}</span>
-                                      </div>
-
-                                      {/* AI summary */}
-                                      {summary && (
-                                        <p className="text-xs text-slate-600 leading-relaxed mb-2 border-t border-slate-100 pt-2">{summary}</p>
-                                      )}
-
-                                      {/* No-recording pill */}
-                                      {!hasRecording && (
-                                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 mb-1.5">
-                                          <Phone className="h-2.5 w-2.5" /> No recording
-                                        </span>
-                                      )}
-
-                                      {/* Transcript */}
-                                      {transcriptTurns.length > 0 && (
-                                        <details className="mt-1">
-                                          <summary className={`cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none ${
-                                            isInbound ? "text-blue-600 hover:text-blue-800" : "text-violet-600 hover:text-violet-800"
-                                          }`}>
-                                            ▶ Transcript ({transcriptTurns.length} turns)
-                                          </summary>
-                                          <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                                            {transcriptTurns.map((turn, ti) => (
-                                              <div key={ti} className="text-xs">
-                                                <span className={`font-semibold mr-1 ${
-                                                  turn.identifier?.toLowerCase().includes("agent") || turn.identifier?.toLowerCase().includes("assistant")
-                                                    ? isInbound ? "text-blue-600" : "text-violet-600"
-                                                    : "text-slate-500"
-                                                }`}>
-                                                  {turn.identifier}:
-                                                </span>
-                                                <span className="text-slate-600">{turn.content}</span>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </details>
-                                      )}
-
-                                      {!summary && !hasRecording && transcriptTurns.length === 0 && (
-                                        <p className="text-xs text-slate-400 italic">No details available yet</p>
-                                      )}
-                                    </div>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
-
-                              {/* Timestamp below bubble */}
-                              <p className="text-[10px] text-slate-400 mt-1 ml-1">{callTime}</p>
                             </div>
                           </motion.div>
                         );
@@ -2511,16 +2385,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         elements.push(
                           <div key={`${message.time}-${idx}`} style={{maxWidth:'66%',display:'flex',flexDirection:'column',gap:'6px'}}>
                             {/* Label outside bubble */}
-                            <div style={{fontSize:'10px',fontWeight:900,color:'#98A2B3',textTransform:'uppercase',letterSpacing:'.22em'}}>Customer</div>
+                            <div style={{fontSize:'12px',fontWeight:700,color:'#8b95a5',textTransform:'uppercase',letterSpacing:'.08em'}}>Customer</div>
                             {/* Bubble */}
                             <motion.div
                               className="group"
                               initial={{ opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                              style={{background:'#FFFFFF',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 8px 22px rgba(15,23,42,.04)',border:'1px solid rgba(16,24,40,.06)'}}
+                              style={{background:'white',borderRadius:'24px',padding:'20px',boxShadow:'0 10px 30px rgba(17,24,39,.05)'}}
                             >
-                              {message.text && <div style={{fontSize:'15px',lineHeight:1.55,color:'#101828',wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
+                              {message.text && <div style={{fontSize:'15px',lineHeight:1.6,color:'#101828',wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
                               {message.media && message.media.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {message.media.map((url, mi) => (
@@ -2557,16 +2431,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                   <div className="w-full h-full flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: color }}>{initials}</div>
                                 )}
                               </div>
-                              <span style={{fontSize:'10px',fontWeight:900,color:'#98A2B3',textTransform:'uppercase',letterSpacing:'.22em'}}>{displayName}</span>
+                              <span style={{fontSize:'12px',fontWeight:700,color:'#8b95a5',textTransform:'uppercase',letterSpacing:'.08em'}}>{displayName}</span>
                             </div>
                             {/* Bubble */}
                             <motion.div
                               initial={{ opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                              style={{background:'#1E2433',borderRadius:'22px',padding:'16px 20px'}}
+                              style={{background:'#101828',borderRadius:'24px',padding:'20px',boxShadow:'0 16px 40px rgba(16,24,40,.18)'}}
                             >
-                              {message.text && <div style={{fontSize:'15px',fontWeight:500,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, false)}</div>}
+                              {message.text && <div style={{fontSize:'17px',fontWeight:600,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, false)}</div>}
                               {message.media && message.media.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {message.media.map((url, mi) => (
@@ -2678,10 +2552,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   {/* ── Conversation Memory — horizontal pill chips ── */}
                   {(memoryLoading || memoryBullets.length > 0) && (
                     <div style={{paddingTop:'4px',paddingBottom:'16px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
-                        <Sparkles style={{width:'12px',height:'12px',color:'#8B5CF6',flexShrink:0}} />
-                        <span style={{fontSize:'11px',fontWeight:900,color:'#8B5CF6',textTransform:'uppercase',letterSpacing:'.22em'}}>Conversation Memory</span>
-                        {memoryLoading && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#C4B5FD',animation:'pulse 1.5s infinite',marginLeft:'2px'}} />}
+                      <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
+                        <Sparkles style={{width:'11px',height:'11px',color:'#a78bfa',flexShrink:0}} />
+                        <span style={{fontSize:'10px',fontWeight:700,color:'#a78bfa',textTransform:'uppercase',letterSpacing:'.1em'}}>Conversation Memory</span>
+                        {memoryLoading && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#c4b5fd',animation:'pulse 1.5s infinite',marginLeft:'2px'}} />}
                       </div>
                       {memoryLoading && memoryBullets.length === 0 ? (
                         <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
@@ -2692,7 +2566,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ) : (
                         <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
                           {memoryBullets.map((bullet, i) => (
-                            <span key={i} style={{display:'inline-flex',alignItems:'center',height:'30px',padding:'0 14px',borderRadius:'100px',background:'rgba(139,92,246,.08)',border:'1px solid rgba(139,92,246,.18)',fontSize:'12px',fontWeight:600,color:'#7C3AED',whiteSpace:'nowrap',letterSpacing:'-0.01em'}}>{bullet}</span>
+                            <span key={i} style={{display:'inline-flex',alignItems:'center',height:'26px',padding:'0 10px',borderRadius:'100px',background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',fontSize:'12px',fontWeight:500,color:'#6d5acd',whiteSpace:'nowrap'}}>{bullet}</span>
                           ))}
                         </div>
                       )}
@@ -2709,8 +2583,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               )}
               {/* ── Compose area ── */}
               <div
-                className={`shrink-0 transition-colors duration-200 ${composeMode === "note" ? "bg-amber-50/95" : ""}`}
-                style={{borderTop:`1px solid rgba(16,24,40,.06)`,padding:'16px 24px 24px',background: composeMode === 'note' ? undefined : '#FAFBFC'}}
+                className={`shrink-0 transition-colors duration-200 ${composeMode === "note" ? "bg-amber-50/95" : "bg-white"}`}
+                style={{borderTop:`1px solid ${composeMode === "note" ? 'rgba(251,191,36,.25)' : 'rgba(17,24,39,.06)'}`,paddingTop:'32px'}}
               >
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
@@ -2744,11 +2618,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 <div
                   className="transition-all duration-200"
                   style={{
-                    margin:'0',
+                    margin:'0 24px 16px',
                     borderRadius:'28px',
-                    background: composeMode === 'note' ? '#fffbeb' : '#FAFBFC',
-                    boxShadow:'0 8px 22px rgba(15,23,42,.05)',
-                    border:`1px solid ${composeMode === 'note' ? 'rgba(251,191,36,.3)' : 'rgba(16,24,40,.06)'}`,
+                    background: composeMode === 'note' ? '#fffbeb' : 'white',
+                    boxShadow:'0 20px 60px rgba(17,24,39,.06)',
+                    border:`1px solid ${composeMode === 'note' ? 'rgba(251,191,36,.3)' : 'rgba(17,24,39,.06)'}`,
                   }}
                 >
 
@@ -2842,7 +2716,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       </div>
                     )}
                     <textarea
-                      className={`w-full bg-transparent border-0 px-0 py-1 min-h-[96px] resize-none focus:outline-none leading-relaxed ${
+                      className={`w-full bg-transparent border-0 px-0 py-1 min-h-[100px] resize-none focus:outline-none text-sm leading-relaxed ${
                         composeMode === "note"
                           ? "text-amber-900 placeholder:text-amber-400"
                           : "text-slate-900 placeholder:text-slate-400"
@@ -3009,7 +2883,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ) : (
                         <div className="flex items-stretch shrink-0">
                           <Button
-                            className="rounded-l-full rounded-r-none h-9 px-5 bg-[#101828] hover:bg-[#1E2433] text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-[#1E2433]"
+                            className="rounded-l-full rounded-r-none h-9 px-5 bg-slate-900 hover:bg-slate-700 text-white font-semibold text-sm gap-1.5 disabled:opacity-30 transition-all duration-150 border-r border-slate-700"
                             disabled={!compose.trim() || sendMessage.isPending || !selected}
                             onClick={() => handleCsSend()}
                           >
@@ -3022,7 +2896,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button
-                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-[#101828] hover:bg-[#1E2433] text-white disabled:opacity-30 transition-all duration-150"
+                                className="rounded-l-none rounded-r-full h-9 px-2.5 bg-slate-900 hover:bg-slate-700 text-white disabled:opacity-30 transition-all duration-150"
                                 disabled={!compose.trim() || sendMessage.isPending || !selected}
                                 onPointerDown={(e) => e.stopPropagation()}
                               >
@@ -3087,17 +2961,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
+          <div className="h-full rounded-[30px] overflow-hidden flex flex-col" style={{background: 'rgba(255,255,255,0.72)', border: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 4px 32px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
-              <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
+              <div style={{padding:'32px',background:'linear-gradient(180deg,#eefcf8,#ffffff)',borderRadius:'32px 32px 0 0',borderBottom:'1px solid rgba(17,24,39,.06)',flexShrink:0}}>
                 <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
-                  <div style={{width:'56px',height:'56px',borderRadius:'18px',background:'linear-gradient(135deg,#14b8a6,#10b981)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 20px rgba(16,185,129,.22)'}}>
+                  <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'linear-gradient(135deg,#14b8a6,#10b981)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 24px rgba(16,185,129,.25)'}}>
                     {selected.initials}
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                    <div style={{fontSize:'20px',fontWeight:900,color:'#101828',lineHeight:1.15,letterSpacing:'-0.03em'}}>{selected.name}</div>
-                    <div style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>Team Member</div>
+                    <div style={{fontSize:'22px',fontWeight:800,color:'#101828',lineHeight:1.15}}>{selected.name}</div>
+                    <div style={{fontSize:'13px',color:'#7B8797',fontWeight:400}}>Team Member</div>
                     <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
                       <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
                       <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
@@ -3106,7 +2980,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
             ) : (
-              <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
+              <div style={{padding:'32px',background:'linear-gradient(180deg,#eefcf8,#ffffff)',borderRadius:'32px 32px 0 0',borderBottom:'1px solid rgba(17,24,39,.06)',flexShrink:0}}>
                 {(() => {
                   const gradientPalette = [
                     "from-violet-500 to-fuchsia-500",
@@ -3125,12 +2999,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   const since = clientProfile?.createdAt ? new Date(clientProfile.createdAt).getFullYear() : null;
                   return (
                     <div style={{display:'flex',alignItems:'center',gap:'20px'}}>
-                      <div className={`bg-gradient-to-br ${gradClass}`} style={{width:'56px',height:'56px',borderRadius:'18px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 20px rgba(0,0,0,.10)'}}>
+                      <div className={`bg-gradient-to-br ${gradClass}`} style={{width:'64px',height:'64px',borderRadius:'20px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',fontWeight:800,color:'white',flexShrink:0,boxShadow:'0 8px 24px rgba(0,0,0,.12)'}}>
                         {ini}
                       </div>
                       <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
-                        <div style={{fontSize:'20px',fontWeight:900,color:'#101828',lineHeight:1.15,letterSpacing:'-0.03em'}}>{name}</div>
-                        <div style={{fontSize:'12px',color:'#98A2B3',fontWeight:600}}>{since ? `Customer since ${since}` : 'Customer'}</div>
+                        <div style={{fontSize:'22px',fontWeight:800,color:'#101828',lineHeight:1.15}}>{name}</div>
+                        <div style={{fontSize:'13px',color:'#7B8797',fontWeight:400}}>{since ? `Customer since ${since}` : 'Customer'}</div>
                         <div style={{display:'flex',alignItems:'center',gap:'6px',marginTop:'2px'}}>
                           <Phone style={{width:'13px',height:'13px',color:'#10b981',flexShrink:0}} />
                           <span style={{fontSize:'14px',fontWeight:600,color:'#101828'}}>{selected.phone}</span>
@@ -3150,7 +3024,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                     {/* Today's jobs */}
                     <div className="p-5 bg-white space-y-3">
-                      <div className="flex items-center gap-2" style={{fontSize:'10px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3'}}>
+                      <div className="text-xs uppercase tracking-[0.18em] text-slate-400 flex items-center gap-2">
                         <Briefcase className="h-3.5 w-3.5" /> Today's jobs
                       </div>
                       {!cleanerTodayJobs ? (
@@ -3375,29 +3249,30 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     <div className="p-6 space-y-0 bg-white">
                       {/* CLIENT PROFILE label + metrics */}
                       <div>
-                        <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginBottom:'16px'}}>Client Profile</div>
-                        {/* One elegant snapshot surface — vertical list with dividers */}
-                        <div style={{borderRadius:'16px',border:'1px solid rgba(16,24,40,.06)',overflow:'hidden',boxShadow:'0 8px 20px rgba(15,23,42,.05)'}}>
+                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
+                        {/* Snapshot grid — 2 cols, label above value */}
+                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0', marginTop:'16px', borderTop:'1px solid rgba(17,24,39,.06)', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
                           {[
                             { label: 'Frequency',      value: clientProfile?.frequency ?? selected.service ?? '—' },
-                            { label: 'Avg Job',        value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
-                            { label: 'Bookings',       value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
-                            { label: 'Last Visit',     value: (() => {
+                            { label: 'Avg price',      value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
+                            { label: 'Total bookings', value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
+                            { label: 'Last booking',   value: (() => {
                               const raw = clientProfile?.lastBookingDate;
                               if (!raw) return '—';
                               const d = new Date(raw);
                               if (isNaN(d.getTime())) return raw;
-                              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
                             })() },
-                          ].map(({ label, value }, i, arr) => (
+                          ].map(({ label, value }, i) => (
                             <div key={label} style={{
-                              display:'flex',alignItems:'center',justifyContent:'space-between',
-                              padding:'14px 16px',
-                              borderBottom: i < arr.length - 1 ? '1px solid rgba(16,24,40,.06)' : 'none',
-                              background:'#FFFFFF',
+                              padding: '14px 12px',
+                              borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                              borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
+                              minWidth: 0,
+                              overflow: 'hidden',
                             }}>
-                              <div style={{fontSize:'12px',fontWeight:650,color:'#98A2B3'}}>{label}</div>
-                              <div style={{fontSize:'14px',fontWeight:700,color:'#101828',letterSpacing:'-0.02em'}}>{value}</div>
+                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{label}</div>
+                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{value}</div>
                             </div>
                           ))}
                         </div>
@@ -3410,7 +3285,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const TjCard = tjUrl ? "a" : "div";
                         return (
                           <div>
-                            <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginTop:'32px',paddingTop:'24px',borderTop:'1px solid rgba(16,24,40,.06)',marginBottom:'12px'}}>Today's job</div>
+                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Today's job</div>
                             <TjCard
                               {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
                               className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
@@ -3440,7 +3315,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Recent job history */}
                       {clientProfile && clientProfile.recentJobs.length > 0 && (
                         <div>
-                          <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginTop:'32px',paddingTop:'24px',borderTop:'1px solid rgba(16,24,40,.06)',marginBottom:'12px'}}>Recent history</div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Recent history</div>
                           <div className="space-y-2">
                             {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
                               const l27Url = job.bookingId
@@ -3451,7 +3326,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                 <CardEl
                                   key={i}
                                   {...(l27Url ? { href: l27Url, target: "_blank", rel: "noopener noreferrer" } : {})}
-                                  className={`rounded-2xl border border-slate-200 bg-white px-3 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition" : ""}`} style={{height:'50px',minHeight:'50px'}}
+                                  className={`rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-400 hover:bg-slate-100 cursor-pointer transition" : ""}`}
                                 >
                                   <div className="min-w-0">
                                     <div className="text-sm font-medium text-slate-800 truncate">
@@ -3480,7 +3355,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Context flags */}
                       {!clientProfile && (
                         <div>
-                          <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginTop:'32px',paddingTop:'24px',borderTop:'1px solid rgba(16,24,40,.06)'}}>Context flags</div>
+                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100">Context flags</div>
                           <div className="mt-4 space-y-3">
                             {[
                               selected.stats.bookings === 0
@@ -3559,21 +3434,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         );
                       })()}
 
-                      <div style={{marginTop:'24px',paddingTop:'20px',borderTop:'1px solid rgba(16,24,40,.06)',borderRadius:'20px',border:'1px solid rgba(139,92,246,.12)',background:'rgba(139,92,246,.04)',padding:'16px'}}>
-                        <div className="flex items-center gap-2 text-sm font-medium" style={{color:'#6D28D9'}}>
+                      <div className="mt-6 pt-5 border-t border-slate-100 rounded-[24px] border border-blue-200 bg-blue-50 p-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
                           <Bot className="h-4 w-4" /> AI insight
-                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA'}} />}
+                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-blue-400" />}
                         </div>
                         {insightLoading && !insightData?.insight ? (
                           <div className="mt-2 space-y-1.5">
-                            <div className="h-3 w-full rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
-                            <div className="h-3 w-4/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
-                            <div className="h-3 w-3/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-full rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-4/5 rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-3/5 rounded bg-blue-200/60 animate-pulse" />
                           </div>
                         ) : insightData?.insight ? (
-                          <div className="mt-2 text-sm leading-6" style={{color:'#4C1D95'}}>{insightData.insight}</div>
+                          <div className="mt-2 text-sm leading-6 text-blue-900">{insightData.insight}</div>
                         ) : (
-                          <div className="mt-2 text-xs italic" style={{color:'#A78BFA'}}>Select a conversation with messages to generate insight.</div>
+                          <div className="mt-2 text-xs text-blue-400 italic">Select a conversation with messages to generate insight.</div>
                         )}
                       </div>
                     </div>
