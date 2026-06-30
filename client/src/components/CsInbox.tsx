@@ -605,7 +605,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // For effectiveSelectedId: prefer client lane first, then team lane
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
-
+  console.log('[EFFECTIVE ID]', {
+    selectedId,
+    liveConversationsLength: liveConversations.length,
+    displayConversationsLength: displayConversations.length,
+    firstDisplayId: displayConversations[0]?.id,
+    effectiveSelectedId,
+  });
   // ── Detail query: fetch full messageHistory only for the open conversation ──────
   // This is the architectural split: the inbox list no longer needs to carry
   // full histories. getCsConversation fetches on demand when a session is opened.
