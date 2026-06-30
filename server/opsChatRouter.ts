@@ -42,6 +42,7 @@ import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildSystemPrompt } from "./csReplyStream";
+import { computeSessionSummary } from "./sessionSummary";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -2742,9 +2743,10 @@ export const opsChatRouter = router({
       try { history = JSON.parse(session?.messageHistory ?? "[]"); } catch { history = []; }
       const agentName = ctx.user?.name ?? "Agent";
       history.push({ role: "assistant", content: input.firstMessage, ts: Date.now(), senderName: agentName });
+      const startSummary = computeSessionSummary(history);
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(history) })
+        .set({ messageHistory: JSON.stringify(history), ...startSummary } as any)
         .where(eq(conversationSessions.id, sessionId));
 
       return { sessionId, isNew: existing.length === 0 };
@@ -3345,9 +3347,10 @@ ${MAIDS_IN_BLACK_KNOWLEDGE_BASE}`;
       try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
       const agentName = ctx.user?.name ?? "Agent";
       history.push({ role: "note", content: input.note, ts: Date.now(), senderName: agentName });
+      const opsCsNoteSummary = computeSessionSummary(history);
       await db
         .update(conversationSessions)
-        .set({ messageHistory: JSON.stringify(history) })
+        .set({ messageHistory: JSON.stringify(history), ...opsCsNoteSummary } as any)
         .where(eq(conversationSessions.id, input.sessionId));
       return { success: true };
     }),

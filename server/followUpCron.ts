@@ -20,6 +20,7 @@ import { conversationSessions } from "../drizzle/schema";
 import { sendSms } from "./openphone";
 import { invokeLLM } from "./_core/llm";
 import { logActivity } from "./activityLogger";
+import { computeSessionSummary } from "./sessionSummary";
 
 // Stages that are considered "active" — the lead is mid-conversation and hasn't finished.
 // REACTIVATION is intentionally excluded: those are first-touch always-on/campaign messages
@@ -190,6 +191,7 @@ Example: "Hey ${firstName}, just circling back — can we help get this set up f
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
         history.push({ role: "assistant", content: nudgeMessage, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
+        const nudgeSummary = computeSessionSummary(history);
 
         const newNudgeCount = (session.nudgeCount ?? 0) + 1;
 
@@ -201,7 +203,8 @@ Example: "Hey ${firstName}, just circling back — can we help get this set up f
             lastAiMessageAt: new Date(),
             messageHistory: JSON.stringify(history),
             nudgeCount: newNudgeCount,
-          })
+            ...nudgeSummary,
+          } as any)
           .where(eq(conversationSessions.id, session.id));
 
         console.log(`[SilenceFollowUp] Sent nudge #${newNudgeCount} to ${session.leadPhone} (session ${session.id}): "${nudgeMessage}"`);
@@ -270,6 +273,7 @@ export async function runScheduledFollowUp(): Promise<{
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
         history.push({ role: "assistant", content: message, ts: Date.now() });
         if (history.length > 20) history = history.slice(-20);
+        const followUpSummary = computeSessionSummary(history);
 
         await db
           .update(conversationSessions)
@@ -279,7 +283,8 @@ export async function runScheduledFollowUp(): Promise<{
             lastAiMessageAt: new Date(),
             autoFollowUpSent: 0, // Allow a new silence nudge after this
             messageHistory: JSON.stringify(history),
-          })
+            ...followUpSummary,
+          } as any)
           .where(eq(conversationSessions.id, session.id));
 
         console.log(`[ScheduledFollowUp] Sent circle-back to ${session.leadPhone} (session ${session.id})`);

@@ -401,6 +401,22 @@ export const conversationSessions = mysqlTable("conversation_sessions", {
    * already responded.
    */
   lastCustomerReplyAt: bigint("lastCustomerReplyAt", { mode: "number" }),
+
+  // ── Inbox summary fields (denormalized for fast list queries) ─────────────
+  /**
+   * Preview text of the last message (any role), truncated to 255 chars.
+   * Eliminates the need to parse messageHistory for inbox card rendering.
+   */
+  lastMessageText: varchar("lastMessageText", { length: 255 }),
+  /** Unix ms timestamp of the last message (any role). */
+  lastMessageTs: bigint("lastMessageTs", { mode: "number" }),
+  /** Unix ms timestamp of the last customer (role:"user") message. */
+  lastCustomerMessageTs: bigint("lastCustomerMessageTs", { mode: "number" }),
+  /** Role of the last message: "user" | "assistant" | "note" | "system" */
+  lastMessageRole: varchar("lastMessageRole", { length: 16 }),
+  /** Total number of messages in messageHistory. */
+  messageCount: int("messageCount").default(0).notNull(),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

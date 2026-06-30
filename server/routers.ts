@@ -51,6 +51,7 @@ import { callMatrixRouter } from "./callMatrixRouter";
 import { stripeRouter } from "./stripeRouter";
 import { tasksRouter } from "./tasksRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
+import { computeSessionSummary } from './sessionSummary';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
 
@@ -1341,14 +1342,14 @@ export const appRouter = router({
 
         const now = Date.now();
         history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
-
+        const summary = computeSessionSummary(history);
 
         // Save to DB first, then send SMS.
         // Also set lastReadAt = lastCustomerReplyAt atomically so the notification clears
         // immediately after a human sends — no second update needed.
         await db
           .update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(history), lastReadAt: sql`lastCustomerReplyAt` } as any)
+          .set({ messageHistory: JSON.stringify(history), lastReadAt: sql`lastCustomerReplyAt`, ...summary } as any)
           .where(eq(conversationSessions.id, input.sessionId));
 
         // Send via OpenPhone (use fromNumberId override for CS line replies)
@@ -4569,9 +4570,10 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
         history.push({ role: "note", content: input.note, ts: Date.now(), senderName: agentSession.agentName });
+        const noteSummary = computeSessionSummary(history);
         await db
           .update(conversationSessions)
-          .set({ messageHistory: JSON.stringify(history) })
+          .set({ messageHistory: JSON.stringify(history), ...noteSummary } as any)
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),

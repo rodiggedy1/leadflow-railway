@@ -172,6 +172,90 @@ async function runStartupMigrations() {
     console.error('[Migration] Failed to create payment_authorizations:', err);
   }
 
+  // ── conversation_sessions inbox summary columns ────────────────────────────────────
+  // Adds denormalized summary fields so listCsInbox can stop selecting messageHistory.
+  // Idempotent: uses ADD COLUMN IF NOT EXISTS. Safe to run on every deploy.
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE conversation_sessions
+        ADD COLUMN IF NOT EXISTS lastMessageText       VARCHAR(255) NULL,
+        ADD COLUMN IF NOT EXISTS lastMessageTs         BIGINT NULL,
+        ADD COLUMN IF NOT EXISTS lastCustomerMessageTs BIGINT NULL,
+        ADD COLUMN IF NOT EXISTS lastMessageRole       VARCHAR(16) NULL,
+        ADD COLUMN IF NOT EXISTS messageCount          INT NOT NULL DEFAULT 0
+    `));
+    console.log('[Migration] conversation_sessions summary columns: OK');
+  } catch (err) {
+    console.error('[Migration] Failed to add conversation_sessions summary columns:', err);
+  }
+
+  // ── Backfill summary columns from messageHistory ──────────────────────────────────
+  // Only processes rows where lastMessageTs IS NULL (not yet backfilled).
+  // Uses lastMessageTs = 0 as a sentinel for rows with empty messageHistory.
+  // Idempotent: safe to run on every deploy — exits immediately if nothing to do.
+  try {
+    const [pendingRows] = await db.execute(sql.raw(
+      `SELECT COUNT(*) AS pending FROM conversation_sessions WHERE lastMessageTs IS NULL`
+    )) as any;
+    const pending = Array.isArray(pendingRows) ? (pendingRows[0]?.pending ?? 0) : 0;
+
+    if (pending === 0) {
+      console.log('[Migration] conversation_sessions backfill: nothing to do (all rows already have summary fields)');
+    } else {
+      console.log(`[Migration] conversation_sessions backfill: starting for ${pending} rows...`);
+      let processed = 0;
+      let updated = 0;
+      let empty = 0;
+      const BATCH = 200;
+
+      while (true) {
+        const [rows] = await db.execute(sql.raw(
+          `SELECT id, messageHistory FROM conversation_sessions WHERE lastMessageTs IS NULL LIMIT ${BATCH}`
+        )) as any;
+        if (!Array.isArray(rows) || rows.length === 0) break;
+
+        for (const row of rows) {
+          let msgs: Array<{ role: string; content?: string; ts?: number }> = [];
+          try { msgs = JSON.parse(row.messageHistory ?? '[]'); if (!Array.isArray(msgs)) msgs = []; } catch { msgs = []; }
+
+          if (msgs.length === 0) {
+            await db.execute(sql.raw(
+              `UPDATE conversation_sessions SET lastMessageText=NULL, lastMessageTs=0, lastCustomerMessageTs=NULL, lastMessageRole='unknown', messageCount=0 WHERE id=${row.id}`
+            ));
+            empty++;
+          } else {
+            const last = msgs[msgs.length - 1];
+            const lastCustomer = [...msgs].reverse().find(m => m.role === 'user');
+            const rawText = typeof last.content === 'string' ? last.content : JSON.stringify(last.content ?? '');
+            const text = rawText.slice(0, 255).replace(/'/g, "''");
+            const ts = last.ts ?? 0;
+            const custTs = lastCustomer?.ts ?? 'NULL';
+            const role = (last.role ?? 'unknown').slice(0, 16).replace(/'/g, "''");
+            const count = msgs.length;
+            await db.execute(sql.raw(
+              `UPDATE conversation_sessions SET lastMessageText='${text}', lastMessageTs=${ts}, lastCustomerMessageTs=${custTs}, lastMessageRole='${role}', messageCount=${count} WHERE id=${row.id}`
+            ));
+            updated++;
+          }
+          processed++;
+        }
+
+        if (processed % 1000 === 0) {
+          console.log(`[Migration] conversation_sessions backfill progress: ${processed} rows (${updated} updated, ${empty} empty)...`);
+        }
+      }
+
+      const [remainingRows] = await db.execute(sql.raw(
+        `SELECT COUNT(*) AS remaining FROM conversation_sessions WHERE lastMessageTs IS NULL`
+      )) as any;
+      const remaining = Array.isArray(remainingRows) ? (remainingRows[0]?.remaining ?? 0) : '?';
+
+      console.log(`[Migration] conversation_sessions backfill complete: processed=${processed} updated=${updated} empty=${empty} remaining_null=${remaining}`);
+    }
+  } catch (err) {
+    console.error('[Migration] conversation_sessions backfill failed (non-fatal):', err);
+  }
+
   // ── cleaner_profiles.launch27TeamId (ghost-profile fix) ──────────────────────────
   // Adds the canonical L27 team ID column so the sync can match by ID instead of name.
   // The UNIQUE constraint prevents two profiles from ever claiming the same L27 team.

@@ -50,6 +50,7 @@ import { getSetting } from "./settingsRouter";
 import { pauseEnrollment, endEnrollment } from "./nurtureSequence";
 import { ENV } from "./_core/env";
 import { scoreAndCacheStatusById } from "./csStatusScorer";
+import { computeSessionSummary } from "./sessionSummary";
 
 export function registerWebhookRoutes(app: Express) {
   // Bark.com lead integration (Zapier webhook)
@@ -770,8 +771,9 @@ export function registerWebhookRoutes(app: Express) {
 
       // Append the lead's inbound message to history first (always stored)
       history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+      const inboundSummary = computeSessionSummary(history);
 
-      // ── CRITICAL: Persist the user message to DB IMMEDIATELY ──────────────────
+      // ── CRITICAL: Persist the user message to DB IMMEDIATELY ──────────────────────────────────
       // This MUST happen before ANY LLM/AI call. If the AI engine crashes, times out,
       // or throws, the customer's message is guaranteed to be in the DB already.
       // Also stamp lastCustomerReplyAt so the CommandChat lead-replies notification
@@ -779,7 +781,7 @@ export function registerWebhookRoutes(app: Express) {
       // The history will be updated again later with the assistant reply appended.
       await db
         .update(conversationSessions)
-                .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now } as any)
+                .set({ messageHistory: JSON.stringify(history), lastCustomerReplyAt: now, ...inboundSummary } as any)
         .where(eq(conversationSessions.id, session.id));
       // Broadcast lead_update immediately so CommandChat notification fires while last message is still 'user'.
       // Must happen BEFORE the AI reply is appended — otherwise last role becomes 'assistant' and the tray misses it.
@@ -2271,12 +2273,12 @@ async function handleCsInboundMessage(msg: any) {
       return;
     }
     history.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
-
+    const csInboundSummary = computeSessionSummary(history);
 
     // Also backfill leadName if it was previously null and we now resolved one.
     // If this is a cleaner texting into a cs_initiated session, permanently upgrade
     // the leadSource to cs-inbound-cleaner so it always appears in the Teams column.
-    const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date() };
+    const updatePayload: Record<string, unknown> = { messageHistory: JSON.stringify(history), updatedAt: new Date(), ...csInboundSummary };
     if (resolvedName && !existingSession.leadName) {
       updatePayload.leadName = resolvedName;
     }
