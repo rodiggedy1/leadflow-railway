@@ -1584,7 +1584,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
           {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FCFCFD', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '24px 24px 24px'}}>
 
@@ -1983,7 +1983,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FCFCFD', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
               {/* Operations Lane header */}
@@ -3299,7 +3299,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
+          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FBFBFC', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
               <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
