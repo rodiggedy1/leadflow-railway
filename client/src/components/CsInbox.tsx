@@ -121,7 +121,7 @@ type Conversation = {
 
 const queueStyles: Record<Queue, { tone: string; dot: string }> = {
   "Priority": { tone: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500" },
-  "New":      { tone: "bg-blue-50 text-blue-700 border-blue-200",    dot: "bg-blue-500" },
+  "New":      { tone: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-500" },
   "Active":   { tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
   "Resolved": { tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
   "Teams":    { tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
@@ -1366,12 +1366,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col" style={{color:'#101828', background:'transparent'}}>
+    <div className="h-full overflow-hidden flex flex-col cs-inbox-scope" style={{color:'#101828', background:'transparent'}}>
       <div className="w-full flex flex-col flex-1 min-h-0" style={{padding:'20px'}}>
         <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
           {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '24px 24px 24px'}}>
 
@@ -1379,7 +1379,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div style={{fontSize:'10px', fontWeight:900, letterSpacing:'.22em', color:'#98A2B3', textTransform:'uppercase', marginBottom:'6px'}}>Revenue Lane</div>
-                  <div style={{fontSize:'30px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Clients</div>
+                  <div style={{fontSize:'34px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Clients</div>
                 </div>
                 <div style={{background:'#101828', color:'white', height:'28px', padding:'0 12px', borderRadius:'999px', fontSize:'12px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
                   {clientConvs.length} open
@@ -1474,6 +1474,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Client conversation list */}
               <div style={{marginTop:'16px'}}>
                 <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                  {clientConvs.length === 0 && (
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'64px 24px',textAlign:'center'}}>
+                      <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
+                        <MessageSquare style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
+                      </div>
+                      <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>Inbox is clear</div>
+                      <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>New client conversations will appear here</div>
+                    </div>
+                  )}
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
@@ -1525,7 +1534,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       // Mechanical fallbacks (used when llmTier is null)
                       act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
                       your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
-                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-400", Icon: Clock3 },
+                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
                       monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
                       resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
@@ -1594,7 +1603,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       solved:         "ring-slate-200 shadow-slate-100",
                       act_now:        "ring-rose-300 shadow-rose-100",
                       your_turn:      "ring-amber-400 shadow-amber-100",
-                      their_turn:     "ring-blue-300 shadow-blue-100",
+                      their_turn:     "ring-slate-300 shadow-slate-100",
                       monitor:        "ring-slate-300 shadow-slate-100",
                       resolved:       "ring-slate-200 shadow-slate-100",
                     };
@@ -1642,15 +1651,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           {/* Content: name + metadata + preview + status */}
                           <div className="min-w-0">
                             <div className="flex items-center" style={{gap:'6px'}}>
-                              <span style={{fontSize:'15px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
+                              <span style={{fontSize:'17px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
                             </div>
-                            <div style={{marginTop:'2px', fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
+                            <div style={{marginTop:'2px', fontSize:'12px', fontWeight:650, color:'#98A2B3', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis'}}>
                               {conversation.service || conversation.location || ''}
                             </div>
                           </div>
 
                           {/* Timestamp — top right */}
-                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0'}}>
+                          <div className="shrink-0 whitespace-nowrap" style={{fontSize:'12px', fontWeight:650, color:'#98A2B3'}}>
                             {conversation.lastMsgTs
                               ? (() => {
                                   const d = new Date(conversation.lastMsgTs);
@@ -1668,7 +1677,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         </div>
 
                         {/* Row 2: Message preview — spans content + time columns */}
-                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#101828' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
+                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight:700, color: isUnread ? '#344054' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage || noteText}</div>
 
                         {/* Row 3: Status pill — minimal outlined style matching target screenshot */}
                         <div style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'6px'}}>
@@ -1763,14 +1772,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
               {/* Operations Lane header */}
               <div className="flex items-start justify-between gap-3" style={{marginBottom:'16px'}}>
                 <div>
                   <div style={{fontSize:'10px', fontWeight:900, letterSpacing:'.22em', textTransform:'uppercase', color:'#98A2B3', marginBottom:'6px'}}>Operations Lane</div>
-                  <div style={{fontSize:'30px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Team</div>
+                  <div style={{fontSize:'34px', fontWeight:950, lineHeight:1, letterSpacing:'-0.05em', color:'#101828'}}>Team</div>
                 </div>
                 <div style={{background:'#101828', color:'white', height:'28px', padding:'0 12px', borderRadius:'999px', fontSize:'12px', fontWeight:700, flexShrink:0, display:'flex', alignItems:'center'}}>
                   {teamConvs.filter((c) => !!(c as any).hasUnanswered).length} active
@@ -1835,10 +1844,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Team conversation list */}
               <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
                 {teamConvs.length === 0 && (
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-6 text-center">
-                    <SprayCan className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                    <div className="text-sm text-slate-400">No team conversations</div>
-                    <div className="text-xs text-slate-300 mt-1">Cleaner messages appear here</div>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'48px 24px',textAlign:'center'}}>
+                    <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
+                      <SprayCan style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
+                    </div>
+                    <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>All clear</div>
+                    <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>Cleaner messages will appear here when they come in</div>
                   </div>
                 )}
                 {teamConvs.map((conversation) => {
@@ -1888,7 +1899,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     // Mechanical fallbacks
                     act_now:            { label: "⚡ Act Now",              action: waitingTooLong2 ? `Reply now · ${waitMinDisplay2}m wait` : "Needs attention · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500",   Icon: ShieldAlert },
                     your_turn:          { label: "👉 Your Turn",           action: "Team waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500",  Icon: MessageSquare },
-                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-400",   Icon: Clock3 },
+                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-slate-50 text-slate-600 border-slate-200",   dot: "bg-slate-400",   Icon: Clock3 },
                     monitor:            { label: "👀 Monitor",             action: "Low urgency · review when free",       pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400",  Icon: CheckCircle2 },
                     resolved:           { label: "✓ Resolved",             action: "Closed",                              pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
                   };
@@ -1958,17 +1969,17 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           {/* Content */}
                           <div className="min-w-0">
                             <div className="flex items-center" style={{gap:'6px'}}>
-                              <span style={{fontSize:'15px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
+                              <span style={{fontSize:'17px', fontWeight: isUnread ? 900 : 700, lineHeight:'1.2', letterSpacing:'-0.03em', color: isUnread ? '#101828' : '#667085'}}>{conversation.name}</span>
                             </div>
-                            <div style={{fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                            <div style={{fontSize:'12px', fontWeight:650, color:'#98A2B3', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
                               {conversation.service || ''}
                             </div>
                           </div>
                           {/* Time */}
-                          <div style={{fontSize:'12px', fontWeight:600, color: isUnread ? '#667085' : '#C0C6D0', whiteSpace:'nowrap'}}>{conversation.wait}</div>
+                          <div style={{fontSize:'12px', fontWeight:650, color:'#98A2B3', whiteSpace:'nowrap'}}>{conversation.wait}</div>
                         </div>
                         {/* Row 2: preview */}
-                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight: isUnread ? 700 : 600, color: isUnread ? '#101828' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
+                        <div style={{marginTop:'6px', fontSize:'14px', fontWeight:700, color: isUnread ? '#344054' : '#98A2B3', lineHeight:'1.35', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{conversation.lastMessage}</div>
                         {/* Status pill row — matches client column style */}
                         <div style={{marginTop:'8px'}}>
                           <div style={{
@@ -2201,13 +2212,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                 </div>
               </div>
 
-              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'#FBFCFD',padding:'32px 32px 24px'}} ref={scrollRef}>
+              <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{background:'#FBFCFD',padding:'32px 40px 24px'}} ref={scrollRef}>
                 <motion.div
                   key={selected?.id ?? 0}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ duration: 0.15 }}
-                  style={{display:'flex',flexDirection:'column',gap:'24px'}}
+                  style={{display:'flex',flexDirection:'column',gap:'28px'}}
                 >
                   {/* Merge SMS messages and call recordings into a single chronological timeline */}
                   {(() => {
@@ -2507,7 +2518,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               initial={{ opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                              style={{background:'#FFFFFF',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 8px 22px rgba(15,23,42,.05)',border:'1px solid rgba(16,24,40,.06)'}}
+                              style={{background:'#FFFFFF',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 8px 22px rgba(15,23,42,.04)',border:'1px solid rgba(16,24,40,.06)'}}
                             >
                               {message.text && <div style={{fontSize:'15px',lineHeight:1.55,color:'#101828',wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, true)}</div>}
                               {message.media && message.media.length > 0 && (
@@ -2553,7 +2564,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               initial={{ opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
-                              style={{background:'#1E2433',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 12px 32px rgba(15,23,42,.14)'}}
+                              style={{background:'#1E2433',borderRadius:'22px',padding:'16px 20px'}}
                             >
                               {message.text && <div style={{fontSize:'15px',fontWeight:500,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, false)}</div>}
                               {message.media && message.media.length > 0 && (
@@ -2667,10 +2678,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   {/* ── Conversation Memory — horizontal pill chips ── */}
                   {(memoryLoading || memoryBullets.length > 0) && (
                     <div style={{paddingTop:'4px',paddingBottom:'16px'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'10px'}}>
-                        <Sparkles style={{width:'11px',height:'11px',color:'#a78bfa',flexShrink:0}} />
-                        <span style={{fontSize:'10px',fontWeight:700,color:'#a78bfa',textTransform:'uppercase',letterSpacing:'.1em'}}>Conversation Memory</span>
-                        {memoryLoading && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#c4b5fd',animation:'pulse 1.5s infinite',marginLeft:'2px'}} />}
+                      <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'12px'}}>
+                        <Sparkles style={{width:'12px',height:'12px',color:'#8B5CF6',flexShrink:0}} />
+                        <span style={{fontSize:'11px',fontWeight:900,color:'#8B5CF6',textTransform:'uppercase',letterSpacing:'.22em'}}>Conversation Memory</span>
+                        {memoryLoading && <div style={{width:'6px',height:'6px',borderRadius:'50%',background:'#C4B5FD',animation:'pulse 1.5s infinite',marginLeft:'2px'}} />}
                       </div>
                       {memoryLoading && memoryBullets.length === 0 ? (
                         <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
@@ -2681,7 +2692,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       ) : (
                         <div style={{display:'flex',flexWrap:'wrap',gap:'6px'}}>
                           {memoryBullets.map((bullet, i) => (
-                            <span key={i} style={{display:'inline-flex',alignItems:'center',height:'26px',padding:'0 10px',borderRadius:'100px',background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',fontSize:'12px',fontWeight:500,color:'#6d5acd',whiteSpace:'nowrap'}}>{bullet}</span>
+                            <span key={i} style={{display:'inline-flex',alignItems:'center',height:'30px',padding:'0 14px',borderRadius:'100px',background:'rgba(139,92,246,.08)',border:'1px solid rgba(139,92,246,.18)',fontSize:'12px',fontWeight:600,color:'#7C3AED',whiteSpace:'nowrap',letterSpacing:'-0.01em'}}>{bullet}</span>
                           ))}
                         </div>
                       )}
@@ -2698,8 +2709,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               )}
               {/* ── Compose area ── */}
               <div
-                className={`shrink-0 transition-colors duration-200 ${composeMode === "note" ? "bg-amber-50/95" : "bg-white"}`}
-                style={{borderTop:`1px solid rgba(16,24,40,.06)`,padding:'16px 24px 24px'}}
+                className={`shrink-0 transition-colors duration-200 ${composeMode === "note" ? "bg-amber-50/95" : ""}`}
+                style={{borderTop:`1px solid rgba(16,24,40,.06)`,padding:'16px 24px 24px',background: composeMode === 'note' ? undefined : '#FAFBFC'}}
               >
                 {/* Floating panels (FAQ, Objections, WorldClass) */}
                 <div className="relative">
@@ -3076,7 +3087,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)'}}>
+          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
               <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
@@ -3364,30 +3375,29 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     <div className="p-6 space-y-0 bg-white">
                       {/* CLIENT PROFILE label + metrics */}
                       <div>
-                        <div className="text-xs uppercase tracking-[0.18em] text-slate-400">Client profile</div>
-                        {/* Snapshot grid — 2 cols, label above value */}
-                        <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0', marginTop:'16px', borderTop:'1px solid rgba(17,24,39,.06)', borderBottom:'1px solid rgba(17,24,39,.06)'}}>
+                        <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginBottom:'16px'}}>Client Profile</div>
+                        {/* One elegant snapshot surface — vertical list with dividers */}
+                        <div style={{borderRadius:'16px',border:'1px solid rgba(16,24,40,.06)',overflow:'hidden',boxShadow:'0 8px 20px rgba(15,23,42,.05)'}}>
                           {[
                             { label: 'Frequency',      value: clientProfile?.frequency ?? selected.service ?? '—' },
-                            { label: 'Avg price',      value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
-                            { label: 'Total bookings', value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
-                            { label: 'Last booking',   value: (() => {
+                            { label: 'Avg Job',        value: clientProfile?.avgPrice ? `$${clientProfile.avgPrice}` : (selected.amount || '—') },
+                            { label: 'Bookings',       value: String(clientProfile ? clientProfile.totalBookings : selected.stats.bookings) },
+                            { label: 'Last Visit',     value: (() => {
                               const raw = clientProfile?.lastBookingDate;
                               if (!raw) return '—';
                               const d = new Date(raw);
                               if (isNaN(d.getTime())) return raw;
-                              return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+                              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                             })() },
-                          ].map(({ label, value }, i) => (
+                          ].map(({ label, value }, i, arr) => (
                             <div key={label} style={{
-                              padding: '14px 12px',
-                              borderRight: i % 2 === 0 ? '1px solid rgba(17,24,39,.06)' : 'none',
-                              borderTop: i >= 2 ? '1px solid rgba(17,24,39,.06)' : 'none',
-                              minWidth: 0,
-                              overflow: 'hidden',
+                              display:'flex',alignItems:'center',justifyContent:'space-between',
+                              padding:'14px 16px',
+                              borderBottom: i < arr.length - 1 ? '1px solid rgba(16,24,40,.06)' : 'none',
+                              background:'#FFFFFF',
                             }}>
-                              <div style={{fontSize:'11px', fontWeight:400, color:'#b0b8c4', marginBottom:'3px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{label}</div>
-                              <div style={{fontSize:'13px', fontWeight:500, color:'#374151', lineHeight:1.3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{value}</div>
+                              <div style={{fontSize:'12px',fontWeight:650,color:'#98A2B3'}}>{label}</div>
+                              <div style={{fontSize:'14px',fontWeight:700,color:'#101828',letterSpacing:'-0.02em'}}>{value}</div>
                             </div>
                           ))}
                         </div>
@@ -3400,7 +3410,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const TjCard = tjUrl ? "a" : "div";
                         return (
                           <div>
-                            <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Today's job</div>
+                            <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginTop:'32px',paddingTop:'24px',borderTop:'1px solid rgba(16,24,40,.06)',marginBottom:'12px'}}>Today's job</div>
                             <TjCard
                               {...(tjUrl ? { href: tjUrl, target: "_blank", rel: "noopener noreferrer" } : {})}
                               className={`rounded-2xl border border-emerald-200 bg-emerald-50 p-3 space-y-1.5 block${tjUrl ? " hover:border-emerald-400 hover:bg-emerald-100 cursor-pointer transition" : ""}`}
@@ -3430,7 +3440,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Recent job history */}
                       {clientProfile && clientProfile.recentJobs.length > 0 && (
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100 mb-3">Recent history</div>
+                          <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginTop:'32px',paddingTop:'24px',borderTop:'1px solid rgba(16,24,40,.06)',marginBottom:'12px'}}>Recent history</div>
                           <div className="space-y-2">
                             {clientProfile.recentJobs.map((job: { date: string | null; address: string | null; serviceType: string | null; status: string; price: number | null; bookingId: string | null }, i: number) => {
                               const l27Url = job.bookingId
@@ -3441,7 +3451,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                 <CardEl
                                   key={i}
                                   {...(l27Url ? { href: l27Url, target: "_blank", rel: "noopener noreferrer" } : {})}
-                                  className={`rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-400 hover:bg-slate-100 cursor-pointer transition" : ""}`}
+                                  className={`rounded-2xl border border-slate-200 bg-white px-3 flex items-center justify-between gap-2 ${l27Url ? "hover:border-slate-300 hover:bg-slate-50 cursor-pointer transition" : ""}`} style={{height:'50px',minHeight:'50px'}}
                                 >
                                   <div className="min-w-0">
                                     <div className="text-sm font-medium text-slate-800 truncate">
@@ -3470,7 +3480,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       {/* Context flags */}
                       {!clientProfile && (
                         <div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-slate-400 mt-8 pt-6 border-t border-slate-100">Context flags</div>
+                          <div style={{fontSize:'11px',fontWeight:900,letterSpacing:'.22em',textTransform:'uppercase',color:'#98A2B3',marginTop:'32px',paddingTop:'24px',borderTop:'1px solid rgba(16,24,40,.06)'}}>Context flags</div>
                           <div className="mt-4 space-y-3">
                             {[
                               selected.stats.bookings === 0
@@ -3549,21 +3559,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         );
                       })()}
 
-                      <div className="mt-6 pt-5 border-t border-slate-100 rounded-[24px] border border-blue-200 bg-blue-50 p-4">
-                        <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+                      <div style={{marginTop:'24px',paddingTop:'20px',borderTop:'1px solid rgba(16,24,40,.06)',borderRadius:'20px',border:'1px solid rgba(139,92,246,.12)',background:'rgba(139,92,246,.04)',padding:'16px'}}>
+                        <div className="flex items-center gap-2 text-sm font-medium" style={{color:'#6D28D9'}}>
                           <Bot className="h-4 w-4" /> AI insight
-                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-blue-400" />}
+                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA'}} />}
                         </div>
                         {insightLoading && !insightData?.insight ? (
                           <div className="mt-2 space-y-1.5">
-                            <div className="h-3 w-full rounded bg-blue-200/60 animate-pulse" />
-                            <div className="h-3 w-4/5 rounded bg-blue-200/60 animate-pulse" />
-                            <div className="h-3 w-3/5 rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-full rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-4/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-3/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
                           </div>
                         ) : insightData?.insight ? (
-                          <div className="mt-2 text-sm leading-6 text-blue-900">{insightData.insight}</div>
+                          <div className="mt-2 text-sm leading-6" style={{color:'#4C1D95'}}>{insightData.insight}</div>
                         ) : (
-                          <div className="mt-2 text-xs text-blue-400 italic">Select a conversation with messages to generate insight.</div>
+                          <div className="mt-2 text-xs italic" style={{color:'#A78BFA'}}>Select a conversation with messages to generate insight.</div>
                         )}
                       </div>
                     </div>
