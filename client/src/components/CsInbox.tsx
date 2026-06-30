@@ -121,7 +121,7 @@ type Conversation = {
 
 const queueStyles: Record<Queue, { tone: string; dot: string }> = {
   "Priority": { tone: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500" },
-  "New":      { tone: "bg-blue-50 text-blue-700 border-blue-200",    dot: "bg-blue-500" },
+  "New":      { tone: "bg-violet-50 text-violet-700 border-violet-200",    dot: "bg-violet-500" },
   "Active":   { tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500" },
   "Resolved": { tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500" },
   "Teams":    { tone: "bg-violet-50 text-violet-700 border-violet-200", dot: "bg-violet-500" },
@@ -1366,12 +1366,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   return (
     <>
-    <div className="h-full overflow-hidden flex flex-col" style={{color:'#101828', background:'transparent'}}>
+    <div className="h-full overflow-hidden flex flex-col cs-inbox-scope" style={{color:'#101828', background:'transparent'}}>
       <div className="w-full flex flex-col flex-1 min-h-0" style={{padding:'20px'}}>
         <div className={`grid flex-1 min-h-0 overflow-hidden gap-4 ${rail ? 'grid-cols-1 xl:grid-cols-[64px_260px_260px_minmax(0,1fr)_260px]' : 'grid-cols-1 xl:grid-cols-[260px_260px_minmax(0,1fr)_260px]'}`} style={{gridAutoRows: '100%', alignItems: 'stretch', gap: '16px'}}>
           {rail}
           {/* ── COL 1: Revenue Lane (Client conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '24px 24px 24px'}}>
 
@@ -1474,6 +1474,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Client conversation list */}
               <div style={{marginTop:'16px'}}>
                 <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                  {clientConvs.length === 0 && (
+                    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'64px 24px',textAlign:'center'}}>
+                      <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
+                        <MessageSquare style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
+                      </div>
+                      <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>Inbox is clear</div>
+                      <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>New client conversations will appear here</div>
+                    </div>
+                  )}
                   {clientConvs.map((conversation) => {
                     const lastViewed = lastViewedMap[(conversation as any).id] ?? 0;
                     const isUnread = !!(conversation as any).hasUnanswered && (conversation as any).lastInboundTs > lastViewed && selected.id !== (conversation as any).id;
@@ -1525,7 +1534,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       // Mechanical fallbacks (used when llmTier is null)
                       act_now:         { label: "⚡ Act Now",            action: waitingTooLong ? `Reply now · ${waitMinDisplay}m wait` : "Needs reply · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",    dot: "bg-rose-500",    Icon: ShieldAlert },
                       your_turn:       { label: "👉 Your Turn",          action: "Client waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200",  dot: "bg-amber-500",   Icon: MessageSquare },
-                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-blue-50 text-blue-700 border-blue-200", dot: "bg-blue-400", Icon: Clock3 },
+                      their_turn:      { label: "⏳ Their Turn",         action: isBooked ? "Booked · waiting on client" : "You replied · waiting on client", pill: "bg-slate-50 text-slate-600 border-slate-200", dot: "bg-slate-400", Icon: Clock3 },
                       monitor:         { label: "👀 Monitor",            action: isBooked ? "Active booking · monitor" : "Low urgency · review when free", pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400", Icon: CheckCircle2 },
                       resolved:        { label: "✓ Resolved",            action: "Closed",                                 pill: "bg-slate-50 text-slate-400 border-slate-200",  dot: "bg-slate-300",   Icon: CheckCircle2 },
                     };
@@ -1763,7 +1772,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── COL 2: Operations Lane (Team conversations) ── */}
-          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
+          <Card className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', minWidth:0, overflow:'hidden'}}>
             <CardContent className="p-0 flex flex-col flex-1 min-h-0">
               <div className="cs-inbox-scroll flex-1 overflow-y-auto" style={{scrollBehavior:'smooth', padding: '20px 20px 24px'}}>
               {/* Operations Lane header */}
@@ -1835,10 +1844,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               {/* Team conversation list */}
               <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
                 {teamConvs.length === 0 && (
-                  <div className="rounded-[20px] border border-slate-200 bg-slate-50 px-4 py-6 text-center">
-                    <SprayCan className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                    <div className="text-sm text-slate-400">No team conversations</div>
-                    <div className="text-xs text-slate-300 mt-1">Cleaner messages appear here</div>
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'48px 24px',textAlign:'center'}}>
+                    <div style={{width:'64px',height:'64px',borderRadius:'20px',background:'rgba(16,24,40,.04)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'20px'}}>
+                      <SprayCan style={{width:'28px',height:'28px',color:'#D0D5DD'}} />
+                    </div>
+                    <div style={{fontSize:'15px',fontWeight:800,color:'#344054',letterSpacing:'-0.02em',marginBottom:'8px'}}>All clear</div>
+                    <div style={{fontSize:'13px',fontWeight:500,color:'#98A2B3',lineHeight:1.5,maxWidth:'180px'}}>Cleaner messages will appear here when they come in</div>
                   </div>
                 )}
                 {teamConvs.map((conversation) => {
@@ -1888,7 +1899,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                     // Mechanical fallbacks
                     act_now:            { label: "⚡ Act Now",              action: waitingTooLong2 ? `Reply now · ${waitMinDisplay2}m wait` : "Needs attention · priority", pill: "bg-rose-50 text-rose-700 border-rose-200",   dot: "bg-rose-500",   Icon: ShieldAlert },
                     your_turn:          { label: "👉 Your Turn",           action: "Team waiting · reply now",             pill: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500",  Icon: MessageSquare },
-                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-blue-50 text-blue-700 border-blue-200",   dot: "bg-blue-400",   Icon: Clock3 },
+                    their_turn:         { label: "⏳ Their Turn",          action: "You replied · waiting on team",         pill: "bg-slate-50 text-slate-600 border-slate-200",   dot: "bg-slate-400",   Icon: Clock3 },
                     monitor:            { label: "👀 Monitor",             action: "Low urgency · review when free",       pill: "bg-slate-50 text-slate-500 border-slate-200", dot: "bg-slate-400",  Icon: CheckCircle2 },
                     resolved:           { label: "✓ Resolved",             action: "Closed",                              pill: "bg-slate-50 text-slate-400 border-slate-200", dot: "bg-slate-300",  Icon: CheckCircle2 },
                   };
@@ -3076,7 +3087,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
           </Card>
 
           {/* ── RIGHT: Conditional panel — Teams vs Client ── */}
-          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 8px 24px rgba(15,23,42,.05)'}}>
+          <div className="h-full rounded-[28px] overflow-hidden flex flex-col" style={{background:'#FFFFFF', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)'}}>
             {/* Pinned header — fills to top, clipped by outer overflow-hidden */}
             {selected.queue === "Teams" ? (
               <div style={{padding:'28px 28px 24px',background:'#FFFFFF',borderBottom:'1px solid rgba(16,24,40,.06)',flexShrink:0}}>
@@ -3549,21 +3560,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         );
                       })()}
 
-                      <div className="mt-6 pt-5 border-t border-slate-100 rounded-[24px] border border-blue-200 bg-blue-50 p-4">
-                        <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
+                      <div style={{marginTop:'24px',paddingTop:'20px',borderTop:'1px solid rgba(16,24,40,.06)',borderRadius:'20px',border:'1px solid rgba(139,92,246,.12)',background:'rgba(139,92,246,.04)',padding:'16px'}}>
+                        <div className="flex items-center gap-2 text-sm font-medium" style={{color:'#6D28D9'}}>
                           <Bot className="h-4 w-4" /> AI insight
-                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto text-blue-400" />}
+                          {insightLoading && <RefreshCw className="h-3 w-3 animate-spin ml-auto" style={{color:'#A78BFA'}} />}
                         </div>
                         {insightLoading && !insightData?.insight ? (
                           <div className="mt-2 space-y-1.5">
-                            <div className="h-3 w-full rounded bg-blue-200/60 animate-pulse" />
-                            <div className="h-3 w-4/5 rounded bg-blue-200/60 animate-pulse" />
-                            <div className="h-3 w-3/5 rounded bg-blue-200/60 animate-pulse" />
+                            <div className="h-3 w-full rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-4/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
+                            <div className="h-3 w-3/5 rounded animate-pulse" style={{background:'rgba(139,92,246,.12)'}} />
                           </div>
                         ) : insightData?.insight ? (
-                          <div className="mt-2 text-sm leading-6 text-blue-900">{insightData.insight}</div>
+                          <div className="mt-2 text-sm leading-6" style={{color:'#4C1D95'}}>{insightData.insight}</div>
                         ) : (
-                          <div className="mt-2 text-xs text-blue-400 italic">Select a conversation with messages to generate insight.</div>
+                          <div className="mt-2 text-xs italic" style={{color:'#A78BFA'}}>Select a conversation with messages to generate insight.</div>
                         )}
                       </div>
                     </div>
