@@ -306,12 +306,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
     refetchOnWindowFocus: false,
-    // Polling fallback: catches any messages missed during SSE reconnect windows (5s matches HubSpot/Intercom/Zendesk safety net)
-    refetchInterval: 5_000,
+    // SSE (lead_update) is the primary update path. 30s poll is a safety-net fallback
+    // for missed events during SSE reconnect windows — not the main driver.
+    refetchInterval: 30_000,
   });
   const { data: resolvedCountData } = trpc.opsChat.getCsResolvedCount.useQuery(undefined, {
     refetchOnWindowFocus: false,
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
+  });
+
+  // Current agent identity — used to stamp senderName in optimistic cache updates
+  const { data: agentMe } = trpc.agents.me.useQuery(undefined, {
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 
   // Agent photo map for avatars in message bubbles
@@ -408,25 +415,57 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     }
   }, [displayConversations]);
   const sendMessage = trpc.leads.sendMessage.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setCompose("");
-      // Lock the current conversation so list re-sort after invalidate doesn't jump away
+      // Lock the current conversation so list re-sort doesn't jump away
       if (effectiveSelectedIdRef.current !== null) {
         setSelectedId(effectiveSelectedIdRef.current);
       }
       utils.leads.getUnansweredCsCount.invalidate();
-      utils.leads.listCsInbox.invalidate();
+      // Surgical cache update: append the sent message to only the affected session.
+      // Avoids a full listCsInbox refetch — SSE will sync any server-side changes.
+      const now = Date.now();
+      const senderName = agentMe?.name ?? undefined;
+      utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+        if (!old) return old;
+        return old.map((s) => {
+          if (s.id !== variables.sessionId) return s;
+          let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+          try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { history = []; }
+          history = [...history, { role: "assistant", content: variables.message, ts: now, ...(senderName ? { senderName } : {}) }];
+          return {
+            ...s,
+            messageHistory: JSON.stringify(history),
+            hasUnanswered: false,
+            lastSenderRole: "assistant" as const,
+            lastMsgTs: now,
+            lastReadAt: new Date(now),
+          };
+        });
+      });
     },
   });
 
   const addCsNote = trpc.opsChat.addCsNote.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setCompose("");
-      // Pin the current conversation so list re-sort after invalidate doesn't jump away
+      // Pin the current conversation so list re-sort doesn't jump away
       if (effectiveSelectedIdRef.current !== null) {
         setSelectedId(effectiveSelectedIdRef.current);
       }
-      utils.leads.listCsInbox.invalidate();
+      // Surgical cache update: append the note to only the affected session.
+      const now = Date.now();
+      const senderName = agentMe?.name ?? undefined;
+      utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+        if (!old) return old;
+        return old.map((s) => {
+          if (s.id !== variables.sessionId) return s;
+          let history: Array<{ role: string; content: string; ts?: number; senderName?: string }> = [];
+          try { history = JSON.parse(s.messageHistory ?? "[]"); } catch { history = []; }
+          history = [...history, { role: "note", content: variables.note, ts: now, ...(senderName ? { senderName } : {}) }];
+          return { ...s, messageHistory: JSON.stringify(history), lastMsgTs: now };
+        });
+      });
       toast.success("Note saved");
     },
     onError: (err: { message?: string }) => toast.error(err.message || "Failed to save note"),
@@ -536,12 +575,18 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     onSuccess: (_data, variables) => {
       // Immediately decrement the badge — don't wait for SSE round-trip
       utils.leads.getUnansweredCsCount.invalidate();
-      // Play celebration for 900ms, then let the card disappear from current view
+      // Play celebration for 900ms, then surgically mark session as resolved in cache.
       setResolvingId(variables.sessionId);
       window.setTimeout(() => {
         setResolvingId(null);
         setSelectedId(null);
-        utils.leads.listCsInbox.invalidate();
+        const resolvedAt = new Date();
+        utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+          if (!old) return old;
+          return old.map((s) =>
+            s.id === variables.sessionId ? { ...s, csResolvedAt: resolvedAt } : s
+          );
+        });
         utils.opsChat.getCsResolvedCount.invalidate();
       }, 900);
     },
@@ -550,14 +595,28 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const updateCsName = trpc.leads.updateCsName.useMutation({
-    onSuccess: () => {
-      utils.leads.listCsInbox.invalidate();
+    onSuccess: (_data, variables) => {
+      // Surgical cache update: patch only the renamed session.
+      utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+        if (!old) return old;
+        return old.map((s) =>
+          s.id === variables.sessionId ? { ...s, leadName: variables.name || null } : s
+        );
+      });
       setEditingName(false);
     },
   });
 
   const updateCsQueue = trpc.leads.updateCsQueue.useMutation({
-    onSuccess: () => utils.leads.listCsInbox.invalidate(),
+    onSuccess: (_data, variables) => {
+      // Surgical cache update: patch only the re-queued session.
+      utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+        if (!old) return old;
+        return old.map((s) =>
+          s.id === variables.sessionId ? { ...s, csQueue: variables.queue } : s
+        );
+      });
+    },
   });
   const backfillCsNames = trpc.leads.backfillCsNames.useMutation({
     onSuccess: (data) => {
@@ -680,7 +739,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     onError: () => setLoadingAction(null),
   });
   const syncOutbound = trpc.opsChat.syncCsOutboundMessages.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // syncOutbound may have merged new messages from OpenPhone into the session.
+      // Do a targeted single-session refetch via full invalidate scoped to this session
+      // by re-fetching the whole list — but only after a real sync (not a no-op).
+      // This is the one case where a full refetch is still needed because the server
+      // does the merge and we don't have the merged history client-side.
+      // Kept as invalidate intentionally — see Phase 2 plan to return merged history.
       utils.leads.listCsInbox.invalidate();
     },
   });

@@ -3096,9 +3096,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const utils = trpc.useUtils();
 
   const resolveSessionFromBanner = trpc.leads.resolveSession.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       utils.leads.getUnansweredCsCount.invalidate();
-      utils.leads.listCsInbox.invalidate();
+      // Surgical cache update: mark only the resolved session — no full refetch.
+      const resolvedAt = new Date();
+      utils.leads.listCsInbox.setData({ showResolved: true }, (old) => {
+        if (!old) return old;
+        return old.map((s) =>
+          s.id === variables.sessionId ? { ...s, csResolvedAt: resolvedAt } : s
+        );
+      });
       utils.leads.getLeadReplies.invalidate();
     },
   });
