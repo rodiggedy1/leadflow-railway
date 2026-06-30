@@ -619,7 +619,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const detailEnabled =
     effectiveSelectedId != null &&
     effectiveSelectedId > 0 &&
-    liveConversations.length > 0;
+    csData !== undefined;
   console.log('[DETAIL ENABLED]', {
     detailEnabled,
     effectiveSelectedId,
