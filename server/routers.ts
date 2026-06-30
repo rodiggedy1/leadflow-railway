@@ -1358,8 +1358,6 @@ export const appRouter = router({
           console.error(`[sendMessage] Failed to send SMS to ${session.leadPhone}:`, smsResult.error);
           // Don't throw — message is already stored in history
         }
-
-        console.log(`[sendMessage] Agent ${agentSession.agentName} sent to ${session.leadPhone}: "${input.message}"`);
         // Broadcast so CS badge updates immediately on all connected clients
         const { broadcastOpsUpdate: bcastSend } = await import("./sseBroadcast");
         bcastSend("lead_update");

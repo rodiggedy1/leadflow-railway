@@ -353,7 +353,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         phones.push(phone);
       }
     }
-    console.log('[batchResolveNames] csData.length:', csData.length, '| uniquePhones.length:', phones.length);
     return phones;
   }, [csData]);
   const { data: nameMap } = trpc.leads.batchResolveNames.useQuery(
@@ -422,14 +421,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     });
   }, [csData, nameMap]);
 
-  // Measurement: how many conversations does liveConversations actually contain?
-  useEffect(() => {
-    if (liveConversations.length > 0) {
-      console.log('[liveConversations] length:', liveConversations.length);
-    }
-  }, [liveConversations.length]);
-
-  // Production inbox: always use live server data. The mock `conversations` array
+    // Production inbox: always use live server data. The mock `conversations` array
   // is intentionally excluded from this path to prevent fake IDs and cache poisoning.
   const displayConversations = liveConversations;
   // Once data arrives, apply any pending focus (handles the case where data wasn't
@@ -607,27 +599,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // For effectiveSelectedId: prefer client lane first, then team lane
   const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
-  console.log('[EFFECTIVE ID]', {
-    selectedId,
-    liveConversationsLength: liveConversations.length,
-    displayConversationsLength: displayConversations.length,
-    firstDisplayId: displayConversations[0]?.id,
-    effectiveSelectedId,
-  });
   // ── Detail query: fetch full messageHistory only for the open conversation ──────
   // This is the architectural split: the inbox list no longer needs to carry
   // full histories. getCsConversation fetches on demand when a session is opened.
-  console.log('[DETAIL] start', effectiveSelectedId);
   const detailEnabled =
     effectiveSelectedId != null &&
     effectiveSelectedId > 0;
-  console.log('[DETAIL ENABLED]', {
-    detailEnabled,
-    effectiveSelectedId,
-    liveConversationsLength: liveConversations.length,
-    csDataUndefined: csData === undefined,
-    csDataLength: csData?.length,
-  });
   const {
     data: conversationDetail,
     isLoading: conversationDetailLoading,
@@ -649,38 +626,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       refetchInterval: 30_000,
     }
   );
-  console.log('[DETAIL] loading', conversationDetailLoading, '| fetching', conversationDetailFetching);
-  console.log('[DETAIL] success', conversationDetail?.sessionId, '| messageHistory.length', conversationDetail?.messageHistory?.length ?? 0);
-  console.log(
-    '[DETAIL QUERY]',
-    {
-      status: conversationDetailStatus,
-      fetchStatus: conversationDetailFetchStatus,
-      isPending: conversationDetailIsPending,
-      isLoading: conversationDetailLoading,
-      isFetching: conversationDetailFetching,
-      isSuccess: conversationDetailIsSuccess,
-      isError: conversationDetailIsError,
-      data: conversationDetail,
-      error: conversationDetailError,
-    }
-  );
-
-  // Parse the detail query result into the messages array format used by the detail panel.
+    // Parse the detail query result into the messages array format used by the detail panel.
   // Falls back to selected.messages (from listCsInbox) while the detail query is loading.
   type RawMsg = { role: string; content: string; ts?: number; senderName?: string; media?: string[] };
 
-  // ── INSTRUMENTATION: log every time conversationDetail changes ──────────────
   const prevConversationDetailRef = useRef<typeof conversationDetail>(undefined);
   if (prevConversationDetailRef.current !== conversationDetail) {
-    console.log('[CsInbox][lifecycle] conversationDetail changed', {
-      sessionId: effectiveSelectedId,
-      wasUndefined: prevConversationDetailRef.current === undefined,
-      isNowUndefined: conversationDetail === undefined,
-      messageHistoryLength: conversationDetail?.messageHistory?.length ?? 0,
-      isLoading: conversationDetailLoading,
-      ts: Date.now(),
-    });
     prevConversationDetailRef.current = conversationDetail;
   }
 
@@ -689,7 +640,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       if (!conversationDetail?.messageHistory) return selected?.messages ?? [];
       let raw: RawMsg[] = [];
       try { raw = JSON.parse(conversationDetail.messageHistory); } catch (e) { raw = []; console.error('[PARSE] exception', e); }
-      console.log('[PARSE]', typeof conversationDetail.messageHistory, conversationDetail.messageHistory.length, 'parsed:', raw.length);
       return raw.map((m) => ({
         sender: (m.role === "user" ? "client" : m.role === "assistant" ? "agent" : m.role === "note" ? "note" : "system") as MsgSender,
         text: m.content,
@@ -699,43 +649,16 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         senderName: m.senderName,
       }));
     })();
-    console.log('[PARSE] guard hit:', !conversationDetail?.messageHistory, '| messageHistory type:', typeof conversationDetail?.messageHistory);
-    console.log('[DETAIL MESSAGES]', result.length, result);
-    console.log('[CsInbox][lifecycle] detailMessages recomputed', {
-      sessionId: effectiveSelectedId,
-      count: result.length,
-      source: conversationDetail?.messageHistory ? 'getCsConversation' : 'selected.messages (fallback)',
-      selectedMsgCount: selected?.messages?.length ?? 0,
-      ts: Date.now(),
-    });
     return result;
   }, [conversationDetail?.messageHistory, selected?.messages]); // eslint-disable-line react-hooks/exhaustive-deps
-  console.log('[DETAIL] messages', detailMessages.length);
 
   // selectedWithDetail: the selected conversation augmented with messages from the detail query.
   // All detail-panel code reads from this instead of selected.messages directly.
   const selectedWithDetail: Conversation | undefined = useMemo(() => {
     if (!selected) return undefined;
     const result = { ...selected, messages: detailMessages };
-    console.log('[SELECTED]', result.messages.length, result);
-    console.log('[CsInbox][lifecycle] selectedWithDetail recomputed', {
-      sessionId: selected.id,
-      messageCount: result.messages.length,
-      ts: Date.now(),
-    });
     return result;
   }, [selected, detailMessages]);
-  console.log('[DETAIL] selectedWithDetail', selectedWithDetail?.id, '| messages', selectedWithDetail?.messages?.length ?? 0);
-
-  // ── INSTRUMENTATION: log every render ────────────────────────────────────────
-  console.log('[CsInbox][render]', {
-    effectiveSelectedId,
-    conversationDetailLoading,
-    hasConversationDetail: !!conversationDetail,
-    detailMsgCount: detailMessages.length,
-    selectedWithDetailMsgCount: selectedWithDetail?.messages?.length ?? 0,
-    ts: Date.now(),
-  });
 
   // Typing presence — broadcast when this agent is composing, show others typing
   const csChannelKey = effectiveSelectedId ? `cs:${effectiveSelectedId}` : "";
@@ -846,7 +769,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     setCompose("");
     setAutoDraftLoading(true);
     const _t6 = performance.now();
-    console.log('[TIMELINE] T6 autoDraft start', { sessionId, t: _t6.toFixed(0) });
     try {
       const res = await fetch("/api/cs-reply-stream", {
         method: "POST",
@@ -897,10 +819,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       }
       setAutoDraftLoading(false);
       autoDraftAbortRef.current = null;
-      console.log('[TIMELINE] T7 autoDraft end (stream)', { ms: (performance.now() - _t6).toFixed(0) });
     } catch (err) {
       if ((err as Error).name === "AbortError") return; // intentional cancel
-      console.log('[TIMELINE] T7 autoDraft error (fallback to tRPC)', { ms: (performance.now() - _t6).toFixed(0) });
       // Fall back to tRPC mutation
       console.warn("[auto-draft stream] falling back to tRPC:", err);
       setCompose("");
@@ -1184,7 +1104,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [insightData, setInsightData] = useState<{ insight: string } | null>(null);
   const [insightFetchedForId, setInsightFetchedForId] = useState<number | null>(null);
   const insightMutation = trpc.opsChat.getCsConvInsight.useMutation({
-    onSuccess: (data) => { console.log('[TIMELINE] T9 insight end', { t: performance.now().toFixed(0) }); setInsightData(data); },
+    onSuccess: (data) => { setInsightData(data); },
   });
   const insightLoading = insightMutation.isPending;
 
@@ -1200,7 +1120,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     if (insightFetchedForId === selectedWithDetail.id && insightMutation.variables &&
         `${insightMutation.variables.sessionId}:${JSON.parse(insightMutation.variables.messageHistory ?? '[]').length}` === key) return;
     setInsightFetchedForId(selectedWithDetail.id);
-    console.log('[TIMELINE] T8 insight start', { sessionId: selectedWithDetail.id, t: performance.now().toFixed(0) });
     insightMutation.mutate({
       sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
@@ -1359,7 +1278,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [memoryBullets, setMemoryBullets] = useState<string[]>([]);
   const [memoryFetchedKey, setMemoryFetchedKey] = useState<string>("");
   const memoryMutation = trpc.opsChat.getCsConvMemory.useMutation({
-    onSuccess: (data) => { console.log('[TIMELINE] T11 memory end', { t: performance.now().toFixed(0) }); setMemoryBullets(data.bullets ?? []); },
+    onSuccess: (data) => { setMemoryBullets(data.bullets ?? []); },
   });
   const memoryLoading = memoryMutation.isPending;
   useEffect(() => {
@@ -1368,7 +1287,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     if (memoryFetchedKey === key) return;
     setMemoryFetchedKey(key);
     if (memoryFetchedKey.split(":")[0] !== String(selectedWithDetail.id)) setMemoryBullets([]);
-    console.log('[TIMELINE] T10 memory start', { sessionId: selectedWithDetail.id, t: performance.now().toFixed(0) });
     memoryMutation.mutate({
       sessionId: selectedWithDetail.id,
       messageHistory: insightMsgHistory,
@@ -1452,31 +1370,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     }
   }, [effectiveSelectedId, selectedWithDetail?.messages?.length]);
 
-  // DOM measurement: log scroll container and first message layout on every message count change
-  useEffect(() => {
-    if (!scrollRef.current) return;
-    const container = scrollRef.current;
-    const firstMsg = container.querySelector('[data-msg-idx="0"]') as HTMLElement | null;
-    const containerStyle = window.getComputedStyle(container);
-    const msgStyle = firstMsg ? window.getComputedStyle(firstMsg) : null;
-    console.log('[DOM]', {
-      containerClientHeight: container.clientHeight,
-      containerScrollHeight: container.scrollHeight,
-      containerDisplay: containerStyle.display,
-      containerOpacity: containerStyle.opacity,
-      containerVisibility: containerStyle.visibility,
-      containerOverflow: containerStyle.overflow,
-      containerOverflowY: containerStyle.overflowY,
-      firstMsgExists: !!firstMsg,
-      firstMsgColor: msgStyle?.color,
-      firstMsgBackground: msgStyle?.backgroundColor,
-      firstMsgRect: firstMsg?.getBoundingClientRect(),
-      firstMsgOpacity: msgStyle?.opacity,
-      firstMsgVisibility: msgStyle?.visibility,
-    });
-  }, [selectedWithDetail?.messages?.length]);
-
-  // Close emoji picker on outside click
+    // Close emoji picker on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
@@ -2439,7 +2333,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                     // Build SMS items with real ts from messageHistory (already passed through)
                     const smsMsgs = selectedWithDetail?.messages ?? [];
-                    console.log('[CHAT]', smsMsgs.length);
                     const smsItems: SmsItem[] = smsMsgs.map((message, idx) => ({
                       kind: "sms" as const,
                       ts: message.ts ?? idx, // real epoch ms if available, else index
