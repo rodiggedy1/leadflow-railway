@@ -629,7 +629,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   } = trpc.leads.getCsConversation.useQuery(
     { sessionId: effectiveSelectedId! },
     {
-      enabled: effectiveSelectedId != null && effectiveSelectedId > 0,
+      enabled: effectiveSelectedId != null && effectiveSelectedId > 0 && liveConversations.length > 0,
       staleTime: 0,           // always fresh when switching conversations
       refetchOnWindowFocus: false,
       // Poll at the same cadence as the inbox list so new inbound messages appear
