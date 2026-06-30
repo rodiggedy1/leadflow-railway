@@ -609,7 +609,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // ── Detail query: fetch full messageHistory only for the open conversation ──────
   // This is the architectural split: the inbox list no longer needs to carry
   // full histories. getCsConversation fetches on demand when a session is opened.
-  const { data: conversationDetail, isLoading: conversationDetailLoading } = trpc.leads.getCsConversation.useQuery(
+  console.log('[DETAIL] start', effectiveSelectedId);
+  const { data: conversationDetail, isLoading: conversationDetailLoading, isFetching: conversationDetailFetching } = trpc.leads.getCsConversation.useQuery(
     { sessionId: effectiveSelectedId! },
     {
       enabled: effectiveSelectedId != null && effectiveSelectedId > 0,
@@ -620,6 +621,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       refetchInterval: 30_000,
     }
   );
+  console.log('[DETAIL] loading', conversationDetailLoading, '| fetching', conversationDetailFetching);
+  console.log('[DETAIL] success', conversationDetail?.id, '| messageHistory.length', conversationDetail?.messageHistory?.length ?? 0);
 
   // Parse the detail query result into the messages array format used by the detail panel.
   // Falls back to selected.messages (from listCsInbox) while the detail query is loading.
@@ -662,6 +665,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     });
     return result;
   }, [conversationDetail?.messageHistory, selected?.messages]); // eslint-disable-line react-hooks/exhaustive-deps
+  console.log('[DETAIL] messages', detailMessages.length);
 
   // selectedWithDetail: the selected conversation augmented with messages from the detail query.
   // All detail-panel code reads from this instead of selected.messages directly.
@@ -675,6 +679,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     });
     return result;
   }, [selected, detailMessages]);
+  console.log('[DETAIL] selectedWithDetail', selectedWithDetail?.id, '| messages', selectedWithDetail?.messages?.length ?? 0);
 
   // ── INSTRUMENTATION: log every render ────────────────────────────────────────
   console.log('[CsInbox][render]', {
@@ -2287,6 +2292,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                     // Build SMS items with real ts from messageHistory (already passed through)
                     const smsMsgs = selectedWithDetail?.messages ?? [];
+                    console.log('[CHAT] render', smsMsgs.length);
                     const smsItems: SmsItem[] = smsMsgs.map((message, idx) => ({
                       kind: "sms" as const,
                       ts: message.ts ?? idx, // real epoch ms if available, else index
