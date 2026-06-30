@@ -311,7 +311,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     },
   });
 
-  const { data: csData, refetch: refetchInbox } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
+  const { data: csData, refetch: refetchInbox, isError: csDataIsError } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
     refetchOnWindowFocus: false,
     // SSE (lead_update) is the primary update path. 30s poll is a safety-net fallback
     // for missed events during SSE reconnect windows — not the main driver.
@@ -429,7 +429,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     }
   }, [liveConversations.length]);
 
-  const displayConversations = liveConversations.length > 0 ? liveConversations : conversations;
+  // Production inbox: always use live server data. The mock `conversations` array
+  // is intentionally excluded from this path to prevent fake IDs and cache poisoning.
+  const displayConversations = liveConversations;
   // Once data arrives, apply any pending focus (handles the case where data wasn't
   // loaded yet when the tab switched and focusSessionId fired)
   useEffect(() => {
@@ -618,8 +620,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   console.log('[DETAIL] start', effectiveSelectedId);
   const detailEnabled =
     effectiveSelectedId != null &&
-    effectiveSelectedId > 0 &&
-    csData !== undefined;
+    effectiveSelectedId > 0;
   console.log('[DETAIL ENABLED]', {
     detailEnabled,
     effectiveSelectedId,
@@ -1469,6 +1470,77 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     if (diff < 60_000) return "just now";
     if (diff < 3600_000) return `${Math.floor(diff / 60_000)}m ago`;
     return `${Math.floor(diff / 3600_000)}h ago`;
+  }
+
+  // ── Loading guard: show skeleton only during initial load, not during background refetches.
+  // Error state falls through to normal render so the existing error UI can handle it.
+  if (csData === undefined && !csDataIsError) {
+    return (
+      <div className="h-full overflow-hidden flex cs-inbox-scope" style={{color:'#101828', background:'transparent', padding:'20px', gap:'16px'}}>
+        {/* Col 1 skeleton */}
+        <div style={{width:'260px', flexShrink:0, background:'#FFFFFF', borderRadius:'28px', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', padding:'24px', display:'flex', flexDirection:'column', gap:'16px'}}>
+          <div style={{height:'12px', width:'60px', background:'#F2F4F7', borderRadius:'6px'}} />
+          <div style={{height:'30px', width:'120px', background:'#F2F4F7', borderRadius:'8px'}} />
+          <div style={{height:'40px', background:'#F9FAFB', borderRadius:'12px'}} />
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{display:'flex', gap:'12px', alignItems:'center', padding:'12px', background:'#F9FAFB', borderRadius:'16px'}}>
+              <div style={{width:'40px', height:'40px', borderRadius:'50%', background:'#E4E7EC', flexShrink:0}} />
+              <div style={{flex:1, display:'flex', flexDirection:'column', gap:'8px'}}>
+                <div style={{height:'12px', width:'70%', background:'#E4E7EC', borderRadius:'6px'}} />
+                <div style={{height:'10px', width:'90%', background:'#F2F4F7', borderRadius:'6px'}} />
+                <div style={{height:'10px', width:'50%', background:'#F2F4F7', borderRadius:'6px'}} />
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Col 2 skeleton (team lane) */}
+        <div style={{width:'260px', flexShrink:0, background:'#FFFFFF', borderRadius:'28px', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', padding:'24px', display:'flex', flexDirection:'column', gap:'16px'}}>
+          <div style={{height:'12px', width:'80px', background:'#F2F4F7', borderRadius:'6px'}} />
+          <div style={{height:'30px', width:'100px', background:'#F2F4F7', borderRadius:'8px'}} />
+          <div style={{height:'40px', background:'#F9FAFB', borderRadius:'12px'}} />
+          {[1,2].map(i => (
+            <div key={i} style={{display:'flex', gap:'12px', alignItems:'center', padding:'12px', background:'#F9FAFB', borderRadius:'16px'}}>
+              <div style={{width:'40px', height:'40px', borderRadius:'50%', background:'#E4E7EC', flexShrink:0}} />
+              <div style={{flex:1, display:'flex', flexDirection:'column', gap:'8px'}}>
+                <div style={{height:'12px', width:'70%', background:'#E4E7EC', borderRadius:'6px'}} />
+                <div style={{height:'10px', width:'90%', background:'#F2F4F7', borderRadius:'6px'}} />
+              </div>
+            </div>
+          ))}
+        </div>
+        {/* Col 3: conversation panel skeleton */}
+        <div style={{flex:1, background:'#FFFFFF', borderRadius:'28px', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', padding:'24px', display:'flex', flexDirection:'column', gap:'16px'}}>
+          <div style={{display:'flex', alignItems:'center', gap:'12px', paddingBottom:'16px', borderBottom:'1px solid #F2F4F7'}}>
+            <div style={{width:'40px', height:'40px', borderRadius:'50%', background:'#E4E7EC'}} />
+            <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
+              <div style={{height:'14px', width:'140px', background:'#E4E7EC', borderRadius:'6px'}} />
+              <div style={{height:'10px', width:'100px', background:'#F2F4F7', borderRadius:'6px'}} />
+            </div>
+          </div>
+          <div style={{flex:1, display:'flex', flexDirection:'column', gap:'12px', paddingTop:'8px'}}>
+            {[1,2,3].map(i => (
+              <div key={i} style={{display:'flex', justifyContent: i % 2 === 0 ? 'flex-end' : 'flex-start'}}>
+                <div style={{maxWidth:'60%', height:'48px', background: i % 2 === 0 ? '#EFF8FF' : '#F9FAFB', borderRadius:'16px'}} />
+              </div>
+            ))}
+          </div>
+          <div style={{height:'48px', background:'#F9FAFB', borderRadius:'12px', marginTop:'auto'}} />
+        </div>
+        {/* Col 4: profile panel skeleton */}
+        <div style={{width:'260px', flexShrink:0, background:'#FFFFFF', borderRadius:'28px', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', padding:'24px', display:'flex', flexDirection:'column', gap:'16px'}}>
+          <div style={{width:'56px', height:'56px', borderRadius:'50%', background:'#E4E7EC', marginBottom:'4px'}} />
+          <div style={{height:'14px', width:'120px', background:'#E4E7EC', borderRadius:'6px'}} />
+          <div style={{height:'10px', width:'90px', background:'#F2F4F7', borderRadius:'6px'}} />
+          <div style={{height:'1px', background:'#F2F4F7', margin:'4px 0'}} />
+          {[1,2,3,4].map(i => (
+            <div key={i} style={{display:'flex', flexDirection:'column', gap:'6px'}}>
+              <div style={{height:'10px', width:'60px', background:'#F2F4F7', borderRadius:'6px'}} />
+              <div style={{height:'12px', width:'100px', background:'#E4E7EC', borderRadius:'6px'}} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   return (
