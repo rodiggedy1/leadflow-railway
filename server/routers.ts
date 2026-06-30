@@ -3123,18 +3123,90 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           ? undefined  // show all
           : isNull(conversationSessions.csResolvedAt); // only open
 
-        // ── Stage 1: conversationSessions DB query ────────────────────────────
+        // ── Stage 1: conversationSessions DB query (summary columns only — no messageHistory) ──
         const _t1 = performance.now();
         const sessions = await db
-          .select()
+          .select({
+            id: conversationSessions.id,
+            leadPhone: conversationSessions.leadPhone,
+            leadName: conversationSessions.leadName,
+            stage: conversationSessions.stage,
+            quotedPrice: conversationSessions.quotedPrice,
+            serviceType: conversationSessions.serviceType,
+            bedrooms: conversationSessions.bedrooms,
+            bathrooms: conversationSessions.bathrooms,
+            extras: conversationSessions.extras,
+            selectedSlot: conversationSessions.selectedSlot,
+            address: conversationSessions.address,
+            callPreference: conversationSessions.callPreference,
+            quoteLeadId: conversationSessions.quoteLeadId,
+            quoteSlug: conversationSessions.quoteSlug,
+            assignedAgentId: conversationSessions.assignedAgentId,
+            assignedAgentName: conversationSessions.assignedAgentName,
+            lastCalledAt: conversationSessions.lastCalledAt,
+            lastCalledByAgentId: conversationSessions.lastCalledByAgentId,
+            lastCalledByAgentName: conversationSessions.lastCalledByAgentName,
+            isBooked: conversationSessions.isBooked,
+            bookedAt: conversationSessions.bookedAt,
+            bookedByAgentId: conversationSessions.bookedByAgentId,
+            bookedByAgentName: conversationSessions.bookedByAgentName,
+            internalNotes: conversationSessions.internalNotes,
+            aiMode: conversationSessions.aiMode,
+            bookedAmount: conversationSessions.bookedAmount,
+            utmSource: conversationSessions.utmSource,
+            utmMedium: conversationSessions.utmMedium,
+            utmCampaign: conversationSessions.utmCampaign,
+            utmContent: conversationSessions.utmContent,
+            gclid: conversationSessions.gclid,
+            leadSource: conversationSessions.leadSource,
+            reactivationLastPrice: conversationSessions.reactivationLastPrice,
+            reactivationDiscountPct: conversationSessions.reactivationDiscountPct,
+            barkQA: conversationSessions.barkQA,
+            lastAiMessageAt: conversationSessions.lastAiMessageAt,
+            autoFollowUpSent: conversationSessions.autoFollowUpSent,
+            followUpDate: conversationSessions.followUpDate,
+            followUpMessage: conversationSessions.followUpMessage,
+            followUpSent: conversationSessions.followUpSent,
+            nudgeCount: conversationSessions.nudgeCount,
+            lostReason: conversationSessions.lostReason,
+            language: conversationSessions.language,
+            preLangStage: conversationSessions.preLangStage,
+            smsOptOut: conversationSessions.smsOptOut,
+            smsFlow: conversationSessions.smsFlow,
+            lastProcessedMessageId: conversationSessions.lastProcessedMessageId,
+            csResolvedAt: conversationSessions.csResolvedAt,
+            csQueue: conversationSessions.csQueue,
+            aiClosingRecCache: conversationSessions.aiClosingRecCache,
+            aiClosingRecCachedAt: conversationSessions.aiClosingRecCachedAt,
+            aiClosingRecMsgLen: conversationSessions.aiClosingRecMsgLen,
+            csPriorityTag: conversationSessions.csPriorityTag,
+            csPriorityReason: conversationSessions.csPriorityReason,
+            csPriorityTaggedAt: conversationSessions.csPriorityTaggedAt,
+            csPriorityDismissedAt: conversationSessions.csPriorityDismissedAt,
+            csMemoryCache: conversationSessions.csMemoryCache,
+            csMemoryCachedMsgLen: conversationSessions.csMemoryCachedMsgLen,
+            csStatusTier: conversationSessions.csStatusTier,
+            csStatusTieredAt: conversationSessions.csStatusTieredAt,
+            csStatusMsgLen: conversationSessions.csStatusMsgLen,
+            aiSummary: conversationSessions.aiSummary,
+            aiSummaryHash: conversationSessions.aiSummaryHash,
+            preferredDates: conversationSessions.preferredDates,
+            specialNotes: conversationSessions.specialNotes,
+            respondedAt: conversationSessions.respondedAt,
+            lastReadAt: conversationSessions.lastReadAt,
+            updatedAt: conversationSessions.updatedAt,
+            createdAt: conversationSessions.createdAt,
+            // Summary columns (populated by computeSessionSummary on every write)
+            lastMessageText: conversationSessions.lastMessageText,
+            lastMessageTs: conversationSessions.lastMessageTs,
+            lastCustomerMessageTs: conversationSessions.lastCustomerMessageTs,
+            lastMessageRole: conversationSessions.lastMessageRole,
+            messageCount: conversationSessions.messageCount,
+          })
           .from(conversationSessions)
           .where(resolvedFilter ? and(sourceFilter, resolvedFilter) : sourceFilter)
           .orderBy(desc(conversationSessions.updatedAt));
         const _d1 = performance.now() - _t1;
-
-        // ── Dataset stats ─────────────────────────────────────────────────────
-        // messageHistory is still in the SELECT (Step 3A safety net) but we no longer parse it for inbox cards.
-        const _totalJsonBytes = sessions.reduce((acc, s) => acc + (s.messageHistory?.length ?? 0), 0);
 
         // ── Stage 2: summary columns (no JSON parse) ──────────────────────────
         const _t2 = performance.now();
@@ -3159,7 +3231,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         // Sort: most recent last message first
         augmented.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
 
-        // ── Stage 4: dedupe/group by phone + merge histories ──────────────────
+        // ── Stage 4: dedupe/group by phone — canonical session selection ────────
+        // For phones with multiple sessions, select the canonical session (newest lastMessageTs).
+        // No history merging here — that belongs in getCsConversation() when the user opens a conversation.
         const _t4 = performance.now();
         type AugmentedSession = typeof augmented[number];
         const phoneGroups = new Map<string, AugmentedSession[]>();
@@ -3169,37 +3243,12 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           phoneGroups.get(phone)!.push(s);
         }
         const deduped = Array.from(phoneGroups.values()).map((group) => {
-          const primary = group[0];
-          if (group.length === 1) return primary;
-          type MsgEntry = { role: string; content: string; ts?: number; senderName?: string; opMsgId?: string };
-          const allMsgs: MsgEntry[] = [];
-          for (const s of group) {
-            let hist: MsgEntry[] = [];
-            try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
-            allMsgs.push(...hist);
-          }
-          const seenMsgIds = new Set<string>();
-          const merged: MsgEntry[] = [];
-          for (const m of allMsgs) {
-            if (m.opMsgId && seenMsgIds.has(m.opMsgId)) continue;
-            if (m.opMsgId) seenMsgIds.add(m.opMsgId);
-            const isDup = merged.some(
-              (x) => x.role === m.role && x.content === m.content && Math.abs((x.ts ?? 0) - (m.ts ?? 0)) < 15_000
-            );
-            if (isDup) continue;
-            merged.push(m);
-          }
-          merged.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-          const lastMerged = merged[merged.length - 1];
-          const mergedLastMsgTs = lastMerged?.ts ?? primary.lastMsgTs;
-          const lastRealMerged = [...merged].reverse().find((e) => e.role === "user" || e.role === "assistant");
-          return {
-            ...primary,
-            messageHistory: JSON.stringify(merged),
-            lastMsgTs: mergedLastMsgTs,
-            hasUnanswered: !!lastRealMerged && lastRealMerged.role === "user",
-            lastSenderRole: (lastRealMerged?.role === "user" ? "user" : lastRealMerged?.role === "assistant" ? "assistant" : null) as "user" | "assistant" | null,
-          };
+          if (group.length === 1) return group[0];
+          // Pick the single canonical session: the one with the most recent lastMessageTs.
+          // All fields come from this one row — no mixing, no hybrid objects.
+          return group.reduce((a, b) =>
+            (b.lastMessageTs ?? 0) > (a.lastMessageTs ?? 0) ? b : a
+          );
         });
         deduped.sort((a, b) => b.lastMsgTs - a.lastMsgTs);
         const _d4 = performance.now() - _t4;
@@ -3263,13 +3312,9 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const _d7 = performance.now() - _t7;
 
         // ── Dataset stats ─────────────────────────────────────────────────────
-        // Dataset stats from summary columns (no JSON parse)
         const _totalMsgs = sessions.reduce((acc, s) => acc + (s.messageCount ?? 0), 0);
         const _maxMsgs = sessions.reduce((acc, s) => Math.max(acc, s.messageCount ?? 0), 0);
         const _avgMsgs = sessions.length > 0 ? (_totalMsgs / sessions.length).toFixed(1) : "0";
-        // messageHistory is still in SELECT (Step 3A safety net) — measure its wire cost
-        const _totalKB = (_totalJsonBytes / 1024).toFixed(1);
-        const _totalMB = (_totalJsonBytes / 1024 / 1024).toFixed(2);
 
         // ── Summary log ─────────────────────────────────────────────────────
         const _total = performance.now() - _totalStart;
@@ -3277,12 +3322,12 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
           `[listCsInbox perf]\n` +
           `  Dataset: sessions=${sessions.length} deduped=${deduped.length} phones=${phones.length}\n` +
           `           total_msgs=${_totalMsgs} avg_msgs/session=${_avgMsgs} max_msgs=${_maxMsgs}\n` +
-          `           messageHistory_wire=${_totalKB}KB (${_totalMB}MB) [SAFETY NET - still in SELECT]\n` +
+          `           messageHistory_wire=0KB (messageHistory removed from SELECT)\n` +
           `           cleaner_jobs=${_cleanerJobsCount} today_jobs=${_todayJobsCount}\n` +
-          `  Stage 1  conversationSessions query (incl messageHistory) .. ${_d1.toFixed(1)}ms\n` +
+          `  Stage 1  conversationSessions query (summary only) .......... ${_d1.toFixed(1)}ms\n` +
           `  Stage 2  summary cols read (no JSON parse) .................. ${_d2.toFixed(1)}ms\n` +
           `  Stage 3  last-msg/unread from summary cols .................. ${_d3.toFixed(1)}ms\n` +
-          `  Stage 4  dedupe/group/merge by phone ........................ ${_d4.toFixed(1)}ms\n` +
+          `  Stage 4  dedupe/canonical session selection ................. ${_d4.toFixed(1)}ms\n` +
           `  Stage 5  cleanerJobs lookup (REGEXP_REPLACE) ................ ${_d5.toFixed(1)}ms\n` +
           `  Stage 6  today's jobs lookup (REGEXP_REPLACE) ............... ${_d6.toFixed(1)}ms\n` +
           `  Stage 7  response mapping .................................. ${_d7.toFixed(1)}ms\n` +
@@ -3290,21 +3335,16 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         );
 
         // Fire async LLM status scoring for stale sessions — never blocks the response
-        import("./csStatusScorer").then(({ scoreAndCacheStatus }) => {
+        // Async LLM status scoring — fires after response is sent, never blocks.
+        // Uses messageCount from summary column for staleness check.
+        // scoreAndCacheStatusById fetches messageHistory itself only when scoring is needed.
+        import("./csStatusScorer").then(({ scoreAndCacheStatusById }) => {
           for (const s of result) {
-            let hist: Array<{ role: string; content: string; ts?: number }> = [];
-            try { hist = JSON.parse(s.messageHistory ?? "[]"); } catch { /* ignore */ }
-            const msgLen = hist.length;
+            const msgLen = s.messageCount ?? 0;
             const isTeam = s.leadSource === "cs-inbound-cleaner";
             if (s.csStatusMsgLen !== msgLen) {
-              scoreAndCacheStatus(
-                s.id,
-                isTeam,
-                hist,
-                msgLen,
-                s.csStatusTier ?? null,
-                s.csStatusMsgLen ?? null
-              ).catch(() => { /* silent — scoring is best-effort */ });
+              scoreAndCacheStatusById(s.id, isTeam)
+                .catch(() => { /* silent — scoring is best-effort */ });
             }
           }
         }).catch(() => { /* silent */ });
