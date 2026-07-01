@@ -262,6 +262,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [worldClassOpen, setWorldClassOpen] = useState(false);
   const [insertResponseOpen, setInsertResponseOpen] = useState(false);
   const [showAICall, setShowAICall] = useState(false);
+  // Reset showAICall when the selected conversation changes so first click always works
+  useEffect(() => { setShowAICall(false); }, [selectedId]);
   // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
 
