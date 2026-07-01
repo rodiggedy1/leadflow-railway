@@ -261,6 +261,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
   const [insertResponseOpen, setInsertResponseOpen] = useState(false);
+  const [showAICall, setShowAICall] = useState(false);
   // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -2247,25 +2248,28 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                   {/* Right: action icons in a compact rounded pill row */}
                   <div style={{display:'flex',alignItems:'center',gap:'8px',flexShrink:0}}>
-                    {/* Call via OpenPhone */}
+                    {/* AI Call — green throb button, opens CustomerMentionChip popup on call view */}
                     {selected?.phone && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <a
-                            href={`openphone://call?to=${encodeURIComponent(selected.phone)}`}
-                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
-                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
-                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
-                          >
-                            <Phone className="h-4 w-4" />
-                          </a>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">Call via OpenPhone</TooltipContent>
-                      </Tooltip>
-                    )}
-                    {/* AI Call — opens same popup as @mention chip in Command Chat */}
-                    {selected?.phone && (
-                      <CustomerMentionChip name={selected.name} phone={selected.phone} />
+                      <>
+                        <style>{`@keyframes cs-call-throb{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.45)}50%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}`}</style>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => setShowAICall(v => !v)}
+                              style={{width:'44px',height:'44px',borderRadius:'14px',background:'#16a34a',border:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'white',transition:'all 0.15s',animation:'cs-call-throb 2s ease-in-out infinite'}}
+                              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='#15803d';(e.currentTarget as HTMLElement).style.animation='none';}}
+                              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#16a34a';(e.currentTarget as HTMLElement).style.animation='cs-call-throb 2s ease-in-out infinite';}}
+                            >
+                              <Phone className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom">AI call</TooltipContent>
+                        </Tooltip>
+                        <div style={{display:'none'}}>
+                          <CustomerMentionChip name={selected.name} phone={selected.phone} openToCall={showAICall} />
+                        </div>
+                      </>
                     )}
                     {/* Sync from OpenPhone */}
                     {selected && selected.id > 0 && selected.phone && (

@@ -1307,9 +1307,18 @@ function CustomerCard({
 }
 
 // ─── Main Chip ────────────────────────────────────────────────────────────────
-export function CustomerMentionChip({ name, phone }: { name: string; phone: string }) {
+export function CustomerMentionChip({ name, phone, openToCall }: { name: string; phone: string; openToCall?: boolean }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"card" | "sms" | "call" | "email">("card");
+  // Auto-open to call view when openToCall is triggered
+  const prevOpenToCall = useRef(false);
+  useEffect(() => {
+    if (openToCall && !prevOpenToCall.current) {
+      setView("call");
+      setOpen(true);
+    }
+    prevOpenToCall.current = !!openToCall;
+  }, [openToCall]);
   const [selected, setSelected] = useState<CustomerData | null>(null);
 
   // Call session — lives here, survives modal open/close
