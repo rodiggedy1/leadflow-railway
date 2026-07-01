@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -1988,6 +1988,31 @@ export const appRouter = router({
           .from(openphoneCallRecordings)
           .where(eq(openphoneCallRecordings.sessionId, input.sessionId))
           .orderBy(openphoneCallRecordings.callStartedAt);
+      }),
+    /**
+     * leads.getCsAiCalls — returns AI call log entries for a given phone number.
+     * Used to merge AI calls into the CS Inbox chat timeline alongside human calls.
+     */
+    getCsAiCalls: adminAgentProcedure
+      .input(z.object({ phone: z.string() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const normalized = input.phone.startsWith("+") ? input.phone : `+1${input.phone.replace(/\D/g, "")}`;
+        return db
+          .select({
+            id: callLog.id,
+            calledPhone: callLog.calledPhone,
+            recordingUrl: callLog.recordingUrl,
+            durationSeconds: callLog.durationSeconds,
+            transcript: callLog.transcript,
+            status: callLog.status,
+            firedAt: callLog.firedAt,
+            completedAt: callLog.completedAt,
+          })
+          .from(callLog)
+          .where(eq(callLog.calledPhone, normalized))
+          .orderBy(callLog.firedAt);
       }),
     /**
      * leads.getLatestCallDebrief — returns the most recent AI post-call debrief

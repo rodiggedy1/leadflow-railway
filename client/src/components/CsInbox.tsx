@@ -1318,11 +1318,20 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // Track which call is currently playing audio
   const [playingCallId, setPlayingCallId] = useState<number | null>(null);
   const callAudioRefs = useRef<Record<number, HTMLAudioElement | null>>({});
+  // AI call expand/play state (separate from human calls — uses string keys like "ai-123")
+  const [expandedAiCallId, setExpandedAiCallId] = useState<string | null>(null);
+  const [playingAiCallId, setPlayingAiCallId] = useState<string | null>(null);
+  const aiCallAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({}); 
 
   // ── Call recordings — fetched for the selected session and merged inline ──
   const { data: callRecordings = [] } = trpc.leads.getCallRecordings.useQuery(
     { sessionId: selected?.id ?? 0 },
     { enabled: !!selected?.id, staleTime: 60_000, refetchInterval: 120_000 }
+  );
+  // ── AI call recordings — fetched from callLog by phone, merged into timeline ──
+  const { data: aiCallRecordings = [] } = trpc.leads.getCsAiCalls.useQuery(
+    { phone: selected?.phone ?? "" },
+    { enabled: !!selected?.phone, staleTime: 30_000, refetchInterval: 60_000 }
   );
 
   // Mark conversation as viewed when selected changes
@@ -2340,7 +2349,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                   {(() => {
                     type SmsItem = { kind: "sms"; ts: number; message: (typeof selected)["messages"][0]; idx: number };
                     type CallItem = { kind: "call"; ts: number; rec: (typeof callRecordings)[0] };
-                    type TimelineItem = SmsItem | CallItem;
+                    type AiCallItem = { kind: "aicall"; ts: number; rec: (typeof aiCallRecordings)[0] };
+                    type TimelineItem = SmsItem | CallItem | AiCallItem;
 
                     // Build SMS items with real ts from messageHistory (already passed through)
                     const smsMsgs = selectedWithDetail?.messages ?? [];
@@ -2358,8 +2368,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                       rec,
                     }));
 
-                    // Merge sort both lists by ts
-                    const allItems: TimelineItem[] = [...smsItems, ...callItems].sort((a, b) => a.ts - b.ts);
+                    // Build AI call items from callLog (firedAt is epoch ms)
+                    const aiCallItems: AiCallItem[] = (aiCallRecordings ?? []).map((rec) => ({
+                      kind: "aicall" as const,
+                      ts: rec.firedAt ?? 0,
+                      rec,
+                    }));
+                    // Merge sort all lists by ts
+                    const allItems: TimelineItem[] = [...smsItems, ...callItems, ...aiCallItems].sort((a, b) => a.ts - b.ts);
 
                     // Track last date for date separators
                     let lastDateStr = "";
@@ -2582,9 +2598,129 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                             </div>
                           </motion.div>
                         );
+                                                return elements;
+                      }
+                      // AI call bubble
+                      if (item.kind === "aicall") {
+                        const aiRec = item.rec;
+                        const aiHasRecording = !!aiRec.recordingUrl;
+                        const aiDuration = aiRec.durationSeconds ?? 0;
+                        const aiDurStr = aiDuration > 0 ? `${Math.floor(aiDuration / 60)}:${String(aiDuration % 60).padStart(2, "0")}` : "0:00";
+                        const aiTime = aiRec.firedAt ? new Date(aiRec.firedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "";
+                        const aiIsExpanded = expandedAiCallId === `ai-${aiRec.id}`;
+                        const aiIsPlaying = playingAiCallId === `ai-${aiRec.id}`;
+                        const aiWaveHeights = [3, 5, 8, 6, 10, 7, 4, 9, 6, 5, 8, 4, 7, 6, 9, 5, 8, 4, 6, 7];
+                        let aiTranscriptTurns: { identifier: string; content: string }[] = [];
+                        try { if (aiRec.transcript) aiTranscriptTurns = JSON.parse(aiRec.transcript as string); } catch { aiTranscriptTurns = []; }
+                        elements.push(
+                          <motion.div
+                            key={`aicall-${aiRec.id}`}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                            className="flex justify-end"
+                          >
+                            <div style={{ maxWidth: "72%" }}>
+                              <div
+                                className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 cursor-pointer select-none shadow-sm"
+                                onClick={() => setExpandedAiCallId(aiIsExpanded ? null : `ai-${aiRec.id}`)}
+                              >
+                                {/* Header row */}
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <Sparkles className="h-3 w-3 text-emerald-500 shrink-0" />
+                                    <span className="text-[11px] font-semibold text-emerald-700">AI Call</span>
+                                  </div>
+                                  {aiRec.status === "no_answer" && (
+                                    <span className="text-[10px] text-red-500 font-medium">No answer</span>
+                                  )}
+                                  {aiRec.status === "voicemail" && (
+                                    <span className="text-[10px] text-amber-500 font-medium">Voicemail</span>
+                                  )}
+                                </div>
+                                {/* Waveform + play + duration */}
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!aiHasRecording) return;
+                                      const audio = aiCallAudioRefs.current[`ai-${aiRec.id}`];
+                                      if (!audio) return;
+                                      if (aiIsPlaying) { audio.pause(); setPlayingAiCallId(null); }
+                                      else { audio.play(); setPlayingAiCallId(`ai-${aiRec.id}`); }
+                                    }}
+                                    className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                                      aiHasRecording ? "bg-emerald-500 hover:bg-emerald-600" : "bg-slate-200 cursor-not-allowed"
+                                    }`}
+                                  >
+                                    {aiIsPlaying
+                                      ? <Pause className="h-3 w-3 text-white" />
+                                      : <Play className="h-3 w-3 text-white ml-0.5" />}
+                                  </button>
+                                  <div className="flex items-end gap-[2px] h-[18px]">
+                                    {aiWaveHeights.map((h, wi) => (
+                                      <div key={wi} className="rounded-full w-[3px] bg-emerald-400" style={{ height: `${h}px` }} />
+                                    ))}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <span className="text-[11px] font-medium tabular-nums text-emerald-600">{aiDurStr}</span>
+                                    {aiIsExpanded ? <ChevronUp className="h-3.5 w-3.5 text-emerald-400" /> : <ChevronDown className="h-3.5 w-3.5 text-emerald-400" />}
+                                  </div>
+                                </div>
+                                {aiHasRecording && (
+                                  <audio
+                                    ref={(el) => { aiCallAudioRefs.current[`ai-${aiRec.id}`] = el; }}
+                                    src={aiRec.recordingUrl as string}
+                                    onEnded={() => setPlayingAiCallId(null)}
+                                    onPause={() => { if (playingAiCallId === `ai-${aiRec.id}`) setPlayingAiCallId(null); }}
+                                    className="hidden"
+                                  />
+                                )}
+                              </div>
+                              {/* Expanded detail */}
+                              <AnimatePresence>
+                                {aiIsExpanded && (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: "auto" }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    transition={{ duration: 0.18, ease: "easeOut" }}
+                                    className="overflow-hidden"
+                                  >
+                                    <div className="mt-1 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2.5">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <Sparkles className="h-3 w-3 text-emerald-500 shrink-0" />
+                                        <span className="text-xs font-medium text-slate-700">AI outbound call · {aiRec.calledPhone}</span>
+                                        <span className="ml-auto text-[10px] text-slate-400">{aiTime}</span>
+                                      </div>
+                                      {aiTranscriptTurns.length > 0 && (
+                                        <details className="mt-1">
+                                          <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none text-emerald-600 hover:text-emerald-800">
+                                            ▶ Transcript ({aiTranscriptTurns.length} turns)
+                                          </summary>
+                                          <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                            {aiTranscriptTurns.map((turn, ti) => (
+                                              <div key={ti} className="text-xs">
+                                                <span className="font-semibold mr-1 text-emerald-600">{turn.identifier}:</span>
+                                                <span className="text-slate-600">{turn.content}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </details>
+                                      )}
+                                      {aiTranscriptTurns.length === 0 && (
+                                        <p className="text-xs text-slate-400 italic">No transcript available yet</p>
+                                      )}
+                                    </div>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                              <p className="text-[10px] text-slate-400 mt-1 mr-1 text-right">{aiTime}</p>
+                            </div>
+                          </motion.div>
+                        );
                         return elements;
                       }
-
                       // SMS bubble
                       const { message, idx } = item;
 
