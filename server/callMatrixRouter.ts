@@ -357,6 +357,7 @@ export const callMatrixRouter = router({
         jobDate: input.jobDate,
         firedBy: callerName,
         firedAt: now,
+        transcriptLanguage: input.language ?? "en",
       });
       const callLogId = (logInsert as any).insertId as number;
 
