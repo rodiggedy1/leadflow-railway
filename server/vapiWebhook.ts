@@ -274,58 +274,48 @@ export function registerVapiWebhookRoute(app: Express): void {
               .catch((err: unknown) => console.error("[Vapi] callLog update error:", err));
 
             // ── Fetch full transcript from VAPI API (end-of-call-report transcript can be incomplete) ──
-            // Wait 4s for VAPI to finalize, then fetch the full call object and update callLog.transcript
-            // Also handles Spanish translation: if transcriptLanguage === "es", run LLM translation
-            setTimeout(async () => {
+            // Fetch the full call object immediately and update callLog.transcript (source of truth).
+            // Then call ensureEnglishTranscript which is idempotent and handles Spanish translation.
+            (async () => {
               try {
                 const fullCallRes = await fetch(`https://api.vapi.ai/call/${vapiCallId}`, {
                   headers: { Authorization: `Bearer ${ENV.vapiPrivateKey}` },
                 });
-                if (!fullCallRes.ok) return;
+                if (!fullCallRes.ok) {
+                  console.error(`[Vapi] Full transcript fetch failed: HTTP ${fullCallRes.status} for vapiCallId=${vapiCallId}`);
+                  return;
+                }
                 const fullCall = await fullCallRes.json() as Record<string, unknown>;
                 const fullArtifact = fullCall.artifact as Record<string, unknown> | undefined;
                 const fullTranscript = (fullArtifact?.transcript as string | undefined) ?? (fullCall.transcript as string | undefined) ?? null;
-                if (!fullTranscript) return;
+                if (!fullTranscript) {
+                  console.log(`[Vapi] No full transcript available yet for vapiCallId=${vapiCallId}`);
+                  return;
+                }
 
-                // Update callLog with the full transcript (source of truth — never overwritten again)
-                await db.update(callLog)
-                  .set({ transcript: fullTranscript })
-                  .where(eq(callLog.vapiCallId, vapiCallId))
-                  .catch((err: unknown) => console.error("[Vapi] callLog full transcript update error:", err));
-                console.log(`[Vapi] callLog full transcript updated for vapiCallId=${vapiCallId} (${fullTranscript.length} chars)`);
-
-                // ── Spanish translation: if transcriptLanguage === "es", translate to English ──
+                // Look up the callLog id for this vapiCallId
                 const [clRow] = await db
-                  .select({ id: callLog.id, transcriptLanguage: callLog.transcriptLanguage })
+                  .select({ id: callLog.id })
                   .from(callLog)
                   .where(eq(callLog.vapiCallId, vapiCallId))
                   .limit(1)
                   .catch(() => []);
-                if (clRow?.transcriptLanguage === "es") {
-                  try {
-                    const { invokeLLM } = await import("./_core/llm");
-                    const llmRes = await invokeLLM({
-                      messages: [
-                        { role: "system", content: "You are a professional translator. Translate the following call transcript from Spanish to English. Preserve speaker labels (AI: / User:) exactly as they appear. Output only the translated transcript, nothing else." },
-                        { role: "user", content: fullTranscript },
-                      ],
-                    });
-                    const translatedText = (llmRes as any)?.choices?.[0]?.message?.content as string | undefined;
-                    if (translatedText) {
-                      await db.update(callLog)
-                        .set({ transcriptEnglish: translatedText })
-                        .where(eq(callLog.vapiCallId, vapiCallId))
-                        .catch((err: unknown) => console.error("[Vapi] callLog transcriptEnglish update error:", err));
-                      console.log(`[Vapi] Spanish transcript translated to English for vapiCallId=${vapiCallId}`);
-                    }
-                  } catch (translationErr) {
-                    console.error("[Vapi] Spanish translation failed:", translationErr);
-                  }
-                }
+                if (!clRow) return;
+
+                // Update callLog.transcript with the full version (source of truth — never overwritten again)
+                await db.update(callLog)
+                  .set({ transcript: fullTranscript })
+                  .where(eq(callLog.id, clRow.id))
+                  .catch((err: unknown) => console.error("[Vapi] callLog full transcript update error:", err));
+                console.log(`[Vapi] callLog id=${clRow.id} full transcript updated (${fullTranscript.length} chars)`);
+
+                // Translate to English if needed (idempotent — skips if already translated or English)
+                const { ensureEnglishTranscript } = await import("./translationHelper");
+                await ensureEnglishTranscript(db, clRow.id);
               } catch (fetchErr) {
-                console.error("[Vapi] Full transcript fetch failed:", fetchErr);
+                console.error("[Vapi] Full transcript fetch/translation failed:", fetchErr);
               }
-            }, 4000);
+            })();
 
             // Update fieldMgmtCalls row with outcome/transcript
             const [updatedCall] = await db.update(fieldMgmtCalls)

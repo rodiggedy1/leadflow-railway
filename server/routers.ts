@@ -6883,6 +6883,21 @@ Your job: fill in the following message template using the booking details provi
           booking: r.bookedAt !== null,
         }));
       }),
+
+    /**
+     * backfillTranscriptTranslations — one-shot admin procedure.
+     * Finds all callLog rows where transcriptLanguage != 'en', transcript exists,
+     * and transcriptEnglish is null, then translates each one.
+     * Idempotent: safe to run multiple times.
+     */
+    backfillTranscriptTranslations: opsChatProcedure
+      .mutation(async ({ ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { backfillEnglishTranscripts } = await import("./translationHelper");
+        const count = await backfillEnglishTranscripts(db);
+        return { translated: count };
+      }),
   }),
 });
 export type AppRouter = typeof appRouter;
