@@ -34,6 +34,13 @@ const VAPI_API_BASE = "https://api.vapi.ai";
 const VAPI_OUTBOUND_PHONE_NUMBER_ID = "61431a3e-8144-4acd-b394-8f600ec3a473";
 const VAPI_OUTBOUND_PHONE_NUMBER = "+19347898077";
 
+// ── Voice IDs per language ────────────────────────────────────────────────────
+// English: Ava — 11Labs voice used for all English calls
+const VOICE_ID_EN = "9FuMHon7Kyk1AGgnR8C2";
+// Spanish: Rachel (11Labs) — neutral Latin American Spanish female voice.
+// TODO: Replace with a verified Spanish-trained 11Labs voice ID before production use.
+const VOICE_ID_ES = "21m00Tcm4TlvDq8ikWAM";
+
 async function vapiPost(path: string, body: unknown): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15_000);
@@ -319,6 +326,8 @@ export const callMatrixRouter = router({
       script: z.string().min(10),
       /** "customer" | "cleaner" — used to tag the step in field_mgmt_calls */
       audience: z.enum(["customer", "cleaner"]),
+      /** Call language — defaults to English. When "es", Spanish voice + prompts are used. */
+      language: z.enum(["en", "es"]).optional().default("en"),
     }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
@@ -358,16 +367,29 @@ export const callMatrixRouter = router({
       }
 
       // ── 2. Vapi POST /call ─────────────────────────────────────────────────
+      const isSpanish = input.language === "es";
       let vapiCallId: string | null = null;
       try {
-        const systemPrompt =
-          `You are Ava, a professional operations coordinator for Maids in Black, a premium cleaning company. ` +
-          `You are calling ${input.personName} regarding: ${input.scenario}. ` +
-          `Be warm, concise, and professional. Listen carefully for the outcome. ` +
-          `IMPORTANT: You MUST end every call with EXACTLY these words, no variation: "It was so great talking with you! Have a wonderful rest of your day, take care!" — say this verbatim before ending the call. ` +
-          `If the person says they will call back or cannot talk, say EXACTLY: "Of course, absolutely no problem! I'll make a note and have someone follow up with you soon. You have a great day, take care!" then end the call. ` +
-          `Let the conversation breathe — wait for the person to fully finish speaking before responding. ` +
-          `Do not rush to end the call. Do not repeat yourself. Do not ask multiple questions. Do not discuss pricing, other services, or anything outside the scope of this call.`;
+        const systemPrompt = isSpanish
+          ? `Eres Ava, coordinadora de operaciones de Maids in Black, una empresa de limpieza premium. ` +
+            `Estás llamando a ${input.personName} en relación a: ${input.scenario}. ` +
+            `Sé cálida, concisa y profesional. Escucha atentamente para identificar el resultado de la llamada. ` +
+            `IMPORTANTE: Debes terminar cada llamada con EXACTAMENTE estas palabras, sin variación: "¡Fue un placer hablar contigo! ¡Que tengas un excelente resto del día, cuídate mucho!" — di esto textualmente antes de terminar la llamada. ` +
+            `Si la persona dice que llamará después o que no puede hablar, di EXACTAMENTE: "Por supuesto, absolutamente no hay problema. Tomaré nota y alguien te dará seguimiento pronto. ¡Que tengas un excelente día, cuídate!" y luego termina la llamada. ` +
+            `Deja que la conversación fluya — espera a que la persona termine de hablar antes de responder. ` +
+            `No te apresures a terminar la llamada. No te repitas. No hagas múltiples preguntas. No hables de precios, otros servicios ni nada fuera del alcance de esta llamada. ` +
+            `Habla siempre en español, independientemente del idioma en que te hablen.`
+          : `You are Ava, a professional operations coordinator for Maids in Black, a premium cleaning company. ` +
+            `You are calling ${input.personName} regarding: ${input.scenario}. ` +
+            `Be warm, concise, and professional. Listen carefully for the outcome. ` +
+            `IMPORTANT: You MUST end every call with EXACTLY these words, no variation: "It was so great talking with you! Have a wonderful rest of your day, take care!" — say this verbatim before ending the call. ` +
+            `If the person says they will call back or cannot talk, say EXACTLY: "Of course, absolutely no problem! I'll make a note and have someone follow up with you soon. You have a great day, take care!" then end the call. ` +
+            `Let the conversation breathe — wait for the person to fully finish speaking before responding. ` +
+            `Do not rush to end the call. Do not repeat yourself. Do not ask multiple questions. Do not discuss pricing, other services, or anything outside the scope of this call.`;
+
+        const voicemailMessage = isSpanish
+          ? `Hola, soy Ava de Maids in Black. Llamaba por ${input.scenario.toLowerCase()}. Por favor llámenos cuando pueda. ¡Gracias!`
+          : `Hi, this is Ava from Maids in Black. I was calling about ${input.scenario.toLowerCase()}. Please call us back at your convenience. Thank you!`;
 
         const payload = {
           phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
@@ -382,11 +404,12 @@ export const callMatrixRouter = router({
             },
             voice: {
               provider: "11labs",
-              voiceId: "9FuMHon7Kyk1AGgnR8C2",
+              voiceId: isSpanish ? VOICE_ID_ES : VOICE_ID_EN,
               stability: 0.5,
               similarityBoost: 0.75,
               style: 0.3,
               useSpeakerBoost: true,
+              ...(isSpanish ? { language: "es" } : {}),
             },
             maxDurationSeconds: 180,
             endCallFunctionEnabled: true,
@@ -397,7 +420,7 @@ export const callMatrixRouter = router({
               enabled: true,
               machineDetectionTimeout: 8,
             },
-            voicemailMessage: `Hi, this is Ava from Maids in Black. I was calling about ${input.scenario.toLowerCase()}. Please call us back at your convenience. Thank you!`,
+            voicemailMessage,
           },
         };
 

@@ -59,6 +59,8 @@ export type StartCallParams = {
   scenario: string;
   script: string;
   audience: "customer" | "cleaner";
+  /** Call language — "en" (default) or "es" for Spanish AI voice + prompts */
+  language?: "en" | "es";
 };
 
 const TERMINAL_STATUSES: CallStatus[] = [

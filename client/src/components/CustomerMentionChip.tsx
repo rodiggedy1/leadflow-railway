@@ -166,7 +166,6 @@ function SmsComposer({
 
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
-  const transformMutation = trpc.opsChat.transformMessage.useMutation();
   const draftReplyMutation = trpc.opsChat.draftReply.useMutation();
 
   // Auto-draft: same as email — use draftReply mutation when lastMessage is provided
@@ -867,7 +866,6 @@ function AiCallComposer({
   onClose: () => void;
 }) {
   const [selectedScenario, setSelectedScenario] = useState(CALL_SCENARIOS[0].title);
-  const [script, setScript] = useState(() => buildCallScript(customer.name, CALL_SCENARIOS[0].title));
   const [showTranscript, setShowTranscript] = useState(false);
   const [isFiring, setIsFiring] = useState(false);
 
@@ -882,9 +880,15 @@ function AiCallComposer({
   const isPttRef = useRef(false);
 
   const [isRewriting, setIsRewriting] = useState(false);
+  // Language state — "en" is always the source of truth; "es" is translated on demand
+  const [language, setLanguage] = useState<"en" | "es">("en");
+  const [englishScript, setEnglishScript] = useState(() => buildCallScript(customer.name, CALL_SCENARIOS[0].title));
+  const [translatedScript, setTranslatedScript] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
 
   const transcribeMutation = trpc.opsChat.transcribeVoiceNote.useMutation();
   const rewriteMutation = trpc.opsChat.rewriteVoiceMessage.useMutation();
+  const transformMutation = trpc.opsChat.transformMessage.useMutation();
 
   const callStatus = session?.status ?? null;
   const callPhase = session?.phase ?? null;
@@ -944,7 +948,7 @@ function AiCallComposer({
         reader.readAsDataURL(blob);
       });
       const { text } = await transcribeMutation.mutateAsync({ dataBase64, mimeType: "audio/webm" });
-      if (text.trim()) setScript(prev => prev ? prev + "\n" + text.trim() : text.trim());
+      if (text.trim()) setActiveScript(activeScript ? activeScript + "\n" + text.trim() : text.trim());
       else toast.warning("No speech detected — try again");
     } catch (err: any) {
       toast.error(err?.message?.length < 200 ? err.message : "Transcription failed");
@@ -961,12 +965,48 @@ function AiCallComposer({
     };
   }, [stopRecording]);
 
+  // ── Language change handler ────────────────────────────────────────────────
+  async function handleLanguageChange(lang: "en" | "es") {
+    if (lang === language) return;
+    if (lang === "en") {
+      setLanguage("en");
+    } else {
+      setIsTranslating(true);
+      try {
+        const result = await transformMutation.mutateAsync({
+          text: englishScript,
+          customerName: customer.name,
+          instruction:
+            "Translate into natural, conversational Latin American Spanish suitable for a professional phone call. " +
+            "Preserve names, addresses, dates, times, prices, URLs, and phone numbers exactly. " +
+            "Do not explain the translation or add any extra text. Return only the translated script.",
+        });
+        setTranslatedScript(result.message);
+        setLanguage(lang);
+      } catch {
+        toast.error("Translation failed");
+      } finally {
+        setIsTranslating(false);
+      }
+    }
+  }
+
+  // Derived: the script shown in the textarea
+  const activeScript = language === "es" && translatedScript != null ? translatedScript : englishScript;
+  function setActiveScript(val: string) {
+    if (language === "es") {
+      setTranslatedScript(val);
+    } else {
+      setEnglishScript(val);
+    }
+  }
+
   async function rewrite(tone: "friendly" | "professional" | "casual") {
-    if (!script.trim()) return;
+    if (!activeScript.trim()) return;
     setIsRewriting(true);
     try {
-      const result = await rewriteMutation.mutateAsync({ rawMessage: script, customerName: customer.name, tone });
-      setScript(result.message);
+      const result = await rewriteMutation.mutateAsync({ rawMessage: activeScript, customerName: customer.name, tone });
+      setActiveScript(result.message);
     } catch { toast.error("Rewrite failed"); }
     finally { setIsRewriting(false); }
   }
@@ -981,8 +1021,9 @@ function AiCallComposer({
         personName: customer.name,
         phone: customer.phone,
         scenario: selectedScenario,
-        script: script.trim(),
+        script: activeScript.trim(),
         audience: "customer",
+        language,
       });
     } catch (err: any) {
       toast.error(err?.message?.length < 200 ? err.message : "Failed to start call");
@@ -1038,7 +1079,13 @@ function AiCallComposer({
               {CALL_SCENARIOS.map(s => (
                 <button
                   key={s.title}
-                  onClick={() => { setSelectedScenario(s.title); setScript(buildCallScript(customer.name, s.title)); }}
+                  onClick={() => {
+                    setSelectedScenario(s.title);
+                    const newScript = buildCallScript(customer.name, s.title);
+                    setEnglishScript(newScript);
+                    setTranslatedScript(null);
+                    setLanguage("en");
+                  }}
                   className={cn(
                     "text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors",
                     selectedScenario === s.title ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
@@ -1056,13 +1103,13 @@ function AiCallComposer({
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Script — edit before calling</p>
-              <button onClick={() => { navigator.clipboard.writeText(script); toast.success("Copied"); }} className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1">
+              <button onClick={() => { navigator.clipboard.writeText(activeScript); toast.success("Copied"); }} className="text-[10px] text-slate-400 hover:text-slate-600 flex items-center gap-1">
                 <Copy className="h-3 w-3" /> Copy
               </button>
             </div>
             <textarea
-              value={script}
-              onChange={e => setScript(e.target.value)}
+              value={activeScript}
+              onChange={e => setActiveScript(e.target.value)}
               rows={6}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 transition-all"
             />
@@ -1071,7 +1118,7 @@ function AiCallComposer({
                 <button
                   key={tone}
                   onClick={() => rewrite(tone)}
-                  disabled={isRewriting || !script.trim()}
+                  disabled={isRewriting || isTranslating || !activeScript.trim()}
                   className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                 >
                   {isRewriting ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : null}
@@ -1079,11 +1126,27 @@ function AiCallComposer({
                 </button>
               ))}
               <button
-                onClick={() => setScript(prev => prev.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"))}
+                onClick={() => setActiveScript(activeScript.replace("I'm sorry, but", "I wanted to personally update you —").replace("we still need", "we just need"))}
                 className="text-[11px] font-semibold px-2.5 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1"
               >
                 <RefreshCw className="h-2.5 w-2.5" /> Softer
               </button>
+              {/* Language selector */}
+              <div className="w-px h-4 bg-slate-200 mx-0.5 self-center" />
+              <div className="relative self-center">
+                <select
+                  value={language}
+                  onChange={e => handleLanguageChange(e.target.value as "en" | "es")}
+                  disabled={isTranslating || isRewriting || !!session}
+                  className="text-[11px] font-semibold pl-2 pr-6 py-1 rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors appearance-none cursor-pointer"
+                  style={{ backgroundImage: "none" }}
+                >
+                  <option value="en">🌐 English</option>
+                  <option value="es">Español</option>
+                </select>
+                {isTranslating && <Loader2 className="h-2.5 w-2.5 animate-spin absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />}
+                {!isTranslating && <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-[9px]">▾</span>}
+              </div>
             </div>
           </div>
         )}
@@ -1156,7 +1219,7 @@ function AiCallComposer({
         ) : (
           <button
             onClick={fireCall}
-            disabled={session !== null || isFiring || !script.trim()}
+            disabled={session !== null || isFiring || !activeScript.trim()}
             className="flex-1 h-11 rounded-xl text-white text-sm font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: session ? statusColor : "#16a34a" }}
           >
