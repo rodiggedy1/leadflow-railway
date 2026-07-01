@@ -27,6 +27,7 @@ import { sendSms } from "./openphone";
 import { getDb } from "./db";
 import { fieldMgmtCalls, callLog } from "../drizzle/schema";
 import { eq, or } from "drizzle-orm";
+import { ENV } from "./_core/env";
 
 const OWNER_ALERT_NUMBER = "+13029816191";
 
