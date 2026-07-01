@@ -289,10 +289,21 @@ async function runStartupMigrations() {
     }
   } catch (err) {
     // Non-fatal: log and continue — the column still works without the index
-    console.warn('[Migration] cleaner_profiles.launch27TeamId unique index: skipped —', (err as any)?.message);
+        console.warn('[Migration] cleaner_profiles.launch27TeamId unique index: skipped —', (err as any)?.message);
+  }
+  // ── call_log bilingual transcript columns ───────────────────────────────────
+  // Idempotent: ADD COLUMN IF NOT EXISTS is safe to run on every deploy.
+  try {
+    await db.execute(sql.raw(`
+      ALTER TABLE call_log
+        ADD COLUMN IF NOT EXISTS transcriptLanguage VARCHAR(10) NULL,
+        ADD COLUMN IF NOT EXISTS transcriptEnglish  LONGTEXT NULL
+    `));
+    console.log('[Migration] call_log bilingual transcript columns: OK');
+  } catch (err) {
+    console.error('[Migration] call_log bilingual transcript columns failed (non-fatal):', err);
   }
 }
-
 async function startServer() {
   // Run startup migrations before anything else touches the DB
   await runStartupMigrations();
