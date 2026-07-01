@@ -21,7 +21,7 @@ type Db = Awaited<ReturnType<typeof import("./db").getDb>>;
  * Translate a single callLog row's transcript to English.
  * Safe to call multiple times — skips if already translated.
  */
-export async function ensureEnglishTranscript(db: NonNullable<Db>, callLogId: number): Promise<void> {
+export async function ensureEnglishTranscript(db: NonNullable<Db>, callLogId: number): Promise<string | null> {
   // Fetch the row
   const [row] = await db
     .select({
@@ -37,25 +37,25 @@ export async function ensureEnglishTranscript(db: NonNullable<Db>, callLogId: nu
 
   if (!row) {
     console.log(`[Translation] callLog id=${callLogId} not found — skipping`);
-    return;
+    return null;
   }
 
   // Skip if English or unknown language
   if (!row.transcriptLanguage || row.transcriptLanguage === "en") {
     console.log(`[Translation] callLog id=${callLogId} language=${row.transcriptLanguage ?? "null"} — skipping`);
-    return;
+    return null;
   }
 
   // Skip if no transcript
   if (!row.transcript || row.transcript.trim().length === 0) {
     console.log(`[Translation] callLog id=${callLogId} — transcript empty, skipping`);
-    return;
+    return null;
   }
 
-  // Skip if already translated (idempotent)
+  // Skip if already translated (idempotent) — return existing translation
   if (row.transcriptEnglish && row.transcriptEnglish.trim().length > 0) {
     console.log(`[Translation] callLog id=${callLogId} — transcriptEnglish already exists, skipping`);
-    return;
+    return row.transcriptEnglish;
   }
 
   console.log(`[Translation] Translating callLog id=${callLogId} (language=${row.transcriptLanguage}, ${row.transcript.length} chars)...`);
@@ -78,7 +78,7 @@ export async function ensureEnglishTranscript(db: NonNullable<Db>, callLogId: nu
 
     if (!translatedText || translatedText.trim().length === 0) {
       console.error(`[Translation] LLM returned empty translation for callLog id=${callLogId}`);
-      return;
+      return null;
     }
 
     await db
@@ -87,9 +87,11 @@ export async function ensureEnglishTranscript(db: NonNullable<Db>, callLogId: nu
       .where(eq(callLog.id, callLogId));
 
     console.log(`[Translation] callLog id=${callLogId} — transcriptEnglish saved (${translatedText.length} chars)`);
+    return translatedText;
   } catch (err) {
     console.error(`[Translation] Failed to translate callLog id=${callLogId}:`, err);
     // Leave transcriptEnglish null — retryable
+    return null;
   }
 }
 

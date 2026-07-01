@@ -1335,6 +1335,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     { enabled: !!selected?.phone, staleTime: 30_000, refetchInterval: 60_000 }
   );
 
+  const translateCallTranscript = trpc.leads.translateCallTranscript.useMutation({
+    onSuccess: () => {
+      // Refetch AI call recordings to pick up the new transcriptEnglish
+      void utils.leads.getCsAiCalls.invalidate();
+    },
+  });
+
   // Mark conversation as viewed when selected changes
   useEffect(() => {
     if (effectiveSelectedId != null) {
@@ -2714,9 +2721,21 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                           <span className="text-[10px] text-slate-500">
                                             🌎 Spanish call
                                             {(aiRec as any).transcriptEnglish
-                                              ? (showingOriginal ? " · Showing original" : " · Transcript translated to English automatically.")
-                                              : " · Translation pending..."}
+                                              ? (showingOriginal ? " · Showing original" : " · Showing English translation")
+                                              : ""}
                                           </span>
+                                          {!(aiRec as any).transcriptEnglish && (
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                translateCallTranscript.mutate({ callLogId: aiRec.id });
+                                              }}
+                                              disabled={translateCallTranscript.isPending}
+                                              className="text-[10px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2 shrink-0 disabled:opacity-50"
+                                            >
+                                              {translateCallTranscript.isPending ? "Translating..." : "Translate to English"}
+                                            </button>
+                                          )}
                                           {(aiRec as any).transcriptEnglish && (
                                             <button
                                               onClick={(e) => {

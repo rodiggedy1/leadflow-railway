@@ -6898,6 +6898,22 @@ Your job: fill in the following message template using the booking details provi
         const count = await backfillEnglishTranscripts(db);
         return { translated: count };
       }),
+
+    /**
+     * Translate a single call's transcript to English on demand.
+     * Only writes to transcriptEnglish — transcript (original) is never touched.
+     * Idempotent: if transcriptEnglish already exists, returns it immediately.
+     */
+    translateCallTranscript: opsChatProcedure
+      .input(z.object({ callLogId: z.number() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+        const { ensureEnglishTranscript } = await import("./translationHelper");
+        const result = await ensureEnglishTranscript(db, input.callLogId);
+        if (!result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Translation failed" });
+        return { transcriptEnglish: result };
+      }),
   }),
 });
 export type AppRouter = typeof appRouter;
