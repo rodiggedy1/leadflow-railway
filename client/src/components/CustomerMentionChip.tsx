@@ -1307,7 +1307,7 @@ function CustomerCard({
 }
 
 // ─── Main Chip ────────────────────────────────────────────────────────────────
-export function CustomerMentionChip({ name, phone, openToCall }: { name: string; phone: string; openToCall?: boolean }) {
+export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseProp }: { name: string; phone: string; openToCall?: boolean; onClose?: () => void }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"card" | "sms" | "call" | "email">("card");
   // Auto-open to call view when openToCall is triggered
@@ -1370,6 +1370,7 @@ export function CustomerMentionChip({ name, phone, openToCall }: { name: string;
     setOpen(false);
     setSelected(null);
     setView("card");
+    onCloseProp?.();
   }
 
   function handleDismissSession() {

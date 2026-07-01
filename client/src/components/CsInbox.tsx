@@ -2269,7 +2269,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                           <TooltipContent side="bottom">AI call</TooltipContent>
                         </Tooltip>
                         <div style={{display:'none'}}>
-                          <CustomerMentionChip name={selected.name} phone={selected.phone} openToCall={showAICall} />
+                          <CustomerMentionChip name={selected.name} phone={selected.phone} openToCall={showAICall} onClose={() => setShowAICall(false)} />
                         </div>
                       </>
                     )}
