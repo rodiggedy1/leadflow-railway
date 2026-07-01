@@ -92,6 +92,7 @@ import FAQPanel from "@/components/FAQPanel";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import WorldClassReplyPanel from "@/components/WorldClassReplyPanel";
 import InsertResponseModal from "@/components/InsertResponseModal";
+import AICallPanel from "@/components/AICallPanel";
 
 type Queue = "Priority" | "New" | "Active" | "Resolved" | "Teams";
 type MsgSender = "client" | "agent" | "system" | "cleaner" | "note";
@@ -260,6 +261,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [objectionsOpen, setObjectionsOpen] = useState(false);
   const [worldClassOpen, setWorldClassOpen] = useState(false);
   const [insertResponseOpen, setInsertResponseOpen] = useState(false);
+  const [showCallPanel, setShowCallPanel] = useState(false);
   // ── All refs declared here to avoid temporal dead zone issues ──────────────
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -2262,6 +2264,23 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         <TooltipContent side="bottom">Call via OpenPhone</TooltipContent>
                       </Tooltip>
                     )}
+                    {/* AI Call */}
+                    {selected?.phone && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            onClick={() => setShowCallPanel(true)}
+                            style={{width:'44px',height:'44px',borderRadius:'14px',background:'#fafafa',border:'1px solid rgba(17,24,39,.06)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#6b7280',transition:'all 0.15s'}}
+                            onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='white';(e.currentTarget as HTMLElement).style.boxShadow='0 8px 24px rgba(0,0,0,.08)';}}
+                            onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#fafafa';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
+                          >
+                            <Bot className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">AI call</TooltipContent>
+                      </Tooltip>
+                    )}
                     {/* Sync from OpenPhone */}
                     {selected && selected.id > 0 && selected.phone && (
                       <Tooltip>
@@ -4203,6 +4222,13 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
       </div>
     )}
 
+    {/* ─── AI Call Panel ─────────────────────────────── */}
+    <AICallPanel
+      open={showCallPanel}
+      onClose={() => setShowCallPanel(false)}
+      prefillPhone={selected?.phone ?? null}
+      prefillName={selected?.name ?? ""}
+    />
     {/* ─── Add Follow-up modal ─────────────────────────── */}
     <FollowUpsModal
       open={addFollowUpOpen}

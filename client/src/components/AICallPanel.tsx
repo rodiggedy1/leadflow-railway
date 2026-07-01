@@ -225,10 +225,13 @@ function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | n
 interface AICallPanelProps {
   open: boolean;
   onClose: () => void;
+  /** When provided, skip the person-selection step and open directly on scenario selection */
+  prefillPhone?: string | null;
+  prefillName?: string;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function AICallPanel({ open, onClose }: AICallPanelProps) {
+export default function AICallPanel({ open, onClose, prefillPhone, prefillName }: AICallPanelProps) {
   const [date] = useState(() => todayET());
 
   // Step state: "person" → "scenario" → "script"
@@ -335,6 +338,27 @@ export default function AICallPanel({ open, onClose }: AICallPanelProps) {
     // If a call is active or just ended, jump straight to script step so user sees status
     if (callStatus !== "idle") {
       setStep("script");
+    } else if (prefillPhone && prefillName) {
+      // CS Inbox prefill: skip person step, inject synthetic PersonItem, open on scenario
+      const syntheticPerson: PersonItem = {
+        id: "prefill-0",
+        cleanerJobId: 0,
+        name: prefillName,
+        phone: prefillPhone,
+        meta: "CS Inbox customer",
+        jobTime: "N/A",
+        eta: "N/A",
+        pay: "N/A",
+        access: "N/A",
+        risk: "N/A",
+      };
+      setCustomPersonItem(syntheticPerson);
+      setSelectedId("prefill-0");
+      setAudience("customer");
+      const sc = SCENARIOS.customer[0].title;
+      setSelectedScenario(sc);
+      setScript(buildScript(syntheticPerson, sc, "customer"));
+      setStep("scenario");
     } else {
       setStep("person");
     }
