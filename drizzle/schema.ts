@@ -1766,6 +1766,9 @@ export const opsChatMessages = mysqlTable("ops_chat_messages", {
   idxJob: index("idx_ocm_job").on(table.cleanerJobId),
   idxChannel: index("idx_ocm_channel").on(table.channel),
   idxCreatedAt: index("idx_ocm_created_at").on(table.createdAt),
+  // Composite index for the listChannelMessages query pattern:
+  // WHERE channel = ? ORDER BY createdAt DESC LIMIT N
+  idxChannelCreatedAt: index("idx_ocm_channel_created_at").on(table.channel, table.createdAt),
 }));
 export type OpsChatMessage = typeof opsChatMessages.$inferSelect;
 export type InsertOpsChatMessage = typeof opsChatMessages.$inferInsert;
