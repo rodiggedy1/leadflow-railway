@@ -1585,19 +1585,18 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
       <span
         onClick={() => { setView("card"); setOpen(true); }}
         data-chip-pill
-        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 border border-green-200 text-slate-800 font-semibold text-[13px] cursor-pointer hover:bg-green-100 transition-colors select-none align-middle"
+        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 text-slate-800 font-semibold text-[13px] cursor-pointer hover:bg-green-100 transition-colors select-none align-middle"
       >
         <span
-          className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-black shrink-0"
-          style={{ background: `hsl(${hue}, 55%, 52%)` }}
+          className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-black shrink-0 bg-green-600"
         >
           {initials}
         </span>
         {name}
         {phone && (
           <>
-            <Phone className="h-2.5 w-2.5 text-green-600 shrink-0" />
-            <span className="font-mono text-[11px] text-green-700">{phone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")}</span>
+            <Phone className="h-2.5 w-2.5 text-slate-500 shrink-0" />
+            <span className="font-mono text-[11px] text-slate-600">{phone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")}</span>
           </>
         )}
       </span>
