@@ -2248,20 +2248,20 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
                   {/* Right: action icons in a compact rounded pill row */}
                   <div style={{display:'flex',alignItems:'center',gap:'8px',flexShrink:0}}>
-                    {/* AI Call — green throb button, opens CustomerMentionChip popup on call view */}
+                    {/* AI Call — soft green tint, phone+sparkle icon (Option B) */}
                     {selected?.phone && (
                       <>
-                        <style>{`@keyframes cs-call-throb{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.45)}50%{box-shadow:0 0 0 7px rgba(34,197,94,0)}}`}</style>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
                               type="button"
                               onClick={() => setShowAICall(v => !v)}
-                              style={{width:'44px',height:'44px',borderRadius:'14px',background:'#16a34a',border:'none',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'white',transition:'all 0.15s',animation:'cs-call-throb 2s ease-in-out infinite'}}
-                              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='#15803d';(e.currentTarget as HTMLElement).style.animation='none';}}
-                              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#16a34a';(e.currentTarget as HTMLElement).style.animation='cs-call-throb 2s ease-in-out infinite';}}
+                              style={{width:'44px',height:'44px',borderRadius:'14px',background:'#f0fdf4',border:'1px solid rgba(34,197,94,.2)',display:'inline-flex',alignItems:'center',justifyContent:'center',color:'#16a34a',transition:'all 0.15s',position:'relative'}}
+                              onMouseEnter={e=>{(e.currentTarget as HTMLElement).style.background='#dcfce7';(e.currentTarget as HTMLElement).style.boxShadow='0 4px 14px rgba(34,197,94,.18)';}}
+                              onMouseLeave={e=>{(e.currentTarget as HTMLElement).style.background='#f0fdf4';(e.currentTarget as HTMLElement).style.boxShadow='none';}}
                             >
                               <Phone className="h-4 w-4" />
+                              <Sparkles style={{position:'absolute',top:'7px',right:'7px',width:'9px',height:'9px',color:'#16a34a'}} />
                             </button>
                           </TooltipTrigger>
                           <TooltipContent side="bottom">AI call</TooltipContent>
