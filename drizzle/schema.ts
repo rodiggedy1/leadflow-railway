@@ -2576,8 +2576,12 @@ export const callLog = mysqlTable("call_log", {
   vapiCallId: varchar("vapiCallId", { length: 128 }),
   /** URL to the call recording (populated from VAPI end-of-call webhook) */
   recordingUrl: varchar("recordingUrl", { length: 1024 }),
-  /** Full call transcript (populated from VAPI end-of-call webhook) */
+  /** Full call transcript — canonical/original transcript, always the source of truth (populated from VAPI end-of-call webhook) */
   transcript: longtext("transcript"),
+  /** Language of the call, e.g. "en" or "es" (populated on call completion) */
+  transcriptLanguage: varchar("transcriptLanguage", { length: 10 }),
+  /** English translation of the transcript (null for English calls, populated after non-English calls) */
+  transcriptEnglish: longtext("transcriptEnglish"),
   /** Job date this call relates to (YYYY-MM-DD) */
   jobDate: varchar("jobDate", { length: 20 }),
   /** Who fired the call: "dispatcher" | "auto" */
