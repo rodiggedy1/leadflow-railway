@@ -1597,7 +1597,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
         {phone && (
           <>
             <Phone className="h-2.5 w-2.5 text-green-600 shrink-0" />
-            <span className="font-mono text-[11px] text-green-700">{phone}</span>
+            <span className="font-mono text-[11px] text-green-700">{phone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")}</span>
           </>
         )}
       </span>
