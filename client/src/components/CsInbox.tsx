@@ -2611,7 +2611,14 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const aiIsPlaying = playingAiCallId === `ai-${aiRec.id}`;
                         const aiWaveHeights = [3, 5, 8, 6, 10, 7, 4, 9, 6, 5, 8, 4, 7, 6, 9, 5, 8, 4, 6, 7];
                         let aiTranscriptTurns: { identifier: string; content: string }[] = [];
-                        try { if (aiRec.transcript) aiTranscriptTurns = JSON.parse(aiRec.transcript as string); } catch { aiTranscriptTurns = []; }
+                        let aiTranscriptRaw: string | null = null;
+                        try {
+                          if (aiRec.transcript) {
+                            const parsed = JSON.parse(aiRec.transcript as string);
+                            if (Array.isArray(parsed)) aiTranscriptTurns = parsed;
+                            else aiTranscriptRaw = aiRec.transcript as string;
+                          }
+                        } catch { aiTranscriptRaw = aiRec.transcript as string ?? null; }
                         elements.push(
                           <motion.div
                             key={`aicall-${aiRec.id}`}
@@ -2708,7 +2715,10 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                           </div>
                                         </details>
                                       )}
-                                      {aiTranscriptTurns.length === 0 && (
+                                      {aiTranscriptTurns.length === 0 && aiTranscriptRaw && (
+                                        <pre className="text-[11px] text-slate-600 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed mt-1">{aiTranscriptRaw}</pre>
+                                      )}
+                                      {aiTranscriptTurns.length === 0 && !aiTranscriptRaw && (
                                         <p className="text-xs text-slate-400 italic">No transcript available yet</p>
                                       )}
                                     </div>
