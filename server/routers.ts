@@ -2009,6 +2009,8 @@ export const appRouter = router({
             status: callLog.status,
             firedAt: callLog.firedAt,
             completedAt: callLog.completedAt,
+            transcriptLanguage: callLog.transcriptLanguage,
+            transcriptEnglish: callLog.transcriptEnglish,
           })
           .from(callLog)
           .where(eq(callLog.calledPhone, normalized))
