@@ -279,7 +279,7 @@ export function registerVapiWebhookRoute(app: Express): void {
             (async () => {
               try {
                 const fullCallRes = await fetch(`https://api.vapi.ai/call/${vapiCallId}`, {
-                  headers: { Authorization: `Bearer ${ENV.vapiPrivateKey}` },
+                  headers: { Authorization: `Bearer ${process.env.VAPI_PRIVATE_KEY}` },
                 });
                 if (!fullCallRes.ok) {
                   console.error(`[Vapi] Full transcript fetch failed: HTTP ${fullCallRes.status} for vapiCallId=${vapiCallId}`);
