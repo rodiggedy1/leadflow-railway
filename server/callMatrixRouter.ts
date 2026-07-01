@@ -37,9 +37,8 @@ const VAPI_OUTBOUND_PHONE_NUMBER = "+19347898077";
 // ── Voice IDs per language ────────────────────────────────────────────────────
 // English: Ava — 11Labs voice used for all English calls
 const VOICE_ID_EN = "9FuMHon7Kyk1AGgnR8C2";
-// Spanish: Rachel (11Labs) — neutral Latin American Spanish female voice.
-// TODO: Replace with a verified Spanish-trained 11Labs voice ID before production use.
-const VOICE_ID_ES = "21m00Tcm4TlvDq8ikWAM";
+// Spanish: Norah — warm Latina voice, neutral Latin American Spanish, designed for conversational agents
+const VOICE_ID_ES = "kcQkGnn0HAT2JRDQ4Ljp";
 
 async function vapiPost(path: string, body: unknown): Promise<unknown> {
   const controller = new AbortController();
@@ -409,7 +408,7 @@ export const callMatrixRouter = router({
               similarityBoost: 0.75,
               style: 0.3,
               useSpeakerBoost: true,
-              ...(isSpanish ? { language: "es" } : {}),
+              // Native Spanish voice — no language override needed
             },
             maxDurationSeconds: 180,
             endCallFunctionEnabled: true,
