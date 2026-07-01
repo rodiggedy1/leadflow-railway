@@ -2006,6 +2006,8 @@ export const appRouter = router({
             recordingUrl: callLog.recordingUrl,
             durationSeconds: callLog.durationSeconds,
             transcript: callLog.transcript,
+            transcriptLanguage: callLog.transcriptLanguage,
+            transcriptEnglish: callLog.transcriptEnglish,
             status: callLog.status,
             firedAt: callLog.firedAt,
             completedAt: callLog.completedAt,
