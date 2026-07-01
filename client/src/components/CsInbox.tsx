@@ -1321,9 +1321,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   // AI call expand/play state (separate from human calls — uses string keys like "ai-123")
   const [expandedAiCallId, setExpandedAiCallId] = useState<string | null>(null);
   const [playingAiCallId, setPlayingAiCallId] = useState<string | null>(null);
-  const aiCallAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
-  // Bilingual transcript toggle: keyed by callLog id — true = show original Spanish, false = show English translation
-  const [showOriginalTranscript, setShowOriginalTranscript] = useState<Record<number, boolean>>({}); 
+  const aiCallAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({}); 
 
   // ── Call recordings — fetched for the selected session and merged inline ──
   const { data: callRecordings = [] } = trpc.leads.getCallRecordings.useQuery(
@@ -2612,24 +2610,15 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                         const aiIsExpanded = expandedAiCallId === `ai-${aiRec.id}`;
                         const aiIsPlaying = playingAiCallId === `ai-${aiRec.id}`;
                         const aiWaveHeights = [3, 5, 8, 6, 10, 7, 4, 9, 6, 5, 8, 4, 7, 6, 9, 5, 8, 4, 6, 7];
-                        // Bilingual transcript logic (non-English calls only)
-                        // For Spanish calls: default to English translation, allow toggling to original
-                        const isSpanishCall = (aiRec as any).transcriptLanguage === "es";
-                        const showingOriginal = showOriginalTranscript[aiRec.id] ?? false;
-                        // displayTranscript: for Spanish calls, show English translation by default
-                        // (falls back to original if translation not yet available)
-                        const displayTranscript: string | null = isSpanishCall && !showingOriginal
-                          ? ((aiRec as any).transcriptEnglish as string | null) ?? (aiRec.transcript as string | null)
-                          : (aiRec.transcript as string | null);
                         let aiTranscriptTurns: { identifier: string; content: string }[] = [];
                         let aiTranscriptRaw: string | null = null;
                         try {
-                          if (displayTranscript) {
-                            const parsed = JSON.parse(displayTranscript);
+                          if (aiRec.transcript) {
+                            const parsed = JSON.parse(aiRec.transcript as string);
                             if (Array.isArray(parsed)) aiTranscriptTurns = parsed;
-                            else aiTranscriptRaw = displayTranscript;
+                            else aiTranscriptRaw = aiRec.transcript as string;
                           }
-                        } catch { aiTranscriptRaw = displayTranscript ?? null; }
+                        } catch { aiTranscriptRaw = aiRec.transcript as string ?? null; }
                         elements.push(
                           <motion.div
                             key={`aicall-${aiRec.id}`}
@@ -2711,28 +2700,6 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                         <span className="text-xs font-medium text-slate-700">AI outbound call · {aiRec.calledPhone}</span>
                                         <span className="ml-auto text-[10px] text-slate-400">{aiTime}</span>
                                       </div>
-                                      {/* Spanish call badge + View Original toggle (non-English calls only) */}
-                                      {isSpanishCall && (
-                                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                          <span className="text-[10px] text-slate-500">
-                                            🌎 Spanish call
-                                            {(aiRec as any).transcriptEnglish
-                                              ? (showingOriginal ? " · Showing original" : " · Transcript translated to English automatically.")
-                                              : " · Translation pending..."}
-                                          </span>
-                                          {(aiRec as any).transcriptEnglish && (
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setShowOriginalTranscript((prev) => ({ ...prev, [aiRec.id]: !showingOriginal }));
-                                              }}
-                                              className="text-[10px] font-medium text-emerald-600 hover:text-emerald-800 underline underline-offset-2 shrink-0"
-                                            >
-                                              {showingOriginal ? "View English" : "View Original"}
-                                            </button>
-                                          )}
-                                        </div>
-                                      )}
                                       {aiTranscriptTurns.length > 0 && (
                                         <details className="mt-1">
                                           <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none text-emerald-600 hover:text-emerald-800">

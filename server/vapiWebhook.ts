@@ -23,7 +23,6 @@ import {
   type VapiEndOfCallReport,
 } from "./vapiService";
 import { notifyOwner } from "./_core/notification";
-import { invokeLLM } from "./_core/llm";
 import { sendSms } from "./openphone";
 import { getDb } from "./db";
 import { fieldMgmtCalls, callLog } from "../drizzle/schema";
@@ -273,40 +272,6 @@ export function registerVapiWebhookRoute(app: Express): void {
               })
               .where(eq(callLog.vapiCallId, vapiCallId))
               .catch((err: unknown) => console.error("[Vapi] callLog update error:", err));
-
-            // ── Spanish transcript auto-translation (non-English calls only) ──
-            // Zero changes to English calls — this block only runs when transcriptLanguage === "es"
-            if (transcript) {
-              try {
-                const [callLogRow] = await db
-                  .select({ id: callLog.id, transcriptLanguage: callLog.transcriptLanguage })
-                  .from(callLog)
-                  .where(eq(callLog.vapiCallId, vapiCallId))
-                  .limit(1)
-                  .catch(() => []);
-                if (callLogRow && callLogRow.transcriptLanguage === "es") {
-                  const llmResponse = await invokeLLM({
-                    messages: [
-                      {
-                        role: "system",
-                        content: "You are a professional translator. Translate the following Spanish call transcript to English. Preserve speaker labels (e.g. 'AI:', 'User:') exactly as-is. Output only the translated transcript, no preamble.",
-                      },
-                      { role: "user", content: transcript },
-                    ],
-                  });
-                  const translatedText = (llmResponse as any)?.choices?.[0]?.message?.content ?? null;
-                  if (translatedText) {
-                    await db.update(callLog)
-                      .set({ transcriptEnglish: translatedText })
-                      .where(eq(callLog.id, callLogRow.id))
-                      .catch((err: unknown) => console.error("[Vapi] transcriptEnglish update error:", err));
-                    console.log(`[Vapi] Spanish transcript translated to English for callLog id=${callLogRow.id}`);
-                  }
-                }
-              } catch (translationErr) {
-                console.error("[Vapi] Spanish transcript translation failed (non-fatal):", translationErr);
-              }
-            }
 
             // Update fieldMgmtCalls row with outcome/transcript
             const [updatedCall] = await db.update(fieldMgmtCalls)
