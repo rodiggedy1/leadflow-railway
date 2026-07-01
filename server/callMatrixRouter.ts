@@ -409,7 +409,11 @@ export const callMatrixRouter = router({
               similarityBoost: 0.75,
               style: 0.3,
               useSpeakerBoost: true,
-              // Native Spanish voice — no language override needed
+            },
+            transcriber: {
+              provider: "deepgram",
+              model: "nova-2",
+              language: isSpanish ? "es" : "en-US",
             },
             maxDurationSeconds: 180,
             endCallFunctionEnabled: true,
