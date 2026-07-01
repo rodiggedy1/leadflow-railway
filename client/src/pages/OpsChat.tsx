@@ -1301,6 +1301,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const prevJobMsgCountRef = useRef(-1);
   const prevChannelMsgCountRef = useRef(-1);
   const prevChannelRef = useRef("");
+  // Refs used to suppress the SSE echo after a local send.
+  // Temporary workaround: SSE events don't carry a messageId, so we track
+  // the timestamp + channel of the last self-send and skip the immediate
+  // listChannelMessages invalidate if the SSE fires within 2 s on the same
+  // channel. Replace with messageId matching if the SSE payload is extended.
+  const selfSentAtRef = useRef<number>(0);
+  const selfSentChannelRef = useRef<string>("");
+  const tempIdCounterRef = useRef<number>(-1);
 
   // -- DM unread counts + sound notification --
   const prevDmUnreadRef = useRef<Record<string, number>>({});
@@ -1400,7 +1408,15 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         utils.opsChat.getJobDetail.invalidate({ jobId });
       }
       if (channel) {
-        utils.opsChat.listChannelMessages.invalidate({ channel });
+        // Suppress the immediate SSE echo after a local send to avoid a redundant
+        // full reload that would discard the optimistic message and re-fetch.
+        // Temporary workaround — see selfSentAtRef comment for details.
+        const isSelfEcho =
+          channel === selfSentChannelRef.current &&
+          Date.now() - selfSentAtRef.current < 2_000;
+        if (!isSelfEcho) {
+          utils.opsChat.listChannelMessages.invalidate({ channel });
+        }
         utils.opsChat.getChannelCounts.invalidate();
         utils.opsChat.getUnreadCounts.invalidate();
         utils.opsChat.getDmUnreadCounts.invalidate();
@@ -1543,7 +1559,49 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Send message mutation ───────────────────────────────────────────────────
   const sendMsg = trpc.opsChat.sendMessage.useMutation({
-    onSuccess: (data, variables) => {
+    onMutate: (variables) => {
+      // Optimistic update: insert a temporary message into the cache immediately
+      // so the sender sees their message without waiting for the server round-trip.
+      if (!variables.channel) return; // only for channel messages (not job threads)
+      const tempId = --tempIdCounterRef.current; // negative IDs won't collide with real DB IDs
+      const tempMsg = {
+        id: tempId,
+        ts: Date.now(),
+        from: variables.authorName,
+        role: variables.authorRole ?? "office",
+        body: variables.body,
+        mediaUrl: variables.mediaUrl ?? null,
+        quickAction: variables.quickAction ?? null,
+        metadata: variables.metadata ?? null,
+        replyToId: variables.replyToId ?? null,
+        replyToBody: variables.replyToBody ?? null,
+        replyToAuthor: variables.replyToAuthor ?? null,
+        cleanerJobId: null,
+        threadParentId: variables.threadParentId ?? null,
+        threadParentBody: null,
+        threadParentFrom: null,
+        replyCount: 0,
+      };
+      utils.opsChat.listChannelMessages.setData(
+        { channel: variables.channel },
+        (prev) => prev ? [...prev, tempMsg] : [tempMsg]
+      );
+      return { tempId, channel: variables.channel };
+    },
+    onSuccess: (data, variables, context) => {
+      // Replace the temporary message with the confirmed server message.
+      if (context?.channel && context?.tempId !== undefined) {
+        utils.opsChat.listChannelMessages.setData(
+          { channel: context.channel },
+          (prev) => prev
+            ? prev.map((m) =>
+                m.id === context.tempId
+                  ? { ...m, id: data.messageId ?? m.id }
+                  : m
+              )
+            : prev
+        );
+      }
       setComposer("");
       setSelectedQuickAction(null);
       // Clear staged photos and revoke object URLs
@@ -1551,9 +1609,15 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       if (selectedJobId) {
         utils.opsChat.getJobDetail.invalidate({ jobId: selectedJobId });
       }
-      if (activeTab === "channels") {
-        utils.opsChat.listChannelMessages.invalidate({ channel: activeChannel });
+      // Record self-send timestamp so the SSE echo doesn't trigger a redundant refetch.
+      // See selfSentAtRef comment above for the rationale and limitations.
+      if (variables.channel) {
+        selfSentAtRef.current = Date.now();
+        selfSentChannelRef.current = variables.channel;
       }
+      // NOTE: intentionally NOT calling listChannelMessages.invalidate here.
+      // The optimistic message is already in cache; SSE will invalidate for
+      // messages from other senders. This avoids an unnecessary full reload.
       // Super-alert: server tells us exactly who was targeted.
       // Update badge cache instantly and show a confirmation toast to the sender.
       if (data.messageId && data.superAlertTargets && data.superAlertTargets.length > 0) {
@@ -1563,6 +1627,16 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         );
         toast.success(`⚡ Super-alert sent to ${data.superAlertTargets.join(", ")}`);
       }
+    },
+    onError: (_err, variables, context) => {
+      // Remove the optimistic message on failure and show an error toast.
+      if (context?.channel && context?.tempId !== undefined) {
+        utils.opsChat.listChannelMessages.setData(
+          { channel: context.channel },
+          (prev) => prev ? prev.filter((m) => m.id !== context.tempId) : prev
+        );
+      }
+      toast.error("Failed to send message. Please try again.");
     },
   });
 
