@@ -4500,12 +4500,20 @@ Rules that ALWAYS apply regardless of instruction:
   countOpenIssues: opsChatProcedure
     .query(async () => {
       const db = await getDb();
-      if (!db) return 0;
-      const [row] = await db
+      if (!db) return { count: 0, latestTitle: null, latestType: null };
+      const [countRow] = await db
         .select({ count: sql<number>`count(*)` })
         .from(issueEngineTable)
         .where(ne(issueEngineTable.status, "resolved"));
-      return Number(row?.count ?? 0);
+      const count = Number(countRow?.count ?? 0);
+      if (count === 0) return { count: 0, latestTitle: null, latestType: null };
+      const [latest] = await db
+        .select({ title: issueEngineTable.title, issueType: issueEngineTable.issueType })
+        .from(issueEngineTable)
+        .where(ne(issueEngineTable.status, "resolved"))
+        .orderBy(desc(issueEngineTable.lastActivityAt))
+        .limit(1);
+      return { count, latestTitle: latest?.title ?? null, latestType: latest?.issueType ?? null };
     }),
 
   /**

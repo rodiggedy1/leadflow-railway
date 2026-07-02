@@ -553,20 +553,52 @@ interface ActiveIssuesPillProps {
   onClick: () => void;
 }
 
+const PILL_TYPE_LABELS: Record<string, string> = {
+  late_team: "Late Team",
+  refund_request: "Refund",
+  angry_customer: "Angry",
+  no_show: "No Show",
+  access_problem: "Access",
+  payment_problem: "Payment",
+  reschedule_needed: "Reschedule",
+  broken_item: "Broken Item",
+  manager_review: "Review",
+  internal_task: "Task",
+  other: "Issue",
+};
+
 export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
-  const { data: count = 0 } = trpc.opsChat.countOpenIssues.useQuery(
+  const { data } = trpc.opsChat.countOpenIssues.useQuery(
     undefined,
     { refetchInterval: 30_000 }
   );
 
+  const count: number = (data as any)?.count ?? (typeof data === "number" ? data : 0);
+  const latestTitle: string | null = (data as any)?.latestTitle ?? null;
+  const latestType: string | null = (data as any)?.latestType ?? null;
+
+  const firstName = latestTitle ? latestTitle.split(" ")[0] : null;
+  const typeLabel = latestType ? (PILL_TYPE_LABELS[latestType] ?? "Issue") : null;
+  const extraCount = count - 1;
+
+  if (count === 0) return null;
+
   return (
     <button
       onClick={onClick}
-      className="issue-pill relative flex items-center gap-2 bg-white border border-slate-200 rounded-full px-4 py-2 font-extrabold text-sm shadow-sm shrink-0 overflow-hidden"
+      className="issue-pill relative flex flex-col items-start bg-white border border-slate-200 rounded-2xl px-4 py-2 shadow-sm shrink-0 overflow-hidden min-w-[160px]"
     >
       <span className="live-dot" />
-      <span className="text-[18px]">🔥</span>
-      <span className="text-slate-800">{count} {count === 1 ? "Active Issue" : "Active Issues"}</span>
+      <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-0.5">Attention Needed</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[16px]">🔥</span>
+        <span className="text-slate-900 font-black text-sm">
+          {firstName && typeLabel ? `${firstName} • ${typeLabel}` : `${count} ${count === 1 ? "Issue" : "Issues"}`}
+        </span>
+        {extraCount > 0 && (
+          <span className="text-orange-500 font-black text-sm">+{extraCount}</span>
+        )}
+      </div>
     </button>
   );
 }
