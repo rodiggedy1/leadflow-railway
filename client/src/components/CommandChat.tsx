@@ -1073,7 +1073,7 @@ function CallDebriefCard({
 
   return (
     <div className="flex justify-start my-1 px-1">
-      <div className="max-w-[72%] min-w-[260px]">
+      <div className="w-full max-w-[520px]">
         {/* Main bubble */}
         <div
           className="rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 bg-white border border-indigo-100 shadow-sm hover:border-indigo-200"
