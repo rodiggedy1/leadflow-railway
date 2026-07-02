@@ -2442,7 +2442,7 @@ const MessageList = memo(function MessageList({
                             )}
                           </div>
                         )}
-                        <div className={"rounded-2xl " + (isAlert ? "max-w-[560px] w-full px-4 py-2.5 bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto px-5 py-4 bg-[#0f172a] text-white" : "w-full px-5 py-4 bg-[#f1f5f9] text-slate-900")}>
+                        <div className={"rounded-2xl " + (isAlert ? "max-w-[560px] px-4 py-2.5 bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto px-5 py-4 bg-[#0f172a] text-white" : "w-full px-5 py-4 bg-[#f1f5f9] text-slate-900")}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
                             <span className={cn(
