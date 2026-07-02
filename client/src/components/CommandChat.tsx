@@ -1043,6 +1043,7 @@ type MessageListProps = {
   emailUnreadCount: number;
   mentionPhoneMap: Record<string, string>;
   openCreateIssueModal: (defaultTitle: string) => void;
+  openIssueEngine: (issueId: number | null) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1211,6 +1212,7 @@ const MessageList = memo(function MessageList({
   emailUnreadCount,
   mentionPhoneMap,
   openCreateIssueModal,
+  openIssueEngine,
 }: MessageListProps) {
   return (
     <>
@@ -1618,11 +1620,7 @@ const MessageList = memo(function MessageList({
                             <p className="text-xs text-slate-400 italic border-l-2 border-slate-600 pl-2 mb-2 leading-relaxed">"{ieNotes}"</p>
                           )}
                           <button
-                            onClick={() => {
-                              const ieId = (meta.issueId as number | null) ?? null;
-                              setIssueEngineInitialId(ieId);
-                              setIssueEngineOverlayOpen(true);
-                            }}
+                            onClick={() => openIssueEngine((meta.issueId as number | null) ?? null)}
                             className="text-[11px] text-teal-400 hover:text-teal-300 transition"
                           >
                             View in Issue Engine →
@@ -5983,6 +5981,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           todayCallCount={todayCallCount}
           emailUnreadCount={emailUnreadCount}
           mentionPhoneMap={mentionPhoneMapRef.current}
+          openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
