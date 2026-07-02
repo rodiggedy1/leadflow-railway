@@ -107,6 +107,7 @@ function IssueListItem({ issue, selected, onClick }: { issue: IssueRow; selected
 function DetailPanel({
   issue,
   callerName,
+  agentPhotoMap,
   onResolve,
   onReopen,
   resolving,
@@ -116,6 +117,7 @@ function DetailPanel({
 }: {
   issue: IssueRow & { timeline: TimelineRow[] };
   callerName: string;
+  agentPhotoMap: Record<string, string | null>;
   onResolve: () => void;
   onReopen: () => void;
   resolving: boolean;
@@ -139,16 +141,35 @@ function DetailPanel({
       <div className="grid grid-cols-3 gap-3 mt-6">
         {/* Owner */}
         <div className="border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Owner</p>
-          <p className="font-bold text-slate-900 text-sm">{issue.ownerName ?? "Unassigned"}</p>
-          {issue.ownerName !== callerName && (
-            <button
-              onClick={() => onUpdate({ ownerName: callerName })}
-              className="text-[11px] text-blue-500 hover:underline mt-1 block"
-            >
-              Claim
-            </button>
-          )}
+          <p className="text-xs text-slate-400 mb-2">Owner</p>
+          <div className="flex items-center gap-2.5">
+            {issue.ownerName && agentPhotoMap[issue.ownerName] ? (
+              <img
+                src={agentPhotoMap[issue.ownerName]!}
+                alt={issue.ownerName}
+                className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm"
+              />
+            ) : issue.ownerName ? (
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center shrink-0 shadow-sm">
+                <span className="text-white text-xs font-bold">{issue.ownerName.charAt(0).toUpperCase()}</span>
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
+                <span className="text-slate-400 text-xs">?</span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="font-bold text-slate-900 text-sm leading-tight">{issue.ownerName ?? "Unassigned"}</p>
+              {issue.ownerName !== callerName && (
+                <button
+                  onClick={() => onUpdate({ ownerName: callerName })}
+                  className="text-[11px] text-blue-500 hover:underline"
+                >
+                  Claim
+                </button>
+              )}
+            </div>
+          </div>
         </div>
         {/* Waiting On */}
         <div className="border border-slate-200 rounded-xl p-4">
@@ -263,9 +284,10 @@ interface IssueEngineOverlayProps {
   open: boolean;
   onClose: () => void;
   callerName: string;
+  agentPhotoMap?: Record<string, string | null>;
 }
 
-export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOverlayProps) {
+export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = {} }: IssueEngineOverlayProps) {
   const utils = trpc.useUtils();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<"open" | "waiting" | "resolved" | "all">("open");
@@ -391,6 +413,7 @@ export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOve
               <DetailPanel
                 issue={issue}
                 callerName={callerName}
+                agentPhotoMap={agentPhotoMap}
                 onResolve={() => resolveMutation.mutate({ id: issue.id, actorName: callerName })}
                 onReopen={() => reopenMutation.mutate({ id: issue.id, actorName: callerName })}
                 resolving={resolveMutation.isPending}

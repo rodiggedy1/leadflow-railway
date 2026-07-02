@@ -7132,6 +7132,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         open={issueEngineOverlayOpen}
         onClose={() => setIssueEngineOverlayOpen(false)}
         callerName={callerName}
+        agentPhotoMap={senderPhotoMap}
       />
       {/* ── Create Issue Modal (+issue) ── */}
       <CreateIssueModal
