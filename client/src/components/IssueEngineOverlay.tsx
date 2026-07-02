@@ -570,7 +570,7 @@ const PILL_TYPE_LABELS: Record<string, string> = {
 export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
   const { data } = trpc.opsChat.countOpenIssues.useQuery(
     undefined,
-    { refetchInterval: 30_000 }
+    { refetchInterval: false }
   );
 
   const count: number = (data as any)?.count ?? (typeof data === "number" ? data : 0);
