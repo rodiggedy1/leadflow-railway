@@ -4639,6 +4639,54 @@ Rules that ALWAYS apply regardless of instruction:
         .where(eq(issueEngineTable.id, input.issueId));
       return { ok: true };
     }),
+
+  // ── Kudos ─────────────────────────────────────────────────────────────────
+  /**
+   * Post a kudos card to the command channel.
+   */
+  postKudos: opsChatProcedure
+    .input(z.object({
+      recipientName: z.string().min(1).max(255),
+      recipientPhotoUrl: z.string().url().nullable().optional(),
+      tag: z.enum(["nice_save","great_recovery","above_and_beyond","team_player","great_communication","other"]),
+      message: z.string().min(1).max(500),
+      fromName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const tagLabels: Record<string, string> = {
+        nice_save: "Nice Save",
+        great_recovery: "Great Recovery",
+        above_and_beyond: "Above & Beyond",
+        team_player: "Team Player",
+        great_communication: "Great Communication",
+        other: "Kudos",
+      };
+      const tagLabel = tagLabels[input.tag] ?? "Kudos";
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        cleanerJobId: null,
+        authorName: input.fromName,
+        authorRole: "system",
+        body: `${input.recipientName} — ${tagLabel}`,
+        quickAction: "kudos_card",
+        metadata: JSON.stringify({
+          recipientName: input.recipientName,
+          recipientPhotoUrl: input.recipientPhotoUrl ?? null,
+          tag: input.tag,
+          tagLabel,
+          message: input.message,
+          fromName: input.fromName,
+        }),
+        mediaUrl: null,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
+      return { ok: true };
+    }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
 function slugify(name: string): string {
