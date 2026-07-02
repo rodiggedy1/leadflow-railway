@@ -1356,6 +1356,43 @@ const MessageList = memo(function MessageList({
                 // Call summary — hidden per user request
                 if (isCallSummary) return null;
 
+                // ── Rating Alert card (compact dark) ─────────────────────────────
+                if (msg.from === "⭐ Rating Alert" || msg.from?.includes("Rating Alert")) {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const rating = (meta.rating as number) ?? 0;
+                  const starsStr = "★".repeat(rating) + "☆".repeat(5 - rating);
+                  const ratingLabel = rating >= 5 ? "5-star" : rating >= 4 ? "4-star" : rating >= 3 ? "3-star" : rating >= 2 ? "2-star" : "1-star";
+                  const link = (meta.link as string) ?? null;
+                  const lines = msg.body.split("\n").filter(Boolean);
+                  const customerLine = lines.find(l => l.startsWith("👤"))?.replace(/^👤 Customer: /, "") ?? "";
+                  const jobLine = lines.find(l => l.startsWith("📍"))?.replace(/^📍 Job: /, "") ?? "";
+                  const commentLine = lines.find(l => l.startsWith("💬"))?.replace(/^💬 Comment: /, "") ?? null;
+                  const ratingColor = rating >= 4 ? "text-yellow-400" : rating === 3 ? "text-amber-400" : "text-red-400";
+                  return (
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden" style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.08)", maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b" style={{ borderColor: "rgba(255,255,255,0.08)" }}>
+                          <span className="text-[10px] text-slate-400 font-medium">★ Rating Alert · Dispatch</span>
+                          <span className="ml-auto text-[10px] text-slate-500">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-3 py-2">
+                          <p className={"text-sm font-bold leading-snug " + ratingColor}>{ratingLabel} {starsStr}</p>
+                          <p className="text-xs text-slate-400 mt-0.5 leading-snug">
+                            {customerLine}{jobLine ? " | " + jobLine : ""}
+                          </p>
+                          {commentLine && <p className="text-xs text-slate-500 mt-0.5 italic">{commentLine}</p>}
+                          {link && (
+                            <a href={link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-400 hover:underline mt-1 inline-block">
+                              View in Quality Dashboard →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── New Lead card (emerald/green) ─────────────────────────────────
                 if (msg.quickAction === "new_lead") {
                   let meta: Record<string, unknown> = {};
