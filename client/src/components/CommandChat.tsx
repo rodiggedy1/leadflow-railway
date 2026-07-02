@@ -2721,7 +2721,10 @@ const MessageList = memo(function MessageList({
                             </button>
                           )}
                           <button
-                            onClick={() => openChatConvert(msg.id, msg.body)}
+                            onClick={() => {
+                              setCreateIssueDefaultTitle(msg.body?.slice(0, 120) ?? "");
+                              setCreateIssueModalOpen(true);
+                            }}
                             className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
                           >
                             <AlertTriangle className="h-3 w-3" />
@@ -3434,6 +3437,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [issueEngineOverlayOpen, setIssueEngineOverlayOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [createIssueModalOpen, setCreateIssueModalOpen] = useState(false);
+  const [createIssueDefaultTitle, setCreateIssueDefaultTitle] = useState("");
   // ── Open Issue modal state ─────────────────────────────────────────────────
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueTitle, setIssueTitle] = useState("");
@@ -7284,8 +7288,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Create Issue Modal (+issue) ── */}
       <CreateIssueModal
         open={createIssueModalOpen}
-        onClose={() => setCreateIssueModalOpen(false)}
+        onClose={() => { setCreateIssueModalOpen(false); setCreateIssueDefaultTitle(""); }}
         callerName={callerName}
+        defaultTitle={createIssueDefaultTitle}
         onIssueCreated={(meta) => {
           // Optimistic: inject the card into the channel cache immediately
           const tempId = Date.now() * -1;
