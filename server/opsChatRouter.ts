@@ -11,6 +11,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { getAvatarDataUrl, phoneSeed } from "./avatar";
 import { opsChatProcedure, router } from "./_core/trpc";
 import { storagePut } from "./storage";
 import { getDb, getAllAgents } from "./db";
@@ -616,7 +617,20 @@ export const opsChatRouter = router({
         for (const p of parents) parentMap.set(p.id, { body: p.body, authorName: p.authorName });
       }
 
-      return msgs.reverse().map((m) => ({
+      return msgs.reverse().map((m) => {
+        // For new_lead cards, inject a server-generated avatar data URL so the
+        // frontend can render a face without any external requests.
+        let metadata = m.metadata ?? null;
+        if (m.quickAction === "new_lead" && metadata) {
+          try {
+            const parsed = JSON.parse(metadata) as Record<string, unknown>;
+            if (!parsed.avatarDataUrl && parsed.leadPhone) {
+              parsed.avatarDataUrl = getAvatarDataUrl(phoneSeed(String(parsed.leadPhone)));
+              metadata = JSON.stringify(parsed);
+            }
+          } catch { /* non-fatal — leave metadata as-is */ }
+        }
+        return {
         id: m.id,
         ts: m.createdAt.getTime(),
         from: m.authorName,
@@ -624,7 +638,7 @@ export const opsChatRouter = router({
         body: m.body,
         mediaUrl: m.mediaUrl,
         quickAction: m.quickAction,
-        metadata: m.metadata ?? null,
+        metadata,
         replyToId: m.replyToId ?? null,
         replyToBody: m.replyToBody ?? null,
         replyToAuthor: m.replyToAuthor ?? null,
@@ -633,7 +647,8 @@ export const opsChatRouter = router({
         threadParentBody: m.threadParentId ? (parentMap.get(m.threadParentId)?.body ?? null) : null,
         threadParentFrom: m.threadParentId ? (parentMap.get(m.threadParentId)?.authorName ?? null) : null,
         replyCount: m.threadParentId ? 0 : (replyCounts[m.id] ?? 0),
-      }));
+        };
+      });
     }),
 
   /**

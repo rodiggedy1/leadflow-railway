@@ -624,6 +624,7 @@ function HotLeadCard({
   const claimedBy   = (meta.claimedBy   as string | null)  ?? null;
   const claimedAt   = (meta.claimedAt   as number | null)  ?? null;
   const thumbtackUrl = (meta.thumbtackUrl as string | null) ?? null;
+  const avatarDataUrl = (meta.avatarDataUrl as string | null) ?? null;
   const isClaimed   = Boolean(claimedBy);
   const isThumbSms  = utmSource === "thumbtack-sms";
 
@@ -759,11 +760,24 @@ function HotLeadCard({
           )}
         </div>
 
-        {/* Name */}
-        <p className="text-base font-bold text-slate-900 leading-tight">{leadName}</p>
-
-        {/* Phone */}
-        {leadPhone && <p className="text-sm text-slate-400 mt-0.5">{leadPhone}</p>}
+        {/* Name + avatar */}
+        <div className="flex items-center gap-2.5 mt-1">
+          {avatarDataUrl ? (
+            <img
+              src={avatarDataUrl}
+              alt={leadName}
+              className="h-10 w-10 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm"
+            />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-sm font-bold text-slate-600 shrink-0 ring-2 ring-white shadow-sm">
+              {(leadName?.[0] ?? "?").toUpperCase()}
+            </div>
+          )}
+          <div className="min-w-0">
+            <p className="text-base font-bold text-slate-900 leading-tight truncate">{leadName}</p>
+            {leadPhone && <p className="text-sm text-slate-400 mt-0.5">{leadPhone}</p>}
+          </div>
+        </div>
 
         {/* Service details */}
         {serviceType && <p className="text-sm text-slate-500 mt-1">{serviceType}</p>}
@@ -1462,6 +1476,7 @@ const MessageList = memo(function MessageList({
                   const arrivedAt = (meta.arrivedAt as number) ?? msg.createdAt.getTime();
                   const claimedBy = (meta.claimedBy as string | null) ?? null;
                   const claimedAt = (meta.claimedAt as number | null) ?? null;
+                  const avatarDataUrl = (meta.avatarDataUrl as string | null) ?? null;
 
                   const isThumbSms = utmSource === "thumbtack-sms";
                   // Build written-out headline
@@ -1493,8 +1508,15 @@ const MessageList = memo(function MessageList({
                         "w-full rounded-2xl px-5 py-4",
                         isThumbSms ? "bg-sky-50" : "bg-[#f0fdf4]"
                       )}>
-                        {/* Top row: name + time inline */}
+                        {/* Top row: avatar + name + time inline */}
                         <div className="flex items-center gap-2 mb-2">
+                          {avatarDataUrl ? (
+                            <img src={avatarDataUrl} alt={leadName} className="h-7 w-7 rounded-full object-cover shrink-0 ring-1 ring-white/60 shadow-sm" />
+                          ) : (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-[11px] font-bold text-slate-600 shrink-0">
+                              {(leadName?.[0] ?? "?").toUpperCase()}
+                            </div>
+                          )}
                           <span className="text-xs text-slate-500">{leadName}</span>
                           {leadPhone && <span className="text-xs text-slate-400">· {leadPhone}</span>}
                           <div className="flex-1" />
