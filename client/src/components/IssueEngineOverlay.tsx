@@ -567,7 +567,6 @@ export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
       <span className="live-dot" />
       <span className="text-[18px]">🔥</span>
       <span className="text-slate-800">{count} {count === 1 ? "Active Issue" : "Active Issues"}</span>
-      <span className="heartbeat-bar" />
     </button>
   );
 }
