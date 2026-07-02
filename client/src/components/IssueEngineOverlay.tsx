@@ -285,9 +285,10 @@ interface IssueEngineOverlayProps {
   onClose: () => void;
   callerName: string;
   agentPhotoMap?: Record<string, string | null>;
+  initialIssueId?: number | null;
 }
 
-export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = {} }: IssueEngineOverlayProps) {
+export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = {}, initialIssueId }: IssueEngineOverlayProps) {
   const utils = trpc.useUtils();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<"open" | "waiting" | "resolved" | "all">("open");
@@ -301,7 +302,16 @@ export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = 
     { enabled: open && selectedId !== null, refetchInterval: 10_000 }
   );
 
-  // Auto-select first issue when list loads
+  // When overlay opens with an initialIssueId, pre-select it and show all statuses so it's visible
+  useEffect(() => {
+    if (open && initialIssueId) {
+      setSelectedId(initialIssueId);
+      setStatusFilter("all");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialIssueId]);
+
+  // Auto-select first issue when list loads (only if no issue is selected yet)
   useEffect(() => {
     if (issues.length > 0 && selectedId === null) {
       setSelectedId((issues as IssueRow[])[0].id);

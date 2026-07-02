@@ -1538,7 +1538,11 @@ const MessageList = memo(function MessageList({
                           {!ieNotes && <p className="text-sm text-slate-400 leading-relaxed mb-3">This issue will stay pinned until closed.</p>}
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => setIssueEngineOverlayOpen(true)}
+                              onClick={() => {
+                                const ieId = (meta.issueId as number | null) ?? null;
+                                setIssueEngineInitialId(ieId);
+                                setIssueEngineOverlayOpen(true);
+                              }}
                               className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 transition"
                             >
                               View Issue
@@ -3338,6 +3342,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // ── Issue Engine (Phase 1) state ──────────────────────────────────────────
   const [issueEngineOverlayOpen, setIssueEngineOverlayOpen] = useState(false);
+  const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [createIssueModalOpen, setCreateIssueModalOpen] = useState(false);
   // ── Open Issue modal state ─────────────────────────────────────────────────
   const [issueOpen, setIssueOpen] = useState(false);
@@ -7181,9 +7186,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Issue Engine Overlay ── */}
       <IssueEngineOverlay
         open={issueEngineOverlayOpen}
-        onClose={() => setIssueEngineOverlayOpen(false)}
+        onClose={() => { setIssueEngineOverlayOpen(false); setIssueEngineInitialId(null); }}
         callerName={callerName}
         agentPhotoMap={senderPhotoMap}
+        initialIssueId={issueEngineInitialId}
       />
       {/* ── Create Issue Modal (+issue) ── */}
       <CreateIssueModal
