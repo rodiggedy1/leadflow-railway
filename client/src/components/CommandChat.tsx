@@ -48,6 +48,7 @@ import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AICallPanel from "@/components/AICallPanel";
 import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMentions } from "@/components/CustomerMentionChip";
+import { IssueEngineOverlay, CreateIssueModal, ActiveIssuesPill } from "@/components/IssueEngineOverlay";
 
 // ── Payment Link Modal ───────────────────────────────────────────────────────
 function _normalizePhone(raw: string) {
@@ -3284,6 +3285,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
   });
 
+  // ── Issue Engine (Phase 1) state ──────────────────────────────────────────
+  const [issueEngineOverlayOpen, setIssueEngineOverlayOpen] = useState(false);
+  const [createIssueModalOpen, setCreateIssueModalOpen] = useState(false);
   // ── Open Issue modal state ─────────────────────────────────────────────────
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueTitle, setIssueTitle] = useState("");
@@ -5116,6 +5120,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </div>
             </div>
+            {/* Issue Engine pill */}
+            <ActiveIssuesPill onClick={() => setIssueEngineOverlayOpen(true)} />
             {/* Agent presence circles — far right */}
             {agentList && agentList.length > 0 && (() => {
               const MAX_SHOW = 8;
@@ -6748,6 +6754,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               value={composer}
               onChange={(e) => {
                 const val = e.target.value;
+                // Intercept +issue to open Create Issue modal
+                if (val.trim().toLowerCase() === '+issue') {
+                  setComposer('');
+                  setCreateIssueModalOpen(true);
+                  return;
+                }
                 setComposer(val);
                 const pos = e.target.selectionStart ?? val.length;
                 const before = val.slice(0, pos);
@@ -7115,6 +7127,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>{/* end white card */}
       </div>
 
+      {/* ── Issue Engine Overlay ── */}
+      <IssueEngineOverlay
+        open={issueEngineOverlayOpen}
+        onClose={() => setIssueEngineOverlayOpen(false)}
+        callerName={callerName}
+      />
+      {/* ── Create Issue Modal (+issue) ── */}
+      <CreateIssueModal
+        open={createIssueModalOpen}
+        onClose={() => setCreateIssueModalOpen(false)}
+        callerName={callerName}
+      />
       {/* ── Open Issue Dialog ── */}
       <Dialog open={issueOpen} onOpenChange={setIssueOpen}>
         <DialogContent className="max-w-md">

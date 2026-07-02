@@ -36,6 +36,8 @@ import {
   users,
   quoteLeads,
   chatSuperAlerts,
+  issueEngineTable,
+  issueEngineTimeline,
 } from "../drizzle/schema";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -4396,6 +4398,208 @@ Rules that ALWAYS apply regardless of instruction:
 
       const transformed = ((result.choices[0].message.content as string) ?? "").trim();
       return { message: transformed };
+    }),
+
+  // ── Issue Engine (Phase 1) ─────────────────────────────────────────────────
+
+  /**
+   * Create a new issue manually.
+   */
+  createIssue: opsChatProcedure
+    .input(z.object({
+      title: z.string().min(1).max(255),
+      issueType: z.enum(["late_team","refund_request","angry_customer","no_show","access_problem","payment_problem","reschedule_needed","broken_item","manager_review","internal_task","other"]),
+      severity: z.enum(["critical","high","medium","low"]).default("medium"),
+      notes: z.string().optional(),
+      ownerName: z.string().optional(),
+      waitingOn: z.string().optional(),
+      relatedSessionId: z.number().int().optional(),
+      relatedJobId: z.number().int().optional(),
+      createdByName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = Date.now();
+      const [result] = await db.insert(issueEngineTable).values({
+        title: input.title,
+        issueType: input.issueType,
+        severity: input.severity,
+        status: "open",
+        notes: input.notes ?? null,
+        ownerName: input.ownerName ?? null,
+        waitingOn: input.waitingOn ?? null,
+        relatedSessionId: input.relatedSessionId ?? null,
+        relatedJobId: input.relatedJobId ?? null,
+        createdByName: input.createdByName,
+        lastActivityAt: now,
+      });
+      const issueId = (result as any).insertId as number;
+      // Write first timeline event
+      await db.insert(issueEngineTimeline).values({
+        issueId,
+        event: `Issue created by ${input.createdByName}`,
+        actor: input.createdByName,
+      });
+      return { id: issueId };
+    }),
+
+  /**
+   * List all issues (optionally filter by status).
+   */
+  listIssues: opsChatProcedure
+    .input(z.object({
+      status: z.enum(["open","waiting","resolved","all"]).default("open"),
+      limit: z.number().int().min(1).max(200).default(100),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(issueEngineTable)
+        .where(input.status === "all" ? undefined : eq(issueEngineTable.status, input.status as any))
+        .orderBy(desc(issueEngineTable.lastActivityAt))
+        .limit(input.limit);
+      return rows;
+    }),
+
+  /**
+   * Count open issues (for the 🔥 pill).
+   */
+  countOpenIssues: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return 0;
+      const [row] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(issueEngineTable)
+        .where(ne(issueEngineTable.status, "resolved"));
+      return Number(row?.count ?? 0);
+    }),
+
+  /**
+   * Get a single issue with its timeline.
+   */
+  getIssue: opsChatProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return null;
+      const [issue] = await db
+        .select()
+        .from(issueEngineTable)
+        .where(eq(issueEngineTable.id, input.id))
+        .limit(1);
+      if (!issue) return null;
+      const timeline = await db
+        .select()
+        .from(issueEngineTimeline)
+        .where(eq(issueEngineTimeline.issueId, input.id))
+        .orderBy(issueEngineTimeline.createdAt);
+      return { ...issue, timeline };
+    }),
+
+  /**
+   * Update issue fields (owner, waitingOn, notes, severity).
+   */
+  updateIssue: opsChatProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      ownerName: z.string().optional(),
+      waitingOn: z.string().optional(),
+      notes: z.string().optional(),
+      severity: z.enum(["critical","high","medium","low"]).optional(),
+      actorName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = Date.now();
+      const updates: Record<string, unknown> = { lastActivityAt: now };
+      if (input.ownerName !== undefined) updates.ownerName = input.ownerName;
+      if (input.waitingOn !== undefined) updates.waitingOn = input.waitingOn;
+      if (input.notes !== undefined) updates.notes = input.notes;
+      if (input.severity !== undefined) updates.severity = input.severity;
+      await db.update(issueEngineTable).set(updates).where(eq(issueEngineTable.id, input.id));
+      const changes = Object.keys(updates).filter(k => k !== "lastActivityAt").join(", ");
+      if (changes) {
+        await db.insert(issueEngineTimeline).values({
+          issueId: input.id,
+          event: `Updated: ${changes}`,
+          actor: input.actorName,
+        });
+      }
+      return { ok: true };
+    }),
+
+  /**
+   * Resolve an issue.
+   */
+  resolveIssueEngine: opsChatProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      actorName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = Date.now();
+      await db.update(issueEngineTable)
+        .set({ status: "resolved", resolvedAt: now, lastActivityAt: now })
+        .where(eq(issueEngineTable.id, input.id));
+      await db.insert(issueEngineTimeline).values({
+        issueId: input.id,
+        event: `Resolved by ${input.actorName}`,
+        actor: input.actorName,
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * Reopen a resolved issue.
+   */
+  reopenIssue: opsChatProcedure
+    .input(z.object({
+      id: z.number().int().positive(),
+      actorName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = Date.now();
+      await db.update(issueEngineTable)
+        .set({ status: "open", resolvedAt: null, lastActivityAt: now })
+        .where(eq(issueEngineTable.id, input.id));
+      await db.insert(issueEngineTimeline).values({
+        issueId: input.id,
+        event: `Reopened by ${input.actorName}`,
+        actor: input.actorName,
+      });
+      return { ok: true };
+    }),
+
+  /**
+   * Add a manual timeline event (comment/note).
+   */
+  addIssueTimelineEvent: opsChatProcedure
+    .input(z.object({
+      issueId: z.number().int().positive(),
+      event: z.string().min(1).max(512),
+      actor: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      await db.insert(issueEngineTimeline).values({
+        issueId: input.issueId,
+        event: input.event,
+        actor: input.actor,
+      });
+      await db.update(issueEngineTable)
+        .set({ lastActivityAt: Date.now() })
+        .where(eq(issueEngineTable.id, input.issueId));
+      return { ok: true };
     }),
 });
 /** Convert a display name to a URL-safe slug for dmThread keys (legacy fallback only) */
