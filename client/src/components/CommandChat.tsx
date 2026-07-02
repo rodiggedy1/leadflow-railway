@@ -1427,8 +1427,9 @@ const MessageList = memo(function MessageList({
                   );
                 }
 
-                // ── New Lead card (emerald/green) ─────────────────────────────────
-                if (msg.quickAction === "new_lead") {
+                // ── New Lead card — hidden per user request (side cards handle this now)
+                if (msg.quickAction === "new_lead") return null;
+                if (false && msg.quickAction === "new_lead") {
                   let meta: Record<string, unknown> = {};
                   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
                   const leadName = (meta.leadName as string) ?? msg.from;
