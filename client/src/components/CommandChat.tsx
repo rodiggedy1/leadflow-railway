@@ -2303,6 +2303,7 @@ const MessageList = memo(function MessageList({
                 }
                 // ── Skip cleaner_status cards — rendered in sidebar instead
                 if (msg.quickAction === "cleaner_status") return null;
+                if (msg.quickAction === "escalation_nudge") return null;
                 // ── Check-in availability card ─────────────────────────────────────────
                 if (msg.quickAction === "checkin_availability") {
                   let meta: { cleanerName?: string; isAvailable?: boolean; maxJobs?: number | null; note?: string | null; availabilityDate?: string } = {};

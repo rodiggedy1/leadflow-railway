@@ -103,3 +103,19 @@ export async function runUnclaimedLeadEscalation(): Promise<{ checked: number; e
 
   return { checked: candidates.length, escalated };
 }
+
+/**
+ * One-time cleanup: delete all escalation_nudge messages from the command channel.
+ * Called once at server startup after the feature was disabled.
+ */
+export async function purgeEscalationNudges(): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    const { eq } = await import("drizzle-orm");
+    await db.delete(opsChatMessages).where(eq(opsChatMessages.quickAction as any, "escalation_nudge"));
+    console.log("[UnclaimedLeadEscalation] Purged all escalation_nudge messages.");
+  } catch (err) {
+    console.error("[UnclaimedLeadEscalation] Failed to purge escalation_nudge messages:", err);
+  }
+}

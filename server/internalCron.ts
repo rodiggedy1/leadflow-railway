@@ -43,7 +43,7 @@ import {
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
 import { cleanerJobs } from "../drizzle/schema";
-import { runUnclaimedLeadEscalation } from "./unclaimedLeadEscalation";
+import { runUnclaimedLeadEscalation, purgeEscalationNudges } from "./unclaimedLeadEscalation";
 import { runScheduleConfirmSend, runScheduleConfirmNudge } from "./scheduleConfirmEngine";
 import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
@@ -178,6 +178,8 @@ export function startInternalCron(): void {
     return;
   }
   _cronStarted = true;
+  // One-time cleanup: remove all escalation_nudge messages (feature disabled)
+  purgeEscalationNudges().catch(() => {});
   // ── Nurture enrollment: every 5 minutes ────────────────────────────────────
   // Finds leads whose speed-to-lead window has passed (15+ min) and enrolls
   // them in the 30-day nurture sequence if not already enrolled.
@@ -479,21 +481,8 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Unclaimed lead escalation: every minute ───────────────────────────────────
-  // Posts a ⚠️ nudge to the command channel if a new_lead card sits unclaimed
-  // for more than 5 minutes. Fires once per lead (escalationPosted flag).
-  cron.schedule("0 * * * * *", async () => {
-    try {
-      const result = await runUnclaimedLeadEscalation();
-      if (result.escalated > 0) {
-        console.log(`[InternalCron] UnclaimedLeadEscalation — checked: ${result.checked}, escalated: ${result.escalated}`);
-      }
-      await recordHeartbeat("unclaimed-lead-escalation", `checked: ${result.checked}, escalated: ${result.escalated}`, result.escalated > 0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] UnclaimedLeadEscalation failed:", msg);
-    }
-  });
+  // ── Unclaimed lead escalation: DISABLED per user request ────────────────────
+  // (was: posts a ⚠️ nudge if a new_lead card sits unclaimed for 5+ min)
 
   // ── Ops Reminder fire: every minute ────────────────────────────────────────
   // Atomic claim pattern: stamp firedAt FIRST (UPDATE WHERE firedAt IS NULL),
