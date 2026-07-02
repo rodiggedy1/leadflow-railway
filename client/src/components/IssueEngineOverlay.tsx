@@ -562,10 +562,12 @@ export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3.5 py-1.5 font-bold text-sm shadow-sm hover:border-orange-300 hover:shadow-md transition-all shrink-0"
+      className="issue-pill relative flex items-center gap-2 bg-white border border-slate-200 rounded-full px-4 py-2 font-extrabold text-sm shadow-sm shrink-0 overflow-hidden"
     >
-      <Flame className="h-4 w-4 text-orange-500" />
-      <span className="text-slate-800">{count} {count === 1 ? "Issue" : "Issues"}</span>
+      <span className="live-dot" />
+      <span className="text-[18px]">🔥</span>
+      <span className="text-slate-800">{count} {count === 1 ? "Active Issue" : "Active Issues"}</span>
+      <span className="heartbeat-bar" />
     </button>
   );
 }

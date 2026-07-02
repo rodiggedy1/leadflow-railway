@@ -1131,3 +1131,32 @@
 .cs-inbox-scope button:active:not(:disabled) {
   transform: scale(0.985);
 }
+
+/* ── Active Issues Pill animations ──────────────────────────────── */
+@keyframes issueGlow {
+  0%, 100% { box-shadow: 0 0 0 rgba(249,115,22,0); }
+  50%       { box-shadow: 0 0 24px rgba(249,115,22,.35); }
+}
+@keyframes pulseDot {
+  0%   { box-shadow: 0 0 0 0    rgba(239,68,68,.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(239,68,68,0);  }
+  100% { box-shadow: 0 0 0 0    rgba(239,68,68,0);  }
+}
+@keyframes heartbeatScan {
+  0%   { width: 0%;   }
+  50%  { width: 100%; }
+  100% { width: 0%;   }
+}
+.issue-pill { animation: issueGlow 2s ease-in-out infinite; }
+.issue-pill:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(0,0,0,.10); }
+.issue-pill .live-dot {
+  position: absolute; top: 8px; right: 10px;
+  width: 8px; height: 8px; background: #ef4444;
+  border-radius: 999px; animation: pulseDot 1.4s infinite;
+}
+.issue-pill .heartbeat-bar {
+  position: absolute; left: 0; bottom: 0; height: 3px;
+  background: linear-gradient(90deg, #fb923c, #ef4444);
+  border-radius: 0 0 999px 999px;
+  animation: heartbeatScan 3s linear infinite;
+}
