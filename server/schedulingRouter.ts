@@ -34,7 +34,7 @@ import {
   openphoneCallRecordings,
   googleApiUsage,
 } from "../drizzle/schema";
-import { makeRequest, GeocodingResult, DistanceMatrixResult } from "./_core/map";
+import { makeRequest, GeocodingResult } from "./_core/map";
 import { invokeLLM } from "./_core/llm";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -237,36 +237,14 @@ async function geocodeWithCache(address: string): Promise<{ lat: number; lng: nu
  * Each pair is called as 1 origin × 1 destination — no batching ambiguity, no cache.
  * Always returns a fresh Google value. Returns 0 if Google fails.
  */
-async function fetchDriveTimes(
+function fetchDriveTimes(
   pairs: { fromLat: number; fromLng: number; toLat: number; toLng: number }[]
-): Promise<number[]> {
-  const result: number[] = new Array(pairs.length).fill(0);
-  let successfulCalls = 0;
-  for (let i = 0; i < pairs.length; i++) {
-    const p = pairs[i];
-    try {
-      const apiResult = await makeRequest<DistanceMatrixResult>('/maps/api/distancematrix/json', {
-        origins: `${p.fromLat},${p.fromLng}`,
-        destinations: `${p.toLat},${p.toLng}`,
-        mode: 'driving',
-        units: 'metric',
-      });
-      const el = apiResult?.rows?.[0]?.elements?.[0];
-      if (el?.status === 'OK') {
-        result[i] = el.duration.value;
-        successfulCalls++;
-      } else {
-        console.warn(`[DRIVE] pair ${i} status=${el?.status ?? 'NO_ELEMENT'} from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng}) el=${JSON.stringify(el)}`);
-        result[i] = 0;
-      }
-    } catch (err) {
-      console.error(`[DRIVE] pair ${i} EXCEPTION from=(${p.fromLat},${p.fromLng}) to=(${p.toLat},${p.toLng}):`, err);
-      result[i] = 0;
-    }
-  }
-  // Track distance matrix API usage (fire-and-forget)
-  if (successfulCalls > 0) void incrementApiUsage("distanceCalls", successfulCalls);
-  return result;
+): number[] {
+  // Haversine-based drive time estimate: straight-line distance / 10 m/s (~22 mph avg urban speed).
+  // No API calls, no cost.
+  return pairs.map(p =>
+    Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10)
+  );
 }
 
 
@@ -1797,21 +1775,9 @@ ${callBlocks.join("\n\n")}`;
           }
 
           {
-            try {
-              const result = await makeRequest<DistanceMatrixResult>("/maps/api/distancematrix/json", {
-                origins: `${fromLat},${fromLng}`,
-                destinations: `${curGeo.lat},${curGeo.lng}`,
-                mode: "driving",
-                units: "metric",
-              });
-              const el = result?.rows?.[0]?.elements?.[0];
-              const secs = el?.status === "OK" ? el.duration.value : 0;
-              console.log(`[DRIVE] job=${cur.cleanerJobId} from=(${fromLat.toFixed(4)},${fromLng.toFixed(4)}) to=(${curGeo.lat.toFixed(4)},${curGeo.lng.toFixed(4)}) status=${el?.status} secs=${secs} (${Math.round(secs/60)}m)`);
-              cur.driveTimeSecs = secs;
-            } catch (err) {
-              console.log(`[DRIVE] job=${cur.cleanerJobId} ERROR: ${err}`);
-              cur.driveTimeSecs = 0;
-            }
+            const secs = Math.round(haversineMeters({ lat: fromLat, lng: fromLng }, { lat: curGeo.lat, lng: curGeo.lng }) / 10);
+            console.log(`[DRIVE] job=${cur.cleanerJobId} from=(${fromLat.toFixed(4)},${fromLng.toFixed(4)}) to=(${curGeo.lat.toFixed(4)},${curGeo.lng.toFixed(4)}) secs=${secs} (${Math.round(secs/60)}m) [haversine]`);
+            cur.driveTimeSecs = secs;
           }
         }
       }
@@ -2006,7 +1972,7 @@ ${callBlocks.join("\n\n")}`;
       // Fetch drive times for the affected legs (with cache)
       const driveUpdates = new Map<number, number>(); // jobId -> driveTimeSecs
       if (affectedPairs.length > 0) {
-        const driveSecs = await fetchDriveTimes(affectedPairs);
+        const driveSecs = fetchDriveTimes(affectedPairs);
         affectedPairs.forEach((p, idx) => {
           if (driveSecs[idx] > 0) driveUpdates.set(p.toJobId, driveSecs[idx]);
         });
@@ -2737,7 +2703,7 @@ ${callBlocks.join("\n\n")}`;
         // Fetch fresh Google drive times
         const pairsOnly = pairs.map(p => ({ fromLat: p.fromLat, fromLng: p.fromLng, toLat: p.toLat, toLng: p.toLng }));
         console.log(`[RERUN] team=${team.name} date=${input.date} pairs=${pairs.length}:`, pairs.map(p => `job${p.jobId}(${p.fromLat.toFixed(4)},${p.fromLng.toFixed(4)})->(${p.toLat.toFixed(4)},${p.toLng.toFixed(4)})`).join(', '));
-        const driveSecs = await fetchDriveTimes(pairsOnly);
+        const driveSecs = fetchDriveTimes(pairsOnly);
         // Persist updated driveTimeSecs
         for (let i = 0; i < pairs.length; i++) {
           const secs = driveSecs[i];
@@ -3541,7 +3507,7 @@ async function recalcTeamRoute(
   // Fetch drive times for the chain (with cache)
   const driveMap = new Map<number, number>(); // jobId -> driveTimeSecs
   if (chainPairs.length > 0) {
-    const chainDriveSecs = await fetchDriveTimes(chainPairs);
+    const chainDriveSecs = fetchDriveTimes(chainPairs);
     chainPairs.forEach((p, idx) => {
       if (chainDriveSecs[idx] > 0) driveMap.set(p.toJobId, chainDriveSecs[idx]);
     });
