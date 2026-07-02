@@ -1596,43 +1596,37 @@ const MessageList = memo(function MessageList({
                     medium: "text-amber-500", low: "text-slate-400",
                   };
                   const sevColor = sevColorMap[ieSeverity] ?? "text-amber-500";
+                  const sevIconMap: Record<string, string> = {
+                    critical: "🔴", high: "🟠", medium: "🟡", low: "🔵",
+                  };
+                  const sevIcon = sevIconMap[ieSeverity] ?? "🟡";
                   return (
-                    <div key={msg.id} className="flex justify-center my-3 px-4">
-                      <div
-                        className="w-full max-w-[560px] rounded-2xl overflow-hidden"
-                        style={{
-                          background: "linear-gradient(135deg, #fffbf0 0%, #fef6e4 100%)",
-                          border: "1.5px solid #fde8b0",
-                          boxShadow: "0 0 0 5px rgba(253,212,80,0.13), 0 6px 28px rgba(251,146,60,0.16)",
-                        }}
-                      >
-                        {/* Beige header row */}
-                        <div className="flex items-center gap-2 px-5 py-3.5">
-                          <span className="text-lg">🔥</span>
-                          <span className="text-sm font-black text-orange-600 uppercase tracking-widest">Issue Created</span>
-                          <div className="ml-auto flex items-center gap-2">
-                            <span className="text-sm font-semibold text-orange-500">{ieTypeLabel}</span>
-                            <span className={`text-sm font-bold ${sevColor}`}>{ieSeverity.charAt(0).toUpperCase() + ieSeverity.slice(1)}</span>
-                          </div>
+                    <div key={msg.id} className="flex justify-start my-2 px-1">
+                      <div className="w-full max-w-[520px] rounded-2xl overflow-hidden bg-[#0f172a] border border-slate-700 shadow-sm">
+                        {/* Header row */}
+                        <div className="flex items-center gap-1.5 px-4 pt-3 pb-1">
+                          <span className="text-[11px] text-slate-400 font-medium">🔥 Issue Engine · Dispatch</span>
+                          <span className="ml-auto text-[11px] text-slate-500 tabular-nums">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        {/* White body section */}
-                        <div className="mx-3 mb-3 rounded-xl bg-white px-5 py-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-                          <p className="text-[15px] font-bold text-slate-900 mb-1">{ieTitle}</p>
-                          {ieNotes && <p className="text-sm text-slate-500 leading-relaxed mb-3">{ieNotes}</p>}
-                          {!ieNotes && <p className="text-sm text-slate-400 leading-relaxed mb-3">This issue will stay pinned until closed.</p>}
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={() => {
-                                const ieId = (meta.issueId as number | null) ?? null;
-                                setIssueEngineInitialId(ieId);
-                                setIssueEngineOverlayOpen(true);
-                              }}
-                              className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 transition"
-                            >
-                              View Issue
-                            </button>
-                            <span className="text-xs text-slate-400">Created by {msg.from} · {fmtMsgTime(msg.createdAt)}</span>
-                          </div>
+                        {/* Body */}
+                        <div className="px-4 pb-3">
+                          <p className={`text-[15px] font-bold mb-0.5 ${sevColor}`}>
+                            {sevIcon} {ieSeverity.charAt(0).toUpperCase() + ieSeverity.slice(1)} · {ieTypeLabel}
+                          </p>
+                          <p className="text-sm text-slate-100 font-semibold mb-1">{ieTitle}</p>
+                          {ieNotes && (
+                            <p className="text-xs text-slate-400 italic border-l-2 border-slate-600 pl-2 mb-2 leading-relaxed">"{ieNotes}"</p>
+                          )}
+                          <button
+                            onClick={() => {
+                              const ieId = (meta.issueId as number | null) ?? null;
+                              setIssueEngineInitialId(ieId);
+                              setIssueEngineOverlayOpen(true);
+                            }}
+                            className="text-[11px] text-teal-400 hover:text-teal-300 transition"
+                          >
+                            View in Issue Engine →
+                          </button>
                         </div>
                       </div>
                     </div>
