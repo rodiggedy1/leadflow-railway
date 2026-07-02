@@ -2268,7 +2268,9 @@ const MessageList = memo(function MessageList({
                   );
                 }
                 // ── Escalation flag card (unconfirmed after 8 PM call) ────────────────
-                if (msg.quickAction === "schedule_escalation_flag") {
+                // ── Escalation flag card — hidden per user request
+                if (msg.quickAction === "schedule_escalation_flag") return null;
+                if (false && msg.quickAction === "schedule_escalation_flag") {
                   let meta: Record<string, unknown> = {};
                   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
                   const cleanerName = (meta.cleanerName as string) ?? "Unknown cleaner";
