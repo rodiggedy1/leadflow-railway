@@ -528,15 +528,13 @@ export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
     { refetchInterval: 30_000 }
   );
 
-  if (count === 0) return null;
-
   return (
     <button
       onClick={onClick}
       className="flex items-center gap-2 bg-white border border-slate-200 rounded-full px-3.5 py-1.5 font-bold text-sm shadow-sm hover:border-orange-300 hover:shadow-md transition-all shrink-0"
     >
       <Flame className="h-4 w-4 text-orange-500" />
-      <span className="text-slate-800">{count} Active {count === 1 ? "Issue" : "Issues"}</span>
+      <span className="text-slate-800">{count} {count === 1 ? "Issue" : "Issues"}</span>
     </button>
   );
 }
