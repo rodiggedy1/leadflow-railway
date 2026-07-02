@@ -1,17 +1,16 @@
 /**
  * IssueEngineOverlay — two-column issue management overlay.
- * Left: issue list with severity badges + status chips.
- * Right: selected issue detail with timeline, owner, waiting-on, and actions.
+ * Design matches the mockup: clean white bg, left list with emoji+title+subtitle,
+ * right panel with large title, Owner/WaitingOn/AIConfidence cards, orange dot
+ * timeline, warm beige AI Recommendation block, Open Chat / Assign / Resolve buttons.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCheck, Plus, ChevronRight, Clock, User, AlertTriangle, Flame } from "lucide-react";
+import { Loader2, CheckCheck, Flame, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -51,104 +50,209 @@ interface TimelineRow {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const ISSUE_TYPE_LABELS: Record<IssueType, string> = {
-  late_team: "🚗 Team Late",
-  refund_request: "💰 Refund",
-  angry_customer: "😡 Angry Customer",
-  no_show: "🚫 No Show",
-  access_problem: "🔑 Access Problem",
-  payment_problem: "💳 Payment Problem",
-  reschedule_needed: "📅 Reschedule",
-  broken_item: "🔨 Broken Item",
-  manager_review: "👔 Manager Review",
-  internal_task: "📋 Internal Task",
-  other: "📌 Other",
+const ISSUE_TYPE_META: Record<IssueType, { emoji: string; label: string }> = {
+  late_team:          { emoji: "🚗", label: "Team Late" },
+  refund_request:     { emoji: "💰", label: "Refund" },
+  angry_customer:     { emoji: "😡", label: "Angry Client" },
+  no_show:            { emoji: "🚫", label: "No Show" },
+  access_problem:     { emoji: "🔑", label: "Access" },
+  payment_problem:    { emoji: "💳", label: "Payment" },
+  reschedule_needed:  { emoji: "📅", label: "Reschedule" },
+  broken_item:        { emoji: "📦", label: "Supplies" },
+  manager_review:     { emoji: "👔", label: "Manager Review" },
+  internal_task:      { emoji: "📋", label: "Internal Task" },
+  other:              { emoji: "📌", label: "Other" },
 };
 
-const SEVERITY_COLORS: Record<IssueSeverity, string> = {
-  critical: "bg-red-100 text-red-700 border-red-200",
-  high: "bg-orange-100 text-orange-700 border-orange-200",
-  medium: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  low: "bg-slate-100 text-slate-600 border-slate-200",
-};
-
-const STATUS_COLORS: Record<IssueStatus, string> = {
-  open: "bg-red-50 text-red-600",
-  waiting: "bg-amber-50 text-amber-600",
-  resolved: "bg-emerald-50 text-emerald-600",
-};
+function formatTime(ts: number | Date): string {
+  const d = typeof ts === "number" ? new Date(ts) : ts;
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 function timeAgo(ts: number | Date): string {
   const ms = typeof ts === "number" ? ts : ts.getTime();
   const diff = Date.now() - ms;
   const mins = Math.floor(diff / 60_000);
   if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} overdue`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+// ── Left list item ─────────────────────────────────────────────────────────────
 
-function IssueListItem({
-  issue,
-  selected,
-  onClick,
-}: {
-  issue: IssueRow;
-  selected: boolean;
-  onClick: () => void;
-}) {
+function IssueListItem({ issue, selected, onClick }: { issue: IssueRow; selected: boolean; onClick: () => void }) {
+  const meta = ISSUE_TYPE_META[issue.issueType];
   return (
     <button
       onClick={onClick}
       className={cn(
-        "w-full text-left p-3.5 rounded-2xl mb-2 border transition-all",
+        "w-full text-left px-4 py-3.5 rounded-2xl mb-2 border transition-all",
         selected
-          ? "bg-white border-orange-200 shadow-md"
-          : "bg-transparent border-transparent hover:bg-white/70 hover:border-slate-200"
+          ? "bg-white border-orange-200 shadow-sm"
+          : "bg-transparent border-transparent hover:bg-white/80"
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-slate-800 truncate">{ISSUE_TYPE_LABELS[issue.issueType]}</p>
-          <p className="text-xs text-slate-500 mt-0.5 truncate">{issue.title}</p>
-        </div>
-        <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 capitalize", SEVERITY_COLORS[issue.severity])}>
-          {issue.severity}
-        </span>
-      </div>
-      <div className="flex items-center gap-2 mt-2">
-        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize", STATUS_COLORS[issue.status])}>
-          {issue.status}
-        </span>
-        <span className="text-[10px] text-slate-400">{timeAgo(issue.lastActivityAt)}</span>
-        {issue.ownerName && (
-          <span className="text-[10px] text-slate-400 ml-auto truncate">👤 {issue.ownerName}</span>
-        )}
-      </div>
+      <p className="text-sm font-bold text-slate-900">
+        {meta.emoji} {meta.label}
+      </p>
+      <p className="text-xs text-slate-500 mt-0.5 truncate">{issue.title}</p>
     </button>
   );
 }
 
-function TimelineFeed({ events }: { events: TimelineRow[] }) {
+// ── Right detail panel ─────────────────────────────────────────────────────────
+
+function DetailPanel({
+  issue,
+  callerName,
+  onResolve,
+  onReopen,
+  resolving,
+  reopening,
+  onUpdate,
+  onAddNote,
+}: {
+  issue: IssueRow & { timeline: TimelineRow[] };
+  callerName: string;
+  onResolve: () => void;
+  onReopen: () => void;
+  resolving: boolean;
+  reopening: boolean;
+  onUpdate: (fields: Partial<{ ownerName: string; waitingOn: string; severity: IssueSeverity }>) => void;
+  onAddNote: (note: string) => void;
+}) {
+  const [noteInput, setNoteInput] = useState("");
+  const meta = ISSUE_TYPE_META[issue.issueType];
+
   return (
-    <div className="space-y-3">
-      {events.map((e) => (
-        <div key={e.id} className="flex gap-3">
-          <div className="mt-1.5 w-2 h-2 rounded-full bg-orange-400 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-slate-700">{e.event}</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              {e.actor} · {timeAgo(e.createdAt)}
-            </p>
+    <div className="flex-1 overflow-y-auto px-8 py-7" style={{ scrollbarWidth: "none" }}>
+      {/* Current focus label */}
+      <p className="text-[11px] tracking-[.2em] uppercase text-slate-400 font-semibold">Current Focus</p>
+
+      {/* Title */}
+      <h2 className="text-3xl font-black text-slate-900 mt-1 leading-tight">{issue.title}</h2>
+      <p className="text-sm text-slate-500 mt-1">{timeAgo(issue.lastActivityAt)}</p>
+
+      {/* Meta cards row */}
+      <div className="grid grid-cols-3 gap-3 mt-6">
+        {/* Owner */}
+        <div className="border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">Owner</p>
+          <p className="font-bold text-slate-900 text-sm">{issue.ownerName ?? "Unassigned"}</p>
+          {issue.ownerName !== callerName && (
+            <button
+              onClick={() => onUpdate({ ownerName: callerName })}
+              className="text-[11px] text-blue-500 hover:underline mt-1 block"
+            >
+              Claim
+            </button>
+          )}
+        </div>
+        {/* Waiting On */}
+        <div className="border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">Waiting On</p>
+          <p className="font-bold text-slate-900 text-sm">{issue.waitingOn ?? "—"}</p>
+          <div className="flex gap-1 mt-1.5 flex-wrap">
+            {["Customer", "Office", "Cleaner"].map((w) => (
+              <button
+                key={w}
+                onClick={() => onUpdate({ waitingOn: w })}
+                className={cn(
+                  "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all",
+                  issue.waitingOn === w
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
+                )}
+              >
+                {w}
+              </button>
+            ))}
           </div>
         </div>
-      ))}
-      {events.length === 0 && (
-        <p className="text-xs text-slate-400 italic">No timeline events yet.</p>
-      )}
+        {/* AI Confidence — placeholder for Phase 2 */}
+        <div className="border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-400 mb-1">AI Confidence</p>
+          <p className="font-bold text-slate-900 text-sm">—</p>
+          <p className="text-[10px] text-slate-400 mt-1">Phase 2</p>
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div className="mt-7">
+        <p className="font-bold text-slate-900 mb-4">Timeline</p>
+        <div className="space-y-3">
+          {(issue.timeline ?? []).map((e) => (
+            <div key={e.id} className="flex items-start gap-3">
+              <div className="mt-1.5 w-2.5 h-2.5 rounded-full bg-orange-400 shrink-0" />
+              <p className="text-sm text-slate-700">
+                <span className="font-medium">{formatTime(e.createdAt)}</span>{" "}
+                {e.event}
+              </p>
+            </div>
+          ))}
+          {(issue.timeline ?? []).length === 0 && (
+            <p className="text-xs text-slate-400 italic">No timeline events yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Add note input */}
+      <div className="flex gap-2 mt-5">
+        <Input
+          placeholder="Add a note to timeline…"
+          value={noteInput}
+          onChange={(e) => setNoteInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && noteInput.trim()) {
+              e.preventDefault();
+              onAddNote(noteInput.trim());
+              setNoteInput("");
+            }
+          }}
+          className="flex-1 text-sm rounded-full border-slate-200"
+        />
+      </div>
+
+      {/* AI Recommendation block */}
+      <div className="mt-6 rounded-2xl p-5" style={{ background: "linear-gradient(135deg, #fef9f0 0%, #fef3e2 100%)", border: "1px solid #fde8c0" }}>
+        <p className="text-xs font-bold tracking-[.15em] uppercase text-orange-500 mb-2">AI Recommendation</p>
+        <p className="text-sm font-semibold text-slate-900">
+          {issue.notes ?? "No recommendation yet — AI detection coming in Phase 2."}
+        </p>
+
+        {/* Action buttons */}
+        <div className="flex gap-2 mt-4 flex-wrap">
+          <button className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors">
+            Open Chat
+          </button>
+          <button
+            onClick={() => onUpdate({ ownerName: callerName })}
+            className="px-5 py-2 rounded-full bg-white border border-slate-200 text-slate-900 text-sm font-semibold hover:border-slate-400 transition-colors"
+          >
+            Assign
+          </button>
+          {issue.status !== "resolved" ? (
+            <button
+              onClick={onResolve}
+              disabled={resolving}
+              className="px-5 py-2 rounded-full bg-white border border-emerald-300 text-emerald-600 text-sm font-semibold hover:bg-emerald-50 transition-colors disabled:opacity-50"
+            >
+              {resolving ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}
+              Resolve
+            </button>
+          ) : (
+            <button
+              onClick={onReopen}
+              disabled={reopening}
+              className="px-5 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-semibold hover:border-slate-400 transition-colors disabled:opacity-50"
+            >
+              Reopen
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -165,9 +269,7 @@ export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOve
   const utils = trpc.useUtils();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<"open" | "waiting" | "resolved" | "all">("open");
-  const [noteInput, setNoteInput] = useState("");
 
-  // Queries
   const { data: issues = [], isLoading } = trpc.opsChat.listIssues.useQuery(
     { status: statusFilter },
     { enabled: open, refetchInterval: 15_000 }
@@ -178,12 +280,14 @@ export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOve
   );
 
   // Auto-select first issue when list loads
-  const handleIssueClick = useCallback((id: number) => {
-    setSelectedId(id);
-    setNoteInput("");
-  }, []);
+  useEffect(() => {
+    if (issues.length > 0 && selectedId === null) {
+      setSelectedId((issues as IssueRow[])[0].id);
+    }
+  }, [issues, selectedId]);
 
-  // Mutations
+  const handleIssueClick = useCallback((id: number) => setSelectedId(id), []);
+
   const resolveMutation = trpc.opsChat.resolveIssueEngine.useMutation({
     onSuccess: () => {
       toast.success("Issue resolved");
@@ -204,7 +308,6 @@ export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOve
   });
   const addEventMutation = trpc.opsChat.addIssueTimelineEvent.useMutation({
     onSuccess: () => {
-      setNoteInput("");
       if (selectedId) utils.opsChat.getIssue.invalidate({ id: selectedId });
       utils.opsChat.listIssues.invalidate();
     },
@@ -221,41 +324,45 @@ export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOve
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-5xl w-full p-0 overflow-hidden rounded-3xl" style={{ maxHeight: "85vh" }}>
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <Flame className="h-5 w-5 text-orange-500" />
-            <DialogTitle className="text-lg font-black text-slate-900">Issue Engine</DialogTitle>
-            <div className="flex gap-1.5">
-              {(["open", "waiting", "resolved", "all"] as const).map((s) => (
+      <DialogContent
+        className="p-0 overflow-hidden rounded-3xl border-0 shadow-2xl"
+        style={{ maxWidth: "860px", width: "90vw", maxHeight: "80vh", background: "#f8f9fb" }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 p-1.5 rounded-full bg-white/80 hover:bg-white text-slate-400 hover:text-slate-700 transition-colors shadow-sm"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="grid h-full" style={{ gridTemplateColumns: "240px 1fr", minHeight: "500px", maxHeight: "80vh" }}>
+          {/* Left: issue list */}
+          <div className="bg-[#f0f2f5] rounded-l-3xl p-4 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
+            {/* Status filter tabs */}
+            <div className="flex gap-1 mb-4 flex-wrap">
+              {(["open", "waiting", "resolved"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => { setStatusFilter(s); setSelectedId(null); }}
                   className={cn(
-                    "text-[11px] font-semibold px-3 py-1 rounded-full capitalize transition-all",
+                    "text-[10px] font-bold px-2.5 py-1 rounded-full capitalize transition-all",
                     statusFilter === s
                       ? "bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      : "bg-white/60 text-slate-500 hover:bg-white"
                   )}
                 >
                   {s}
                 </button>
               ))}
             </div>
-          </div>
-        </div>
 
-        {/* Body */}
-        <div className="grid overflow-hidden" style={{ gridTemplateColumns: "280px 1fr", height: "calc(85vh - 73px)" }}>
-          {/* Left: Issue list */}
-          <div className="bg-slate-50 border-r border-slate-100 p-3 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
             {isLoading ? (
               <div className="flex justify-center pt-8"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
-            ) : issues.length === 0 ? (
+            ) : (issues as IssueRow[]).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-400">
                 <CheckCheck className="h-8 w-8 opacity-30" />
-                <p className="text-sm font-medium">No {statusFilter === "all" ? "" : statusFilter} issues</p>
+                <p className="text-xs font-medium">No {statusFilter} issues</p>
               </div>
             ) : (
               (issues as IssueRow[]).map((iss) => (
@@ -269,149 +376,28 @@ export function IssueEngineOverlay({ open, onClose, callerName }: IssueEngineOve
             )}
           </div>
 
-          {/* Right: Detail panel */}
-          <div className="flex flex-col overflow-hidden bg-white">
+          {/* Right: detail */}
+          <div className="bg-white rounded-r-3xl overflow-y-auto flex flex-col" style={{ scrollbarWidth: "none" }}>
             {!selectedId ? (
-              <div className="flex flex-col items-center justify-center flex-1 gap-3 text-slate-400">
-                <ChevronRight className="h-8 w-8 opacity-30" />
-                <p className="text-sm font-medium">Select an issue to view details</p>
+              <div className="flex flex-col items-center justify-center flex-1 gap-3 text-slate-400 py-20">
+                <Flame className="h-8 w-8 opacity-20" />
+                <p className="text-sm font-medium">Select an issue</p>
               </div>
             ) : detailLoading ? (
               <div className="flex justify-center pt-12"><Loader2 className="h-5 w-5 animate-spin text-slate-400" /></div>
             ) : !issue ? (
               <div className="flex justify-center pt-12 text-slate-400 text-sm">Issue not found</div>
             ) : (
-              <div className="flex-1 overflow-y-auto px-6 py-5" style={{ scrollbarWidth: "none" }}>
-                {/* Title */}
-                <p className="text-[10px] tracking-[.25em] uppercase text-slate-400 font-bold">Current Focus</p>
-                <h2 className="text-2xl font-black text-slate-900 mt-1 leading-tight">{issue.title}</h2>
-                <p className="text-sm text-slate-500 mt-1">{ISSUE_TYPE_LABELS[issue.issueType]}</p>
-
-                {/* Meta cards */}
-                <div className="grid grid-cols-3 gap-3 mt-5">
-                  <div className="p-3.5 rounded-2xl bg-slate-50">
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide flex items-center gap-1"><User className="h-3 w-3" /> Owner</p>
-                    <p className="font-bold text-slate-800 mt-1 text-sm">{issue.ownerName ?? "Unassigned"}</p>
-                    <button
-                      onClick={() => updateMutation.mutate({ id: issue.id, ownerName: callerName, actorName: callerName })}
-                      className="text-[10px] text-blue-500 hover:underline mt-1"
-                    >
-                      {issue.ownerName === callerName ? "✓ You" : "Claim"}
-                    </button>
-                  </div>
-                  <div className="p-3.5 rounded-2xl bg-slate-50">
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide flex items-center gap-1"><Clock className="h-3 w-3" /> Waiting On</p>
-                    <p className="font-bold text-slate-800 mt-1 text-sm">{issue.waitingOn ?? "—"}</p>
-                    <div className="flex gap-1 mt-1 flex-wrap">
-                      {["Customer", "Office", "Cleaner"].map((w) => (
-                        <button
-                          key={w}
-                          onClick={() => updateMutation.mutate({ id: issue.id, waitingOn: w, actorName: callerName })}
-                          className={cn(
-                            "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border transition-all",
-                            issue.waitingOn === w
-                              ? "bg-slate-900 text-white border-slate-900"
-                              : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
-                          )}
-                        >
-                          {w}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="p-3.5 rounded-2xl bg-slate-50">
-                    <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide flex items-center gap-1"><AlertTriangle className="h-3 w-3" /> Severity</p>
-                    <p className={cn("font-bold mt-1 text-sm capitalize px-2 py-0.5 rounded-full inline-block", SEVERITY_COLORS[issue.severity])}>{issue.severity}</p>
-                    <div className="flex gap-1 mt-1 flex-wrap">
-                      {(["low", "medium", "high", "critical"] as IssueSeverity[]).map((s) => (
-                        <button
-                          key={s}
-                          onClick={() => updateMutation.mutate({ id: issue.id, severity: s, actorName: callerName })}
-                          className={cn(
-                            "text-[9px] font-semibold px-1.5 py-0.5 rounded-full border transition-all capitalize",
-                            issue.severity === s
-                              ? "bg-slate-900 text-white border-slate-900"
-                              : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
-                          )}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Notes */}
-                {issue.notes && (
-                  <div className="mt-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-100">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 mb-1">Notes</p>
-                    <p className="text-sm text-slate-700">{issue.notes}</p>
-                  </div>
-                )}
-
-                {/* Timeline */}
-                <div className="mt-6">
-                  <p className="font-bold text-slate-800 mb-3 text-sm">Timeline</p>
-                  <TimelineFeed events={issue.timeline ?? []} />
-                </div>
-
-                {/* Add note */}
-                <div className="mt-5 flex gap-2">
-                  <Input
-                    placeholder="Add a timeline note…"
-                    value={noteInput}
-                    onChange={(e) => setNoteInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey && noteInput.trim()) {
-                        e.preventDefault();
-                        addEventMutation.mutate({ issueId: issue.id, event: noteInput.trim(), actor: callerName });
-                      }
-                    }}
-                    className="flex-1 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!noteInput.trim() || addEventMutation.isPending}
-                    onClick={() => addEventMutation.mutate({ issueId: issue.id, event: noteInput.trim(), actor: callerName })}
-                  >
-                    {addEventMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
-                  </Button>
-                </div>
-
-                {/* Actions */}
-                <div className="mt-5 flex gap-2 flex-wrap">
-                  {issue.status !== "resolved" ? (
-                    <Button
-                      className="bg-emerald-600 text-white hover:bg-emerald-700 rounded-full"
-                      size="sm"
-                      disabled={resolveMutation.isPending}
-                      onClick={() => resolveMutation.mutate({ id: issue.id, actorName: callerName })}
-                    >
-                      {resolveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : "✓ "}
-                      Resolve
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      disabled={reopenMutation.isPending}
-                      onClick={() => reopenMutation.mutate({ id: issue.id, actorName: callerName })}
-                    >
-                      Reopen
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full"
-                    onClick={() => updateMutation.mutate({ id: issue.id, ownerName: callerName, actorName: callerName })}
-                  >
-                    Assign to Me
-                  </Button>
-                </div>
-              </div>
+              <DetailPanel
+                issue={issue}
+                callerName={callerName}
+                onResolve={() => resolveMutation.mutate({ id: issue.id, actorName: callerName })}
+                onReopen={() => reopenMutation.mutate({ id: issue.id, actorName: callerName })}
+                resolving={resolveMutation.isPending}
+                reopening={reopenMutation.isPending}
+                onUpdate={(fields) => updateMutation.mutate({ id: issue.id, actorName: callerName, ...fields })}
+                onAddNote={(note) => addEventMutation.mutate({ issueId: issue.id, event: note, actor: callerName })}
+              />
             )}
           </div>
         </div>
@@ -449,32 +435,31 @@ export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "" 
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Flame className="h-5 w-5 text-orange-500" />
-            Create Issue
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 mt-2">
+      <DialogContent className="max-w-md rounded-2xl">
+        <div className="flex items-center gap-2 mb-4">
+          <Flame className="h-5 w-5 text-orange-500" />
+          <h2 className="text-lg font-black text-slate-900">New Issue</h2>
+        </div>
+        <div className="space-y-3">
           <Input
             placeholder="Issue title (required)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
+            className="rounded-xl"
           />
           <Select value={issueType} onValueChange={(v) => setIssueType(v as IssueType)}>
-            <SelectTrigger>
+            <SelectTrigger className="rounded-xl">
               <SelectValue placeholder="Issue type" />
             </SelectTrigger>
             <SelectContent>
-              {(Object.entries(ISSUE_TYPE_LABELS) as [IssueType, string][]).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v}</SelectItem>
+              {(Object.entries(ISSUE_TYPE_META) as [IssueType, { emoji: string; label: string }][]).map(([k, v]) => (
+                <SelectItem key={k} value={k}>{v.emoji} {v.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select value={severity} onValueChange={(v) => setSeverity(v as IssueSeverity)}>
-            <SelectTrigger>
+            <SelectTrigger className="rounded-xl">
               <SelectValue placeholder="Severity" />
             </SelectTrigger>
             <SelectContent>
@@ -489,13 +474,17 @@ export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "" 
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="resize-none"
+            className="resize-none rounded-xl"
           />
         </div>
-        <div className="flex gap-2 mt-4 justify-end">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            className="bg-orange-500 text-white hover:bg-orange-600"
+        <div className="flex gap-2 mt-5 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-full border border-slate-200 text-slate-600 text-sm font-semibold hover:border-slate-400 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
             disabled={!title.trim() || createMutation.isPending}
             onClick={() =>
               createMutation.mutate({
@@ -506,10 +495,11 @@ export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "" 
                 createdByName: callerName,
               })
             }
+            className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
-            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Flame className="h-4 w-4 mr-2" />}
+            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}
             Create Issue
-          </Button>
+          </button>
         </div>
       </DialogContent>
     </Dialog>
