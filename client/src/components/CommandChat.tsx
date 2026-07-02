@@ -2495,6 +2495,60 @@ const MessageList = memo(function MessageList({
                   );
                 }
 
+                if (msg.quickAction === "kudos_card") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const recipientName = (meta.recipientName as string) ?? msg.body?.split("—")[0]?.trim() ?? "Team Member";
+                  const recipientPhotoUrl = (meta.recipientPhotoUrl as string | null) ?? null;
+                  const tagLabel = (meta.tagLabel as string) ?? "Kudos";
+                  const kudosMessage = (meta.message as string) ?? msg.body ?? "";
+                  const fromName = (meta.fromName as string) ?? msg.from ?? "Team";
+                  const tagValue = (meta.tag as string) ?? "other";
+                  const initial = (recipientName?.[0] ?? "?").toUpperCase();
+                  const accentMap: Record<string, string> = {
+                    nice_save: "text-emerald-300",
+                    great_recovery: "text-cyan-300",
+                    above_and_beyond: "text-amber-300",
+                    team_player: "text-violet-300",
+                    great_communication: "text-sky-300",
+                    other: "text-teal-300",
+                  };
+                  const accentClass = accentMap[tagValue] ?? "text-teal-300";
+                  return (
+                    <div key={msg.id} className="flex justify-start my-2 px-1">
+                      <div className="w-full max-w-[520px] rounded-2xl overflow-hidden bg-[#0f172a] border border-slate-700 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-4 pt-3 pb-1">
+                          <span className="text-[11px] font-medium text-slate-400">🏆 Kudos</span>
+                          <span className={cn("text-[11px] font-semibold", accentClass)}>· {tagLabel}</span>
+                          <span className="ml-auto text-[11px] text-slate-500 tabular-nums">{fmtMsgTime(msg.createdAt)}</span>
+                        </div>
+                        <div className="px-4 pb-4">
+                          <div className="mt-1 flex items-center gap-3">
+                            {recipientPhotoUrl ? (
+                              <img
+                                src={recipientPhotoUrl}
+                                alt={recipientName}
+                                className="h-14 w-14 rounded-full object-cover ring-2 ring-white/10"
+                              />
+                            ) : (
+                              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-700 text-lg font-bold text-white ring-2 ring-white/10">
+                                {initial}
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="truncate text-base font-bold text-white">{recipientName}</p>
+                              <p className="text-xs text-slate-400">Recognized in Command Chat</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 rounded-xl border border-slate-700 bg-white/[0.03] px-3 py-2.5">
+                            <p className="text-sm leading-relaxed text-slate-100">{kudosMessage}</p>
+                          </div>
+                          <p className="mt-2 text-[11px] text-slate-400">from {fromName}</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -3092,6 +3146,220 @@ function EmailHistoryPopover({
 }
 
 let _commandChatScrollTop = 0;
+function KudosModal({
+  open,
+  onClose,
+  callerName,
+  agentList,
+  onPosted,
+}: {
+  open: boolean;
+  onClose: () => void;
+  callerName: string;
+  agentList: Array<{ id: number; name: string; photoUrl: string | null }>;
+  onPosted?: (meta: {
+    recipientName: string;
+    recipientPhotoUrl: string | null;
+    tag: "nice_save" | "great_recovery" | "above_and_beyond" | "team_player" | "great_communication" | "other";
+    tagLabel: string;
+    message: string;
+    fromName: string;
+  }) => void;
+}) {
+  const utils = trpc.useUtils();
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+  const [tag, setTag] = useState<"nice_save" | "great_recovery" | "above_and_beyond" | "team_player" | "great_communication" | "other">("nice_save");
+  const [message, setMessage] = useState("");
+
+  const tagOptions = [
+    { value: "nice_save" as const, label: "Nice Save" },
+    { value: "great_recovery" as const, label: "Great Recovery" },
+    { value: "above_and_beyond" as const, label: "Above & Beyond" },
+    { value: "team_player" as const, label: "Team Player" },
+    { value: "great_communication" as const, label: "Great Communication" },
+    { value: "other" as const, label: "Kudos" },
+  ];
+
+  const selectedAgent = useMemo(
+    () => agentList.find((agent) => agent.id === selectedAgentId) ?? null,
+    [agentList, selectedAgentId]
+  );
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedAgentId(agentList[0]?.id ?? null);
+      setTag("nice_save");
+      setMessage("");
+      return;
+    }
+    if (selectedAgentId === null && agentList.length > 0) {
+      setSelectedAgentId(agentList[0].id);
+    }
+  }, [open, agentList, selectedAgentId]);
+
+  const postKudosMutation = trpc.opsChat.postKudos.useMutation({
+    onSuccess: async (_data, variables) => {
+      const tagLabel = tagOptions.find((option) => option.value === variables.tag)?.label ?? "Kudos";
+      onPosted?.({
+        recipientName: variables.recipientName,
+        recipientPhotoUrl: variables.recipientPhotoUrl ?? null,
+        tag: variables.tag,
+        tagLabel,
+        message: variables.message,
+        fromName: variables.fromName,
+      });
+      toast.success("Kudos posted to Command Chat");
+      onClose();
+      await utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
+    },
+    onError: (err) => {
+      toast.error("Failed to post kudos", { description: err.message });
+    },
+  });
+
+  const handleSubmit = () => {
+    const trimmedMessage = message.trim();
+    if (!selectedAgent) {
+      toast.error("Select a teammate first");
+      return;
+    }
+    if (!trimmedMessage) {
+      toast.error("Add a short kudos message");
+      return;
+    }
+    postKudosMutation.mutate({
+      recipientName: selectedAgent.name,
+      recipientPhotoUrl: selectedAgent.photoUrl ?? null,
+      tag,
+      message: trimmedMessage,
+      fromName: callerName,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="max-w-2xl border border-slate-800 bg-[#020617] text-white">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <span className="text-lg">🏆</span>
+            Send kudos
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Pick a teammate</p>
+            {agentList.length === 0 ? (
+              <div className="mt-2 rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-5 text-sm text-slate-400">
+                No agents are available right now.
+              </div>
+            ) : (
+              <div className="mt-2 grid max-h-72 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                {agentList.map((agent) => {
+                  const isSelected = agent.id === selectedAgentId;
+                  const initial = (agent.name?.[0] ?? "?").toUpperCase();
+                  return (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => setSelectedAgentId(agent.id)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition",
+                        isSelected
+                          ? "border-teal-400 bg-teal-500/10 shadow-[0_0_0_1px_rgba(45,212,191,0.35)]"
+                          : "border-slate-800 bg-slate-900/70 hover:border-slate-700 hover:bg-slate-900"
+                      )}
+                    >
+                      {agent.photoUrl ? (
+                        <img
+                          src={agent.photoUrl}
+                          alt={agent.name}
+                          className="h-11 w-11 rounded-full object-cover ring-2 ring-white/10"
+                        />
+                      ) : (
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-white ring-2 ring-white/10">
+                          {initial}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{agent.name}</p>
+                        <p className="text-xs text-slate-400">Recognize this teammate in Command Chat</p>
+                      </div>
+                      {isSelected && (
+                        <div className="rounded-full border border-teal-400/30 bg-teal-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-teal-300">
+                          Selected
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Tag</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {tagOptions.map((option) => {
+                const isActive = option.value === tag;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setTag(option.value)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      isActive
+                        ? "border-amber-400/40 bg-amber-400/15 text-amber-200"
+                        : "border-slate-700 bg-slate-900/70 text-slate-300 hover:border-slate-600 hover:text-white"
+                    )}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Message</p>
+              <span className="text-[11px] text-slate-500">{message.length}/500</span>
+            </div>
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value.slice(0, 500))}
+              placeholder="Call out what they did well..."
+              rows={4}
+              className="mt-2 resize-none border-slate-800 bg-slate-900 text-white placeholder:text-slate-500 focus-visible:ring-teal-400"
+            />
+            <p className="mt-2 text-xs text-slate-500">This will post a compact kudos card to the Command Chat from {callerName}.</p>
+          </div>
+        </div>
+
+        <DialogFooter className="mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            className="border-slate-700 bg-transparent text-slate-200 hover:bg-slate-900 hover:text-white"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSubmit}
+            disabled={postKudosMutation.isPending || !selectedAgent || !message.trim()}
+            className="bg-teal-500 text-slate-950 hover:bg-teal-400"
+          >
+            {postKudosMutation.isPending ? "Posting..." : "Post kudos"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
   onSwitchToCSSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
@@ -3428,6 +3696,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [issueEngineOverlayOpen, setIssueEngineOverlayOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
   const [createIssueModalOpen, setCreateIssueModalOpen] = useState(false);
+  const [kudosModalOpen, setKudosModalOpen] = useState(false);
   const [createIssueDefaultTitle, setCreateIssueDefaultTitle] = useState("");
   // ── Open Issue modal state ─────────────────────────────────────────────────
   const [issueOpen, setIssueOpen] = useState(false);
@@ -6903,6 +7172,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   setCreateIssueModalOpen(true);
                   return;
                 }
+                if (val.trim().toLowerCase() === '+kudos') {
+                  setComposer('');
+                  setKudosModalOpen(true);
+                  return;
+                }
                 setComposer(val);
                 const pos = e.target.selectionStart ?? val.length;
                 const before = val.slice(0, pos);
@@ -7304,6 +7578,37 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             threadParentBody: null,
             threadParentFrom: null,
             replyCount: 0,
+          };
+          utils.opsChat.listChannelMessages.setData(
+            { channel: "command" },
+            (prev) => prev ? [...prev, tempMsg] : [tempMsg]
+          );
+        }}
+      />
+      <KudosModal
+        open={kudosModalOpen}
+        onClose={() => setKudosModalOpen(false)}
+        callerName={callerName}
+        agentList={(agentList ?? []).map((agent) => ({ id: agent.id, name: agent.name, photoUrl: agent.photoUrl ?? null }))}
+        onPosted={(meta) => {
+          const tempId = Date.now() * -1;
+          const tempMsg: LeadMsg = {
+            id: tempId,
+            from: callerName,
+            role: "system",
+            body: `${meta.recipientName} — ${meta.tagLabel}`,
+            mediaUrl: null,
+            quickAction: "kudos_card",
+            metadata: JSON.stringify(meta),
+            replyToId: null,
+            replyToBody: null,
+            replyToAuthor: null,
+            cleanerJobId: null,
+            threadParentId: null,
+            threadParentBody: null,
+            threadParentFrom: null,
+            replyCount: 0,
+            createdAt: new Date(),
           };
           utils.opsChat.listChannelMessages.setData(
             { channel: "command" },
