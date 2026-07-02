@@ -1052,7 +1052,7 @@ function CallDebriefCard({
   nextLine: string | null; recordingUrl: string | null; callerName: string | null;
   callerPhone: string | null; createdAt: Date;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hasRecording = !!recordingUrl;
@@ -1076,21 +1076,21 @@ function CallDebriefCard({
       <div className="w-full max-w-[520px]">
         {/* Main bubble */}
         <div
-          className="rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 bg-white border border-indigo-100 shadow-sm hover:border-indigo-200"
+          className="rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 bg-[#0f172a] border border-slate-700 shadow-sm hover:border-slate-600"
           onClick={() => setExpanded(v => !v)}
         >
           {/* Top row: phone icon + name + grade badge + time + chevron */}
           <div className="flex items-center gap-2 mb-2.5">
-            <Phone className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-            <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{displayName}</span>
+            <Phone className="h-3.5 w-3.5 text-teal-400 shrink-0" />
+            <span className="text-xs font-semibold text-slate-100 flex-1 truncate">{displayName}</span>
             {gradeBg && (
               <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>{grade}</span>
             )}
-            <span className="text-[10px] text-slate-400 tabular-nums">{fmtMsgTime(createdAt)}</span>
+            <span className="text-[10px] text-slate-500 tabular-nums">{fmtMsgTime(createdAt)}</span>
             {hasDetails && (
               expanded
-                ? <ChevronUp className="h-3.5 w-3.5 text-indigo-300" />
-                : <ChevronDown className="h-3.5 w-3.5 text-indigo-300" />
+                ? <ChevronUp className="h-3.5 w-3.5 text-slate-500" />
+                : <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
             )}
           </div>
           {/* Audio row: play button + waveform */}
@@ -1098,14 +1098,14 @@ function CallDebriefCard({
             <button
               onClick={togglePlay}
               className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                hasRecording ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                hasRecording ? "bg-teal-600 hover:bg-teal-700 text-white" : "bg-slate-700 text-slate-500 cursor-not-allowed"
               }`}
             >
               {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
             </button>
             <div className="flex items-center gap-[2px] flex-1 h-7">
               {waveHeights.map((h, wi) => (
-                <div key={wi} className="rounded-full w-[3px] bg-indigo-300" style={{ height: `${h}px` }} />
+                <div key={wi} className="rounded-full w-[3px] bg-teal-600/70" style={{ height: `${h}px` }} />
               ))}
             </div>
           </div>
@@ -1121,23 +1121,23 @@ function CallDebriefCard({
         </div>
         {/* Expandable debrief details */}
         {hasDetails && expanded && (
-          <div className="mt-1 rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 animate-in slide-in-from-top-1 duration-150">
+          <div className="mt-1 rounded-xl border border-slate-700 bg-[#0f172a]/80 px-3 py-2.5 animate-in slide-in-from-top-1 duration-150">
             {wentWell && (
               <div className="mb-2">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600">✔ Went well</span>
-                <p className="text-xs text-slate-700 leading-relaxed mt-0.5 pl-3">{wentWell}</p>
+                <p className="text-xs text-slate-300 leading-relaxed mt-0.5 pl-3">{wentWell}</p>
               </div>
             )}
             {improve && (
-              <div className="mb-2 border-t border-indigo-100 pt-2">
+              <div className="mb-2 border-t border-slate-700 pt-2">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">▲ Improve</span>
-                <p className="text-xs text-slate-700 leading-relaxed mt-0.5 pl-3">{improve}</p>
+                <p className="text-xs text-slate-300 leading-relaxed mt-0.5 pl-3">{improve}</p>
               </div>
             )}
             {nextLine && (
-              <div className="border-t border-indigo-100 pt-2">
-                <p className="text-[10px] text-indigo-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
-                <p className="text-xs text-indigo-800 italic leading-relaxed">"{nextLine}"</p>
+              <div className="border-t border-slate-700 pt-2">
+                <p className="text-[10px] text-teal-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
+                <p className="text-xs text-slate-200 italic leading-relaxed">"{nextLine}"</p>
               </div>
             )}
           </div>
