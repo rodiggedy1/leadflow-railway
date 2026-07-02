@@ -1042,6 +1042,7 @@ type MessageListProps = {
   todayCallCount: number;
   emailUnreadCount: number;
   mentionPhoneMap: Record<string, string>;
+  openCreateIssueModal: (defaultTitle: string) => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1209,6 +1210,7 @@ const MessageList = memo(function MessageList({
   todayCallCount,
   emailUnreadCount,
   mentionPhoneMap,
+  openCreateIssueModal,
 }: MessageListProps) {
   return (
     <>
@@ -2721,10 +2723,7 @@ const MessageList = memo(function MessageList({
                             </button>
                           )}
                           <button
-                            onClick={() => {
-                              setCreateIssueDefaultTitle(msg.body?.slice(0, 120) ?? "");
-                              setCreateIssueModalOpen(true);
-                            }}
+                            onClick={() => openCreateIssueModal(msg.body?.slice(0, 120) ?? "")}
                             className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition border border-red-200 bg-white text-red-600 hover:bg-red-50 shadow-sm"
                           >
                             <AlertTriangle className="h-3 w-3" />
@@ -5945,6 +5944,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           claimLeadMutation={claimLeadMutation}
           scrollToCmdMsg={scrollToCmdMsg}
           openChatConvert={openChatConvert}
+          openCreateIssueModal={(defaultTitle) => { setCreateIssueDefaultTitle(defaultTitle); setCreateIssueModalOpen(true); }}
           setReplyTo={setReplyTo}
           setLightboxUrl={setLightboxUrl}
           setFirstMsgDetails={setFirstMsgDetails}
