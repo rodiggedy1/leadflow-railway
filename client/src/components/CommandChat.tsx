@@ -2041,7 +2041,9 @@ const MessageList = memo(function MessageList({
                   );
                 }
                 // ── Sync watchdog alert card (amber, dismissible) ─────────────────
-                if (msg.quickAction === "sync_watchdog") {
+                // ── Sync watchdog — hidden per user request
+                if (msg.quickAction === "sync_watchdog") return null;
+                if (false && msg.quickAction === "sync_watchdog") {
                   let meta: Record<string, unknown> = {};
                   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
                   const minutesSince = (meta.minutesSince as number | null) ?? null;
@@ -2164,7 +2166,9 @@ const MessageList = memo(function MessageList({
                   );
                 }
                 // ── Cron Error card (red, dismissible) ──────────────────────────────
-                if (msg.quickAction === "cron_error") {
+                // ── Cron error — hidden per user request
+                if (msg.quickAction === "cron_error") return null;
+                if (false && msg.quickAction === "cron_error") {
                   let meta: Record<string, unknown> = {};
                   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
                   const jobName = (meta.jobName as string | null) ?? "unknown";
