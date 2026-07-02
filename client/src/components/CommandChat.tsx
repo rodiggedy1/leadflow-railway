@@ -3742,11 +3742,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   });
 
    // ── Super-alert overlay ──────────────────────────────────────────────────────
-  // Poll every 3s for unacknowledged super-alerts; also refreshed via SSE onSuperAlert.
-  // Server uses session cookie to identify the caller — no agentName input needed.
+  // Read from the shared React Query cache populated by SuperAlertWatcher (no duplicate poll).
+  // SuperAlertWatcher owns the 3s polling; CommandChat just reads the cached value.
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
     undefined,
-    { refetchInterval: 3_000, refetchIntervalInBackground: true, retry: 2, staleTime: 0, refetchOnWindowFocus: true }
+    { staleTime: 0, refetchOnWindowFocus: false }
   );
   const acknowledgeSuperAlertMutation = trpc.opsChat.acknowledgeSuperAlert.useMutation({
     onSuccess: () => { utils.opsChat.getPendingSuperAlerts.invalidate(); },

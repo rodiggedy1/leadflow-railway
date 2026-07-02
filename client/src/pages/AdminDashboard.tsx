@@ -147,6 +147,7 @@ import CallGuide from "@/components/CallGuide";
 import PipelineBoard from "@/components/PipelineBoard";
 import { getStepLabel, getPhaseName, formatNextSendAt, STEP_PREVIEW } from "@/lib/nurtureUtils";
 import { useOpsStream } from "@/hooks/useOpsStream";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 // ── Follow-up Reminder Toastt ───────────────────────────────────────────────────────────────────────────
 /**
  * Slide-in toast stack that appears from the bottom-right when leads have
@@ -1292,10 +1293,11 @@ function ConversationDrawer({
     setTypingMutation.mutate({ sessionId: session.id, isTyping });
   };
 
-  // Poll for other agents typing in this conversation (every 2s)
+  // Poll for other agents typing in this conversation (every 5s; paused when tab hidden)
+  const isPageVisible = usePageVisibility();
   const { data: typingData } = trpc.leads.getTyping.useQuery(
     { sessionId: session.id },
-    { refetchInterval: 2000 }
+    { refetchInterval: isPageVisible ? 5000 : false }
   );
 
   // Delete lead
