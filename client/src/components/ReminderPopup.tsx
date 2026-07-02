@@ -13,7 +13,7 @@ export default function ReminderPopup() {
   const isAuthenticated = !!agentMe;
   const { data, refetch } = trpc.opsChat.getDueReminders.useQuery(undefined, {
     enabled: isAuthenticated,
-    refetchInterval: isAuthenticated ? 30_000 : false,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
     retry: false,
   });

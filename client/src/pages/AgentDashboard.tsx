@@ -65,6 +65,7 @@ import {
 import CallGuide from "@/components/CallGuide";
 import { useLocation } from "wouter";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
@@ -543,9 +544,10 @@ export function ConversationDrawer({
   const handleTypingChange = (isTyping: boolean) => {
     setTypingMutation.mutate({ sessionId: session.id, isTyping });
   };
+  const isPageVisible = usePageVisibility();
   const { data: typingData } = trpc.leads.getTyping.useQuery(
     { sessionId: session.id },
-    { refetchInterval: 2000 }
+    { refetchInterval: isPageVisible ? 5000 : false }
   );
 
   // Claim / release

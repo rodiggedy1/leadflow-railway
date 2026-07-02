@@ -30,6 +30,7 @@ import { useOpsStream } from "@/hooks/useOpsStream";
 import { useNotificationSound } from "@/hooks/useNotificationSound";
 import { Zap, MessageSquare, Loader2 } from "lucide-react";
 import { useOpsChatWindow } from "@/hooks/useOpsChatWindow";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 
 export default function SuperAlertWatcher() {
   const utils = trpc.useUtils();
@@ -46,13 +47,15 @@ export default function SuperAlertWatcher() {
   });
   const isEligible = Boolean(agentMe?.id || authMe?.id);
 
-  // Poll every 3s — same as CommandChat
+  const isVisible = usePageVisibility();
+
+  // Poll every 3s; pause when tab is hidden (visibility-aware)
   const { data: pendingSuperAlerts = [] } = trpc.opsChat.getPendingSuperAlerts.useQuery(
     undefined,
     {
       enabled: isEligible,
-      refetchInterval: 3_000,
-      refetchIntervalInBackground: true,
+      refetchInterval: isVisible ? 3_000 : false,
+      refetchIntervalInBackground: false,
       retry: 2,
       staleTime: 0,
       refetchOnWindowFocus: true,

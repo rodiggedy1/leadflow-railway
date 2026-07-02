@@ -11,6 +11,7 @@ import { useOpsChatWindow, OpsChatProvider } from "./hooks/useOpsChatWindow";
 import OpsChat from "./pages/OpsChat";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "./hooks/useOpsStream";
+import { usePollingInstrumentation } from "@/hooks/usePollingInstrumentation";
 
 // Route-level code splitting — each page loads only when its route is visited.
 const Home = lazy(() => import("./pages/Home"));
@@ -235,6 +236,7 @@ function GlobalOpsChat() {
 }
 
 function App() {
+  usePollingInstrumentation();
   return (
     <ErrorBoundary>
       <OpsChatProvider>

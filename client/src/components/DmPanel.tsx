@@ -18,6 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { X, Send, MessageCircle } from "lucide-react";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 
 interface DmPanelProps {
   myName: string;
@@ -60,9 +61,10 @@ export default function DmPanel({
   // if getMyDmKey hasn't resolved yet and myKey is still a display name
   const keyReady = myKey.includes("@") && recipientKey.includes("@");
 
+  const isVisible = usePageVisibility();
   const { data, isLoading } = trpc.opsChat.listDmMessages.useQuery(
     { keyA: myKey, keyB: recipientKey },
-    { refetchInterval: 3000, enabled: keyReady }
+    { refetchInterval: isVisible ? 5000 : false, enabled: keyReady }
   );
 
   const sendDm = trpc.opsChat.sendDm.useMutation({
