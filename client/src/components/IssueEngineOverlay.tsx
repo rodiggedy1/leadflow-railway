@@ -436,9 +436,10 @@ interface CreateIssueModalProps {
   onClose: () => void;
   callerName: string;
   defaultTitle?: string;
+  onIssueCreated?: (meta: { issueId: number; issueTitle: string; typeLabel: string; severity: string; notes: string | null }) => void;
 }
 
-export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "" }: CreateIssueModalProps) {
+export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "", onIssueCreated }: CreateIssueModalProps) {
   const utils = trpc.useUtils();
   const [title, setTitle] = useState(defaultTitle);
   const [issueType, setIssueType] = useState<IssueType>("other");
@@ -446,10 +447,17 @@ export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "" 
   const [notes, setNotes] = useState("");
 
   const createMutation = trpc.opsChat.createIssue.useMutation({
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Issue created");
       utils.opsChat.listIssues.invalidate();
       utils.opsChat.countOpenIssues.invalidate();
+      onIssueCreated?.({
+        issueId: data.id,
+        issueTitle: title,
+        typeLabel: ISSUE_TYPE_META[issueType]?.label ?? issueType,
+        severity,
+        notes: notes.trim() || null,
+      });
       setTitle(""); setIssueType("other"); setSeverity("medium"); setNotes("");
       onClose();
     },

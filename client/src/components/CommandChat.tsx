@@ -1499,7 +1499,7 @@ const MessageList = memo(function MessageList({
                   );
                 }
 
-                // ── Issue Engine Created card (amber glow) ──────────────────────
+                // ── Issue Engine Created card ─────────────────────────────────
                 if (msg.quickAction === "issue_engine_created") {
                   let meta: Record<string, unknown> = {};
                   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
@@ -1507,37 +1507,43 @@ const MessageList = memo(function MessageList({
                   const ieNotes = (meta.notes as string | null) ?? null;
                   const ieTypeLabel = (meta.typeLabel as string) ?? "Issue";
                   const ieSeverity = (meta.severity as string) ?? "medium";
-                  const severityColors: Record<string, string> = {
+                  const sevColorMap: Record<string, string> = {
                     critical: "text-red-600", high: "text-orange-500",
                     medium: "text-amber-500", low: "text-slate-400",
                   };
-                  const sevColor = severityColors[ieSeverity] ?? "text-amber-500";
+                  const sevColor = sevColorMap[ieSeverity] ?? "text-amber-500";
                   return (
-                    <div key={msg.id} className="flex justify-center my-2">
+                    <div key={msg.id} className="flex justify-center my-3 px-4">
                       <div
-                        className="w-full max-w-[520px] rounded-2xl border border-orange-100 bg-white overflow-hidden"
-                        style={{ boxShadow: "0 0 0 4px rgba(251,191,36,0.15), 0 4px 24px rgba(251,146,60,0.18)" }}
+                        className="w-full max-w-[560px] rounded-2xl overflow-hidden"
+                        style={{
+                          background: "linear-gradient(135deg, #fffbf0 0%, #fef6e4 100%)",
+                          border: "1.5px solid #fde8b0",
+                          boxShadow: "0 0 0 5px rgba(253,212,80,0.13), 0 6px 28px rgba(251,146,60,0.16)",
+                        }}
                       >
-                        {/* Header */}
-                        <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
-                          <span className="text-base">🔥</span>
-                          <span className="text-xs font-bold text-orange-600 uppercase tracking-widest">Issue Created</span>
-                          <span className="ml-auto text-[10px] text-orange-400 font-medium">{ieTypeLabel}</span>
-                          <span className={`text-[10px] font-semibold ml-1 ${sevColor}`}>{ieSeverity.charAt(0).toUpperCase() + ieSeverity.slice(1)}</span>
+                        {/* Beige header row */}
+                        <div className="flex items-center gap-2 px-5 py-3.5">
+                          <span className="text-lg">🔥</span>
+                          <span className="text-sm font-black text-orange-600 uppercase tracking-widest">Issue Created</span>
+                          <div className="ml-auto flex items-center gap-2">
+                            <span className="text-sm font-semibold text-orange-500">{ieTypeLabel}</span>
+                            <span className={`text-sm font-bold ${sevColor}`}>{ieSeverity.charAt(0).toUpperCase() + ieSeverity.slice(1)}</span>
+                          </div>
                         </div>
-                        {/* Body */}
-                        <div className="px-4 py-3">
-                          <p className="text-sm font-bold text-slate-900 mb-1">{ieTitle}</p>
-                          {ieNotes && <p className="text-xs text-slate-500 leading-relaxed mb-2">{ieNotes}</p>}
-                          {!ieNotes && <p className="text-xs text-slate-400 leading-relaxed mb-2">This issue will stay pinned until closed.</p>}
-                          <div className="flex items-center gap-2 mt-2">
+                        {/* White body section */}
+                        <div className="mx-3 mb-3 rounded-xl bg-white px-5 py-4" style={{ boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
+                          <p className="text-[15px] font-bold text-slate-900 mb-1">{ieTitle}</p>
+                          {ieNotes && <p className="text-sm text-slate-500 leading-relaxed mb-3">{ieNotes}</p>}
+                          {!ieNotes && <p className="text-sm text-slate-400 leading-relaxed mb-3">This issue will stay pinned until closed.</p>}
+                          <div className="flex items-center gap-3">
                             <button
                               onClick={() => setIssueEngineOverlayOpen(true)}
-                              className="px-4 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold hover:bg-slate-700 transition"
+                              className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-bold hover:bg-slate-700 transition"
                             >
                               View Issue
                             </button>
-                            <span className="text-[10px] text-slate-400">Created by {msg.from} · {fmtMsgTime(msg.createdAt)}</span>
+                            <span className="text-xs text-slate-400">Created by {msg.from} · {fmtMsgTime(msg.createdAt)}</span>
                           </div>
                         </div>
                       </div>
@@ -7184,6 +7190,32 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         open={createIssueModalOpen}
         onClose={() => setCreateIssueModalOpen(false)}
         callerName={callerName}
+        onIssueCreated={(meta) => {
+          // Optimistic: inject the card into the channel cache immediately
+          const tempId = Date.now() * -1;
+          const tempMsg = {
+            id: tempId,
+            ts: Date.now(),
+            from: callerName,
+            role: "office" as const,
+            body: meta.issueTitle,
+            mediaUrl: null,
+            quickAction: "issue_engine_created",
+            metadata: JSON.stringify(meta),
+            replyToId: null,
+            replyToBody: null,
+            replyToAuthor: null,
+            cleanerJobId: null,
+            threadParentId: null,
+            threadParentBody: null,
+            threadParentFrom: null,
+            replyCount: 0,
+          };
+          utils.opsChat.listChannelMessages.setData(
+            { channel: "command" },
+            (prev) => prev ? [...prev, tempMsg] : [tempMsg]
+          );
+        }}
       />
       {/* ── Open Issue Dialog ── */}
       <Dialog open={issueOpen} onOpenChange={setIssueOpen}>
