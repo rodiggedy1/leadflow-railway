@@ -1499,6 +1499,51 @@ const MessageList = memo(function MessageList({
                   );
                 }
 
+                // ── Issue Engine Created card (amber glow) ──────────────────────
+                if (msg.quickAction === "issue_engine_created") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const ieTitle = (meta.issueTitle as string) ?? msg.body;
+                  const ieNotes = (meta.notes as string | null) ?? null;
+                  const ieTypeLabel = (meta.typeLabel as string) ?? "Issue";
+                  const ieSeverity = (meta.severity as string) ?? "medium";
+                  const severityColors: Record<string, string> = {
+                    critical: "text-red-600", high: "text-orange-500",
+                    medium: "text-amber-500", low: "text-slate-400",
+                  };
+                  const sevColor = severityColors[ieSeverity] ?? "text-amber-500";
+                  return (
+                    <div key={msg.id} className="flex justify-center my-2">
+                      <div
+                        className="w-full max-w-[520px] rounded-2xl border border-orange-100 bg-white overflow-hidden"
+                        style={{ boxShadow: "0 0 0 4px rgba(251,191,36,0.15), 0 4px 24px rgba(251,146,60,0.18)" }}
+                      >
+                        {/* Header */}
+                        <div className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100">
+                          <span className="text-base">🔥</span>
+                          <span className="text-xs font-bold text-orange-600 uppercase tracking-widest">Issue Created</span>
+                          <span className="ml-auto text-[10px] text-orange-400 font-medium">{ieTypeLabel}</span>
+                          <span className={`text-[10px] font-semibold ml-1 ${sevColor}`}>{ieSeverity.charAt(0).toUpperCase() + ieSeverity.slice(1)}</span>
+                        </div>
+                        {/* Body */}
+                        <div className="px-4 py-3">
+                          <p className="text-sm font-bold text-slate-900 mb-1">{ieTitle}</p>
+                          {ieNotes && <p className="text-xs text-slate-500 leading-relaxed mb-2">{ieNotes}</p>}
+                          {!ieNotes && <p className="text-xs text-slate-400 leading-relaxed mb-2">This issue will stay pinned until closed.</p>}
+                          <div className="flex items-center gap-2 mt-2">
+                            <button
+                              onClick={() => setIssueEngineOverlayOpen(true)}
+                              className="px-4 py-1.5 rounded-full bg-slate-900 text-white text-xs font-semibold hover:bg-slate-700 transition"
+                            >
+                              View Issue
+                            </button>
+                            <span className="text-[10px] text-slate-400">Created by {msg.from} · {fmtMsgTime(msg.createdAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── General Issue card (red) ─────────────────────────────────────
                 if (msg.quickAction === "general_issue") {
                   let meta: Record<string, unknown> = {};

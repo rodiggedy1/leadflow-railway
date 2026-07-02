@@ -4441,6 +4441,36 @@ Rules that ALWAYS apply regardless of instruction:
         event: `Issue created by ${input.createdByName}`,
         actor: input.createdByName,
       });
+      // Post a system card to the command channel so the issue appears in the chat thread
+      const issueTypeMeta: Record<string, string> = {
+        late_team: "Team Late", refund_request: "Refund", angry_customer: "Angry Client",
+        no_show: "No Show", access_problem: "Access", payment_problem: "Payment",
+        reschedule_needed: "Reschedule", broken_item: "Supplies",
+        manager_review: "Manager Review", internal_task: "Internal Task", other: "Other",
+      };
+      const typeLabel = issueTypeMeta[input.issueType] ?? input.issueType;
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        cleanerJobId: null,
+        authorName: input.createdByName,
+        authorRole: "system",
+        body: input.title,
+        quickAction: "issue_engine_created",
+        metadata: JSON.stringify({
+          issueId,
+          issueTitle: input.title,
+          issueType: input.issueType,
+          typeLabel,
+          severity: input.severity,
+          notes: input.notes ?? null,
+          createdByName: input.createdByName,
+        }),
+        mediaUrl: null,
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
       return { id: issueId };
     }),
 
