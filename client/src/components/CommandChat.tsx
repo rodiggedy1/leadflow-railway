@@ -30,7 +30,7 @@ import {
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
   ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw,
-  DollarSign, Check, User, Calendar, CreditCard } from "lucide-react";
+  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1053,81 +1053,91 @@ function CallDebriefCard({
   callerPhone: string | null; createdAt: Date;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const gradeColors: Record<string, string> = {
-    A: "bg-green-100 text-green-700 border-green-300",
-    B: "bg-blue-100 text-blue-700 border-blue-300",
-    C: "bg-amber-100 text-amber-700 border-amber-300",
-    D: "bg-orange-100 text-orange-700 border-orange-300",
-    F: "bg-red-100 text-red-700 border-red-300",
-  };
-  const gradeColor = grade ? (gradeColors[grade] ?? gradeColors.C) : gradeColors.C;
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hasRecording = !!recordingUrl;
   const hasDetails = !!(wentWell || improve || nextLine);
+  const waveHeights = [3,5,8,12,16,20,14,18,22,16,10,14,20,24,18,12,16,20,14,8,12,18,22,16,10,6,10,14,18,12,8,5];
+  const gradeColors: Record<string, string> = {
+    A: "bg-emerald-500", B: "bg-blue-500", C: "bg-amber-500", D: "bg-orange-500", F: "bg-red-500",
+  };
+  const gradeBg = grade ? (gradeColors[grade] ?? "bg-slate-500") : null;
+  const displayName = callerName ?? callerPhone ?? "Unknown caller";
+
+  function togglePlay(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+    if (isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
+    else { audioRef.current.play(); setIsPlaying(true); }
+  }
+
   return (
-    <div key={msgId} className="flex justify-center my-2 px-4">
-      <div className="w-full max-w-sm rounded-[20px] border border-purple-200 bg-purple-50 shadow-sm overflow-hidden">
-        {/* Always-visible header — click to expand */}
-        <button
-          className="w-full p-4 flex items-center justify-between text-left hover:bg-purple-100/40 transition-colors"
+    <div className="flex justify-start my-1 px-1">
+      <div className="max-w-[72%] min-w-[240px]">
+        {/* Compact bubble */}
+        <div
+          className="rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 bg-slate-100 border border-slate-200 hover:bg-slate-200"
           onClick={() => setExpanded(v => !v)}
         >
-          <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-100 border border-purple-200 shrink-0">
-              <Phone className="h-3 w-3 text-purple-600" />
-            </div>
-            <div>
-              <span className="text-[10px] font-semibold text-purple-700 uppercase tracking-widest">Call Debrief</span>
-              {(callerName || callerPhone) && (
-                <p className="text-xs font-medium text-purple-900 mt-0.5">{callerName ?? callerPhone}</p>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {grade && (
-              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full border-2 text-xs font-bold ${gradeColor}`}>
-                {grade}
-              </span>
+          {/* Top row: name + grade badge + time + chevron */}
+          <div className="flex items-center gap-2 mb-2">
+            <Phone className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+            <span className="text-xs font-semibold text-slate-700 flex-1 truncate">{displayName}</span>
+            {gradeBg && (
+              <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>{grade}</span>
             )}
-            <span className="text-[10px] text-purple-400">{fmtMsgTime(createdAt)}</span>
+            <span className="text-[10px] text-slate-400 tabular-nums">{fmtMsgTime(createdAt)}</span>
             {hasDetails && (
-              <ChevronDown className={cn("h-3.5 w-3.5 text-purple-400 transition-transform duration-200", expanded && "rotate-180")} />
+              expanded
+                ? <ChevronUp className="h-3.5 w-3.5 text-slate-400" />
+                : <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
             )}
           </div>
-        </button>
-        {/* Audio player — always visible */}
-        {recordingUrl && (
-          <div className="px-4 pb-3">
-            <audio controls src={recordingUrl} className="w-full h-8 rounded-xl" style={{ accentColor: "#7c3aed" }} />
+          {/* Audio row: play button + waveform + duration */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={togglePlay}
+              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                hasRecording ? "bg-slate-600 hover:bg-slate-700 text-white" : "bg-slate-300 text-slate-400 cursor-not-allowed"
+              }`}
+            >
+              {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
+            </button>
+            <div className="flex items-center gap-[2px] flex-1 h-7">
+              {waveHeights.map((h, wi) => (
+                <div key={wi} className="rounded-full w-[3px] bg-slate-400" style={{ height: `${h}px` }} />
+              ))}
+            </div>
           </div>
-        )}
-        {/* Expandable details */}
+          {hasRecording && (
+            <audio
+              ref={audioRef}
+              src={recordingUrl!}
+              onEnded={() => setIsPlaying(false)}
+              onPause={() => setIsPlaying(false)}
+              className="hidden"
+            />
+          )}
+        </div>
+        {/* Expandable debrief details */}
         {hasDetails && expanded && (
-          <div className="px-4 pb-4 animate-in slide-in-from-top-1 duration-150">
-            <div className="border-t border-purple-200/70 mb-3" />
+          <div className="mt-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 animate-in slide-in-from-top-1 duration-150">
             {wentWell && (
               <div className="mb-2">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <span className="text-green-500 text-xs">✔</span>
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">Went well</span>
-                </div>
-                <p className="text-xs text-purple-800 leading-relaxed pl-4">{wentWell}</p>
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-green-600">✔ Went well</span>
+                <p className="text-xs text-slate-700 leading-relaxed mt-0.5 pl-3">{wentWell}</p>
               </div>
             )}
             {improve && (
-              <>
-                <div className="border-t border-purple-200/50 mb-2" />
-                <div className="mb-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span className="text-amber-500 text-xs">▲</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">Improve</span>
-                  </div>
-                  <p className="text-xs text-purple-800 leading-relaxed pl-4">{improve}</p>
-                </div>
-              </>
+              <div className="mb-2 border-t border-slate-200 pt-2">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-600">▲ Improve</span>
+                <p className="text-xs text-slate-700 leading-relaxed mt-0.5 pl-3">{improve}</p>
+              </div>
             )}
             {nextLine && (
-              <div className="rounded-2xl bg-white border border-purple-200 px-3 py-2">
-                <p className="text-[10px] text-purple-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
-                <p className="text-xs text-purple-900 italic leading-relaxed">&ldquo;{nextLine}&rdquo;</p>
+              <div className="border-t border-slate-200 pt-2">
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-widest mb-1">Next time, say:</p>
+                <p className="text-xs text-slate-600 italic leading-relaxed">"{nextLine}"</p>
               </div>
             )}
           </div>
