@@ -1648,18 +1648,38 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
     teamPhone: null,
   } : null;
   const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const [teamView, setTeamView] = useState<"card" | "sms" | "call" | "email">("card");
+  function closeTeamModal() { setTeamModalOpen(false); setTeamView("card"); }
   const teamModal = teamModalOpen && teamCustomer ? ReactDOM.createPortal(
     <>
-      <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.35)" }} onMouseDown={() => setTeamModalOpen(false)} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.35)" }} onMouseDown={closeTeamModal} />
       <div data-chip-modal style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}>
-        <CustomerCard
-          customer={teamCustomer}
-          isTeam
-          onClose={() => setTeamModalOpen(false)}
-          onText={() => setTeamModalOpen(false)}
-          onCall={() => setTeamModalOpen(false)}
-          onEmail={() => setTeamModalOpen(false)}
-        />
+        {teamView === "sms" ? (
+          <SmsComposer customer={teamCustomer} onBack={() => setTeamView("card")} onClose={closeTeamModal} />
+        ) : teamView === "call" ? (
+          <AiCallComposer
+            customer={teamCustomer}
+            session={session}
+            isPolling={isPolling}
+            onStartCall={startCall}
+            onMinimize={closeTeamModal}
+            onCancelCall={cancelCall}
+            onDismissSession={() => { dismissSession(); closeTeamModal(); }}
+            onBack={() => setTeamView("card")}
+            onClose={closeTeamModal}
+          />
+        ) : teamView === "email" ? (
+          <EmailComposer customer={teamCustomer} onBack={() => setTeamView("card")} onClose={closeTeamModal} />
+        ) : (
+          <CustomerCard
+            customer={teamCustomer}
+            isTeam
+            onClose={closeTeamModal}
+            onText={() => setTeamView("sms")}
+            onCall={() => setTeamView("call")}
+            onEmail={() => setTeamView("email")}
+          />
+        )}
       </div>
     </>,
     document.body
