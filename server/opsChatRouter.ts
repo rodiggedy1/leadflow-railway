@@ -4209,9 +4209,14 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         .sort((a, b) => b.totalCleans - a.totalCleans)
         .slice(0, 8);
 
-      // Look up the most recently assigned team for each customer phone
+      // Look up the most recently assigned team for each customer phone.
+      // completedJobs.phone is E.164 (+17025551234), cleanerJobs.customerPhone is raw
+      // formatted from Launch27 (e.g. "(702) 555-1234" or "702-555-1234").
+      // Normalize both sides to the last 10 digits for comparison.
       const phones = topCustomers.map(c => c.phone).filter(Boolean);
-      const teamRows = phones.length > 0
+      // Strip non-digits and take last 10 chars for each E.164 phone
+      const phoneDigits = phones.map(p => p.replace(/\D/g, "").slice(-10));
+      const teamRows = phoneDigits.length > 0
         ? await db
             .select({
               customerPhone: cleanerJobs.customerPhone,
@@ -4222,29 +4227,34 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
             })
             .from(cleanerJobs)
             .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
-            .where(inArray(cleanerJobs.customerPhone, phones))
+            .where(
+              // Normalize cleanerJobs.customerPhone to last 10 digits for comparison
+              inArray(
+                sql`RIGHT(REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', ''), 10)`,
+                phoneDigits
+              )
+            )
             .orderBy(desc(cleanerJobs.jobDate))
-            .limit(phones.length * 5)
+            .limit(phoneDigits.length * 5)
         : [];
-
-      // Pick the most recent team row per customer phone
+      // Pick the most recent team row per normalized 10-digit phone
       const teamByPhone = new Map<string, { teamName: string | null; teamPhone: string | null }>();
       for (const r of teamRows) {
-        const p = r.customerPhone ?? "";
-        if (p && !teamByPhone.has(p)) {
-          teamByPhone.set(p, {
+        const digits = (r.customerPhone ?? "").replace(/\D/g, "").slice(-10);
+        if (digits && !teamByPhone.has(digits)) {
+          teamByPhone.set(digits, {
             teamName: r.teamName ?? r.cleanerName ?? null,
             teamPhone: r.teamPhone ?? null,
           });
         }
       }
-
       const customers = topCustomers.map(c => ({
         ...c,
         isVip: c.totalCleans >= 5,
         city: c.address ? c.address.split(",").slice(-2, -1)[0]?.trim() ?? "" : "",
-        teamName: teamByPhone.get(c.phone)?.teamName ?? null,
-        teamPhone: teamByPhone.get(c.phone)?.teamPhone ?? null,
+        // Look up by normalized 10-digit key
+        teamName: teamByPhone.get(c.phone.replace(/\D/g, "").slice(-10))?.teamName ?? null,
+        teamPhone: teamByPhone.get(c.phone.replace(/\D/g, "").slice(-10))?.teamPhone ?? null,
       }));
       return { customers };
     }),
