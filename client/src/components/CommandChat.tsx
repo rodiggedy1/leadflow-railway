@@ -6976,6 +6976,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                           e.preventDefault();
                           // Store phone in token for reliable lookup across sessions
                           mentionPhoneMapRef.current[c.name] = c.phone;
+                          // Seed chip cache so team data is instant on render
+                          utils.opsChat.searchCustomers.setData({ query: c.phone }, { customers: [c] });
                           const token = `@[${c.name}|${c.phone}]`;
                           const before = composer.slice(0, mentionStart);
                           const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
