@@ -142,8 +142,8 @@ function DetailPanel({
       {/* Meta cards row */}
       <div className="grid grid-cols-3 gap-3 mt-6">
         {/* Assignee */}
-        <div className="bg-[#0f172a] border border-white/8 rounded-xl p-3.5">
-          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-500 mb-2.5">Assignee</p>
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5">
+          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-400 mb-2.5">Assignee</p>
           <AssigneeDropdown
             ownerName={issue.ownerName}
             agentList={agentList}
@@ -153,22 +153,22 @@ function DetailPanel({
         </div>
 
         {/* Waiting On */}
-        <div className="bg-[#0f172a] border border-white/8 rounded-xl p-3.5">
-          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-500 mb-2.5">Waiting On</p>
-          <div className="grid grid-cols-3 bg-white/5 rounded-lg p-0.5 gap-0.5">
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5">
+          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-400 mb-2.5">Waiting On</p>
+          <div className="grid grid-cols-3 bg-slate-100 rounded-lg p-0.5 gap-0.5">
             {(["Customer", "Office", "Cleaner"] as const).map((w) => {
               const isActive = issue.waitingOn === w;
               const activeClass =
-                w === "Customer" ? "bg-orange-500/20 text-orange-300" :
-                w === "Office"   ? "bg-blue-500/20 text-blue-300" :
-                                   "bg-emerald-500/20 text-emerald-300";
+                w === "Customer" ? "bg-white text-orange-600 shadow-sm" :
+                w === "Office"   ? "bg-white text-blue-600 shadow-sm" :
+                                   "bg-white text-emerald-600 shadow-sm";
               return (
                 <button
                   key={w}
                   onClick={() => onUpdate({ waitingOn: w })}
                   className={cn(
                     "py-1.5 rounded-md text-[10px] font-bold text-center transition-all",
-                    isActive ? activeClass : "text-slate-500 hover:text-slate-400"
+                    isActive ? activeClass : "text-slate-400 hover:text-slate-600"
                   )}
                 >
                   {w}
@@ -179,14 +179,14 @@ function DetailPanel({
         </div>
 
         {/* Severity */}
-        <div className="bg-[#0f172a] border border-white/8 rounded-xl p-3.5">
-          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-500 mb-2.5">Severity</p>
+        <div className="bg-white border border-slate-200 rounded-xl p-3.5">
+          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-400 mb-2.5">Severity</p>
           <div className="grid grid-cols-2 gap-1.5">
             {([
-              { key: "critical" as IssueSeverity, label: "Critical", dot: "bg-red-500",    active: "bg-red-500/20 border-red-500/40 text-red-300",    inactive: "border-white/8 text-slate-500" },
-              { key: "high"     as IssueSeverity, label: "High",     dot: "bg-orange-500", active: "bg-orange-500/20 border-orange-500/40 text-orange-300", inactive: "border-white/8 text-slate-500" },
-              { key: "medium"   as IssueSeverity, label: "Medium",   dot: "bg-yellow-500", active: "bg-yellow-500/20 border-yellow-500/40 text-yellow-300", inactive: "border-white/8 text-slate-500" },
-              { key: "low"      as IssueSeverity, label: "Low",      dot: "bg-slate-500",  active: "bg-slate-500/20 border-slate-500/40 text-slate-300",  inactive: "border-white/8 text-slate-500" },
+              { key: "critical" as IssueSeverity, label: "Critical", dot: "bg-red-500",    active: "bg-red-50 border-red-200 text-red-600",       inactive: "border-slate-200 text-slate-400" },
+              { key: "high"     as IssueSeverity, label: "High",     dot: "bg-orange-500", active: "bg-orange-50 border-orange-200 text-orange-600", inactive: "border-slate-200 text-slate-400" },
+              { key: "medium"   as IssueSeverity, label: "Medium",   dot: "bg-yellow-500", active: "bg-yellow-50 border-yellow-200 text-yellow-700", inactive: "border-slate-200 text-slate-400" },
+              { key: "low"      as IssueSeverity, label: "Low",      dot: "bg-slate-400",  active: "bg-slate-100 border-slate-300 text-slate-600",  inactive: "border-slate-200 text-slate-400" },
             ]).map(({ key, label, dot, active, inactive }) => (
               <button
                 key={key}
@@ -329,8 +329,8 @@ function AssigneeDropdown({
         onClick={() => setOpen(o => !o)}
         className={cn(
           "w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm text-left",
-          "bg-[#0f172a] border-white/10 hover:border-white/20",
-          open && "border-indigo-500/50"
+          "bg-white border-slate-200 hover:border-slate-300",
+          open && "border-orange-400 ring-2 ring-orange-100"
         )}
       >
         {ownerName ? (
@@ -342,33 +342,33 @@ function AssigneeDropdown({
             </div>
           )
         ) : (
-          <div className="w-5 h-5 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0">
+          <div className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
             <User className="w-3 h-3 text-slate-500" />
           </div>
         )}
-        <span className={cn("flex-1 truncate font-semibold text-[12px]", ownerName ? "text-slate-200" : "text-slate-500")}>
+        <span className={cn("flex-1 truncate font-semibold text-[12px]", ownerName ? "text-slate-800" : "text-slate-400")}>
           {ownerName ?? "Unassigned"}
         </span>
-        <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
+        <ChevronDown className="w-3 h-3 text-slate-400 shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#1e293b] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
           <div className="overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "none" }}>
             {/* Unassign option */}
             <button
               type="button"
               onClick={() => { onSelect(null); setOpen(false); }}
               className={cn(
-                "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors text-sm",
-                !ownerName && "bg-indigo-500/10"
+                "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-sm",
+                !ownerName && "bg-orange-50"
               )}
             >
-              <div className="w-6 h-6 rounded-full bg-white/6 border border-white/10 flex items-center justify-center shrink-0">
+              <div className="w-6 h-6 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
                 <User className="w-3.5 h-3.5 text-slate-500" />
               </div>
-              <span className={cn("font-medium text-[12px]", !ownerName ? "text-indigo-300" : "text-slate-400")}>Unassigned</span>
-              {!ownerName && <span className="ml-auto text-indigo-400 text-xs">✓</span>}
+              <span className={cn("font-medium text-[12px]", !ownerName ? "text-orange-600" : "text-slate-500")}>Unassigned</span>
+              {!ownerName && <span className="ml-auto text-orange-500 text-xs">✓</span>}
             </button>
             {agentList.map(agent => {
               const photo = agentPhotoMap[agent.name] ?? null;
@@ -379,8 +379,8 @@ function AssigneeDropdown({
                   type="button"
                   onClick={() => { onSelect(agent.name); setOpen(false); }}
                   className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors text-sm",
-                    isSelected && "bg-indigo-500/10"
+                    "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors text-sm",
+                    isSelected && "bg-orange-50"
                   )}
                 >
                   {photo ? (
@@ -390,8 +390,8 @@ function AssigneeDropdown({
                       <span className="text-white text-[9px] font-bold">{agent.name.charAt(0).toUpperCase()}</span>
                     </div>
                   )}
-                  <span className={cn("font-semibold text-[12px]", isSelected ? "text-indigo-300" : "text-slate-200")}>{agent.name}</span>
-                  {isSelected && <span className="ml-auto text-indigo-400 text-xs">✓</span>}
+                  <span className={cn("font-semibold text-[12px]", isSelected ? "text-orange-600" : "text-slate-800")}>{agent.name}</span>
+                  {isSelected && <span className="ml-auto text-orange-500 text-xs">✓</span>}
                 </button>
               );
             })}
