@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Phone, Mail, MessageSquare, History, Star, Loader2, X, ChevronLeft, Mic, MicOff, Send, RefreshCw, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallSession, CallSession, CallStatus, StartCallParams } from "@/hooks/useCallSession";
+import { getCustomerAvatarUrl } from "@/lib/customerAvatar";
 
 // ─── Call status display maps ─────────────────────────────────────────────────
 const CALL_STATUS_COLORS: Record<CallStatus, string> = {
@@ -296,6 +297,7 @@ function SmsComposer({
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const avatarUrl = getCustomerAvatarUrl(customer.phone);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (
@@ -305,7 +307,7 @@ function SmsComposer({
           <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+          <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} />
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{customer.name}</p>
             <p className="text-blue-300 text-[11px]">{customer.phone}</p>
@@ -649,6 +651,7 @@ function EmailComposer({
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const avatarUrl = getCustomerAvatarUrl(customer.phone);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const canSend = subject.trim().length > 0 && body.trim().length > 0;
 
@@ -659,7 +662,7 @@ function EmailComposer({
         <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
           <div className="flex items-center gap-3">
             <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0"><ChevronLeft className="h-5 w-5" /></button>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+            <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} />
             <div className="flex-1 min-w-0">
               <p className="text-white font-bold text-sm truncate">{customer.name}</p>
               <p className="text-blue-300 text-[11px]">Email</p>
@@ -683,7 +686,7 @@ function EmailComposer({
       <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
         <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+            <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} />
             <div className="flex-1 min-w-0">
               <p className="text-white font-bold text-sm truncate">{customer.name}</p>
               <p className="text-blue-300 text-[11px]">{customer.email}</p>
@@ -720,7 +723,7 @@ function EmailComposer({
       <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
         <div className="flex items-center gap-3">
           <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0"><ChevronLeft className="h-5 w-5" /></button>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+          <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} />
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{customer.name}</p>
             <p className="text-blue-300 text-[11px] truncate">{customer.email}</p>
@@ -902,6 +905,7 @@ function AiCallComposer({
   const statusLabel = callStatus ? CALL_STATUS_LABELS[callStatus] : "Ready";
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const avatarUrl = getCustomerAvatarUrl(customer.phone);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   // Auto-minimize when call goes active
@@ -1049,7 +1053,7 @@ function AiCallComposer({
           <button onClick={onBack} className="text-white/60 hover:text-white transition-colors shrink-0">
             <ChevronLeft className="h-5 w-5" />
           </button>
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-sm shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
+          <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} />
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{customer.name}</p>
             <p className="text-blue-300 text-[11px]">{customer.phone}</p>
@@ -1271,6 +1275,7 @@ function CustomerCard({
 
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const avatarUrl = getCustomerAvatarUrl(customer.phone);
 
   const actions = [
     { icon: MessageSquare, label: "Text", color: "text-green-600", bg: "hover:bg-green-50", onClick: onText },
@@ -1313,9 +1318,7 @@ function CustomerCard({
           {/* Customer side (recipient — right) */}
           <div className="flex flex-col items-center gap-1.5 flex-1 min-w-0">
             <div className="relative">
-              <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-black text-lg shadow-lg" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
-                {initials}
-              </div>
+              <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} size="w-14 h-14" textSize="text-lg" rounded="rounded-full" />
               {(ctx?.isVip ?? customer.isVip) && (
                 <span className="absolute -top-1 -right-1 bg-green-500 text-white text-[8px] font-black px-1 py-0.5 rounded-full flex items-center gap-0.5 leading-none">
                   <Star className="h-2 w-2 fill-white" />
@@ -1376,6 +1379,44 @@ function CustomerCard({
 }
 
 // ─── Main Chip ────────────────────────────────────────────────────────────────
+
+/** Renders a customer avatar photo with initial-circle fallback */
+function AvatarImg({
+  avatarUrl,
+  initials,
+  hue,
+  size = "w-9 h-9",
+  textSize = "text-sm",
+  rounded = "rounded-xl",
+}: {
+  avatarUrl: string | null;
+  initials: string;
+  hue: number;
+  size?: string;
+  textSize?: string;
+  rounded?: string;
+}) {
+  const [imgError, setImgError] = React.useState(false);
+  if (avatarUrl && !imgError) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={initials}
+        onError={() => setImgError(true)}
+        className={`${size} ${rounded} object-cover shrink-0`}
+      />
+    );
+  }
+  return (
+    <div
+      className={`${size} ${rounded} flex items-center justify-center text-white font-black ${textSize} shrink-0`}
+      style={{ background: `hsl(${hue}, 55%, 52%)` }}
+    >
+      {initials}
+    </div>
+  );
+}
+
 export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseProp }: { name: string; phone: string; openToCall?: boolean; onClose?: () => void }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"card" | "sms" | "call" | "email">("card");
@@ -1420,6 +1461,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
   const combinedLoading = (hasPhone && isLoading) || (noCustomerFound && cleanerLoading);
 
   const hue = Math.abs(phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const avatarUrl = getCustomerAvatarUrl(phone);
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   // Auto-reopen modal when call reaches terminal state (once per session)
@@ -1511,9 +1553,10 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
               {customers.map(c => {
                 const cInitials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                 const cHue = Math.abs(c.phone.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360;
+                const cAvatarUrl = getCustomerAvatarUrl(c.phone);
                 return (
                   <button key={c.phone} onClick={() => setSelected(c)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shrink-0" style={{ background: `hsl(${cHue}, 55%, 52%)` }}>{cInitials}</div>
+                    <AvatarImg avatarUrl={cAvatarUrl} initials={cInitials} hue={cHue} size="w-8 h-8" textSize="text-xs" rounded="rounded-full" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900 truncate">{c.name}</p>
                       <p className="text-[11px] text-slate-400 truncate">{c.phone}{c.city ? ` · ${c.city}` : ""}</p>
@@ -1556,12 +1599,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
     >
       <div className="px-4 py-3">
         <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-xs shrink-0"
-            style={{ background: `hsl(${hue}, 55%, 52%)` }}
-          >
-            {initials}
-          </div>
+          <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} size="w-8 h-8" textSize="text-xs" rounded="rounded-xl" />
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold text-sm truncate">{pillSession.customerName}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -1640,12 +1678,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
           className="inline-flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/5 transition-colors"
           onClick={() => { setView("card"); setOpen(true); }}
         >
-          <span
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0"
-            style={{ background: `hsl(${hue}, 55%, 52%)` }}
-          >
-            {initials}
-          </span>
+          <AvatarImg avatarUrl={avatarUrl} initials={initials} hue={hue} size="w-7 h-7" textSize="text-[10px]" rounded="rounded-full" />
           <span className="flex flex-col leading-tight min-w-0">
             <span className="font-bold text-[13px] text-white leading-none mb-0.5">{name}</span>
             {phone && (
