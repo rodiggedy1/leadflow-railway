@@ -4288,10 +4288,25 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         .orderBy(desc(quoteLeads.createdAt))
         .limit(3);
 
+      // Also check cleanerJobs for most recent job date (covers today's jobs not yet in completedJobs)
+      const liveJobRows = await db
+        .select({ jobDate: cleanerJobs.jobDate })
+        .from(cleanerJobs)
+        .where(sql`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${p10}`)
+        .orderBy(desc(cleanerJobs.jobDate))
+        .limit(1);
+      const liveLastJobDate = liveJobRows[0]?.jobDate ?? null;
       const totalCleans = jobs.length;
       const ltv = jobs.reduce((s, j) => s + (j.lastBookingPrice ?? 0), 0);
       const lastJob = jobs[0];
       const frequency = lastJob?.frequency ?? "Unknown";
+      // Pick the most recent date from either completedJobs or cleanerJobs
+      const completedLastDate = lastJob?.jobDate ?? null;
+      const resolvedLastJobDate = (!completedLastDate && liveLastJobDate)
+        ? liveLastJobDate
+        : (completedLastDate && liveLastJobDate && liveLastJobDate > completedLastDate)
+          ? liveLastJobDate
+          : completedLastDate;
 
       // Build AI context summary
       const { invokeLLM } = await import("./_core/llm");
@@ -4300,7 +4315,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         `Total cleans: ${totalCleans}`,
         `LTV: $${ltv}`,
         `Frequency: ${frequency}`,
-        `Last job: ${lastJob?.jobDate ?? "unknown"}`,
+        `Last job: ${resolvedLastJobDate ?? "unknown"}`,
         openQuotes.length > 0 ? `Open quotes: ${openQuotes.length} (latest: $${openQuotes[0].totalPrice ?? "?"})`  : "No open quotes",
       ];
 
@@ -4323,7 +4338,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         totalCleans,
         ltv,
         frequency,
-        lastJobDate: lastJob?.jobDate ?? null,
+        lastJobDate: resolvedLastJobDate,
         openQuotes: openQuotes.map(q => ({ id: q.id, totalPrice: q.totalPrice })),
         aiSummary,
         timeline,
