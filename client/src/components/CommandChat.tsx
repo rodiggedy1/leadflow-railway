@@ -2760,7 +2760,7 @@ const MessageList = memo(function MessageList({
                             return (
                               <>
                                 {chips.length > 0 && (
-                                  <div className="flex flex-col gap-2 mb-2">
+                                  <div className="flex flex-col gap-2 mb-2 w-fit">
                                     {chips}
                                   </div>
                                 )}

@@ -145,6 +145,7 @@ function SmsComposer({
   lastMessage,
   isLeadChat,
   sessionId,
+  isTeam,
 }: {
   customer: CustomerData;
   onBack: () => void;
@@ -152,6 +153,7 @@ function SmsComposer({
   lastMessage?: string;
   isLeadChat?: boolean;
   sessionId?: number;
+  isTeam?: boolean;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -296,10 +298,9 @@ function SmsComposer({
     }
   }
 
-  const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
+    const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
+  const avatarUrl = isTeam ? getTeamAvatarUrl() : getCustomerAvatarUrl(customer.phone, customer.name);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-
   return (
     <div className="w-[440px] rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white" style={{ fontFamily: "Inter, sans-serif" }}>
       <div className="relative px-4 pt-4 pb-3" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)" }}>
@@ -494,12 +495,14 @@ function EmailComposer({
   onClose,
   lastMessage,
   emailSubject,
+  isTeam,
 }: {
   customer: CustomerData;
   onBack: () => void;
   onClose: () => void;
   lastMessage?: string;
   emailSubject?: string;
+  isTeam?: boolean;
 }) {
   const firstName = customer.name.split(" ")[0];
   const [subject, setSubject] = useState(emailSubject || "Regarding your cleaning appointment");
@@ -651,7 +654,7 @@ function EmailComposer({
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
+  const avatarUrl = isTeam ? getTeamAvatarUrl() : getCustomerAvatarUrl(customer.phone, customer.name);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const canSend = subject.trim().length > 0 && body.trim().length > 0;
 
@@ -861,6 +864,7 @@ function AiCallComposer({
   onDismissSession,
   onBack,
   onClose,
+  isTeam,
 }: {
   customer: CustomerData;
   session: CallSession | null;
@@ -871,6 +875,7 @@ function AiCallComposer({
   onDismissSession: () => void;
   onBack: () => void;
   onClose: () => void;
+  isTeam?: boolean;
 }) {
   const [selectedScenario, setSelectedScenario] = useState(CALL_SCENARIOS[0].title);
   const [showTranscript, setShowTranscript] = useState(false);
@@ -905,7 +910,7 @@ function AiCallComposer({
   const statusLabel = callStatus ? CALL_STATUS_LABELS[callStatus] : "Ready";
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
+  const avatarUrl = isTeam ? getTeamAvatarUrl() : getCustomerAvatarUrl(customer.phone, customer.name);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   // Auto-minimize when call goes active
@@ -1655,7 +1660,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
       <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.35)" }} onMouseDown={closeTeamModal} />
       <div data-chip-modal style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}>
         {teamView === "sms" ? (
-          <SmsComposer customer={teamCustomer} onBack={() => setTeamView("card")} onClose={closeTeamModal} />
+          <SmsComposer customer={teamCustomer} onBack={() => setTeamView("card")} onClose={closeTeamModal} isTeam />
         ) : teamView === "call" ? (
           <AiCallComposer
             customer={teamCustomer}
@@ -1667,9 +1672,10 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
             onDismissSession={() => { dismissSession(); closeTeamModal(); }}
             onBack={() => setTeamView("card")}
             onClose={closeTeamModal}
+            isTeam
           />
         ) : teamView === "email" ? (
-          <EmailComposer customer={teamCustomer} onBack={() => setTeamView("card")} onClose={closeTeamModal} />
+          <EmailComposer customer={teamCustomer} onBack={() => setTeamView("card")} onClose={closeTeamModal} isTeam />
         ) : (
           <CustomerCard
             customer={teamCustomer}
