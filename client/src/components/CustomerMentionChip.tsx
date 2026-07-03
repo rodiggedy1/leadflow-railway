@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Phone, Mail, MessageSquare, History, Star, Loader2, X, ChevronLeft, Mic, MicOff, Send, RefreshCw, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCallSession, CallSession, CallStatus, StartCallParams } from "@/hooks/useCallSession";
-import { getCustomerAvatarUrl } from "@/lib/customerAvatar";
+import { getCustomerAvatarUrl, getTeamAvatarUrl } from "@/lib/customerAvatar";
 
 // ─── Call status display maps ─────────────────────────────────────────────────
 const CALL_STATUS_COLORS: Record<CallStatus, string> = {
@@ -95,15 +95,15 @@ function formatLtv(n: number) {
 
 function timeAgo(dateStr: string | null) {
   if (!dateStr) return "—";
+  // Parse YYYY-MM-DD as local date (not UTC) to avoid off-by-one day issues
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  // Fallback for full ISO timestamps
   const d = new Date(dateStr);
-  // Show full date + time, e.g. "Jun 28, 2:30 PM"
-  return d.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 // ─── Build SMS text from scenario (mirrors buildCallScript but for SMS) ─────────
@@ -297,7 +297,7 @@ function SmsComposer({
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone);
+  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   return (
@@ -651,7 +651,7 @@ function EmailComposer({
   }
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone);
+  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const canSend = subject.trim().length > 0 && body.trim().length > 0;
 
@@ -905,7 +905,7 @@ function AiCallComposer({
   const statusLabel = callStatus ? CALL_STATUS_LABELS[callStatus] : "Ready";
 
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone);
+  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   // Auto-minimize when call goes active
@@ -1275,7 +1275,7 @@ function CustomerCard({
 
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone);
+  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
 
   const actions = [
     { icon: MessageSquare, label: "Text", color: "text-green-600", bg: "hover:bg-green-50", onClick: onText },
@@ -1461,7 +1461,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
   const combinedLoading = (hasPhone && isLoading) || (noCustomerFound && cleanerLoading);
 
   const hue = Math.abs(phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(phone);
+  const avatarUrl = getCustomerAvatarUrl(phone, name);
   const initials = name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   // Auto-reopen modal when call reaches terminal state (once per session)
@@ -1553,7 +1553,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
               {customers.map(c => {
                 const cInitials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
                 const cHue = Math.abs(c.phone.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360;
-                const cAvatarUrl = getCustomerAvatarUrl(c.phone);
+                const cAvatarUrl = getCustomerAvatarUrl(c.phone, c.name);
                 return (
                   <button key={c.phone} onClick={() => setSelected(c)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left">
                     <AvatarImg avatarUrl={cAvatarUrl} initials={cInitials} hue={cHue} size="w-8 h-8" textSize="text-xs" rounded="rounded-full" />
@@ -1706,12 +1706,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
             onClick={(e) => { e.stopPropagation(); setTeamModalOpen(true); }}
           >
             <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wide mr-0.5">→</span>
-            <span
-              className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[7px] font-black shrink-0"
-              style={{ background: `hsl(${teamHue}, 45%, 42%)` }}
-            >
-              {teamInitials}
-            </span>
+            <img src={getTeamAvatarUrl()} alt="MIB" className="w-4 h-4 rounded-full object-cover shrink-0" />
             <span className="text-[11px] font-semibold text-indigo-200 truncate">{teamName}</span>
             {teamPhone && (
               <span className="inline-flex items-center gap-1 ml-auto shrink-0">
