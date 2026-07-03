@@ -4544,7 +4544,7 @@ Rules that ALWAYS apply regardless of instruction:
   updateIssue: opsChatProcedure
     .input(z.object({
       id: z.number().int().positive(),
-      ownerName: z.string().optional(),
+      ownerName: z.string().nullable().optional(),
       waitingOn: z.string().optional(),
       notes: z.string().optional(),
       severity: z.enum(["critical","high","medium","low"]).optional(),

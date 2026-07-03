@@ -1,16 +1,16 @@
 /**
  * IssueEngineOverlay — two-column issue management overlay.
  * Design matches the mockup: clean white bg, left list with emoji+title+subtitle,
- * right panel with large title, Owner/WaitingOn/AIConfidence cards, orange dot
+ * right panel with large title, Assignee/WaitingOn/Severity cards, orange dot
  * timeline, warm beige AI Recommendation block, Open Chat / Assign / Resolve buttons.
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, CheckCheck, Flame, X } from "lucide-react";
+import { Loader2, CheckCheck, Flame, X, ChevronDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -108,6 +108,7 @@ function DetailPanel({
   issue,
   callerName,
   agentPhotoMap,
+  agentList,
   onResolve,
   onReopen,
   resolving,
@@ -118,11 +119,12 @@ function DetailPanel({
   issue: IssueRow & { timeline: TimelineRow[] };
   callerName: string;
   agentPhotoMap: Record<string, string | null>;
+  agentList: AgentEntry[];
   onResolve: () => void;
   onReopen: () => void;
   resolving: boolean;
   reopening: boolean;
-  onUpdate: (fields: Partial<{ ownerName: string; waitingOn: string; severity: IssueSeverity }>) => void;
+  onUpdate: (fields: Partial<{ ownerName: string | null; waitingOn: string; severity: IssueSeverity }>) => void;
   onAddNote: (note: string) => void;
 }) {
   const [noteInput, setNoteInput] = useState("");
@@ -139,64 +141,66 @@ function DetailPanel({
 
       {/* Meta cards row */}
       <div className="grid grid-cols-3 gap-3 mt-6">
-        {/* Owner */}
-        <div className="border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-400 mb-2">Owner</p>
-          <div className="flex items-center gap-2.5">
-            {issue.ownerName && agentPhotoMap[issue.ownerName] ? (
-              <img
-                src={agentPhotoMap[issue.ownerName]!}
-                alt={issue.ownerName}
-                className="w-8 h-8 rounded-full object-cover shrink-0 ring-2 ring-white shadow-sm"
-              />
-            ) : issue.ownerName ? (
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center shrink-0 shadow-sm">
-                <span className="text-white text-xs font-bold">{issue.ownerName.charAt(0).toUpperCase()}</span>
-              </div>
-            ) : (
-              <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center shrink-0">
-                <span className="text-slate-400 text-xs">?</span>
-              </div>
-            )}
-            <div className="min-w-0">
-              <p className="font-bold text-slate-900 text-sm leading-tight">{issue.ownerName ?? "Unassigned"}</p>
-              {issue.ownerName !== callerName && (
+        {/* Assignee */}
+        <div className="bg-[#0f172a] border border-white/8 rounded-xl p-3.5">
+          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-500 mb-2.5">Assignee</p>
+          <AssigneeDropdown
+            ownerName={issue.ownerName}
+            agentList={agentList}
+            agentPhotoMap={agentPhotoMap}
+            onSelect={(name) => onUpdate({ ownerName: name ?? undefined })}
+          />
+        </div>
+
+        {/* Waiting On */}
+        <div className="bg-[#0f172a] border border-white/8 rounded-xl p-3.5">
+          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-500 mb-2.5">Waiting On</p>
+          <div className="grid grid-cols-3 bg-white/5 rounded-lg p-0.5 gap-0.5">
+            {(["Customer", "Office", "Cleaner"] as const).map((w) => {
+              const isActive = issue.waitingOn === w;
+              const activeClass =
+                w === "Customer" ? "bg-orange-500/20 text-orange-300" :
+                w === "Office"   ? "bg-blue-500/20 text-blue-300" :
+                                   "bg-emerald-500/20 text-emerald-300";
+              return (
                 <button
-                  onClick={() => onUpdate({ ownerName: callerName })}
-                  className="text-[11px] text-blue-500 hover:underline"
+                  key={w}
+                  onClick={() => onUpdate({ waitingOn: w })}
+                  className={cn(
+                    "py-1.5 rounded-md text-[10px] font-bold text-center transition-all",
+                    isActive ? activeClass : "text-slate-500 hover:text-slate-400"
+                  )}
                 >
-                  Claim
+                  {w}
                 </button>
-              )}
-            </div>
+              );
+            })}
           </div>
         </div>
-        {/* Waiting On */}
-        <div className="border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Waiting On</p>
-          <p className="font-bold text-slate-900 text-sm">{issue.waitingOn ?? "—"}</p>
-          <div className="flex gap-1 mt-1.5 flex-wrap">
-            {["Customer", "Office", "Cleaner"].map((w) => (
+
+        {/* Severity */}
+        <div className="bg-[#0f172a] border border-white/8 rounded-xl p-3.5">
+          <p className="text-[10px] font-bold tracking-[.14em] uppercase text-slate-500 mb-2.5">Severity</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {([
+              { key: "critical" as IssueSeverity, label: "Critical", dot: "bg-red-500",    active: "bg-red-500/20 border-red-500/40 text-red-300",    inactive: "border-white/8 text-slate-500" },
+              { key: "high"     as IssueSeverity, label: "High",     dot: "bg-orange-500", active: "bg-orange-500/20 border-orange-500/40 text-orange-300", inactive: "border-white/8 text-slate-500" },
+              { key: "medium"   as IssueSeverity, label: "Medium",   dot: "bg-yellow-500", active: "bg-yellow-500/20 border-yellow-500/40 text-yellow-300", inactive: "border-white/8 text-slate-500" },
+              { key: "low"      as IssueSeverity, label: "Low",      dot: "bg-slate-500",  active: "bg-slate-500/20 border-slate-500/40 text-slate-300",  inactive: "border-white/8 text-slate-500" },
+            ]).map(({ key, label, dot, active, inactive }) => (
               <button
-                key={w}
-                onClick={() => onUpdate({ waitingOn: w })}
+                key={key}
+                onClick={() => onUpdate({ severity: key })}
                 className={cn(
-                  "text-[10px] font-semibold px-2 py-0.5 rounded-full border transition-all",
-                  issue.waitingOn === w
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-500 border-slate-200 hover:border-slate-400"
+                  "flex items-center gap-1.5 px-2 py-1.5 rounded-lg border text-[10px] font-bold transition-all",
+                  issue.severity === key ? active : inactive
                 )}
               >
-                {w}
+                <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dot)} />
+                {label}
               </button>
             ))}
           </div>
-        </div>
-        {/* AI Confidence — placeholder for Phase 2 */}
-        <div className="border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-400 mb-1">AI Confidence</p>
-          <p className="font-bold text-slate-900 text-sm">—</p>
-          <p className="text-[10px] text-slate-400 mt-1">Phase 2</p>
         </div>
       </div>
 
@@ -280,15 +284,125 @@ function DetailPanel({
 
 // ── Main overlay ──────────────────────────────────────────────────────────────
 
+interface AgentEntry { id: number; name: string; photoUrl: string | null; }
+
 interface IssueEngineOverlayProps {
   open: boolean;
   onClose: () => void;
   callerName: string;
   agentPhotoMap?: Record<string, string | null>;
+  agentList?: AgentEntry[];
   initialIssueId?: number | null;
 }
 
-export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = {}, initialIssueId }: IssueEngineOverlayProps) {
+// ── Assignee Dropdown ─────────────────────────────────────────────────────────
+
+function AssigneeDropdown({
+  ownerName,
+  agentList,
+  agentPhotoMap,
+  onSelect,
+}: {
+  ownerName: string | null;
+  agentList: AgentEntry[];
+  agentPhotoMap: Record<string, string | null>;
+  onSelect: (name: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const photoUrl = ownerName ? (agentPhotoMap[ownerName] ?? null) : null;
+  const initial = ownerName ? ownerName.charAt(0).toUpperCase() : null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className={cn(
+          "w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors text-sm text-left",
+          "bg-[#0f172a] border-white/10 hover:border-white/20",
+          open && "border-indigo-500/50"
+        )}
+      >
+        {ownerName ? (
+          photoUrl ? (
+            <img src={photoUrl} alt={ownerName} className="w-5 h-5 rounded-full object-cover shrink-0" />
+          ) : (
+            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center shrink-0">
+              <span className="text-white text-[9px] font-bold">{initial}</span>
+            </div>
+          )
+        ) : (
+          <div className="w-5 h-5 rounded-full bg-white/8 border border-white/10 flex items-center justify-center shrink-0">
+            <User className="w-3 h-3 text-slate-500" />
+          </div>
+        )}
+        <span className={cn("flex-1 truncate font-semibold text-[12px]", ownerName ? "text-slate-200" : "text-slate-500")}>
+          {ownerName ?? "Unassigned"}
+        </span>
+        <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#1e293b] border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+          <div className="overflow-y-auto" style={{ maxHeight: 220, scrollbarWidth: "none" }}>
+            {/* Unassign option */}
+            <button
+              type="button"
+              onClick={() => { onSelect(null); setOpen(false); }}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors text-sm",
+                !ownerName && "bg-indigo-500/10"
+              )}
+            >
+              <div className="w-6 h-6 rounded-full bg-white/6 border border-white/10 flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5 text-slate-500" />
+              </div>
+              <span className={cn("font-medium text-[12px]", !ownerName ? "text-indigo-300" : "text-slate-400")}>Unassigned</span>
+              {!ownerName && <span className="ml-auto text-indigo-400 text-xs">✓</span>}
+            </button>
+            {agentList.map(agent => {
+              const photo = agentPhotoMap[agent.name] ?? null;
+              const isSelected = ownerName === agent.name;
+              return (
+                <button
+                  key={agent.id}
+                  type="button"
+                  onClick={() => { onSelect(agent.name); setOpen(false); }}
+                  className={cn(
+                    "w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/5 transition-colors text-sm",
+                    isSelected && "bg-indigo-500/10"
+                  )}
+                >
+                  {photo ? (
+                    <img src={photo} alt={agent.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-orange-400 to-pink-500 flex items-center justify-center shrink-0">
+                      <span className="text-white text-[9px] font-bold">{agent.name.charAt(0).toUpperCase()}</span>
+                    </div>
+                  )}
+                  <span className={cn("font-semibold text-[12px]", isSelected ? "text-indigo-300" : "text-slate-200")}>{agent.name}</span>
+                  {isSelected && <span className="ml-auto text-indigo-400 text-xs">✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = {}, agentList = [], initialIssueId }: IssueEngineOverlayProps) {
   const utils = trpc.useUtils();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<"open" | "waiting" | "resolved" | "all">("open");
@@ -424,6 +538,7 @@ export function IssueEngineOverlay({ open, onClose, callerName, agentPhotoMap = 
                 issue={issue}
                 callerName={callerName}
                 agentPhotoMap={agentPhotoMap}
+                agentList={agentList}
                 onResolve={() => resolveMutation.mutate({ id: issue.id, actorName: callerName })}
                 onReopen={() => reopenMutation.mutate({ id: issue.id, actorName: callerName })}
                 resolving={resolveMutation.isPending}
