@@ -4205,15 +4205,47 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         }
       }
 
-      const customers = Array.from(byPhone.values())
+      const topCustomers = Array.from(byPhone.values())
         .sort((a, b) => b.totalCleans - a.totalCleans)
-        .slice(0, 8)
-        .map(c => ({
-          ...c,
-          isVip: c.totalCleans >= 5,
-          city: c.address ? c.address.split(",").slice(-2, -1)[0]?.trim() ?? "" : "",
-        }));
+        .slice(0, 8);
 
+      // Look up the most recently assigned team for each customer phone
+      const phones = topCustomers.map(c => c.phone).filter(Boolean);
+      const teamRows = phones.length > 0
+        ? await db
+            .select({
+              customerPhone: cleanerJobs.customerPhone,
+              teamName: cleanerJobs.teamName,
+              cleanerName: cleanerJobs.cleanerName,
+              teamPhone: cleanerProfiles.phone,
+              jobDate: cleanerJobs.jobDate,
+            })
+            .from(cleanerJobs)
+            .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+            .where(inArray(cleanerJobs.customerPhone, phones))
+            .orderBy(desc(cleanerJobs.jobDate))
+            .limit(phones.length * 5)
+        : [];
+
+      // Pick the most recent team row per customer phone
+      const teamByPhone = new Map<string, { teamName: string | null; teamPhone: string | null }>();
+      for (const r of teamRows) {
+        const p = r.customerPhone ?? "";
+        if (p && !teamByPhone.has(p)) {
+          teamByPhone.set(p, {
+            teamName: r.teamName ?? r.cleanerName ?? null,
+            teamPhone: r.teamPhone ?? null,
+          });
+        }
+      }
+
+      const customers = topCustomers.map(c => ({
+        ...c,
+        isVip: c.totalCleans >= 5,
+        city: c.address ? c.address.split(",").slice(-2, -1)[0]?.trim() ?? "" : "",
+        teamName: teamByPhone.get(c.phone)?.teamName ?? null,
+        teamPhone: teamByPhone.get(c.phone)?.teamPhone ?? null,
+      }));
       return { customers };
     }),
 

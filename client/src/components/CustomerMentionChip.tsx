@@ -83,6 +83,8 @@ export type CustomerData = {
   totalCleans: number;
   isVip: boolean;
   city: string;
+  teamName?: string | null;
+  teamPhone?: string | null;
 };
 
 function formatLtv(n: number) {
@@ -1580,23 +1582,63 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
     document.body
   ) : null;
 
+  // Resolved team data from the customer lookup
+  const teamName = resolvedCustomer?.teamName ?? null;
+  const teamPhone = resolvedCustomer?.teamPhone ?? null;
+  const teamInitials = teamName
+    ? teamName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
+    : null;
+  const teamHue = teamName
+    ? Math.abs(teamName.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0)) % 360
+    : 0;
+  const fmtPhone = (p: string) => p.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+
   return (
     <>
       <span
         onClick={() => { setView("card"); setOpen(true); }}
         data-chip-pill
-        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-green-50 text-slate-800 font-semibold text-[13px] cursor-pointer hover:bg-green-100 transition-colors select-none align-middle"
+        className="inline-flex items-center gap-0 rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/7 backdrop-blur-sm shadow-md cursor-pointer select-none align-middle transition-all hover:-translate-y-px hover:border-white/36 overflow-hidden text-white"
+        style={{ verticalAlign: "middle" }}
       >
-        <span
-          className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-black shrink-0 bg-green-600"
-        >
-          {initials}
+        {/* Customer section */}
+        <span className="inline-flex items-center gap-2 px-3 py-1.5">
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-black shrink-0"
+            style={{ background: `hsl(${hue}, 55%, 52%)` }}
+          >
+            {initials}
+          </span>
+          <span className="flex flex-col leading-tight">
+            <span className="font-bold text-[12px] text-white">{name}</span>
+            {phone && (
+              <span className="font-mono text-[10px] text-white/60">{fmtPhone(phone)}</span>
+            )}
+          </span>
+          {(resolvedCustomer?.isVip) && (
+            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">VIP</span>
+          )}
         </span>
-        {name}
-        {phone && (
+
+        {/* Team section — only shown once data resolves */}
+        {teamName && (
           <>
-            <Phone className="h-2.5 w-2.5 text-slate-500 shrink-0" />
-            <span className="font-mono text-[11px] text-slate-600">{phone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")}</span>
+            <span className="w-px self-stretch bg-white/15" />
+            <span className="inline-flex items-center gap-2 px-3 py-1.5">
+              <span
+                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-black shrink-0"
+                style={{ background: `hsl(${teamHue}, 45%, 42%)` }}
+              >
+                {teamInitials}
+              </span>
+              <span className="flex flex-col leading-tight">
+                <span className="text-[10px] text-white/50 font-semibold">Assigned team</span>
+                <span className="font-bold text-[12px] text-white">{teamName}</span>
+                {teamPhone && (
+                  <span className="font-mono text-[10px] text-white/60">{fmtPhone(teamPhone)}</span>
+                )}
+              </span>
+            </span>
           </>
         )}
       </span>
