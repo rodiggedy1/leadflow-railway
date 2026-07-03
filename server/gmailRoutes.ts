@@ -3,7 +3,7 @@
  */
 import type { Express } from "express";
 import { getGmailAuthUrl, exchangeCodeForTokens, getHistoryEvents, clearRefreshTokenCache, setupGmailWatch } from "./gmailService";
-import { enqueueThread, type EnqueueSource } from "./gmailGlanceWorker";
+import { enqueueThread, backfillGlanceQueue, type EnqueueSource } from "./gmailGlanceWorker";
 import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { getDb } from "./db";
@@ -169,6 +169,31 @@ export function registerGmailRoutes(app: Express) {
     } catch (err) {
       console.error("[Gmail] Webhook error:", err);
       res.status(200).send("ok"); // Always 200 to prevent Google retries
+    }
+  });
+
+  // ── Manual backfill: re-process last 100 inbox threads ──────────────────────
+  // Safe to call at any time — only enqueues threads not yet in DB.
+  // Auth: ?secret=CRON_SECRET in query string.
+  app.get("/api/gmail/backfill", async (req, res) => {
+    const secret = req.query["secret"] as string | undefined;
+    if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+      return res.status(403).json({ error: "Unauthorized — provide ?secret=CRON_SECRET" });
+    }
+    try {
+      console.log("[Gmail] Manual backfill triggered via /api/gmail/backfill");
+      await backfillGlanceQueue();
+      return res.send(`
+        <html><body style="font-family:sans-serif;padding:40px">
+          <h2>✅ Gmail backfill complete!</h2>
+          <p>Last 100 inbox threads have been queued for processing.</p>
+          <p>Check the CS inbox — missed emails should appear within a minute.</p>
+        </body></html>
+      `);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[Gmail] Manual backfill error:", err);
+      return res.status(500).send("Backfill error: " + msg);
     }
   });
 }
