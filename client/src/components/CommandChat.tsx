@@ -2084,6 +2084,53 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Portal visibility failure card (compact red alert) ───────────────────
+                if (msg.quickAction === "portal_ghost") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const pgDate = (meta.date as string | null) ?? "";
+                  const ghostJobCount = (meta.ghostJobCount as number | null) ?? 0;
+                  const ghostJobs = (meta.ghostJobs as Array<{ jobId: number; bookingId: number; customerName: string; cleanerProfileId: number; profileName: string }> | null) ?? [];
+                  const pgDateLabel = pgDate ? (() => {
+                    try {
+                      const [y, m, d] = pgDate.split("-").map(Number);
+                      return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                    } catch { return pgDate; }
+                  })() : "";
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[85%] rounded-xl overflow-hidden border border-red-400 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600">
+                          <AlertTriangle className="h-3 w-3 text-red-100" />
+                          <span className="text-[10px] font-semibold text-red-100 uppercase tracking-widest">Portal Visibility Failure</span>
+                          <span className="ml-auto text-[10px] text-red-200">{fmtMsgTime(msg.createdAt)}</span>
+                          <button className="ml-1 text-red-200 hover:text-white transition-colors" title="Dismiss" onClick={() => dismissSystemCard(msg.id)}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="px-3 py-2.5 bg-red-50">
+                          <p className="text-sm font-semibold text-slate-900">
+                            {ghostJobCount} job{ghostJobCount !== 1 ? "s" : ""} invisible to cleaners{pgDateLabel ? ` — ${pgDateLabel}` : ""}
+                          </p>
+                          <p className="text-xs text-red-700 mt-0.5">Linked to ghost profiles (no portal login)</p>
+                          {ghostJobs.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {ghostJobs.map((j) => (
+                                <li key={j.jobId} className="flex items-center gap-1.5 text-xs text-slate-700">
+                                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                                  <span className="font-medium">{j.customerName}</span>
+                                  <span className="text-slate-400">#{j.jobId}</span>
+                                  <span className="ml-auto text-[10px] text-slate-400 truncate max-w-[80px]">{j.profileName}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <p className="text-[11px] text-slate-500 mt-2">Use Portal Diagnostic in CleanerDashboard to merge ghost profiles.</p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Sync mismatch card (red, dismissible) ─────────────────────────
                 if (msg.quickAction === "sync_mismatch") {
                   let meta: Record<string, unknown> = {};
