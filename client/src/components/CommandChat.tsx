@@ -47,7 +47,7 @@ import CallLogPanel from "@/components/CallLogPanel";
 import ThreadPanel from "@/components/ThreadPanel";
 import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AICallPanel from "@/components/AICallPanel";
-import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMentions } from "@/components/CustomerMentionChip";
+import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMentions, renderMessageParts } from "@/components/CustomerMentionChip";
 import { IssueEngineOverlay, CreateIssueModal, ActiveIssuesPill } from "@/components/IssueEngineOverlay";
 
 // ── Payment Link Modal ───────────────────────────────────────────────────────
@@ -2663,9 +2663,23 @@ const MessageList = memo(function MessageList({
                               </div>
                             </button>
                           )}
-                          <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
-                            {renderMessageWithMentions(msg.body, `msg-${msg.id}`, mentionPhoneMap)}
-                          </p>
+                          {(() => {
+                            const { chips, text } = renderMessageParts(msg.body, `msg-${msg.id}`, mentionPhoneMap);
+                            return (
+                              <>
+                                {chips.length > 0 && (
+                                  <div className="flex flex-col gap-2 mb-2">
+                                    {chips}
+                                  </div>
+                                )}
+                                {text.length > 0 && (
+                                  <p className={cn("leading-relaxed whitespace-pre-wrap break-words", isAlert ? "text-xl font-bold leading-snug" : "text-base")}>
+                                    {text}
+                                  </p>
+                                )}
+                              </>
+                            );
+                          })()}
                           {mediaUrls.length > 0 && (
                             <div className={cn("mt-2 flex flex-wrap gap-2", mediaUrls.length === 1 ? "max-w-xs" : "")}>
                               {mediaUrls.map((url, idx) => (

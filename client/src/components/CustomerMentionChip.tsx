@@ -1246,12 +1246,14 @@ function CustomerCard({
   onText,
   onCall,
   onEmail,
+  isTeam,
 }: {
   customer: CustomerData;
   onClose: () => void;
   onText: () => void;
   onCall: () => void;
   onEmail: () => void;
+  isTeam?: boolean;
 }) {
   const { data: ctx, isLoading } = trpc.opsChat.getCustomerContext.useQuery(
     { phone: customer.phone, name: customer.name },
@@ -1320,7 +1322,7 @@ function CustomerCard({
             </div>
             <div className="text-center min-w-0 w-full">
               <p className="text-white font-bold text-sm truncate">{customer.name}</p>
-              <p className="text-blue-200 text-[11px] truncate">{customer.frequency ?? "Customer"}{customer.city ? ` · ${customer.city}` : ""}</p>
+              <p className="text-blue-200 text-[11px] truncate">{isTeam ? "Team" : (customer.frequency ?? "Customer")}{customer.city ? ` · ${customer.city}` : ""}</p>
             </div>
           </div>
         </div>
@@ -1613,6 +1615,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
       <div data-chip-modal style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}>
         <CustomerCard
           customer={teamCustomer}
+          isTeam
           onClose={() => setTeamModalOpen(false)}
           onText={() => setTeamModalOpen(false)}
           onCall={() => setTeamModalOpen(false)}
@@ -1725,6 +1728,45 @@ function renderTextWithLinks(text: string, keyPrefix: string): React.ReactNode[]
   }
   if (last < text.length) nodes.push(text.slice(last));
   return nodes.length > 0 ? nodes : [text];
+}
+
+/**
+ * Split message body into { chips, text } so chips can be rendered as a block
+ * above the text in the chat bubble instead of inline.
+ */
+export function renderMessageParts(
+  body: string,
+  keyPrefix?: string,
+  phoneMap?: Record<string, string>
+): { chips: React.ReactNode[]; text: React.ReactNode[] } {
+  const TOKEN_RE = /@\[([^\]]+?)(?:\|([^\]]+))?\]/g;
+  const chips: React.ReactNode[] = [];
+  const text: React.ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  // Collect all tokens and text segments in order
+  const segments: Array<{ type: "chip"; node: React.ReactNode } | { type: "text"; content: string }> = [];
+  while ((match = TOKEN_RE.exec(body)) !== null) {
+    if (match.index > last) segments.push({ type: "text", content: body.slice(last, match.index) });
+    const mName = match[1];
+    const mPhone = match[2] ? match[2].split(",")[0].trim() : (phoneMap?.[mName] ?? "");
+    segments.push({ type: "chip", node: <CustomerMentionChip key={`${keyPrefix ?? ""}-${match.index}-${mName}`} name={mName} phone={mPhone} /> });
+    last = match.index + match[0].length;
+  }
+  if (last < body.length) segments.push({ type: "text", content: body.slice(last) });
+  // Separate chips from text
+  for (const seg of segments) {
+    if (seg.type === "chip") {
+      chips.push(seg.node);
+    } else {
+      // Only push non-empty text (trim leading/trailing newlines around chips)
+      const trimmed = seg.content.replace(/^[\n]+|[\n]+$/g, "");
+      if (trimmed.length > 0) {
+        renderTextWithLinks(trimmed, `${keyPrefix ?? ""}-text`).forEach(n => text.push(n));
+      }
+    }
+  }
+  return { chips, text };
 }
 
 export function renderMessageWithMentions(
