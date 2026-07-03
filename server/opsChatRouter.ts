@@ -4237,25 +4237,43 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
             .orderBy(desc(cleanerJobs.jobDate))
             .limit(phoneDigits.length * 5)
         : [];
-      // Pick the most recent team row per normalized 10-digit phone
+      // Pick the most recent team row AND most recent jobDate per normalized 10-digit phone
       const teamByPhone = new Map<string, { teamName: string | null; teamPhone: string | null }>();
+      const liveLastJobByPhone = new Map<string, string>(); // digits10 -> most recent jobDate from cleanerJobs
       for (const r of teamRows) {
         const digits = (r.customerPhone ?? "").replace(/\D/g, "").slice(-10);
-        if (digits && !teamByPhone.has(digits)) {
+        if (!digits) continue;
+        if (!teamByPhone.has(digits)) {
           teamByPhone.set(digits, {
             teamName: r.teamName ?? r.cleanerName ?? null,
             teamPhone: r.teamPhone ?? null,
           });
         }
+        // Track most recent jobDate from cleanerJobs per customer
+        const existing = liveLastJobByPhone.get(digits);
+        if (r.jobDate && (!existing || r.jobDate > existing)) {
+          liveLastJobByPhone.set(digits, r.jobDate);
+        }
       }
-      const customers = topCustomers.map(c => ({
-        ...c,
-        isVip: c.totalCleans >= 5,
-        city: c.address ? c.address.split(",").slice(-2, -1)[0]?.trim() ?? "" : "",
-        // Look up by normalized 10-digit key
-        teamName: teamByPhone.get(c.phone.replace(/\D/g, "").slice(-10))?.teamName ?? null,
-        teamPhone: teamByPhone.get(c.phone.replace(/\D/g, "").slice(-10))?.teamPhone ?? null,
-      }));
+      const customers = topCustomers.map(c => {
+        const digits10 = c.phone.replace(/\D/g, "").slice(-10);
+        const liveDate = liveLastJobByPhone.get(digits10) ?? null;
+        // Use whichever date is more recent: completedJobs or cleanerJobs
+        const resolvedLastJobDate = (!c.lastJobDate && liveDate)
+          ? liveDate
+          : (c.lastJobDate && liveDate && liveDate > c.lastJobDate)
+            ? liveDate
+            : c.lastJobDate;
+        return {
+          ...c,
+          lastJobDate: resolvedLastJobDate,
+          isVip: c.totalCleans >= 5,
+          city: c.address ? c.address.split(",").slice(-2, -1)[0]?.trim() ?? "" : "",
+          // Look up by normalized 10-digit key
+          teamName: teamByPhone.get(digits10)?.teamName ?? null,
+          teamPhone: teamByPhone.get(digits10)?.teamPhone ?? null,
+        };
+      });
       return { customers };
     }),
 
