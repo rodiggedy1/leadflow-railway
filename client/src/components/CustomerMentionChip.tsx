@@ -1686,13 +1686,13 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
   ) : null;
   return (
     <>
-      {/* Variation C: client top section + indigo team strip below */}
+      {/* Side-by-side pill: customer left | team right */}
       <span
         data-chip-pill
-        className="inline-flex flex-col rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/7 backdrop-blur-sm shadow-md select-none align-middle overflow-hidden text-white transition-all hover:border-white/30"
-        style={{ verticalAlign: "middle", minWidth: teamName ? 220 : undefined }}
+        className="inline-flex flex-row items-stretch rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/7 backdrop-blur-sm shadow-md select-none align-middle overflow-hidden text-white transition-all hover:border-white/30"
+        style={{ verticalAlign: "middle" }}
       >
-        {/* ── Client row ── */}
+        {/* ── Customer side ── */}
         <span
           className="inline-flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/5 transition-colors"
           onClick={() => { setView("card"); setOpen(true); }}
@@ -1701,44 +1701,28 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
           <span className="flex flex-col leading-tight min-w-0">
             <span className="font-bold text-[13px] text-white leading-none mb-0.5">{name}</span>
             {phone && (
-              <span className="inline-flex items-center gap-1">
-                <span className="font-mono text-[10px] text-white/60">{fmtPhone(phone)}</span>
-                <span
-                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 transition-colors shrink-0"
-                  title="Call or text client"
-                  onClick={(e) => { e.stopPropagation(); setView("card"); setOpen(true); }}
-                >
-                  <Phone className="w-2.5 h-2.5 text-white/70" />
-                </span>
-              </span>
+              <span className="font-mono text-[11px] text-white/70 tracking-wide">{fmtPhone(phone)}</span>
             )}
           </span>
           {resolvedCustomer?.isVip && (
-            <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">VIP</span>
+            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">VIP</span>
           )}
         </span>
-        {/* ── Team strip — only shown once data resolves ── */}
+        {/* ── Team side — only shown when team data resolves ── */}
         {teamName && (
           <span
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors"
-            style={{ background: "linear-gradient(to right, rgba(99,102,241,.18), rgba(99,102,241,.08))", borderTop: "1px solid rgba(99,102,241,.25)" }}
+            className="inline-flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors"
+            style={{ borderLeft: "1px solid rgba(255,255,255,0.12)", background: "rgba(99,102,241,0.12)" }}
             onClick={(e) => { e.stopPropagation(); setTeamModalOpen(true); }}
           >
-            <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wide mr-0.5">→</span>
-            <img src={getTeamAvatarUrl()} alt="MIB" className="w-4 h-4 rounded-full object-cover shrink-0" />
-            <span className="text-[11px] font-semibold text-indigo-200 truncate">{teamName}</span>
-            {teamPhone && (
-              <span className="inline-flex items-center gap-1 ml-auto shrink-0">
-                <span className="font-mono text-[10px] text-indigo-300/70">{fmtPhone(teamPhone)}</span>
-                <span
-                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500/20 hover:bg-indigo-500/40 transition-colors"
-                  title="Call or text team"
-                  onClick={(e) => { e.stopPropagation(); setTeamModalOpen(true); }}
-                >
-                  <Phone className="w-2.5 h-2.5 text-indigo-300" />
-                </span>
-              </span>
-            )}
+            <img src={getTeamAvatarUrl()} alt="MIB" className="w-7 h-7 rounded-full object-cover shrink-0" />
+            <span className="flex flex-col leading-tight min-w-0">
+              <span className="text-[9px] font-bold text-indigo-300/70 uppercase tracking-widest leading-none mb-0.5">Assigned Team</span>
+              <span className="font-semibold text-[13px] text-white leading-none mb-0.5">{teamName}</span>
+              {teamPhone && (
+                <span className="font-mono text-[11px] text-indigo-200/80 tracking-wide">{fmtPhone(teamPhone)}</span>
+              )}
+            </span>
           </span>
         )}
       </span>
