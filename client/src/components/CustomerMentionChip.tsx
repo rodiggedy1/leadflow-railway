@@ -1275,8 +1275,7 @@ function CustomerCard({
 
   const initials = customer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const hue = Math.abs(customer.phone.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % 360;
-  const avatarUrl = getCustomerAvatarUrl(customer.phone, customer.name);
-
+    const avatarUrl = isTeam ? getTeamAvatarUrl() : getCustomerAvatarUrl(customer.phone, customer.name);
   const actions = [
     { icon: MessageSquare, label: "Text", color: "text-green-600", bg: "hover:bg-green-50", onClick: onText },
     { icon: Phone, label: "AI Call", color: "text-blue-600", bg: "hover:bg-blue-50", onClick: onCall },
