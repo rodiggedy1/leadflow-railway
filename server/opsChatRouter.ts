@@ -4685,6 +4685,8 @@ Rules that ALWAYS apply regardless of instruction:
         replyToAuthor: null,
         threadParentId: null,
       });
+      // Broadcast so all connected agents see the new kudos card immediately via SSE
+      broadcastOpsUpdate("new_message", { channel: "command" });
       return { ok: true };
     }),
 });
