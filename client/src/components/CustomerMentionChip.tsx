@@ -1397,7 +1397,7 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
 
   const { data, isLoading } = trpc.opsChat.searchCustomers.useQuery(
     { query: phone },
-    { staleTime: 300_000, retry: false, enabled: hasPhone && (open || session !== null) }
+    { staleTime: 300_000, retry: false, enabled: hasPhone }
   );
 
   const customers: CustomerData[] = data?.customers ?? [];
