@@ -1591,58 +1591,107 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
   const teamHue = teamName
     ? Math.abs(teamName.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0)) % 360
     : 0;
-  const fmtPhone = (p: string) => p.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
-
+    const fmtPhone = (p: string) => p.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  // Synthetic CustomerData for the team modal (call/text the team directly)
+  const teamCustomer: CustomerData | null = (teamName && teamPhone) ? {
+    name: teamName,
+    phone: teamPhone,
+    ltv: 0,
+    totalCleans: 0,
+    address: null,
+    frequency: null,
+    lastJobDate: null,
+    isVip: false,
+    city: null,
+    teamName: null,
+    teamPhone: null,
+  } : null;
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const teamModal = teamModalOpen && teamCustomer ? ReactDOM.createPortal(
+    <>
+      <div style={{ position: "fixed", inset: 0, zIndex: 99998, background: "rgba(0,0,0,0.35)" }} onMouseDown={() => setTeamModalOpen(false)} />
+      <div data-chip-modal style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 99999 }}>
+        <CustomerCard
+          customer={teamCustomer}
+          onClose={() => setTeamModalOpen(false)}
+          onText={() => setTeamModalOpen(false)}
+          onCall={() => setTeamModalOpen(false)}
+          onEmail={() => setTeamModalOpen(false)}
+        />
+      </div>
+    </>,
+    document.body
+  ) : null;
   return (
     <>
+      {/* Variation C: client top section + indigo team strip below */}
       <span
-        onClick={() => { setView("card"); setOpen(true); }}
         data-chip-pill
-        className="inline-flex items-center gap-0 rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/7 backdrop-blur-sm shadow-md cursor-pointer select-none align-middle transition-all hover:-translate-y-px hover:border-white/36 overflow-hidden text-white"
-        style={{ verticalAlign: "middle" }}
+        className="inline-flex flex-col rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/7 backdrop-blur-sm shadow-md select-none align-middle overflow-hidden text-white transition-all hover:border-white/30"
+        style={{ verticalAlign: "middle", minWidth: teamName ? 220 : undefined }}
       >
-        {/* Customer section */}
-        <span className="inline-flex items-center gap-2 px-3 py-1.5">
+        {/* ── Client row ── */}
+        <span
+          className="inline-flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white/5 transition-colors"
+          onClick={() => { setView("card"); setOpen(true); }}
+        >
           <span
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-black shrink-0"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-black shrink-0"
             style={{ background: `hsl(${hue}, 55%, 52%)` }}
           >
             {initials}
           </span>
-          <span className="flex flex-col leading-tight">
-            <span className="font-bold text-[12px] text-white">{name}</span>
+          <span className="flex flex-col leading-tight min-w-0">
+            <span className="font-bold text-[13px] text-white leading-none mb-0.5">{name}</span>
             {phone && (
-              <span className="font-mono text-[10px] text-white/60">{fmtPhone(phone)}</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="font-mono text-[10px] text-white/60">{fmtPhone(phone)}</span>
+                <span
+                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-white/10 hover:bg-white/20 transition-colors shrink-0"
+                  title="Call or text client"
+                  onClick={(e) => { e.stopPropagation(); setView("card"); setOpen(true); }}
+                >
+                  <Phone className="w-2.5 h-2.5 text-white/70" />
+                </span>
+              </span>
             )}
           </span>
-          {(resolvedCustomer?.isVip) && (
-            <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">VIP</span>
+          {resolvedCustomer?.isVip && (
+            <span className="ml-auto text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 shrink-0">VIP</span>
           )}
         </span>
-
-        {/* Team section — only shown once data resolves */}
+        {/* ── Team strip — only shown once data resolves ── */}
         {teamName && (
-          <>
-            <span className="w-px self-stretch bg-white/15" />
-            <span className="inline-flex items-center gap-2 px-3 py-1.5">
-              <span
-                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-black shrink-0"
-                style={{ background: `hsl(${teamHue}, 45%, 42%)` }}
-              >
-                {teamInitials}
-              </span>
-              <span className="flex flex-col leading-tight">
-                <span className="text-[10px] text-white/50 font-semibold">Assigned team</span>
-                <span className="font-bold text-[12px] text-white">{teamName}</span>
-                {teamPhone && (
-                  <span className="font-mono text-[10px] text-white/60">{fmtPhone(teamPhone)}</span>
-                )}
-              </span>
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 cursor-pointer transition-colors"
+            style={{ background: "linear-gradient(to right, rgba(99,102,241,.18), rgba(99,102,241,.08))", borderTop: "1px solid rgba(99,102,241,.25)" }}
+            onClick={(e) => { e.stopPropagation(); setTeamModalOpen(true); }}
+          >
+            <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wide mr-0.5">→</span>
+            <span
+              className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[7px] font-black shrink-0"
+              style={{ background: `hsl(${teamHue}, 45%, 42%)` }}
+            >
+              {teamInitials}
             </span>
-          </>
+            <span className="text-[11px] font-semibold text-indigo-200 truncate">{teamName}</span>
+            {teamPhone && (
+              <span className="inline-flex items-center gap-1 ml-auto shrink-0">
+                <span className="font-mono text-[10px] text-indigo-300/70">{fmtPhone(teamPhone)}</span>
+                <span
+                  className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-indigo-500/20 hover:bg-indigo-500/40 transition-colors"
+                  title="Call or text team"
+                  onClick={(e) => { e.stopPropagation(); setTeamModalOpen(true); }}
+                >
+                  <Phone className="w-2.5 h-2.5 text-indigo-300" />
+                </span>
+              </span>
+            )}
+          </span>
         )}
       </span>
       {modal}
+      {teamModal}
       {pill}
     </>
   );
