@@ -95,12 +95,14 @@ function formatLtv(n: number) {
 function timeAgo(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 30) return `${days}d ago`;
-  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-  return `${Math.floor(days / 365)}y ago`;
+  // Show full date + time, e.g. "Jun 28, 2:30 PM"
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 // ─── Build SMS text from scenario (mirrors buildCallScript but for SMS) ─────────
