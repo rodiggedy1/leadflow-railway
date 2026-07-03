@@ -2084,6 +2084,51 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                // ── Gmail re-auth required card ──────────────────────────────────────────────────────────────────────────────────
+                if (msg.quickAction === "gmail_reauth_required") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  const detectedAt = (meta.triggeredAt as string | null) ?? "";
+                  return (
+                    <div key={msg.id} className="flex justify-start">
+                      <div className="max-w-[85%] rounded-xl overflow-hidden border border-amber-400 shadow-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500">
+                          <Mail className="h-3 w-3 text-white" />
+                          <span className="text-[10px] font-semibold text-white uppercase tracking-widest">Gmail Re-Authorization Required</span>
+                          <span className="ml-auto text-[10px] text-amber-100">{fmtMsgTime(msg.createdAt)}</span>
+                          <button className="ml-1 text-amber-100 hover:text-white transition-colors" title="Dismiss" onClick={() => dismissSystemCard(msg.id)}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <div className="px-3 py-2.5 bg-amber-50">
+                          <p className="text-sm font-semibold text-slate-900">OAuth token revoked by Google</p>
+                          <p className="text-xs text-amber-800 mt-0.5">Real-time inbox notifications are paused. Re-authorize to restore them.</p>
+                          <div className="mt-2.5 flex flex-col gap-1.5">
+                            <a
+                              href="https://quote.maidinblack.com/api/gmail/oauth/start"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-amber-500 hover:bg-amber-600 rounded-lg px-3 py-1.5 transition-colors w-fit"
+                            >
+                              <Mail className="h-3 w-3" />
+                              Step 1 — Re-authorize Gmail
+                            </a>
+                            <a
+                              href="https://quote.maidinblack.com/api/gmail/watch/setup"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded-lg px-3 py-1.5 transition-colors w-fit"
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                              Step 2 — Renew watch
+                            </a>
+                          </div>
+                          {detectedAt && <p className="text-[10px] text-slate-400 mt-2">Detected: {new Date(detectedAt).toLocaleString()}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 // ── Portal visibility failure card (compact red alert) ───────────────────
                 if (msg.quickAction === "portal_ghost") {
                   let meta: Record<string, unknown> = {};

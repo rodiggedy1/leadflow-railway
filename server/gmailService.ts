@@ -21,6 +21,51 @@ export function clearRefreshTokenCache() {
   _cachedInboxEmail = null; // also clear inbox email so it re-fetches on next use
 }
 
+// ── invalid_grant alert (fire-and-forget, deduped per hour) ─────────────────
+let _lastInvalidGrantAlert = 0;
+export async function alertInvalidGrant(context: string): Promise<void> {
+  const now = Date.now();
+  if (now - _lastInvalidGrantAlert < 60 * 60 * 1000) return; // max 1 alert/hour
+  _lastInvalidGrantAlert = now;
+  const triggeredAt = new Date().toISOString();
+  console.error(`[GmailService] ❌ invalid_grant in ${context} — posting re-auth alert`);
+  try {
+    const { getDb } = await import("./db");
+    const { opsChatMessages } = await import("../drizzle/schema");
+    const db = await getDb();
+    if (!db) return;
+    await (db as any).insert(opsChatMessages).values({
+      channel: "command",
+      authorName: "System",
+      authorRole: "system",
+      body: `🔐 Gmail Re-Authorization Required
+
+The Gmail OAuth token has been revoked by Google (invalid_grant) while processing ${context}.
+Real-time inbox notifications are paused until you re-authorize.
+
+👉 Step 1 — Re-authorize: https://quote.maidinblack.com/api/gmail/oauth/start
+👉 Step 2 — Renew watch: https://quote.maidinblack.com/api/gmail/watch/setup
+
+Detected at: ${triggeredAt}`,
+      quickAction: "gmail_reauth_required",
+      metadata: JSON.stringify({ context, triggeredAt, reauth: true }),
+    });
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("new_message", { channel: "command" });
+  } catch (e) {
+    console.error("[GmailService] Failed to post invalid_grant alert:", e);
+  }
+}
+
+function _isInvalidGrant(err: unknown): boolean {
+  if (!err) return false;
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes("invalid_grant") || msg.includes("invalid grant")) return true;
+  const e = err as any;
+  const reason = e?.response?.data?.error ?? e?.response?.data?.error_description ?? "";
+  return typeof reason === "string" && (reason.includes("invalid_grant") || reason.includes("invalid grant"));
+}
+
 /**
  * Returns the authenticated Gmail account's email address.
  * Cached in memory after the first call — same lifecycle as the refresh token.
@@ -78,7 +123,8 @@ async function getOAuth2Client() {
 }
 
 async function getGmailClient() {
-  return google.gmail({ version: "v1", auth: await getOAuth2Client() });
+  const auth = await getOAuth2Client();
+  return google.gmail({ version: "v1", auth });
 }
 
 export function getGmailAuthUrl(): string {
