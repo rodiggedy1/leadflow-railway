@@ -1048,6 +1048,7 @@ export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "",
                 severity,
                 notes: notesWithContext || undefined,
                 createdByName: callerName,
+                ownerName: callerName,
               });
             }}
             className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
