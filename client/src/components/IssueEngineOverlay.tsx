@@ -133,12 +133,34 @@ function DetailPanel({
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-7" style={{ scrollbarWidth: "none" }}>
-      {/* Current focus label */}
-      <p className="text-[11px] tracking-[.2em] uppercase text-slate-400 font-semibold">Current Focus</p>
-
-      {/* Title */}
-      <h2 className="text-3xl font-black text-slate-900 mt-1 leading-tight">{issue.title}</h2>
-      <p className="text-sm text-slate-500 mt-1">{timeAgo(issue.lastActivityAt)}</p>
+      {/* Header row: label + resolve button */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[11px] tracking-[.2em] uppercase text-slate-400 font-semibold">Current Focus</p>
+          <h2 className="text-3xl font-black text-slate-900 mt-1 leading-tight">{issue.title}</h2>
+          <p className="text-sm text-slate-500 mt-1">{timeAgo(issue.lastActivityAt)}</p>
+        </div>
+        <div className="shrink-0 pt-1">
+          {issue.status !== "resolved" ? (
+            <button
+              onClick={onResolve}
+              disabled={resolving}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition-colors disabled:opacity-50"
+            >
+              {resolving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+              Resolve
+            </button>
+          ) : (
+            <button
+              onClick={onReopen}
+              disabled={reopening}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-200 transition-colors disabled:opacity-50"
+            >
+              Reopen
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Context + Notes block — shown at top */}
       {issue.notes && (() => {
@@ -307,36 +329,7 @@ function DetailPanel({
         />
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-2 mt-6 flex-wrap">
-        <button className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors">
-          Open Chat
-        </button>
-        <button
-          onClick={() => onUpdate({ ownerName: callerName })}
-          className="px-5 py-2 rounded-full bg-white border border-slate-200 text-slate-900 text-sm font-semibold hover:border-slate-400 transition-colors"
-        >
-          Assign
-        </button>
-        {issue.status !== "resolved" ? (
-          <button
-            onClick={onResolve}
-            disabled={resolving}
-            className="px-5 py-2 rounded-full bg-white border border-emerald-300 text-emerald-600 text-sm font-semibold hover:bg-emerald-50 transition-colors disabled:opacity-50"
-          >
-            {resolving ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}
-            Resolve
-          </button>
-        ) : (
-          <button
-            onClick={onReopen}
-            disabled={reopening}
-            className="px-5 py-2 rounded-full bg-white border border-slate-200 text-slate-600 text-sm font-semibold hover:border-slate-400 transition-colors disabled:opacity-50"
-          >
-            Reopen
-          </button>
-        )}
-      </div>
+
     </div>
   );
 }
