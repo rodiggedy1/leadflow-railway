@@ -10,7 +10,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, CheckCheck, Flame, X, ChevronDown, User, Search, Calendar, Users } from "lucide-react";
+import { Loader2, CheckCheck, Flame, X, ChevronDown, User, Search, Calendar, Users, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getCustomerAvatarUrl, getTeamAvatarUrl } from "@/lib/customerAvatar";
@@ -103,6 +103,84 @@ function IssueListItem({ issue, selected, onClick }: { issue: IssueRow; selected
   );
 }
 
+// ── Waiting Toggle ───────────────────────────────────────────────────────────
+
+const WAITING_PARTIES = ["Customer", "Office", "Cleaner"] as const;
+type WaitingParty = typeof WAITING_PARTIES[number];
+
+function WaitingToggle({
+  waitingOn,
+  onSet,
+  onClear,
+}: {
+  waitingOn: string | null;
+  onSet: (party: WaitingParty) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const isWaiting = !!waitingOn;
+
+  const partyColor: Record<WaitingParty, string> = {
+    Customer: "text-orange-600",
+    Office:   "text-blue-600",
+    Cleaner:  "text-emerald-600",
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => {
+          if (isWaiting) { onClear(); } else { setOpen(v => !v); }
+        }}
+        className={cn(
+          "flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-semibold border transition-colors",
+          isWaiting
+            ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+            : "bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100"
+        )}
+        title={isWaiting ? `Waiting on ${waitingOn} — click to clear` : "Mark as waiting"}
+      >
+        <Clock className="h-3.5 w-3.5" />
+        {isWaiting ? (
+          <span>Waiting · <span className={cn("font-bold", partyColor[waitingOn as WaitingParty] ?? "text-amber-700")}>{waitingOn}</span></span>
+        ) : (
+          "Waiting"
+        )}
+      </button>
+
+      {/* Party picker dropdown */}
+      {open && !isWaiting && (
+        <div className="absolute right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden min-w-[130px]">
+          {WAITING_PARTIES.map((party) => (
+            <button
+              key={party}
+              onClick={() => { onSet(party); setOpen(false); }}
+              className={cn(
+                "w-full text-left px-4 py-2.5 text-sm font-semibold hover:bg-slate-50 transition-colors",
+                partyColor[party]
+              )}
+            >
+              {party}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Right detail panel ─────────────────────────────────────────────────────────
 
 function DetailPanel({
@@ -125,7 +203,7 @@ function DetailPanel({
   onReopen: () => void;
   resolving: boolean;
   reopening: boolean;
-  onUpdate: (fields: Partial<{ ownerName: string | null; waitingOn: string; severity: IssueSeverity }>) => void;
+  onUpdate: (fields: Partial<{ ownerName: string | null; waitingOn: string | null; severity: IssueSeverity }>) => void;
   onAddNote: (note: string) => void;
 }) {
   const [noteInput, setNoteInput] = useState("");
@@ -140,7 +218,15 @@ function DetailPanel({
           <h2 className="text-3xl font-black text-slate-900 mt-1 leading-tight">{issue.title}</h2>
           <p className="text-sm text-slate-500 mt-1">{timeAgo(issue.lastActivityAt)}</p>
         </div>
-        <div className="shrink-0 pt-1">
+        <div className="shrink-0 pt-1 flex items-center gap-2">
+          {/* Waiting toggle — only shown for non-resolved issues */}
+          {issue.status !== "resolved" && (
+            <WaitingToggle
+              waitingOn={issue.waitingOn}
+              onSet={(party) => onUpdate({ waitingOn: party })}
+              onClear={() => onUpdate({ waitingOn: null })}
+            />
+          )}
           {issue.status !== "resolved" ? (
             <button
               onClick={onResolve}
