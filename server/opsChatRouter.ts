@@ -4620,7 +4620,7 @@ Rules that ALWAYS apply regardless of instruction:
     .input(z.object({
       id: z.number().int().positive(),
       ownerName: z.string().nullable().optional(),
-      waitingOn: z.string().optional(),
+      waitingOn: z.string().nullable().optional(),
       notes: z.string().optional(),
       severity: z.enum(["critical","high","medium","low"]).optional(),
       actorName: z.string().min(1),
@@ -4712,7 +4712,32 @@ Rules that ALWAYS apply regardless of instruction:
       await db.update(issueEngineTable)
         .set({ lastActivityAt: Date.now() })
         .where(eq(issueEngineTable.id, input.issueId));
-      return { ok: true };
+            return { ok: true };
+    }),
+
+  // ── Issue counts by assignee ───────────────────────────────────────────────
+  /**
+   * Count active (open + not waiting) issues per assignee for header badges.
+   */
+  getIssueCountsByAssignee: opsChatProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select({
+          ownerName: issueEngineTable.ownerName,
+          count: sql<number>`count(*)`,
+        })
+        .from(issueEngineTable)
+        .where(
+          and(
+            eq(issueEngineTable.status, "open"),
+            isNull(issueEngineTable.waitingOn),
+            isNotNull(issueEngineTable.ownerName),
+          )
+        )
+        .groupBy(issueEngineTable.ownerName);
+      return rows.map(r => ({ ownerName: r.ownerName!, count: Number(r.count) }));
     }),
 
   // ── Kudos ─────────────────────────────────────────────────────────────────

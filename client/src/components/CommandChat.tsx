@@ -3804,6 +3804,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [createIssueModalOpen, setCreateIssueModalOpen] = useState(false);
   const [kudosModalOpen, setKudosModalOpen] = useState(false);
   const [createIssueDefaultTitle, setCreateIssueDefaultTitle] = useState("");
+  // Issue count badges per assignee (active = open + not waiting)
+  const { data: issueCountsData } = trpc.opsChat.getIssueCountsByAssignee.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  const issueCountMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const row of issueCountsData ?? []) m[row.ownerName] = row.count;
+    return m;
+  }, [issueCountsData]);
   // ── Open Issue modal state ─────────────────────────────────────────────────
   const [issueOpen, setIssueOpen] = useState(false);
   const [issueTitle, setIssueTitle] = useState("");
@@ -5651,14 +5661,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     const initials = ag.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                     const hue = (ag.name.charCodeAt(0) * 37) % 360;
                     const isOnCall = Boolean(ag.onCallSince);
+                    const issueCount = issueCountMap[ag.name] ?? 0;
                     return (
-                      <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}`} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
+                      <div key={ag.id} className="relative" title={isOnCall ? `${ag.name} — on a call` : `${ag.name} — ${status}${issueCount > 0 ? ` · ${issueCount} open issue${issueCount > 1 ? "s" : ""}` : ""}`} style={{ marginLeft: idx === 0 ? 0 : -6, zIndex: visible.length - idx }}>
                         {ag.photoUrl ? (
                           <img src={ag.photoUrl} alt={ag.name} className={cn("w-8 h-8 rounded-full object-cover border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400")} />
                         ) : (
                           <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold border-2 border-white shadow-sm", isOnCall && "ring-2 ring-green-400")} style={{ background: `hsl(${hue}, 55%, 52%)` }}>{initials}</div>
                         )}
                         <span className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-white", isOnCall ? "bg-green-500" : dotColor)} />
+                        {issueCount > 0 && (
+                          <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-orange-500 border border-white flex items-center justify-center text-[9px] font-bold text-white leading-none z-10">
+                            {issueCount > 9 ? "9+" : issueCount}
+                          </span>
+                        )}
                       </div>
                     );
                   })}
