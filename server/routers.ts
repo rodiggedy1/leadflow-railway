@@ -182,11 +182,10 @@ export const appRouter = router({
           .select()
           .from(conversationSessions)
           .where(conditions)
-          // Fetch without a specific order; we'll sort by lastActivityAt below
-          // after deriving it from messageHistory / lastCalledAt. Sorting by
-          // updatedAt here would cause leads to jump around whenever any
-          // background write (cron, notes save, stage update) touches the row.
-          .orderBy(desc(conversationSessions.createdAt))
+          // Sort by most recent customer message at DB level so active sessions
+          // (even old ones with new replies) always appear in the top 500.
+          // COALESCE falls back to createdAt for sessions with no inbound messages yet.
+          .orderBy(desc(sql`COALESCE(${conversationSessions.lastCustomerMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
           .limit(500);
 
         // Derive lastActivity from messageHistory (most recent SMS) or lastCalledAt.
