@@ -10,9 +10,10 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, CheckCheck, Flame, X, ChevronDown, User } from "lucide-react";
+import { Loader2, CheckCheck, Flame, X, ChevronDown, User, Search, Calendar, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getCustomerAvatarUrl, getTeamAvatarUrl } from "@/lib/customerAvatar";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -564,76 +565,331 @@ interface CreateIssueModalProps {
   onIssueCreated?: (meta: { issueId: number; issueTitle: string; typeLabel: string; severity: string; notes: string | null }) => void;
 }
 
+// ── Customer search result type (matches searchCustomers return shape) ─────────
+type CustomerSearchResult = {
+  phone: string;
+  name: string;
+  email: string | null;
+  address: string | null;
+  frequency: string | null;
+  lastJobDate: string | null;
+  ltv: number;
+  totalCleans: number;
+  isVip: boolean;
+  city: string;
+  teamName?: string | null;
+  teamPhone?: string | null;
+};
+
+function formatServiceDate(dateStr: string | null): string {
+  if (!dateStr) return "Unknown";
+  const parts = dateStr.split("-");
+  if (parts.length === 3) {
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  }
+  return dateStr;
+}
+
 export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "", onIssueCreated }: CreateIssueModalProps) {
   const utils = trpc.useUtils();
+
+  // ── Customer search state ──────────────────────────────────────────────────
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerSearchResult | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const { data: searchResults, isFetching: isSearching } = trpc.opsChat.searchCustomers.useQuery(
+    { query: customerQuery },
+    { enabled: customerQuery.length >= 2 && !selectedCustomer, staleTime: 30_000 }
+  );
+
+  const customers: CustomerSearchResult[] = (searchResults as any)?.customers ?? [];
+
+  // ── Issue fields ───────────────────────────────────────────────────────────
   const [title, setTitle] = useState(defaultTitle);
   const [issueType, setIssueType] = useState<IssueType>("other");
   const [severity, setSeverity] = useState<IssueSeverity>("medium");
   const [notes, setNotes] = useState("");
+
+  // Reset on open
+  useEffect(() => {
+    if (open) {
+      setCustomerQuery("");
+      setSelectedCustomer(null);
+      setShowDropdown(false);
+      setTitle(defaultTitle);
+      setIssueType("other");
+      setSeverity("medium");
+      setNotes("");
+    }
+  }, [open, defaultTitle]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node) &&
+          searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function selectCustomer(c: CustomerSearchResult) {
+    setSelectedCustomer(c);
+    setCustomerQuery(c.name);
+    setShowDropdown(false);
+  }
+
+  function clearCustomer() {
+    setSelectedCustomer(null);
+    setCustomerQuery("");
+    setTimeout(() => searchRef.current?.focus(), 50);
+  }
 
   const createMutation = trpc.opsChat.createIssue.useMutation({
     onSuccess: (data) => {
       toast.success("Issue created");
       utils.opsChat.listIssues.invalidate();
       utils.opsChat.countOpenIssues.invalidate();
+      // Build enriched title if customer selected
+      const finalTitle = title.trim();
       onIssueCreated?.({
         issueId: data.id,
-        issueTitle: title,
+        issueTitle: finalTitle,
         typeLabel: ISSUE_TYPE_META[issueType]?.label ?? issueType,
         severity,
         notes: notes.trim() || null,
       });
       setTitle(""); setIssueType("other"); setSeverity("medium"); setNotes("");
+      setSelectedCustomer(null); setCustomerQuery("");
       onClose();
     },
     onError: (e) => toast.error("Failed to create issue", { description: e.message }),
   });
 
+  const severityConfig = {
+    low:      { color: "bg-slate-100 text-slate-600 border-slate-200",      dot: "bg-slate-400" },
+    medium:   { color: "bg-amber-50 text-amber-700 border-amber-200",       dot: "bg-amber-400" },
+    high:     { color: "bg-orange-50 text-orange-700 border-orange-200",    dot: "bg-orange-500" },
+    critical: { color: "bg-red-50 text-red-700 border-red-200",             dot: "bg-red-500" },
+  };
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-md rounded-2xl">
-        <div className="flex items-center gap-2 mb-4">
-          <Flame className="h-5 w-5 text-orange-500" />
-          <h2 className="text-lg font-black text-slate-900">New Issue</h2>
+      <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden" style={{ fontFamily: "Inter, sans-serif" }}>
+        {/* Header */}
+        <div className="px-6 pt-5 pb-4 border-b border-slate-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-orange-100 flex items-center justify-center">
+              <Flame className="h-4 w-4 text-orange-500" />
+            </div>
+            <div>
+              <h2 className="text-base font-black text-slate-900 leading-tight">Create Issue</h2>
+              <p className="text-[11px] text-slate-400">Track and resolve service problems</p>
+            </div>
+          </div>
         </div>
-        <div className="space-y-3">
-          <Input
-            placeholder="Issue title (required)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            autoFocus
-            className="rounded-xl"
-          />
-          <Select value={issueType} onValueChange={(v) => setIssueType(v as IssueType)}>
-            <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Issue type" />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.entries(ISSUE_TYPE_META) as [IssueType, { emoji: string; label: string }][]).map(([k, v]) => (
-                <SelectItem key={k} value={k}>{v.emoji} {v.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={severity} onValueChange={(v) => setSeverity(v as IssueSeverity)}>
-            <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Severity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
-            </SelectContent>
-          </Select>
-          <Textarea
-            placeholder="Notes (optional)"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={3}
-            className="resize-none rounded-xl"
-          />
+
+        <div className="px-6 py-4 space-y-5 max-h-[70vh] overflow-y-auto">
+
+          {/* ── Section 1: WHO IS THIS ABOUT? ─────────────────────────────── */}
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Who is this about?</p>
+
+            {/* Customer search input */}
+            <div className="relative">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={customerQuery}
+                  onChange={(e) => {
+                    setCustomerQuery(e.target.value);
+                    if (selectedCustomer) setSelectedCustomer(null);
+                    setShowDropdown(true);
+                  }}
+                  onFocus={() => { if (customerQuery.length >= 2) setShowDropdown(true); }}
+                  placeholder="Type customer name, phone, address, or booking…"
+                  className="w-full pl-8 pr-8 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 transition-all"
+                />
+                {isSearching && (
+                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 animate-spin" />
+                )}
+                {customerQuery && !isSearching && (
+                  <button onClick={clearCustomer} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Dropdown */}
+              {showDropdown && customers.length > 0 && !selectedCustomer && (
+                <div ref={dropdownRef} className="absolute z-50 mt-1 w-full bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
+                  {customers.slice(0, 6).map((c) => {
+                    const avatarUrl = getCustomerAvatarUrl(c.phone, c.name);
+                    const initials = c.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = Math.abs(c.phone.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360;
+                    return (
+                      <button
+                        key={c.phone}
+                        onMouseDown={(e) => { e.preventDefault(); selectCustomer(c); }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-orange-50 transition-colors text-left"
+                      >
+                        {/* Avatar */}
+                        <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{ background: avatarUrl ? undefined : `hsl(${hue},55%,55%)` }}>
+                          {avatarUrl ? <img src={avatarUrl} alt={c.name} className="w-full h-full object-cover" /> : initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-sm font-semibold text-slate-900 truncate">{c.name}</span>
+                            {c.isVip && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">VIP</span>}
+                          </div>
+                          <div className="text-[11px] text-slate-400 truncate">{c.phone}{c.city ? ` · ${c.city}` : ""}</div>
+                        </div>
+                        {c.teamName && (
+                          <div className="shrink-0 flex items-center gap-1">
+                            <div className="w-5 h-5 rounded-full overflow-hidden">
+                              <img src={getTeamAvatarUrl()} alt="team" className="w-full h-full object-cover" />
+                            </div>
+                            <span className="text-[10px] text-slate-500 max-w-[80px] truncate">{c.teamName.replace(/^Team\s+/i, "")}</span>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Auto-filled context cards — shown after customer selected */}
+            {selectedCustomer && (
+              <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50/60 overflow-hidden">
+                {/* Customer row */}
+                <div className="flex items-center gap-3 px-3 py-2.5 border-b border-orange-100">
+                  {(() => {
+                    const avatarUrl = getCustomerAvatarUrl(selectedCustomer.phone, selectedCustomer.name);
+                    const initials = selectedCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+                    const hue = Math.abs(selectedCustomer.phone.split("").reduce((a, ch) => a + ch.charCodeAt(0), 0)) % 360;
+                    return (
+                      <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-white text-xs font-bold" style={{ background: avatarUrl ? undefined : `hsl(${hue},55%,55%)` }}>
+                        {avatarUrl ? <img src={avatarUrl} alt={selectedCustomer.name} className="w-full h-full object-cover" /> : initials}
+                      </div>
+                    );
+                  })()}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-bold text-slate-900">{selectedCustomer.name}</span>
+                      {selectedCustomer.isVip && <span className="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">VIP</span>}
+                    </div>
+                    <span className="text-[11px] text-slate-500">{selectedCustomer.phone}</span>
+                  </div>
+                  <button onClick={clearCustomer} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {/* Team row */}
+                {selectedCustomer.teamName && (
+                  <div className="flex items-center gap-3 px-3 py-2 border-b border-orange-100">
+                    <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+                      <img src={getTeamAvatarUrl()} alt="team" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-black text-orange-500 uppercase tracking-wide">Assigned Team</p>
+                      <p className="text-sm font-semibold text-slate-800 truncate">{selectedCustomer.teamName}</p>
+                    </div>
+                    {selectedCustomer.teamPhone && (
+                      <span className="text-[11px] text-slate-400 shrink-0">{selectedCustomer.teamPhone}</span>
+                    )}
+                  </div>
+                )}
+                {/* Service date row */}
+                {selectedCustomer.lastJobDate && (
+                  <div className="flex items-center gap-3 px-3 py-2">
+                    <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                      <Calendar className="h-3.5 w-3.5 text-orange-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] font-black text-orange-500 uppercase tracking-wide">Date of Service</p>
+                      <p className="text-sm font-semibold text-slate-800">{formatServiceDate(selectedCustomer.lastJobDate)}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Section 2: WHAT'S THE ISSUE? ──────────────────────────────── */}
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">What&apos;s the issue?</p>
+            <div className="space-y-2.5">
+              {/* Issue type grid */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {(Object.entries(ISSUE_TYPE_META) as [IssueType, { emoji: string; label: string }][]).map(([k, v]) => (
+                  <button
+                    key={k}
+                    onClick={() => setIssueType(k)}
+                    className={cn(
+                      "flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl border text-center transition-all",
+                      issueType === k
+                        ? "border-orange-400 bg-orange-50 text-orange-700 shadow-sm"
+                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                    )}
+                  >
+                    <span className="text-base">{v.emoji}</span>
+                    <span className="text-[10px] font-semibold leading-tight">{v.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Title */}
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={`Issue title — e.g. "${ISSUE_TYPE_META[issueType]?.label} for ${selectedCustomer?.name?.split(" ")[0] ?? "customer"}"`}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 transition-all"
+              />
+
+              {/* Severity */}
+              <div className="flex gap-1.5">
+                {(["low", "medium", "high", "critical"] as IssueSeverity[]).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setSeverity(s)}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold capitalize transition-all",
+                      severity === s ? severityConfig[s].color + " shadow-sm" : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                    )}
+                  >
+                    <span className={cn("w-1.5 h-1.5 rounded-full", severity === s ? severityConfig[s].dot : "bg-slate-300")} />
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 3: NOTES ──────────────────────────────────────────── */}
+          <div>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Notes</p>
+            <Textarea
+              placeholder="Add details, refund amount, customer expectation, or what needs follow-up…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="resize-none rounded-xl text-sm"
+            />
+          </div>
         </div>
-        <div className="flex gap-2 mt-5 justify-end">
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-2 justify-end">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-full border border-slate-200 text-slate-600 text-sm font-semibold hover:border-slate-400 transition-colors"
@@ -642,18 +898,24 @@ export function CreateIssueModal({ open, onClose, callerName, defaultTitle = "",
           </button>
           <button
             disabled={!title.trim() || createMutation.isPending}
-            onClick={() =>
+            onClick={() => {
+              const notesWithContext = [
+                selectedCustomer ? `Customer: ${selectedCustomer.name} (${selectedCustomer.phone})` : null,
+                selectedCustomer?.teamName ? `Team: ${selectedCustomer.teamName}${selectedCustomer.teamPhone ? ` (${selectedCustomer.teamPhone})` : ""}` : null,
+                selectedCustomer?.lastJobDate ? `Service date: ${formatServiceDate(selectedCustomer.lastJobDate)}` : null,
+                notes.trim() || null,
+              ].filter(Boolean).join("\n");
               createMutation.mutate({
                 title: title.trim(),
                 issueType,
                 severity,
-                notes: notes.trim() || undefined,
+                notes: notesWithContext || undefined,
                 createdByName: callerName,
-              })
-            }
-            className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50"
+              });
+            }}
+            className="px-5 py-2 rounded-full bg-slate-900 text-white text-sm font-semibold hover:bg-slate-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}
+            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Flame className="h-3.5 w-3.5 text-orange-400" />}
             Create Issue
           </button>
         </div>
