@@ -241,12 +241,92 @@ function DetailPanel({
         />
       </div>
 
-      {/* AI Recommendation block */}
+      {/* Context + Notes block */}
       <div className="mt-6 rounded-2xl p-5" style={{ background: "linear-gradient(135deg, #fef9f0 0%, #fef3e2 100%)", border: "1px solid #fde8c0" }}>
-        <p className="text-xs font-bold tracking-[.15em] uppercase text-orange-500 mb-2">AI Recommendation</p>
-        <p className="text-sm font-semibold text-slate-900">
-          {issue.notes ?? "No recommendation yet — AI detection coming in Phase 2."}
-        </p>
+        <p className="text-xs font-bold tracking-[.15em] uppercase text-orange-500 mb-3">Context</p>
+        {(() => {
+          const raw = issue.notes ?? "";
+          const lines = raw.split("\n");
+          const customerLine = lines.find(l => l.startsWith("Customer:"));
+          const teamLine = lines.find(l => l.startsWith("Team:"));
+          const dateLine = lines.find(l => l.startsWith("Service date:"));
+          const userNotes = lines.filter(l =>
+            !l.startsWith("Customer:") && !l.startsWith("Team:") && !l.startsWith("Service date:")
+          ).join("\n").trim();
+
+          // Parse customer name + phone from "Customer: Name (phone)"
+          const custMatch = customerLine?.match(/^Customer:\s*(.+?)\s*\(([^)]+)\)$/);
+          const custName = custMatch?.[1] ?? customerLine?.replace("Customer:", "").trim();
+          const custPhone = custMatch?.[2] ?? null;
+
+          // Parse team name + phone from "Team: Name (phone)" or "Team: Name"
+          const teamMatch = teamLine?.match(/^Team:\s*(.+?)(?:\s*\(([^)]+)\))?$/);
+          const teamName = teamMatch?.[1] ?? null;
+          const teamPhone = teamMatch?.[2] ?? null;
+
+          // Parse date from "Service date: Fri, Jul 3"
+          const serviceDate = dateLine?.replace("Service date:", "").trim() ?? null;
+
+          const hasContext = !!(custName || teamName || serviceDate);
+
+          // Avatar helpers
+          const custInitials = custName ? custName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() : "?";
+          const custHue = custPhone ? Math.abs(custPhone.split("").reduce((a: number, c: string) => a + c.charCodeAt(0), 0)) % 360 : 200;
+          const custAvatarUrl = custPhone && custName ? getCustomerAvatarUrl(custPhone, custName) : null;
+
+          return (
+            <>
+              {hasContext && (
+                <div className="rounded-xl overflow-hidden border border-orange-100 mb-3" style={{ background: "rgba(255,255,255,0.7)" }}>
+                  {/* Customer row */}
+                  {custName && (
+                    <div className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: teamName || serviceDate ? "1px solid rgba(253,232,192,0.6)" : "none" }}>
+                      <div className="w-9 h-9 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-white font-bold text-sm" style={{ background: custAvatarUrl ? undefined : `hsl(${custHue}, 55%, 52%)` }}>
+                        {custAvatarUrl
+                          ? <img src={custAvatarUrl} alt={custName} className="w-full h-full object-cover" />
+                          : custInitials
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-900 leading-none mb-0.5">{custName}</p>
+                        {custPhone && <p className="text-[11px] font-mono text-slate-500">{custPhone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")}</p>}
+                      </div>
+                    </div>
+                  )}
+                  {/* Team row */}
+                  {teamName && (
+                    <div className="flex items-center gap-3 px-4 py-3" style={{ background: "rgba(99,102,241,0.05)", borderBottom: serviceDate ? "1px solid rgba(253,232,192,0.6)" : "none" }}>
+                      <img src={getTeamAvatarUrl()} alt="MIB" className="w-9 h-9 rounded-full object-cover shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest leading-none mb-0.5">Assigned Team</p>
+                        <p className="text-sm font-bold text-slate-900 leading-none mb-0.5">{teamName}</p>
+                        {teamPhone && <p className="text-[11px] font-mono text-slate-500">{teamPhone.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3")}</p>}
+                      </div>
+                    </div>
+                  )}
+                  {/* Date row */}
+                  {serviceDate && (
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                        <Calendar className="h-4 w-4 text-orange-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-bold text-orange-400 uppercase tracking-widest leading-none mb-0.5">Date of Service</p>
+                        <p className="text-sm font-bold text-slate-900">{serviceDate}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* User-written notes */}
+              {userNotes ? (
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{userNotes}</p>
+              ) : !hasContext ? (
+                <p className="text-sm text-slate-400 italic">No context added yet.</p>
+              ) : null}
+            </>
+          );
+        })()}
 
         {/* Action buttons */}
         <div className="flex gap-2 mt-4 flex-wrap">
