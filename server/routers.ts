@@ -5098,7 +5098,6 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           leadPhone IS NOT NULL
           AND leadPhone NOT REGEXP '[a-zA-Z]'
           AND LENGTH(REGEXP_REPLACE(leadPhone, '[^0-9]', '')) >= 10
-          AND createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)
           AND (leadSource IS NULL OR leadSource NOT IN (${sql.raw(nonLeadSourceList)}))
           AND lastCustomerReplyAt IS NOT NULL
           AND (
