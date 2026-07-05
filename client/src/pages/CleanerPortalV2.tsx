@@ -892,6 +892,13 @@ function CompletedScreen({ job }: { job: MockJob }) {
       >
         Back to Schedule
       </button>
+      {/* Dev reset — clears sessionStorage so the portal restarts from step 1 */}
+      <button
+        onClick={() => { try { sessionStorage.clear(); } catch {} window.location.reload(); }}
+        className="mt-3 text-slate-600 text-xs underline"
+      >
+        Reset (dev)
+      </button>
     </div>
   );
 }
