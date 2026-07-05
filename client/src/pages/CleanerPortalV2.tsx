@@ -6,7 +6,7 @@
  *
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from "react";
 import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -308,7 +308,75 @@ function JobHeader({ job, stepIndex, totalSteps }: { job: PortalJob; stepIndex: 
   );
 }
 
+// ── Location Context ────────────────────────────────────────────────────────
+/**
+ * LocationProvider owns geolocation permission for the entire portal session.
+ * Child components never call getCurrentPosition directly — they call requestLocation()
+ * which fires a fresh fetch at the moment it's needed (e.g. when the cleaner taps
+ * "Start Navigation"). Permission is requested once; subsequent calls reuse the
+ * browser's granted state without re-prompting.
+ */
+type LocationState = {
+  permissionState: "unknown" | "granted" | "denied" | "unavailable";
+  requestLocation: () => Promise<{ lat: number; lng: number } | null>;
+};
+
+const LocationContext = createContext<LocationState>({
+  permissionState: "unknown",
+  requestLocation: async () => null,
+});
+
+function LocationProvider({ children }: { children: React.ReactNode }) {
+  const [permissionState, setPermissionState] = useState<LocationState["permissionState"]>("unknown");
+
+  // Check permission state on mount (no prompt — just query)
+  useEffect(() => {
+    if (!navigator?.permissions) return;
+    navigator.permissions.query({ name: "geolocation" }).then((result) => {
+      if (result.state === "granted") setPermissionState("granted");
+      else if (result.state === "denied") setPermissionState("denied");
+      result.onchange = () => {
+        if (result.state === "granted") setPermissionState("granted");
+        else if (result.state === "denied") setPermissionState("denied");
+      };
+    }).catch(() => {});
+  }, []);
+
+  const requestLocation = useCallback((): Promise<{ lat: number; lng: number } | null> => {
+    return new Promise((resolve) => {
+      if (!navigator?.geolocation) {
+        setPermissionState("unavailable");
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setPermissionState("granted");
+          resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => {
+          setPermissionState("denied");
+          resolve(null);
+        },
+        { timeout: 8000, maximumAge: 0 }
+      );
+    });
+  }, []);
+
+  return (
+    <LocationContext.Provider value={{ permissionState, requestLocation }}>
+      {children}
+    </LocationContext.Provider>
+  );
+}
+
+function useLocation() {
+  return useContext(LocationContext);
+}
+
+// ── Navigate Step Card ───────────────────────────────────────────────────────
 function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStartTime }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; jobStartTime: string }) {
+  const { requestLocation } = useLocation();
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
@@ -327,27 +395,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
     { enabled: etaEnabled && !!coords, retry: false, throwOnError: false }
   );
   const statusMutation = trpc.cleaner.updateJobStatus.useMutation({ throwOnError: false });
-  // Request GPS on mount
-  useEffect(() => {
-    if (!navigator?.geolocation) {
-      setGpsState("error");
-      return;
-    }
-    setGpsState("fetching");
-    try {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setGpsState("ready");
-          setEtaEnabled(true);
-        },
-        () => setGpsState("error"),
-        { timeout: 8000, maximumAge: 60000 }
-      );
-    } catch {
-      setGpsState("error");
-    }
-  }, []);
+  // Location is fetched inside handleNavigate at tap time — never on mount.
   // Detect when user returns from maps app (tab/page becomes visible again)
   useEffect(() => {
     if (!hasLaunched) return;
@@ -366,27 +414,37 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
   }, [hasLaunched]);
   const eta = etaQuery.data;
   const hasEta = eta?.ok;
-  const handleNavigate = () => {
+  const handleNavigate = useCallback(async () => {
     const dest = encodeURIComponent(jobAddress);
     const url = /iPhone|iPad|iPod/i.test(navigator.userAgent)
       ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
       : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
+
+    // Launch maps immediately — don't block on GPS
     window.open(url, "_blank");
     setHasLaunched(true);
     try { sessionStorage.setItem(LAUNCHED_KEY, '1'); } catch {}
-    // On desktop (new tab), visibilitychange won't fire — set returnedFromMaps after a short delay
     setTimeout(() => setReturnedFromMaps(true), 1500);
+
+    // Fetch fresh location now (triggered by user action — no auto-prompt on mount)
+    const freshCoords = await requestLocation();
+    if (freshCoords) {
+      setCoords(freshCoords);
+      setGpsState("ready");
+      setEtaEnabled(true);
+    } else {
+      setGpsState("error");
+    }
+
     // Fire on_the_way status update — sends customer the "on my way" SMS
     if (cleanerJobId) {
       const etaData = etaQuery.data;
       let etaTimestampOverride: number | undefined;
       let etaLabel: string | undefined;
       if (etaData?.ok && etaData.durationSeconds) {
-        // GPS worked — use real drive time
         etaTimestampOverride = Date.now() + etaData.durationSeconds * 1000;
         etaLabel = etaData.durationText ?? undefined;
       } else {
-        // GPS unavailable — fall back to job scheduled start time so SMS always has a real ETA
         const fallbackTs = parseJobTime(jobStartTime);
         if (fallbackTs) {
           etaTimestampOverride = fallbackTs;
@@ -395,7 +453,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
       }
       statusMutation.mutate({ cleanerJobId, status: "on_the_way", etaTimestampOverride, etaLabel });
     }
-  };
+  }, [jobAddress, cleanerJobId, jobStartTime, requestLocation, etaQuery.data, statusMutation, LAUNCHED_KEY]);
 
   // ── Phase: not yet launched — show the navigate CTA ──────────────────────
   if (!hasLaunched) {
@@ -1386,7 +1444,7 @@ function DayBriefing({
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function CleanerPortalV2() {
+function CleanerPortalV2Inner() {
   // Auth guard — check session before loading jobs.
   // If the cookie is absent or expired, redirect to /cleaner (which has the login form).
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false, throwOnError: false });
@@ -1523,3 +1581,13 @@ export default function CleanerPortalV2() {
     </>
   );
 }
+
+// Wrap with LocationProvider so permission is owned at the top level
+const CleanerPortalV2WithLocation = function CleanerPortalV2WithLocation() {
+  return (
+    <LocationProvider>
+      <CleanerPortalV2Inner />
+    </LocationProvider>
+  );
+};
+export { CleanerPortalV2WithLocation as default };
