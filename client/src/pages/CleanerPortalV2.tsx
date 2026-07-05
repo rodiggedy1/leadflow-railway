@@ -1292,8 +1292,90 @@ function WeeklySchedulePrompt({
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// ── Day Briefing Screen ─────────────────────────────────────────────────────
+/**
+ * Shown after the schedule prompt (or on first load if already submitted).
+ * Gives the cleaner a quick overview of today's jobs before they start.
+ */
+function DayBriefing({
+  jobs,
+  cleanerName,
+  onStart,
+}: {
+  jobs: PortalJob[];
+  cleanerName: string;
+  onStart: () => void;
+}) {
+  const firstName = cleanerName.split(' ')[0];
+  const hourET = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }));
+  const greeting = hourET < 12 ? 'Good morning' : hourET < 17 ? 'Good afternoon' : 'Good evening';
 
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col px-4 pt-10 pb-8 max-w-lg mx-auto w-full">
+      {/* Header */}
+      <div className="text-center mb-8 space-y-1">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-3">
+          <span className="text-2xl">🧹</span>
+        </div>
+        <h1 className="text-white text-2xl font-black">{greeting}, {firstName}!</h1>
+        <p className="text-slate-400 text-sm">
+          {jobs.length === 1
+            ? 'You have 1 mission today'
+            : `You have ${jobs.length} missions today`}
+        </p>
+      </div>
+
+      {/* Job cards */}
+      <div className="space-y-3 flex-1">
+        {jobs.map((job, idx) => (
+          <div
+            key={job.cleanerJobId}
+            className="bg-slate-800/70 border border-slate-700/60 rounded-2xl px-4 py-4 space-y-2"
+          >
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shrink-0">
+                {idx + 1}
+              </span>
+              <span className="text-white font-bold text-base leading-tight">{job.customerName}</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
+              <span className="text-emerald-400 font-semibold">{job.time}</span>
+              <span className="text-slate-600">·</span>
+              <span className="truncate">{job.address}</span>
+            </div>
+            {(job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
+              <div className="flex flex-wrap gap-1.5 pl-8">
+                {job.bathrooms > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">
+                    {job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}
+                  </span>
+                )}
+                {(job.extras ?? []).map(e => (
+                  <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">
+                    {e.replace(/_/g, ' ')}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* CTA */}
+      <div className="mt-8">
+        <button
+          onClick={onStart}
+          className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
+        >
+          Let's Go →
+        </button>
+        <p className="text-center text-slate-600 text-xs mt-3">Starting with Job 1</p>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function CleanerPortalV2() {
   // Auth guard — check session before loading jobs.
   // If the cookie is absent or expired, redirect to /cleaner (which has the login form).
@@ -1317,6 +1399,9 @@ export default function CleanerPortalV2() {
 
   // Show weekly schedule prompt if not yet submitted today
   const [showSchedulePrompt, setShowSchedulePrompt] = useState(false);
+  // Show day briefing screen before starting jobs
+  const [showBriefing, setShowBriefing] = useState(true);
+
   useEffect(() => {
     if (!meQuery.data) return;
     if (portalDataQuery.isLoading || portalDataQuery.data === undefined) return;
@@ -1404,12 +1489,25 @@ export default function CleanerPortalV2() {
         onSubmitted={() => {
           setShowSchedulePrompt(false);
           portalDataQuery.refetch();
+          // After schedule prompt, show the day briefing
+          setShowBriefing(true);
         }}
       />
-      <JobRunner
-        key={activeJob.cleanerJobId}
-        job={activeJob}
-      />
+      {/* Day briefing — shown after schedule prompt or on first load if already submitted */}
+      {!showSchedulePrompt && showBriefing && (
+        <DayBriefing
+          jobs={jobs}
+          cleanerName={meQuery.data?.name ?? ""}
+          onStart={() => setShowBriefing(false)}
+        />
+      )}
+      {/* Job runner — shown after briefing is dismissed */}
+      {!showSchedulePrompt && !showBriefing && (
+        <JobRunner
+          key={activeJob.cleanerJobId}
+          job={activeJob}
+        />
+      )}
     </>
   );
 }
