@@ -6,9 +6,12 @@
  *
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation } from "lucide-react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { EXTRAS_LIST } from "@shared/extras";
 
@@ -1075,12 +1078,233 @@ function JobRunner({ job }: { job: PortalJob }) {
   );
 }
 
+
+// ── Weekly Schedule Prompt ───────────────────────────────────────────────────
+/**
+ * Full-screen weekly schedule confirmation shown on login if the cleaner
+ * hasn't yet submitted today. Blocks back-button navigation to ensure completion.
+ * Ported verbatim from CleanerPortal.tsx.
+ */
+function WeeklySchedulePrompt({
+  open,
+  cleanerName,
+  onSubmitted,
+}: {
+  open: boolean;
+  cleanerName: string;
+  onSubmitted: () => void;
+}) {
+  const { i18n } = useTranslation();
+  const DAYS = ['sun','mon','tue','wed','thu','fri','sat'] as const;
+  type Day = typeof DAYS[number];
+  const DAY_LABELS: Record<Day, string> = { sun:'Sunday', mon:'Monday', tue:'Tuesday', wed:'Wednesday', thu:'Thursday', fri:'Friday', sat:'Saturday' };
+  const DAY_LABELS_ES: Record<Day, string> = { sun:'Domingo', mon:'Lunes', tue:'Martes', wed:'Miércoles', thu:'Jueves', fri:'Viernes', sat:'Sábado' };
+  const DAY_LABELS_PT: Record<Day, string> = { sun:'Domingo', mon:'Segunda', tue:'Terça', wed:'Quarta', thu:'Quinta', fri:'Sexta', sat:'Sábado' };
+  const lang = i18n.language as 'en' | 'es' | 'pt';
+  const getDayLabel = (d: Day) => lang === 'es' ? DAY_LABELS_ES[d] : lang === 'pt' ? DAY_LABELS_PT[d] : DAY_LABELS[d];
+
+  const weekDates = useMemo(() => {
+    const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const et = new Date(etStr);
+    const day = et.getDay();
+    const sunday = new Date(et);
+    sunday.setDate(et.getDate() - day);
+    if (day === 6) sunday.setDate(sunday.getDate() + 7);
+    return DAYS.map((d, i) => {
+      const dt = new Date(sunday);
+      dt.setDate(sunday.getDate() + i);
+      return { key: d, date: dt };
+    });
+  }, []);
+
+  const [schedule, setSchedule] = useState<Record<Day, boolean>>({ mon:false, tue:false, wed:false, thu:false, fri:false, sat:false, sun:false });
+  const [seeded, setSeeded] = useState(false);
+  const [step, setStep] = useState<'schedule' | 'note' | 'confirmed'>('schedule');
+  const [note, setNote] = useState('');
+
+  const savedScheduleQuery = trpc.cleaner.getMyTeamSchedule.useQuery(undefined, {
+    enabled: open && !seeded,
+    retry: false,
+    throwOnError: false,
+  });
+  useEffect(() => {
+    if (seeded) return;
+    const s = savedScheduleQuery.data?.schedule;
+    if (!s) return;
+    setSchedule({ mon: s.mon === 1, tue: s.tue === 1, wed: s.wed === 1, thu: s.thu === 1, fri: s.fri === 1, sat: s.sat === 1, sun: s.sun === 1 });
+    setSeeded(true);
+  }, [savedScheduleQuery.data, seeded]);
+
+  const submitWeeklySchedule = trpc.cleaner.submitWeeklySchedule.useMutation({
+    onSuccess: () => { setStep('confirmed'); setTimeout(onSubmitted, 2000); },
+    onError: (err) => toast.error(`Submission failed: ${err.message}`),
+  });
+
+  const toggleDay = (day: Day) => setSchedule(s => ({ ...s, [day]: !s[day] }));
+  const handleConfirmSchedule = () => setStep('note');
+  const handleFinalSubmit = () => {
+    submitWeeklySchedule.mutate({ mon: schedule.mon?1:0, tue: schedule.tue?1:0, wed: schedule.wed?1:0, thu: schedule.thu?1:0, fri: schedule.fri?1:0, sat: schedule.sat?1:0, sun: schedule.sun?1:0, note: note.trim() || null });
+  };
+
+  const workingCount = DAYS.filter(d => schedule[d]).length;
+  const weekStart = weekDates[0].date;
+  const weekEnd = weekDates[6].date;
+  const fmtShort = (dt: Date) => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const weekRange = `${fmtShort(weekStart)} – ${fmtShort(weekEnd)}`;
+  const firstName = cleanerName.split(' ')[0];
+
+  // Block back-button navigation while prompt is open
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ weeklyPrompt: true }, '');
+    const onPopState = (e: PopStateEvent) => {
+      if (e.state?.weeklyPrompt) return;
+      window.history.pushState({ weeklyPrompt: true }, '');
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [open]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-6 pb-6 max-w-lg mx-auto w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {step === 'schedule' && (
+          <div className="space-y-6">
+            <div className="text-center space-y-1.5">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-2">
+                <CalendarDays className="w-7 h-7 text-emerald-400" />
+              </div>
+              <h2 className="text-white text-2xl font-bold leading-tight">
+                {lang === 'es' ? 'Confirma tu horario' : lang === 'pt' ? 'Confirme sua agenda' : "Confirm this week's schedule"}
+              </h2>
+              <p className="text-slate-400 text-sm">
+                {lang === 'es' ? `Hola ${firstName} — marca los días que trabajarás` : lang === 'pt' ? `Olá ${firstName} — marque os dias que você vai trabalhar` : `Hey ${firstName} — select the days you'll be working`}
+              </p>
+            </div>
+            <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-2.5 border border-slate-700/50">
+              <span className="text-slate-300 text-sm font-semibold">{lang === 'es' ? 'Esta semana' : lang === 'pt' ? 'Esta semana' : 'This Week'}</span>
+              <div className="flex items-center gap-1.5 text-slate-400 text-sm">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>{weekRange}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {weekDates.map(({ key, date }) => {
+                const isWorking = schedule[key];
+                const dayNum = date.getDate();
+                const monthShort = date.toLocaleDateString('en-US', { month: 'short' });
+                return (
+                  <div key={key} className="flex items-center justify-between px-4 py-2.5 rounded-2xl bg-slate-800/60 border border-slate-700/50 select-none">
+                    <div>
+                      <p className={`font-semibold text-base leading-tight ${isWorking ? 'text-white' : 'text-slate-300'}`}>{getDayLabel(key)}</p>
+                      <p className="text-slate-500 text-xs mt-0.5">{monthShort} {dayNum}</p>
+                    </div>
+                    <div className="flex items-center bg-slate-800 rounded-full p-0.5 border border-slate-700">
+                      <button onClick={e => { e.stopPropagation(); if (isWorking) toggleDay(key); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${!isWorking ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
+                        {!isWorking && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        <span>{lang === 'es' ? 'No trabajo' : lang === 'pt' ? 'Não trabalho' : 'Not Working'}</span>
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); if (!isWorking) toggleDay(key); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${isWorking ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' : 'text-slate-500 hover:text-slate-300'}`}>
+                        {isWorking && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        <span>{lang === 'es' ? 'Trabajando' : lang === 'pt' ? 'Trabalhando' : 'Working'}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2 px-4 py-3 bg-slate-800/40 rounded-xl border border-slate-700/40">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <p className="text-slate-300 text-sm">
+                {workingCount === 0 ? (lang === 'es' ? 'Ningún día seleccionado' : lang === 'pt' ? 'Nenhum dia selecionado' : 'No days selected')
+                  : lang === 'es' ? `${workingCount} día${workingCount !== 1 ? 's' : ''} de trabajo esta semana`
+                  : lang === 'pt' ? `${workingCount} dia${workingCount !== 1 ? 's' : ''} de trabalho esta semana`
+                  : `${workingCount} working day${workingCount !== 1 ? 's' : ''} this week`}
+              </p>
+            </div>
+            <Button className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold py-4 text-base h-auto rounded-2xl shadow-lg shadow-emerald-900/30 transition-all" onClick={handleConfirmSchedule}>
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              {lang === 'es' ? 'Confirmar horario' : lang === 'pt' ? 'Confirmar agenda' : 'Confirm Schedule'}
+            </Button>
+          </div>
+        )}
+        {step === 'note' && (
+          <div className="space-y-6">
+            <div className="text-center space-y-1.5">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-900/50 border border-blue-700/50 mb-2">
+                <span className="text-2xl">📝</span>
+              </div>
+              <h2 className="text-white text-2xl font-bold">
+                {lang === 'es' ? '¿Alguna nota?' : lang === 'pt' ? 'Alguma observação?' : 'Any notes?'}
+              </h2>
+              <p className="text-slate-400 text-sm">
+                {lang === 'es' ? 'Opcional — comparte cualquier detalle con el equipo' : lang === 'pt' ? 'Opcional — compartilhe detalhes com a equipe' : 'Optional — share any details with the team'}
+              </p>
+            </div>
+            <div className="bg-slate-800/60 rounded-xl border border-slate-700/50 px-4 py-3 space-y-1">
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">{lang === 'es' ? 'Tu horario' : lang === 'pt' ? 'Sua agenda' : 'Your schedule'}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {DAYS.map(d => (
+                  <span key={d} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${schedule[d] ? 'bg-emerald-900/40 border-emerald-600/60 text-emerald-300' : 'bg-slate-700/40 border-slate-600/40 text-slate-500'}`}>
+                    {getDayLabel(d).slice(0, 3)}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={lang === 'es' ? 'ej. Disponible después de las 9am…' : lang === 'pt' ? 'ex. Disponível após as 9h…' : 'e.g. Available after 9am, prefer East side…'} rows={4} maxLength={500} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3.5 py-3 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors" autoFocus />
+              <p className="text-slate-600 text-xs text-right">{note.length}/500</p>
+            </div>
+            <div className="space-y-3">
+              <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl" onClick={handleFinalSubmit} disabled={submitWeeklySchedule.isPending}>
+                {submitWeeklySchedule.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
+                {lang === 'es' ? 'Enviar' : lang === 'pt' ? 'Enviar' : 'Submit'}
+              </Button>
+              <button onClick={() => setStep('schedule')} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2 transition-colors">
+                ← {lang === 'es' ? 'Atrás' : lang === 'pt' ? 'Voltar' : 'Back'}
+              </button>
+            </div>
+          </div>
+        )}
+        {step === 'confirmed' && (
+          <div className="flex-1 flex flex-col items-center justify-center space-y-6 text-center py-12">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-900/50 border-2 border-emerald-500">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-white text-2xl font-bold">{lang === 'es' ? '¡Todo listo!' : lang === 'pt' ? 'Tudo certo!' : 'All set!'}</h2>
+              <p className="text-slate-400 text-base">{lang === 'es' ? 'Tu horario ha sido registrado.' : lang === 'pt' ? 'Sua agenda foi registrada.' : 'Your schedule has been recorded.'}</p>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center">
+              {DAYS.map(d => (
+                <span key={d} className={`text-sm font-semibold px-3 py-1.5 rounded-full ${schedule[d] ? 'bg-emerald-700 text-white' : 'bg-slate-800 text-slate-500'}`}>
+                  {getDayLabel(d).slice(0, 3)}
+                </span>
+              ))}
+            </div>
+            <p className="text-slate-500 text-sm">{lang === 'es' ? '¡Que tengas un excelente día!' : lang === 'pt' ? 'Tenha um ótimo dia!' : 'Have a great day!'}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function CleanerPortalV2() {
   // Auth guard — check session before loading jobs.
   // If the cookie is absent or expired, redirect to /cleaner (which has the login form).
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false, throwOnError: false });
+
+  // Portal data — includes tomorrowAvailability.submitted to gate the schedule prompt
+  const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, {
+    enabled: meQuery.data != null,
+    staleTime: 5 * 60 * 1000,
+    throwOnError: false,
+  });
 
   const { data: jobs, isLoading, error } = trpc.cleaner.getMyJobsToday.useQuery(undefined, {
     enabled: meQuery.data != null, // only run once session is confirmed
@@ -1090,6 +1314,15 @@ export default function CleanerPortalV2() {
 
   // Track which job index we're on (for multi-job days)
   const [activeJobIdx, setActiveJobIdx] = useState(0);
+
+  // Show weekly schedule prompt if not yet submitted today
+  const [showSchedulePrompt, setShowSchedulePrompt] = useState(false);
+  useEffect(() => {
+    if (!meQuery.data) return;
+    if (portalDataQuery.isLoading || portalDataQuery.data === undefined) return;
+    if (portalDataQuery.data.tomorrowAvailability?.submitted) return; // already done
+    setShowSchedulePrompt(true);
+  }, [meQuery.data, portalDataQuery.data, portalDataQuery.isLoading]);
 
   // Session loading
   if (meQuery.isLoading) {
@@ -1158,14 +1391,25 @@ export default function CleanerPortalV2() {
     );
   }
 
-  const activeJob = jobs[activeJobIdx] ?? jobs[0];
+    const activeJob = jobs[activeJobIdx] ?? jobs[0];
 
   // Render the active job runner
   // Key on cleanerJobId so state resets when switching jobs
   return (
-    <JobRunner
-      key={activeJob.cleanerJobId}
-      job={activeJob}
-    />
+    <>
+      {/* Weekly schedule prompt — fullscreen takeover, shown once per day if not yet submitted */}
+      <WeeklySchedulePrompt
+        open={showSchedulePrompt}
+        cleanerName={meQuery.data?.name ?? ""}
+        onSubmitted={() => {
+          setShowSchedulePrompt(false);
+          portalDataQuery.refetch();
+        }}
+      />
+      <JobRunner
+        key={activeJob.cleanerJobId}
+        job={activeJob}
+      />
+    </>
   );
 }
