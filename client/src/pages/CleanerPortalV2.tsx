@@ -884,27 +884,51 @@ function CompletedScreen({ job }: { job: MockJob }) {
 
 export default function CleanerPortalV2() {
   const job = MOCK_JOB;
+
+  // Filter steps based on job data — hide next_job when there's only one job
+  const visibleSteps = job.steps.filter(s => {
+    if (s.type === 'next_job' && job.totalJobs <= 1) return false;
+    return true;
+  });
+
   const SESSION_KEY = `portal_v2_step_${job.id}`;
   const [stepIndex, setStepIndex] = useState(() => {
     try { return parseInt(sessionStorage.getItem(SESSION_KEY) ?? "0", 10) || 0; } catch { return 0; }
   });
   const [completed, setCompleted] = useState(false);
 
+  // markComplete mutation — fires when sign-off is submitted
+  const markCompleteMutation = trpc.cleaner.markComplete.useMutation({ throwOnError: false });
+
   // Persist step index so navigating back from maps restores the right step
   useEffect(() => {
     try { sessionStorage.setItem(SESSION_KEY, String(stepIndex)); } catch {}
   }, [stepIndex, SESSION_KEY]);
 
-  const currentStep = job.steps[stepIndex];
+  const currentStep = visibleSteps[stepIndex];
   const isSignoff = currentStep?.type === "signoff";
 
   const advance = useCallback(() => {
     setStepIndex(i => {
-      if (i < job.steps.length - 1) return i + 1;
+      if (i < visibleSteps.length - 1) return i + 1;
       setCompleted(true);
       return i;
     });
-  }, [job.steps.length]);
+  }, [visibleSteps.length]);
+
+  const handleSignoffComplete = useCallback(() => {
+    // Fire markComplete — sends completion flow to customer
+    if (job.cleanerJobId) {
+      markCompleteMutation.mutate(
+        { cleanerJobId: job.cleanerJobId },
+        { onSettled: () => setCompleted(true) }
+      );
+    } else {
+      setCompleted(true);
+    }
+    // Clear session storage so next job starts fresh
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+  }, [job.cleanerJobId, markCompleteMutation, SESSION_KEY]);
 
   if (completed) return <CompletedScreen job={job} />;
 
@@ -913,12 +937,12 @@ export default function CleanerPortalV2() {
       {/* Mobile-width shell */}
       <div className="w-full max-w-[430px] min-h-screen bg-slate-900 flex flex-col relative">
         {/* Header */}
-        <JobHeader job={job} stepIndex={stepIndex} totalSteps={job.steps.length} />
+        <JobHeader job={job} stepIndex={stepIndex} totalSteps={visibleSteps.length} />
 
         {/* Step card */}
         <div className="flex-1 pb-10">
           {isSignoff ? (
-            <SignoffCard onComplete={() => setCompleted(true)} />
+            <SignoffCard onComplete={handleSignoffComplete} />
           ) : (
             currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} completedJobId={job.completedJobId} jobStartTime={job.time} />
           )}
