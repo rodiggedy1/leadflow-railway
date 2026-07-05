@@ -481,34 +481,39 @@ export default function CleanerPortalV2() {
   if (completed) return <CompletedScreen job={job} />;
 
   return (
-    <div className="min-h-screen bg-slate-900 pb-10">
-      {/* Header */}
-      <JobHeader job={job} stepIndex={stepIndex} totalSteps={job.steps.length} />
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center">
+      {/* Mobile-width shell */}
+      <div className="w-full max-w-[430px] min-h-screen bg-slate-900 flex flex-col relative">
+        {/* Header */}
+        <JobHeader job={job} stepIndex={stepIndex} totalSteps={job.steps.length} />
 
-      {/* Step card */}
-      {isSignoff ? (
-        <SignoffCard onComplete={() => setCompleted(true)} />
-      ) : (
-        currentStep && <StepCard step={currentStep} onComplete={advance} />
-      )}
+        {/* Step card */}
+        <div className="flex-1 pb-10">
+          {isSignoff ? (
+            <SignoffCard onComplete={() => setCompleted(true)} />
+          ) : (
+            currentStep && <StepCard step={currentStep} onComplete={advance} />
+          )}
+        </div>
 
-      {/* Dev nav (remove before production) */}
-      <div className="fixed bottom-4 right-4 flex gap-2 opacity-40 hover:opacity-100 transition-opacity">
-        <button
-          onClick={() => setStepIndex(i => Math.max(0, i - 1))}
-          className="bg-slate-700 text-white p-2 rounded-lg"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <span className="bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-mono">
-          {stepIndex + 1}/{job.steps.length}
-        </span>
-        <button
-          onClick={() => setStepIndex(i => Math.min(job.steps.length - 1, i + 1))}
-          className="bg-slate-700 text-white p-2 rounded-lg"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+        {/* Dev nav (remove before production) */}
+        <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
+          <button
+            onClick={() => setStepIndex(i => Math.max(0, i - 1))}
+            className="bg-slate-700 text-white p-2 rounded-lg"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-mono">
+            {stepIndex + 1}/{job.steps.length}
+          </span>
+          <button
+            onClick={() => setStepIndex(i => Math.min(job.steps.length - 1, i + 1))}
+            className="bg-slate-700 text-white p-2 rounded-lg"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
