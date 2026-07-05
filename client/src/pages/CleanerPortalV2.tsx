@@ -161,6 +161,15 @@ const MOCK_JOB: MockJob = {
       ctaText: "Complete Objective",
     },
     {
+      id: "signoff",
+      type: "signoff",
+      label: "FINAL STEP",
+      emoji: "✍️",
+      title: "Customer Sign-off",
+      description: "Walk the home together before finishing.",
+      ctaText: "COMPLETE SIGN-OFF",
+    },
+    {
       id: "next_job",
       type: "next_job",
       label: "YOUR NEXT OBJECTIVE",
@@ -170,15 +179,6 @@ const MOCK_JOB: MockJob = {
       aiCoach: "Jennifer Smith is ready for you.",
       badge: "Next Job Unlocked",
       ctaText: "Start Mission #2 →",
-    },
-    {
-      id: "signoff",
-      type: "signoff",
-      label: "FINAL STEP",
-      emoji: "✍️",
-      title: "Customer Sign-off",
-      description: "Walk the home together before finishing.",
-      ctaText: "COMPLETE SIGN-OFF",
     },
   ],
 };
