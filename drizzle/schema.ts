@@ -1170,6 +1170,12 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   requestedTeam: varchar("requestedTeam", { length: 255 }),
   /** S3 URL of the customer signature captured at sign-off */
   signatureUrl: varchar("signatureUrl", { length: 1000 }),
+  /** Customer satisfaction response from sign-off (e.g. 'great', 'touchup', 'issue') */
+  customerResponse: varchar("customerResponse", { length: 50 }),
+  /** Customer response notes from sign-off */
+  customerNotes: text("customerNotes"),
+  /** Set to 1 if cleaner bypassed sign-off because customer was not home */
+  customerNotHome: tinyint("customerNotHome").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [
@@ -1200,6 +1206,8 @@ export const jobPhotos = mysqlTable("job_photos", {
   thumbnailKey: varchar("thumbnailKey", { length: 512 }),
   /** Original filename */
   filename: varchar("filename", { length: 255 }),
+  /** Photo type: 'before' | 'after' | 'general' */
+  photoType: varchar("photoType", { length: 20 }).default("general").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type JobPhoto = typeof jobPhotos.$inferSelect;

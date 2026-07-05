@@ -1389,6 +1389,9 @@ export const qualityRouter = router({
           googleReviewBonus: cj.googleReviewBonus ?? null,
           customerNotes: cj.customerNotes ?? null,
           staffNotes: cj.staffNotes ?? null,
+          signatureUrl: (cj as any).signatureUrl ?? null,
+          customerResponse: (cj as any).customerResponse ?? null,
+          customerNotHome: (cj as any).customerNotHome === 1,
           checklistItems: cj.checklistItems
             ? (JSON.parse(cj.checklistItems) as Array<{ text: string; checked: boolean }>)
             : null,
@@ -1409,6 +1412,7 @@ export const qualityRouter = router({
             photoUrl: p.photoUrl,
             thumbnailUrl: p.thumbnailUrl ?? null,
             filename: p.filename ?? null,
+            photoType: (p as any).photoType ?? "general",
           })),
       }));
     }),

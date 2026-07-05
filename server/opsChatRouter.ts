@@ -429,7 +429,19 @@ export const opsChatRouter = router({
           cleanerPhone: profile?.phone ?? null,
           cleanerName: job.cleanerName,
           teamName: job.teamName ?? null,
+          // Sign-off data
+          signatureUrl: job.signatureUrl ?? null,
+          customerResponse: job.customerResponse ?? null,
+          customerSignoffNotes: (job as any).customerNotes ?? null,
+          customerNotHome: (job as any).customerNotHome === 1,
         },
+        photos: photos.map(p => ({
+          id: p.id,
+          url: p.photoUrl,
+          thumbnailUrl: p.thumbnailUrl ?? p.photoUrl,
+          photoType: (p as any).photoType ?? "general",
+          createdAt: p.createdAt,
+        })),
         timeline,
         thread,
       };

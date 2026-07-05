@@ -511,7 +511,10 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
           reader.onload = () => {
             const base64 = (reader.result as string).split(',')[1];
             uploadMutation.mutate(
-              { cleanerJobId, completedJobId, filename: valid[i].name, mimeType: valid[i].type, dataBase64: base64 },
+              {
+                cleanerJobId, completedJobId, filename: valid[i].name, mimeType: valid[i].type, dataBase64: base64,
+                photoType: step.type === 'before_photos' ? 'before' : step.type === 'after_photos' ? 'after' : 'general',
+              },
               { onSettled: () => resolve() }
             );
           };
@@ -708,6 +711,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
   const [loading, setLoading] = useState(false);
 
   const saveSignatureMutation = trpc.cleaner.saveSignature.useMutation({ throwOnError: false });
+  const saveNotHomeMutation = trpc.cleaner.saveNotHome.useMutation({ throwOnError: false });
 
   // Signature canvas
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -766,21 +770,39 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
     const canvas = canvasRef.current;
     const sig = canvas?.toDataURL("image/png") ?? "";
 
-    // Upload signature to S3 if we have a real job
-    if (cleanerJobId && sig && sig !== "data:,") {
-      const base64 = sig.split(",")[1];
-      if (base64) {
-        await new Promise<void>((resolve) => {
-          saveSignatureMutation.mutate(
-            { cleanerJobId, signatureBase64: base64 },
-            { onSettled: () => resolve() }
-          );
-        });
-      }
+    // Upload signature + save customer response to DB if we have a real job
+    if (cleanerJobId) {
+      const base64 = (sig && sig !== "data:,") ? sig.split(",")[1] : undefined;
+      await new Promise<void>((resolve) => {
+        saveSignatureMutation.mutate(
+          {
+            cleanerJobId,
+            signatureBase64: base64 ?? "",
+            customerResponse: satisfaction,
+            customerNotes: notes || undefined,
+            customerNotHome: false,
+          },
+          { onSettled: () => resolve() }
+        );
+      });
     }
 
     setLoading(false);
     onComplete({ satisfaction, notes, signature: sig });
+  };
+
+  const handleNotHome = async () => {
+    setLoading(true);
+    if (cleanerJobId) {
+      await new Promise<void>((resolve) => {
+        saveNotHomeMutation.mutate(
+          { cleanerJobId },
+          { onSettled: () => resolve() }
+        );
+      });
+    }
+    setLoading(false);
+    onComplete({ satisfaction: "not_home", notes: "", signature: "" });
   };
 
   const options = [
@@ -855,7 +877,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
       </div>
 
       {/* Submit */}
-      <div className="px-4 mt-4 mb-5">
+      <div className="px-4 mt-4 mb-2">
         <button
           onClick={handleSubmit}
           disabled={!satisfaction || loading}
@@ -863,6 +885,18 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
           COMPLETE SIGN-OFF
+        </button>
+      </div>
+
+      {/* Customer Not Home bypass */}
+      <div className="px-4 mb-5">
+        <button
+          onClick={handleNotHome}
+          disabled={loading}
+          className="w-full bg-transparent border border-slate-600 text-slate-400 hover:text-slate-200 hover:border-slate-400 text-sm py-3 rounded-2xl transition-all flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🚪</span>}
+          Customer not home — skip sign-off
         </button>
       </div>
     </div>

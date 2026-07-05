@@ -294,6 +294,7 @@ export const cleanerRouter = router({
       filename: z.string().max(255),
       mimeType: z.string().max(50),
       dataBase64: z.string().max(10 * 1024 * 1024), // 10MB base64 limit
+      photoType: z.enum(["before", "after", "general"]).default("general"),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -343,6 +344,7 @@ export const cleanerRouter = router({
         thumbnailUrl: thumbnailUrl ?? null,
         thumbnailKey: thumbnailKey ?? null,
         filename: input.filename,
+        photoType: input.photoType,
       });
 
       // Count total photos now uploaded for this job (including the one just inserted)
@@ -389,12 +391,14 @@ export const cleanerRouter = router({
     }),
 
   /**
-   * cleaner.saveSignature — upload customer signature PNG to S3 and save URL on the job.
+   * cleaner.saveSignature — upload customer signature PNG to S3 and save URL + response on the job.
    */
   saveSignature: cleanerProcedure
     .input(z.object({
       cleanerJobId: z.number(),
       signatureBase64: z.string().max(2 * 1024 * 1024), // 2MB max for a signature PNG
+      customerResponse: z.enum(["great", "touchup", "issue"]).optional(),
+      customerNotes: z.string().max(2000).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
@@ -414,10 +418,34 @@ export const cleanerRouter = router({
       const buffer = Buffer.from(input.signatureBase64, "base64");
       const { url } = await storagePut(fileKey, buffer, "image/png");
 
-      // Save URL on the job
-      await db.update(cleanerJobs).set({ signatureUrl: url }).where(eq(cleanerJobs.id, input.cleanerJobId));
+      // Save URL + customer response on the job
+      await db.update(cleanerJobs).set({
+        signatureUrl: url,
+        ...(input.customerResponse ? { customerResponse: input.customerResponse } : {}),
+        ...(input.customerNotes !== undefined ? { customerNotes: input.customerNotes } : {}),
+      }).where(eq(cleanerJobs.id, input.cleanerJobId));
 
       return { signatureUrl: url };
+    }),
+
+  /**
+   * cleaner.saveNotHome — record that customer was not home, bypassing sign-off.
+   */
+  saveNotHome: cleanerProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      const jobRows = await db
+        .select()
+        .from(cleanerJobs)
+        .where(and(eq(cleanerJobs.id, input.cleanerJobId), eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)))
+        .limit(1);
+      if (!jobRows[0]) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
+
+      await db.update(cleanerJobs).set({ customerNotHome: 1 }).where(eq(cleanerJobs.id, input.cleanerJobId));
+      return { success: true };
     }),
 
   /**

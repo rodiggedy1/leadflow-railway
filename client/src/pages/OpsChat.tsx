@@ -3176,6 +3176,99 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               )}
             </div>
 
+            {/* 2b. Photos card — before/after gallery */}
+            {jobDetail.photos && jobDetail.photos.length > 0 && (() => {
+              const beforePhotos = jobDetail.photos.filter((p: any) => p.photoType === "before");
+              const afterPhotos = jobDetail.photos.filter((p: any) => p.photoType === "after");
+              const generalPhotos = jobDetail.photos.filter((p: any) => p.photoType === "general" || !p.photoType);
+              const renderGrid = (photos: any[]) => (
+                <div className="grid grid-cols-3 gap-1.5 mt-2">
+                  {photos.map((p: any, i: number) => (
+                    <a key={p.id} href={p.url} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={p.thumbnailUrl || p.url}
+                        alt={`Photo ${i + 1}`}
+                        className="w-full aspect-square object-cover rounded-lg border border-slate-200 hover:opacity-90 transition-opacity"
+                      />
+                    </a>
+                  ))}
+                </div>
+              );
+              return (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Photos ({jobDetail.photos.length})</p>
+                  {beforePhotos.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-slate-500 mb-1">Before ({beforePhotos.length})</p>
+                      {renderGrid(beforePhotos)}
+                    </div>
+                  )}
+                  {afterPhotos.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-slate-500 mb-1">After ({afterPhotos.length})</p>
+                      {renderGrid(afterPhotos)}
+                    </div>
+                  )}
+                  {generalPhotos.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-1">General ({generalPhotos.length})</p>
+                      {renderGrid(generalPhotos)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 2c. Sign-off card — customer response, notes, signature */}
+            {(jobDetail.job.signatureUrl || jobDetail.job.customerResponse || jobDetail.job.customerNotHome) && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Customer Sign-off</p>
+                {jobDetail.job.customerNotHome ? (
+                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                    <span className="text-amber-600 text-sm">🏠</span>
+                    <p className="text-sm text-amber-700 font-medium">Customer was not home — sign-off bypassed</p>
+                  </div>
+                ) : (
+                  <>
+                    {jobDetail.job.customerResponse && (
+                      <div className="mb-3">
+                        <p className="text-xs text-slate-400 mb-1">Satisfaction</p>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                          jobDetail.job.customerResponse === "great" ? "bg-emerald-100 text-emerald-700" :
+                          jobDetail.job.customerResponse === "touchup" ? "bg-amber-100 text-amber-700" :
+                          "bg-red-100 text-red-700"
+                        }`}>
+                          {jobDetail.job.customerResponse === "great" ? "😍 Everything looks great" :
+                           jobDetail.job.customerResponse === "touchup" ? "🛠️ Needs one touch-up" :
+                           "⚠️ Major issue"}
+                        </span>
+                      </div>
+                    )}
+                    {jobDetail.job.customerSignoffNotes && (
+                      <div className="mb-3">
+                        <p className="text-xs text-slate-400 mb-1">Customer Notes</p>
+                        <div className="rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+                          <p className="text-sm text-slate-600">{jobDetail.job.customerSignoffNotes}</p>
+                        </div>
+                      </div>
+                    )}
+                    {jobDetail.job.signatureUrl && (
+                      <div>
+                        <p className="text-xs text-slate-400 mb-1">Signature</p>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                          <img
+                            src={jobDetail.job.signatureUrl}
+                            alt="Customer signature"
+                            className="w-full max-h-24 object-contain"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             {/* 3. Actions card — at bottom */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Actions</p>
