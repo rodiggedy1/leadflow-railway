@@ -41,6 +41,7 @@ const queryClient = new QueryClient({
 const EXPECTED_AUTH_ERRORS = new Set([
   "Agent login required",
   "Cleaner login required",
+  UNAUTHED_ERR_MSG, // suppress on cleaner/portal routes
 ]);
 
 const isExpectedAuthError = (error: unknown): boolean => {
@@ -59,7 +60,7 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   // to Manus OAuth. A protectedProcedure error on those pages just means the
   // Manus user session is absent, which is expected and fine.
   const path = window.location.pathname;
-  if (path.startsWith("/admin") || path.startsWith("/agent") || path.startsWith("/cleaner") || path.startsWith("/auth")) return;
+  if (path.startsWith("/admin") || path.startsWith("/agent") || path.startsWith("/cleaner") || path.startsWith("/auth") || path.startsWith("/portal-v2")) return;
 
   window.location.href = getLoginUrl();
 };

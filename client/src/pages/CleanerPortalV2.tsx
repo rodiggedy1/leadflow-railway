@@ -1078,7 +1078,12 @@ function JobRunner({ job }: { job: PortalJob }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function CleanerPortalV2() {
+  // Auth guard — check session before loading jobs.
+  // If the cookie is absent or expired, redirect to /cleaner (which has the login form).
+  const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false, throwOnError: false });
+
   const { data: jobs, isLoading, error } = trpc.cleaner.getMyJobsToday.useQuery(undefined, {
+    enabled: meQuery.data != null, // only run once session is confirmed
     retry: 1,
     throwOnError: false,
   });
@@ -1086,7 +1091,28 @@ export default function CleanerPortalV2() {
   // Track which job index we're on (for multi-job days)
   const [activeJobIdx, setActiveJobIdx] = useState(0);
 
-  // Loading state
+  // Session loading
+  if (meQuery.isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
+        <p className="text-slate-400 text-sm">Loading…</p>
+      </div>
+    );
+  }
+
+  // Not authenticated — send to /cleaner which has the login form
+  if (!meQuery.data) {
+    window.location.replace("/cleaner");
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
+        <p className="text-slate-400 text-sm">Redirecting to login…</p>
+      </div>
+    );
+  }
+
+  // Jobs loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">

@@ -3,7 +3,7 @@
  *
  * Dedicated auth callback page for magic link login.
  * This page does ONE thing: exchange the magic token for a session cookie,
- * wait for the session to be confirmed, then redirect to /cleaner.
+ * wait for the session to be confirmed, then redirect to /portal-v2.
  *
  * It never renders the portal UI. It never checks existing sessions.
  * It is the ONLY place that calls verifyMagicLink.
@@ -12,8 +12,8 @@
  *   1. User taps magic link: https://quote.maidinblack.com/auth/cleaner-callback?token=XXX
  *   2. This page reads the token from the URL
  *   3. Calls verifyMagicLink mutation — server sets the session cookie in the response
- *   4. On success: confirms session is active by calling cleaner.me, then redirects to /cleaner
- *   5. On failure: shows error message with a link back to the login page
+ *   4. On success: confirms session is active by calling cleaner.me, then redirects to /portal-v2
+ *   5. On failure: shows error message with a link back to the login page (/cleaner)
  */
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -71,7 +71,7 @@ export default function CleanerAuthCallback() {
       // hasRedirected ref ensures this fires at most once even if the effect re-runs.
       if (!hasRedirected.current) {
         hasRedirected.current = true;
-        window.location.replace("/cleaner");
+        window.location.replace("/portal-v2");
       }
     } else if (meQuery.isError || (!meQuery.isLoading && !meQuery.data)) {
       // Session not found even after verification — something went wrong
