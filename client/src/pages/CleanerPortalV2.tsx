@@ -39,6 +39,7 @@ interface Step {
 
 interface MockJob {
   id: number;
+  cleanerJobId: number | null; // null = mock mode, skip real API calls
   customerName: string;
   address: string;
   time: string;
@@ -51,12 +52,13 @@ interface MockJob {
 // ── Mock Data ─────────────────────────────────────────────────────────────────
 
 const MOCK_JOB: MockJob = {
-  id: 1001,
-  customerName: "Jennifer Smith",
-  address: "Alexandria, VA",
-  time: "2:00 PM",
-  jobIndex: 2,
-  totalJobs: 3,
+  id: 2190001,
+  cleanerJobId: 2190001, // real test job — Test Cleaner / Rohan Test Client
+  customerName: "Rohan Test Client",
+  address: "123 Test Street NW, Washington DC 20001",
+  time: "10:00 AM",
+  jobIndex: 1,
+  totalJobs: 1,
   fiveStarChance: 84,
   steps: [
     {
@@ -202,7 +204,7 @@ function JobHeader({ job, stepIndex, totalSteps }: { job: MockJob; stepIndex: nu
   );
 }
 
-function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComplete: () => void; jobAddress: string }) {
+function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
@@ -215,6 +217,8 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
     { originLat: coords?.lat ?? 0, originLng: coords?.lng ?? 0, destination: jobAddress },
     { enabled: etaEnabled && !!coords, retry: false, throwOnError: false }
   );
+
+  const statusMutation = trpc.cleaner.updateJobStatus.useMutation();
 
   // Request GPS on mount
   useEffect(() => {
@@ -259,6 +263,21 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
     setHasLaunched(true);
     // On desktop (new tab), visibilitychange won't fire — set returnedFromMaps after a short delay
     setTimeout(() => setReturnedFromMaps(true), 1500);
+
+    // Fire on_the_way status update — sends customer the "on my way" SMS
+    if (cleanerJobId) {
+      const etaData = etaQuery.data;
+      const etaTimestampOverride = etaData?.ok && etaData.durationSeconds
+        ? Date.now() + etaData.durationSeconds * 1000
+        : undefined;
+      const etaLabel = etaData?.ok && etaData.durationText ? etaData.durationText : undefined;
+      statusMutation.mutate({
+        cleanerJobId,
+        status: "on_the_way",
+        etaLabel,
+        etaTimestampOverride,
+      });
+    }
   };
 
   // ── Phase: before navigation launched ─────────────────────────────────────
@@ -387,20 +406,28 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
   );
 }
 
-function StepCard({ step, onComplete, jobAddress }: { step: Step; onComplete: () => void; jobAddress: string }) {
+function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
   const [loading, setLoading] = useState(false);
+  const statusMutation = trpc.cleaner.updateJobStatus.useMutation();
 
   // Navigate step gets its own special card with ETA
   if (step.type === "navigate") {
-    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} />;
+    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} />;
   }
 
   const handleCta = useCallback(async () => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
+    // Fire real status updates for key steps
+    if (cleanerJobId) {
+      if (step.type === "arrived") {
+        await statusMutation.mutateAsync({ cleanerJobId, status: "arrived" }).catch(() => {});
+      }
+    } else {
+      await new Promise(r => setTimeout(r, 600));
+    }
     setLoading(false);
     onComplete();
-  }, [onComplete]);
+  }, [onComplete, step.type, cleanerJobId, statusMutation]);
 
   return (
     <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
@@ -681,7 +708,7 @@ export default function CleanerPortalV2() {
           {isSignoff ? (
             <SignoffCard onComplete={() => setCompleted(true)} />
           ) : (
-            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} />
+            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} />
           )}
         </div>
 
