@@ -834,10 +834,10 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Daily 5 PM ET: schedule confirmation SMS to cleaners ────────────────────
+  // ── Daily 6 PM ET: schedule confirmation SMS to cleaners ────────────────────
   // Sends "please confirm your schedule for tomorrow" SMS to all cleaners with jobs.
-  cron.schedule("0 0 17 * * *", async () => {
-    console.log("[InternalCron] Running ScheduleConfirmSend (5 PM)...");
+  cron.schedule("0 0 18 * * *", async () => {
+    console.log("[InternalCron] Running ScheduleConfirmSend (6 PM)...");
     try {
       const result = await runScheduleConfirmSend();
       const summary = `teamsSent: ${result.teamsSent}, teamsFailed: ${result.teamsFailed}, missingPhone: ${result.teamsMissingPhone}`;
@@ -850,10 +850,10 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Daily 7 PM ET: schedule confirmation nudge to still-unconfirmed cleaners ─
-  // Re-sends confirmation request to cleaners who haven't replied since the 5 PM SMS.
-  cron.schedule("0 0 19 * * *", async () => {
-    console.log("[InternalCron] Running ScheduleConfirmNudge (7 PM)...");
+  // ── Daily 8 PM ET: schedule confirmation nudge to still-unconfirmed cleaners ─
+  // Re-sends confirmation request to cleaners who haven't replied since the 6 PM SMS.
+  cron.schedule("0 0 20 * * *", async () => {
+    console.log("[InternalCron] Running ScheduleConfirmNudge (8 PM)...");
     try {
       const result = await runScheduleConfirmNudge();
       const summary = `nudgesSent: ${result.nudgesSent}, alreadyConfirmed: ${result.alreadyConfirmed}, alreadyNudged: ${result.alreadyNudged}, errors: ${result.errors}`;
