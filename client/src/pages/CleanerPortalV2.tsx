@@ -18,6 +18,7 @@ type StepType =
   | "arrived"
   | "greet"
   | "before_photos"
+  | "after_photos"
   | "checklist_item"
   | "photo_objective"
   | "walk_through"
@@ -40,6 +41,7 @@ interface Step {
 interface MockJob {
   id: number;
   cleanerJobId: number | null; // null = mock mode, skip real API calls
+  completedJobId: number;       // 0 until job is completed
   customerName: string;
   address: string;
   time: string;
@@ -53,7 +55,8 @@ interface MockJob {
 
 const MOCK_JOB: MockJob = {
   id: 2190001,
-  cleanerJobId: 2190001, // real test job — Test Cleaner / Rohan Test Client
+  cleanerJobId: 2190001,  // real test job — Test Cleaner / Rohan Test Client
+  completedJobId: 0,       // 0 = not yet completed
   customerName: "Rohan Test Client",
   address: "123 Test Street NW, Washington DC 20001",
   time: "10:00 AM",
@@ -112,6 +115,17 @@ const MOCK_JOB: MockJob = {
       aiCoach: "Take a close-up of the sink and counters before leaving the kitchen.",
       badge: "+$5 Bonus",
       ctaText: "Complete Objective",
+    },
+    {
+      id: "after_photos",
+      type: "after_photos",
+      label: "NEXT REQUIRED ACTION",
+      emoji: "📸",
+      title: "Take After Photos",
+      description: "Photograph every room you cleaned — kitchen, bathrooms, bedrooms, living areas. Aim for 10+ photos.",
+      whyItMatters: "After photos unlock the +$5 bonus and protect the team if a customer claims something was missed.",
+      badge: "+$5 Bonus at 10 photos",
+      ctaText: "AFTER PHOTOS DONE",
     },
     {
       id: "walk_through",
@@ -423,7 +437,158 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
   );
 }
 
-function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
+// ── Photo Step Card ───────────────────────────────────────────────────────────
+
+function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
+  step: Step;
+  onComplete: () => void;
+  cleanerJobId: number | null;
+  completedJobId: number;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [photos, setPhotos] = useState<{ id: number; photoUrl: string; filename: string | null }[]>([]);
+
+  const uploadMutation = trpc.cleaner.uploadPhoto.useMutation({
+    throwOnError: false,
+    onError: (err) => console.error('Upload failed:', err.message),
+  });
+
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    const oversized = files.filter(f => f.size > 8 * 1024 * 1024);
+    const valid = files.filter(f => f.size <= 8 * 1024 * 1024);
+    if (oversized.length > 0) alert(`${oversized.length} photo(s) exceed 8MB and were skipped`);
+    if (valid.length === 0) return;
+
+    setUploading(true);
+    setUploadProgress({ current: 0, total: valid.length });
+    for (let i = 0; i < valid.length; i++) {
+      setUploadProgress({ current: i + 1, total: valid.length });
+      await new Promise<void>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          if (cleanerJobId) {
+            uploadMutation.mutate(
+              { cleanerJobId, completedJobId, filename: valid[i].name, mimeType: valid[i].type, dataBase64: base64 },
+              {
+                onSuccess: (data) => {
+                  setPhotos(prev => [...prev, { id: Date.now() + i, photoUrl: data.url, filename: valid[i].name }]);
+                  resolve();
+                },
+                onError: () => resolve(),
+              }
+            );
+          } else {
+            // Mock mode — just show a local preview
+            const url = URL.createObjectURL(valid[i]);
+            setPhotos(prev => [...prev, { id: Date.now() + i, photoUrl: url, filename: valid[i].name }]);
+            resolve();
+          }
+        };
+        reader.readAsDataURL(valid[i]);
+      });
+    }
+    setUploadProgress(null);
+    setUploading(false);
+    e.target.value = '';
+  }, [cleanerJobId, completedJobId, uploadMutation]);
+
+  // before_photos: require at least 1; after_photos: require at least 5 for a proper after set
+  const minPhotos = step.type === 'after_photos' ? 5 : 1;
+  const canAdvance = photos.length >= minPhotos;
+
+  return (
+    <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
+      {/* Label */}
+      <div className="pt-5 pb-1 text-center">
+        <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">{step.label}</span>
+      </div>
+      <div className="text-center text-5xl mt-3 mb-2 leading-none">{step.emoji}</div>
+      <h2 className="text-center text-3xl font-black text-white px-6 leading-tight">{step.title}</h2>
+      <p className="text-center text-slate-300 text-base px-6 mt-3 leading-relaxed">{step.description}</p>
+
+      {step.whyItMatters && (
+        <div className="mx-4 mt-4 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
+          <p className="text-blue-400 font-bold text-sm">Why this matters</p>
+          <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
+        </div>
+      )}
+
+      {/* Photo grid */}
+      {photos.length > 0 && (
+        <div className="mx-4 mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">{photos.length} photo{photos.length !== 1 ? 's' : ''} uploaded</span>
+            {photos.length >= 10 && <span className="text-emerald-400 text-xs font-bold">✓ Bonus earned</span>}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map(p => (
+              <a key={p.id} href={p.photoUrl} target="_blank" rel="noreferrer">
+                <img src={p.photoUrl} alt={p.filename ?? 'Photo'} className="w-full h-20 object-cover rounded-lg border border-slate-600 hover:opacity-80 transition-opacity" />
+              </a>
+            ))}
+          </div>
+          {/* Progress bar toward 10-photo bonus */}
+          {photos.length < 10 && (
+            <div className="mt-2">
+              <div className="w-full bg-slate-700 rounded-full h-1.5">
+                <div className="bg-amber-400 h-1.5 rounded-full transition-all" style={{ width: `${Math.min((photos.length / 10) * 100, 100)}%` }} />
+              </div>
+              <p className="text-amber-500 text-[10px] mt-0.5">{photos.length}/10 — {10 - photos.length} more for +$5 bonus</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Upload + progress */}
+      <div className="px-4 mt-4">
+        {uploading && uploadProgress && (
+          <div className="mb-3 bg-slate-900/60 border border-slate-700/40 rounded-xl px-4 py-3 flex items-center gap-3">
+            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+            <span className="text-slate-300 text-sm">
+              Uploading {uploadProgress.current}/{uploadProgress.total}...
+            </span>
+          </div>
+        )}
+        <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-semibold text-base py-4 rounded-2xl border border-slate-600/50 transition-all disabled:opacity-60 flex items-center justify-center gap-3"
+        >
+          {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+          {uploading ? `Uploading ${uploadProgress?.current ?? ''}/${uploadProgress?.total ?? ''}...` : photos.length > 0 ? 'Add More Photos' : 'Open Camera / Gallery'}
+        </button>
+      </div>
+
+      {/* Done CTA — only enabled once at least 1 photo uploaded */}
+      <div className="px-4 mt-3 mb-2">
+        <button
+          onClick={onComplete}
+          disabled={!canAdvance || uploading}
+          className={cn(
+            "w-full font-black text-base uppercase tracking-wide py-4 rounded-2xl border-2 shadow-lg transition-all flex items-center justify-center gap-2",
+            canAdvance
+              ? "bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white border-emerald-400/30 shadow-emerald-900/40"
+              : "bg-slate-700 text-slate-500 border-slate-600/30 cursor-not-allowed"
+          )}
+        >
+          <CheckCircle2 className="w-4 h-4" />
+          {canAdvance ? step.ctaText : `Upload at least 1 photo to continue`}
+        </button>
+      </div>
+      <p className="text-center text-slate-500 text-xs pb-5 mt-1 px-6">
+        {canAdvance ? `${photos.length} photo${photos.length !== 1 ? 's' : ''} ready · tap done to continue` : 'Take photos first, then tap done'}
+      </p>
+    </div>
+  );
+}
+
+function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; completedJobId: number }) {
   const [loading, setLoading] = useState(false);
 
   // MUST be before any conditional return — React hooks rules
@@ -435,6 +600,11 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; 
   // Navigate step gets its own special card with ETA
   if (step.type === "navigate") {
     return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} />;
+  }
+
+  // Photo steps get the camera upload card
+  if (step.type === 'before_photos' || step.type === 'after_photos' || step.type === 'photo_objective') {
+    return <PhotoStepCard step={step} onComplete={onComplete} cleanerJobId={cleanerJobId} completedJobId={completedJobId} />;
   }
 
   return (
@@ -724,7 +894,7 @@ export default function CleanerPortalV2() {
           {isSignoff ? (
             <SignoffCard onComplete={() => setCompleted(true)} />
           ) : (
-            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} />
+            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} completedJobId={job.completedJobId} />
           )}
         </div>
 
