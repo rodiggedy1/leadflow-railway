@@ -1512,7 +1512,9 @@ export const cleanerRouter = router({
 
   /**
    * cleaner.getDriveEta — get drive time and ETA from current location to job address.
-   * Uses Google Maps Directions API via Manus proxy.
+   * Uses Nominatim (free geocoding) + OSRM (free routing) — no API key, no cost.
+   * Step 1: geocode the job address to lat/lng via Nominatim
+   * Step 2: call OSRM public demo server for real drive time
    */
   getDriveEta: publicProcedure
     .input(z.object({
@@ -1521,35 +1523,38 @@ export const cleanerRouter = router({
       destination: z.string(), // job address
     }))
     .query(async ({ input }) => {
-      const { makeRequest } = await import("./_core/map.js");
-      type DirectionsResponse = {
-        status: string;
-        routes: Array<{
-          legs: Array<{
-            duration: { value: number; text: string };
-            duration_in_traffic?: { value: number; text: string };
-          }>;
-        }>;
-      };
       try {
-        const result = await makeRequest<DirectionsResponse>("/maps/api/directions/json", {
-          origin: `${input.originLat},${input.originLng}`,
-          destination: input.destination,
-          mode: "driving",
-          departure_time: "now",
+        // Step 1: Geocode the destination address using Nominatim (free OpenStreetMap)
+        const geocodeUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(input.destination)}&format=json&limit=1`;
+        const geocodeRes = await fetch(geocodeUrl, {
+          headers: { "User-Agent": "MaidInBlack-CleanerPortal/1.0" },
         });
-        if (result.status !== "OK" || !result.routes[0]?.legs[0]) {
+        const geocodeData = await geocodeRes.json() as Array<{ lat: string; lon: string }>;
+        if (!geocodeData[0]) {
           return { ok: false as const, durationText: null, etaText: null, durationSeconds: null };
         }
-        const leg = result.routes[0].legs[0];
-        const dur = leg.duration_in_traffic ?? leg.duration;
-        const durationSeconds = dur.value;
-        const durationText = dur.text;
+        const destLat = parseFloat(geocodeData[0].lat);
+        const destLng = parseFloat(geocodeData[0].lon);
+
+        // Step 2: Get real drive time from OSRM public demo server (free, no API key)
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${input.originLng},${input.originLat};${destLng},${destLat}?overview=false`;
+        const osrmRes = await fetch(osrmUrl, {
+          headers: { "User-Agent": "MaidInBlack-CleanerPortal/1.0" },
+        });
+        const osrmData = await osrmRes.json() as { code: string; routes: Array<{ duration: number; distance: number }> };
+        if (osrmData.code !== "Ok" || !osrmData.routes[0]) {
+          return { ok: false as const, durationText: null, etaText: null, durationSeconds: null };
+        }
+
+        const durationSeconds = Math.round(osrmData.routes[0].duration);
+        const minutes = Math.round(durationSeconds / 60);
+        const durationText = minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
         const etaMs = Date.now() + durationSeconds * 1000;
         const etaText = new Date(etaMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+
         return { ok: true as const, durationText, etaText, durationSeconds };
       } catch (err) {
-        console.error("[getDriveEta] Maps API error:", err);
+        console.error("[getDriveEta] OSRM/Nominatim error:", err);
         return { ok: false as const, durationText: null, etaText: null, durationSeconds: null };
       }
     }),

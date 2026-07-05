@@ -80,7 +80,7 @@ const MOCK_JOB: MockJob = {
   cleanerJobId: 2190001,  // real test job — Test Cleaner / Rohan Test Client
   completedJobId: 0,       // 0 = not yet completed
   customerName: "Rohan Test Client",
-  address: "123 Test Street NW, Washington DC 20001",
+  address: "1600 Pennsylvania Ave NW, Washington DC 20500",
   time: "10:00 AM",
   jobIndex: 1,
   totalJobs: 1,
