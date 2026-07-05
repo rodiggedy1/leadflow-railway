@@ -218,7 +218,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
     { enabled: etaEnabled && !!coords, retry: false, throwOnError: false }
   );
 
-  const statusMutation = trpc.cleaner.updateJobStatus.useMutation();
+  const statusMutation = trpc.cleaner.updateJobStatus.useMutation({ throwOnError: false });
 
   // Request GPS on mount
   useEffect(() => {
@@ -408,25 +408,27 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
 
 function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
   const [loading, setLoading] = useState(false);
-  const statusMutation = trpc.cleaner.updateJobStatus.useMutation();
+  const statusMutation = trpc.cleaner.updateJobStatus.useMutation({ throwOnError: false });
 
   // Navigate step gets its own special card with ETA
   if (step.type === "navigate") {
     return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} />;
   }
 
-  const handleCta = useCallback(async () => {
+  const handleCta = useCallback(() => {
     setLoading(true);
-    // Fire real status updates for key steps
-    if (cleanerJobId) {
-      if (step.type === "arrived") {
-        await statusMutation.mutateAsync({ cleanerJobId, status: "arrived" }).catch(() => {});
-      }
+    // Fire real status updates for key steps, then always advance
+    if (cleanerJobId && step.type === "arrived") {
+      statusMutation.mutate(
+        { cleanerJobId, status: "arrived" },
+        {
+          onSuccess: () => { setLoading(false); onComplete(); },
+          onError: () => { setLoading(false); onComplete(); }, // advance even on error
+        }
+      );
     } else {
-      await new Promise(r => setTimeout(r, 600));
+      setTimeout(() => { setLoading(false); onComplete(); }, 400);
     }
-    setLoading(false);
-    onComplete();
   }, [onComplete, step.type, cleanerJobId, statusMutation]);
 
   return (
@@ -687,12 +689,12 @@ export default function CleanerPortalV2() {
   const isSignoff = currentStep?.type === "signoff";
 
   const advance = useCallback(() => {
-    if (stepIndex < job.steps.length - 1) {
-      setStepIndex(i => i + 1);
-    } else {
+    setStepIndex(i => {
+      if (i < job.steps.length - 1) return i + 1;
       setCompleted(true);
-    }
-  }, [stepIndex, job.steps.length]);
+      return i;
+    });
+  }, [job.steps.length]);
 
   if (completed) return <CompletedScreen job={job} />;
 
