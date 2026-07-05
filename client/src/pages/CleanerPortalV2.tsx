@@ -524,8 +524,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
     e.target.value = '';
   }, [cleanerJobId, completedJobId, uploadMutation]);
 
-  // before_photos: require at least 1; after_photos: require at least 5 for a proper after set
-  const minPhotos = step.type === 'after_photos' ? 5 : 1;
+  const minPhotos = 1;
   const canAdvance = photos.length >= minPhotos;
 
   return (
