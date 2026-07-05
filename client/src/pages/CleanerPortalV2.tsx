@@ -200,9 +200,15 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
   // After user taps START NAVIGATION, show the pulsing "I've Arrived" CTA
-  const [hasLaunched, setHasLaunched] = useState(false);
+  const LAUNCHED_KEY = `portal_v2_launched_${cleanerJobId ?? 'mock'}`;
+  const [hasLaunched, setHasLaunched] = useState(() => {
+    try { return sessionStorage.getItem(LAUNCHED_KEY) === '1'; } catch { return false; }
+  });
   // When user returns from maps (tab becomes visible again), pulse the arrived button
-  const [returnedFromMaps, setReturnedFromMaps] = useState(false);
+  // If hasLaunched is already true on mount (restored from sessionStorage), pulse immediately
+  const [returnedFromMaps, setReturnedFromMaps] = useState(() => {
+    try { return sessionStorage.getItem(LAUNCHED_KEY) === '1'; } catch { return false; }
+  });
 
   const etaQuery = trpc.cleaner.getDriveEta.useQuery(
     { originLat: coords?.lat ?? 0, originLng: coords?.lng ?? 0, destination: jobAddress },
@@ -260,6 +266,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
       : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
     window.open(url, "_blank");
     setHasLaunched(true);
+    try { sessionStorage.setItem(LAUNCHED_KEY, '1'); } catch {}
     // On desktop (new tab), visibilitychange won't fire — set returnedFromMaps after a short delay
     setTimeout(() => setReturnedFromMaps(true), 1500);
 
@@ -381,6 +388,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
       {/* Arrived CTA — pulses when user returns from maps */}
       <button
         onClick={() => {
+          try { sessionStorage.removeItem(LAUNCHED_KEY); } catch {}
           if (cleanerJobId) {
             statusMutation.mutate(
               { cleanerJobId, status: "arrived" },
@@ -679,8 +687,16 @@ function CompletedScreen({ job }: { job: MockJob }) {
 
 export default function CleanerPortalV2() {
   const job = MOCK_JOB;
-  const [stepIndex, setStepIndex] = useState(0);
+  const SESSION_KEY = `portal_v2_step_${job.id}`;
+  const [stepIndex, setStepIndex] = useState(() => {
+    try { return parseInt(sessionStorage.getItem(SESSION_KEY) ?? "0", 10) || 0; } catch { return 0; }
+  });
   const [completed, setCompleted] = useState(false);
+
+  // Persist step index so navigating back from maps restores the right step
+  useEffect(() => {
+    try { sessionStorage.setItem(SESSION_KEY, String(stepIndex)); } catch {}
+  }, [stepIndex, SESSION_KEY]);
 
   const currentStep = job.steps[stepIndex];
   const isSignoff = currentStep?.type === "signoff";
