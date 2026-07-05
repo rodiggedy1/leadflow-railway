@@ -42,6 +42,7 @@ import {
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, or, sql } from "drizzle-orm";
 import { transcribeAudio } from "./_core/voiceTranscription";
 import { sendSms } from "./openphone";
+import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
@@ -1528,7 +1529,9 @@ export const opsChatRouter = router({
       for (const p of profiles) {
         if (!p.phone) continue;
         try {
-          await sendSms({ to: p.phone, content: input.message });
+          // Send from CS number so cleaner replies come back on the CS line,
+          // not the leads line, and are handled by handleCsInboundMessage.
+          await sendSms({ to: p.phone, content: input.message, fromNumberId: ENV.openPhoneCsNumberId || undefined });
           results.push({ name: p.name ?? "Cleaner", phone: p.phone, ok: true });
         } catch {
           results.push({ name: p.name ?? "Cleaner", phone: p.phone, ok: false });
