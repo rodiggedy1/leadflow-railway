@@ -426,15 +426,16 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
 function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
   const [loading, setLoading] = useState(false);
 
-  // Navigate step gets its own special card with ETA
-  if (step.type === "navigate") {
-    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} />;
-  }
-
+  // MUST be before any conditional return — React hooks rules
   const handleCta = useCallback(() => {
     setLoading(true);
     setTimeout(() => { setLoading(false); onComplete(); }, 400);
   }, [onComplete]);
+
+  // Navigate step gets its own special card with ETA
+  if (step.type === "navigate") {
+    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} />;
+  }
 
   return (
     <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
