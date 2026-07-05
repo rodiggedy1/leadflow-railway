@@ -1666,6 +1666,7 @@ export const cleanerRouter = router({
           ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
           : [],
         bookingStatus: job.bookingStatus ?? "",
+        jobStatus: job.jobStatus ?? "",
         jobIndex: idx + 1,
         totalJobsToday,
       };

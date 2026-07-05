@@ -78,6 +78,7 @@ interface PortalJob {
   extras: string[];             // extra keys from booking
   checklistItems: Array<{ text: string; checked: boolean }>;
   bookingStatus: string;
+  jobStatus: string;
   jobIndex: number;
   totalJobsToday: number;
 }
@@ -1027,11 +1028,22 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
   );
 }
 
-function CompletedScreen({ customerName, onNextJob, nextJobName }: { customerName: string; onNextJob?: () => void; nextJobName?: string }) {
+function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedule }: {
+  customerName: string;
+  onNextJob?: () => void;
+  nextJobName?: string;
+  onBackToSchedule?: () => void;
+}) {
+  const isLastJob = !onNextJob;
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 px-6 text-center">
-      <div className="text-6xl mb-4">🎉</div>
-      <h1 className="text-3xl font-black text-white">Job Complete!</h1>
+      <div className="text-6xl mb-4">{isLastJob ? '🏁' : '🎉'}</div>
+      <h1 className="text-3xl font-black text-white">
+        {isLastJob ? 'Last Job Done!' : 'Job Complete!'}
+      </h1>
+      {isLastJob && (
+        <p className="text-emerald-400 font-semibold mt-1 text-sm">That's all your missions today!</p>
+      )}
       <p className="text-slate-400 mt-2 text-base">
         {customerName} has been signed off. Great work!
       </p>
@@ -1053,10 +1065,10 @@ function CompletedScreen({ customerName, onNextJob, nextJobName }: { customerNam
         </button>
       ) : (
         <button
-          onClick={() => window.location.reload()}
-          className="mt-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold px-8 py-3 rounded-xl transition-all"
+          onClick={onBackToSchedule ?? (() => window.location.reload())}
+          className="mt-6 w-full max-w-sm bg-slate-700 hover:bg-slate-600 text-white font-semibold px-8 py-4 rounded-2xl transition-all"
         >
-          Back to Schedule
+          View Day Summary
         </button>
       )}
       {/* Dev reset — clears sessionStorage so the portal restarts from step 1 */}
@@ -1072,7 +1084,7 @@ function CompletedScreen({ customerName, onNextJob, nextJobName }: { customerNam
 
 // ── Single Job Runner ─────────────────────────────────────────────────────────
 
-function JobRunner({ job, onNextJob, nextJobName }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string }) {
+function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string; onBackToSchedule?: () => void }) {
   const steps = buildStepsFromJob(job);
 
   const SESSION_KEY = `portal_v2_step_${job.cleanerJobId}`;
@@ -1121,7 +1133,7 @@ function JobRunner({ job, onNextJob, nextJobName }: { job: PortalJob; onNextJob?
     }
   }, [job.cleanerJobId, markCompleteMutation, SESSION_KEY, COMPLETED_KEY]);
 
-  if (completed) return <CompletedScreen customerName={job.customerName} onNextJob={onNextJob} nextJobName={nextJobName} />;
+  if (completed) return <CompletedScreen customerName={job.customerName} onNextJob={onNextJob} nextJobName={nextJobName} onBackToSchedule={onBackToSchedule} />;
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center">
@@ -1390,76 +1402,104 @@ function DayBriefing({
   jobs,
   cleanerName,
   onStart,
+  onJobSelect,
 }: {
   jobs: PortalJob[];
   cleanerName: string;
   onStart: () => void;
+  onJobSelect?: (idx: number) => void;
 }) {
   const firstName = cleanerName.split(' ')[0];
   const hourET = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }));
   const greeting = hourET < 12 ? 'Good morning' : hourET < 17 ? 'Good afternoon' : 'Good evening';
-
+  const completedCount = jobs.filter(j => j.jobStatus === 'completed' || j.bookingStatus === 'completed').length;
+  const allDone = completedCount === jobs.length;
+  const firstIncompleteIdx = jobs.findIndex(j => j.jobStatus !== 'completed' && j.bookingStatus !== 'completed');
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col px-4 pt-10 pb-8 max-w-lg mx-auto w-full">
       {/* Header */}
       <div className="text-center mb-8 space-y-1">
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-3">
-          <span className="text-2xl">🧹</span>
+          <span className="text-2xl">{allDone ? '🏁' : '🧹'}</span>
         </div>
-        <h1 className="text-white text-2xl font-black">{greeting}, {firstName}!</h1>
+        <h1 className="text-white text-2xl font-black">
+          {allDone ? `Great work, ${firstName}!` : `${greeting}, ${firstName}!`}
+        </h1>
         <p className="text-slate-400 text-sm">
-          {jobs.length === 1
-            ? 'You have 1 mission today'
-            : `You have ${jobs.length} missions today`}
+          {allDone
+            ? 'All missions complete for today!'
+            : completedCount > 0
+              ? `${completedCount} of ${jobs.length} missions done`
+              : jobs.length === 1 ? 'You have 1 mission today' : `You have ${jobs.length} missions today`}
         </p>
       </div>
-
       {/* Job cards */}
       <div className="space-y-3 flex-1">
-        {jobs.map((job, idx) => (
-          <div
-            key={job.cleanerJobId}
-            className="bg-slate-800/70 border border-slate-700/60 rounded-2xl px-4 py-4 space-y-2"
-          >
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shrink-0">
-                {idx + 1}
-              </span>
-              <span className="text-white font-bold text-base leading-tight">{job.customerName}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
-              <span className="text-emerald-400 font-semibold">{job.time}</span>
-              <span className="text-slate-600">·</span>
-              <span className="truncate">{job.address}</span>
-            </div>
-            {(job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
-              <div className="flex flex-wrap gap-1.5 pl-8">
-                {job.bathrooms > 0 && (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">
-                    {job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}
+        {jobs.map((job, idx) => {
+          const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
+          return (
+            <div
+              key={job.cleanerJobId}
+              onClick={() => { if (!isDone && onJobSelect) { onJobSelect(idx); onStart(); } }}
+              className={[
+                'rounded-2xl px-4 py-4 space-y-2 transition-all',
+                isDone
+                  ? 'bg-slate-800/40 border border-slate-700/30 opacity-60'
+                  : 'bg-slate-800/70 border border-slate-700/60 active:scale-[0.98] cursor-pointer',
+              ].join(' ')}
+            >
+              <div className="flex items-center gap-2">
+                {isDone ? (
+                  <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
+                ) : (
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shrink-0">
+                    {idx + 1}
                   </span>
                 )}
-                {(job.extras ?? []).map(e => (
-                  <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">
-                    {e.replace(/_/g, ' ')}
-                  </span>
-                ))}
+                <span className={['font-bold text-base leading-tight', isDone ? 'text-slate-500 line-through' : 'text-white'].join(' ')}>
+                  {job.customerName}
+                </span>
+                {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">Done</span>}
               </div>
-            )}
-          </div>
-        ))}
+              <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
+                <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
+                <span className="text-slate-600">·</span>
+                <span className="truncate">{job.address}</span>
+              </div>
+              {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
+                <div className="flex flex-wrap gap-1.5 pl-8">
+                  {job.bathrooms > 0 && (
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">
+                      {job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  {(job.extras ?? []).map(e => (
+                    <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">
+                      {e.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
-
       {/* CTA */}
-      <div className="mt-8">
-        <button
-          onClick={onStart}
-          className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
-        >
-          Let's Go →
-        </button>
-        <p className="text-center text-slate-600 text-xs mt-3">Starting with Job 1</p>
-      </div>
+      {!allDone && (
+        <div className="mt-8">
+          <button
+            onClick={() => { if (firstIncompleteIdx >= 0 && onJobSelect) onJobSelect(firstIncompleteIdx); onStart(); }}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
+          >
+            {completedCount > 0 ? 'Continue →' : "Let's Go →"}
+          </button>
+          {completedCount === 0 && (
+            <p className="text-center text-slate-600 text-xs mt-3">
+              Starting with Job {firstIncompleteIdx + 1}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1485,7 +1525,22 @@ function CleanerPortalV2Inner() {
   });
 
   // Track which job index we're on (for multi-job days)
-  const [activeJobIdx, setActiveJobIdx] = useState(0);
+  // Initialize to the first non-completed job so re-opening the portal after completing
+  // job 1 starts on job 2 (not job 1 again).
+  const [activeJobIdx, setActiveJobIdx] = useState(() => {
+    // We don't have jobs yet at init time — start at 0 and correct once jobs load
+    return 0;
+  });
+  // Once jobs load, jump to the first incomplete job
+  const [hasAutoAdvanced, setHasAutoAdvanced] = useState(false);
+  useEffect(() => {
+    if (!jobs || hasAutoAdvanced) return;
+    const firstIncomplete = jobs.findIndex(
+      j => j.jobStatus !== 'completed' && j.bookingStatus !== 'completed'
+    );
+    if (firstIncomplete > 0) setActiveJobIdx(firstIncomplete);
+    setHasAutoAdvanced(true);
+  }, [jobs, hasAutoAdvanced]);
 
   // Show weekly schedule prompt if not yet submitted today
   const [showSchedulePrompt, setShowSchedulePrompt] = useState(false);
@@ -1607,6 +1662,7 @@ function CleanerPortalV2Inner() {
           jobs={jobs}
           cleanerName={meQuery.data?.name ?? ""}
           onStart={() => setShowBriefing(false)}
+          onJobSelect={(idx) => setActiveJobIdx(idx)}
         />
       )}
       {/* Job runner — shown after briefing is dismissed */}
@@ -1616,6 +1672,7 @@ function CleanerPortalV2Inner() {
           job={activeJob}
           onNextJob={activeJobIdx < jobs.length - 1 ? () => setActiveJobIdx(i => i + 1) : undefined}
           nextJobName={jobs[activeJobIdx + 1]?.customerName}
+          onBackToSchedule={() => setShowBriefing(true)}
         />
       )}
     </>
