@@ -1467,8 +1467,9 @@ function DayBriefing({
 // ── Main Component ────────────────────────────────────────────────────────────
 function CleanerPortalV2Inner() {
   // Auth guard — check session before loading jobs.
-  // If the cookie is absent or expired, redirect to /cleaner (which has the login form).
-  const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: false, throwOnError: false });
+  // Only redirect to /cleaner on an explicit UNAUTHORIZED error (expired/missing cookie).
+  // Transient network failures during deploys must NOT redirect — show an error state instead.
+  const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
 
   // Portal data — includes tomorrowAvailability.submitted to gate the schedule prompt
   const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, {
@@ -1508,13 +1509,31 @@ function CleanerPortalV2Inner() {
     );
   }
 
-  // Not authenticated — send to /cleaner which has the login form
-  if (!meQuery.data) {
+  // Not authenticated — only redirect on explicit UNAUTHORIZED (cookie expired/missing).
+  // Any other error (network, deploy restart) shows a retry screen instead.
+  const isUnauthorized = meQuery.isError &&
+    (meQuery.error?.message?.includes("10001") || meQuery.error?.message?.includes("UNAUTHORIZED"));
+
+  if (isUnauthorized) {
     window.location.replace("/cleaner");
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
         <p className="text-slate-400 text-sm">Redirecting to login…</p>
+      </div>
+    );
+  }
+
+  if (meQuery.isError && !isUnauthorized) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4 px-6">
+        <p className="text-slate-300 text-center">Connection error. Please check your signal and try again.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="bg-emerald-500 text-white font-bold px-6 py-3 rounded-xl"
+        >
+          Retry
+        </button>
       </div>
     );
   }
