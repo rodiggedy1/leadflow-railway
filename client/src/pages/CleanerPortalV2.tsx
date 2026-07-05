@@ -206,6 +206,10 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
+  // After user taps START NAVIGATION, show the pulsing "I've Arrived" CTA
+  const [hasLaunched, setHasLaunched] = useState(false);
+  // When user returns from maps (tab becomes visible again), pulse the arrived button
+  const [returnedFromMaps, setReturnedFromMaps] = useState(false);
 
   const etaQuery = trpc.cleaner.getDriveEta.useQuery(
     { originLat: coords?.lat ?? 0, originLng: coords?.lng ?? 0, destination: jobAddress },
@@ -226,72 +230,159 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
     );
   }, []);
 
+  // Detect when user returns from maps app (tab/page becomes visible again)
+  useEffect(() => {
+    if (!hasLaunched) return;
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        setReturnedFromMaps(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    // Also handle focus event for desktop/PWA
+    window.addEventListener("focus", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
+    };
+  }, [hasLaunched]);
+
   const eta = etaQuery.data;
+  const hasEta = eta?.ok;
 
   const handleNavigate = () => {
     const dest = encodeURIComponent(jobAddress);
-    // Opens Google Maps (Android) or Apple Maps (iOS) or falls back to Google Maps web
     const url = /iPhone|iPad|iPod/i.test(navigator.userAgent)
       ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
       : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
     window.open(url, "_blank");
-    // Don't auto-advance — let the cleaner tap "Arrived" when they get there
+    setHasLaunched(true);
+    // On desktop (new tab), visibilitychange won't fire — set returnedFromMaps after a short delay
+    setTimeout(() => setReturnedFromMaps(true), 1500);
   };
 
-  return (
-    <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
-      <div className="pt-5 pb-1 text-center">
-        <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">{step.label}</span>
-      </div>
-      <div className="text-center text-5xl mt-3 mb-2 leading-none">{step.emoji}</div>
-      <h2 className="text-center text-3xl font-black text-white px-6 leading-tight">{step.title}</h2>
-      <p className="text-center text-slate-300 text-base px-6 mt-3 leading-relaxed">{step.description}</p>
-
-      {/* ETA display */}
-      <div className="mx-4 mt-4 bg-slate-900/80 border border-slate-700/40 rounded-xl p-4 min-h-[64px] flex items-center justify-center">
-        {gpsState === "fetching" || (gpsState === "ready" && etaQuery.isLoading) ? (
-          <div className="flex items-center gap-2 text-slate-400">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span className="text-sm">Getting drive time...</span>
-          </div>
-        ) : gpsState === "error" || (eta && !eta.ok) ? (
-          <div className="flex items-center gap-2 text-slate-500">
-            <AlertTriangle className="w-4 h-4" />
-            <span className="text-sm">Location unavailable — tap to open maps</span>
-          </div>
-        ) : eta?.ok ? (
-          <div className="text-center">
-            <div className="text-2xl font-black text-white">{eta.durationText}</div>
-            <div className="text-slate-400 text-sm mt-0.5">Arrive by <span className="text-emerald-400 font-semibold">{eta.etaText}</span></div>
-          </div>
-        ) : null}
-      </div>
-
-      {step.whyItMatters && (
-        <div className="mx-4 mt-4 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-          <p className="text-blue-400 font-bold text-sm">Why this matters</p>
-          <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
+  // ── Phase: before navigation launched ─────────────────────────────────────
+  if (!hasLaunched) {
+    return (
+      <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
+        <div className="pt-5 pb-1 text-center">
+          <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">{step.label}</span>
         </div>
-      )}
+        <div className="text-center text-5xl mt-3 mb-2 leading-none">{step.emoji}</div>
+        <h2 className="text-center text-3xl font-black text-white px-6 leading-tight">{step.title}</h2>
 
-      <div className="px-4 mt-5 mb-2 flex flex-col gap-3">
-        <button
-          onClick={handleNavigate}
-          className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-base uppercase tracking-wide py-4 rounded-2xl border-2 border-emerald-400/30 shadow-lg transition-all flex items-center justify-center gap-2"
-        >
-          <Navigation className="w-5 h-5" />
-          {step.ctaText}
-        </button>
-        <button
-          onClick={onComplete}
-          className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-300 font-bold text-sm uppercase tracking-wide py-3 rounded-2xl border border-slate-600/50 transition-all"
-        >
-          Already there? Mark Arrived →
-        </button>
+        {/* Address pill */}
+        <div className="mx-4 mt-4 bg-slate-900/80 border border-slate-700/40 rounded-xl px-4 py-3 flex items-center gap-3">
+          <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="text-white font-semibold text-sm flex-1 truncate">{jobAddress}</span>
+        </div>
+
+        {/* ETA display */}
+        <div className="mx-4 mt-3 bg-slate-900/60 border border-slate-700/30 rounded-xl p-4 min-h-[64px] flex items-center justify-center">
+          {gpsState === "fetching" || (gpsState === "ready" && etaQuery.isLoading) ? (
+            <div className="flex items-center gap-2 text-slate-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Calculating drive time...</span>
+            </div>
+          ) : hasEta ? (
+            <div className="flex items-center justify-between w-full">
+              <div>
+                <div className="text-2xl font-black text-white">{eta.durationText}</div>
+                <div className="text-slate-400 text-xs mt-0.5">estimated drive</div>
+              </div>
+              <div className="text-right">
+                <div className="text-emerald-400 font-black text-xl">{eta.etaText}</div>
+                <div className="text-slate-400 text-xs mt-0.5">arrive by</div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-500">
+              <MapPin className="w-4 h-4" />
+              <span className="text-sm">Tap to get directions</span>
+            </div>
+          )}
+        </div>
+
+        {step.whyItMatters && (
+          <div className="mx-4 mt-3 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
+            <p className="text-blue-400 font-bold text-sm">Why this matters</p>
+            <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
+          </div>
+        )}
+
+        <div className="px-4 mt-5 pb-5">
+          <button
+            onClick={handleNavigate}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-5 rounded-2xl border-2 border-emerald-400/30 shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-3"
+          >
+            <Navigation className="w-6 h-6" />
+            {step.ctaText}
+          </button>
+          <p className="text-center text-slate-500 text-xs mt-3">
+            Opens Google Maps · Come back when you arrive
+          </p>
+        </div>
       </div>
-      <p className="text-center text-slate-500 text-xs pb-5 mt-2 px-6">
-        No dashboard. No scrolling. Finish this action to get the next one.
-      </p>
+    );
+  }
+
+  // ── Phase: navigation launched — waiting for arrival ───────────────────────
+  return (
+    <div className="mx-4 mt-4 overflow-hidden shadow-xl">
+      {/* En route card */}
+      <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl mb-3">
+        <div className="pt-4 pb-1 text-center">
+          <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">🚗 En Route</span>
+        </div>
+        <div className="text-center text-5xl mt-2 mb-2 leading-none">🗺️</div>
+        <h2 className="text-center text-2xl font-black text-white px-6 leading-tight">Heading to {jobAddress.split(",")[0]}</h2>
+
+        {/* ETA reminder */}
+        {hasEta && (
+          <div className="mx-4 mt-3 bg-blue-900/20 border border-blue-700/30 rounded-xl px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span className="text-blue-300 text-sm font-semibold">ETA {eta.etaText}</span>
+            </div>
+            <span className="text-slate-400 text-sm">{eta.durationText} drive</span>
+          </div>
+        )}
+
+        {/* Re-open maps */}
+        <div className="px-4 mt-3 mb-4">
+          <button
+            onClick={handleNavigate}
+            className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-300 font-semibold text-sm py-3 rounded-xl border border-slate-600/50 transition-all flex items-center justify-center gap-2"
+          >
+            <Navigation className="w-4 h-4" />
+            Re-open Maps
+          </button>
+        </div>
+      </div>
+
+      {/* Arrived CTA — pulses when user returns from maps */}
+      <button
+        onClick={onComplete}
+        className={cn(
+          "w-full bg-emerald-500 text-white font-black text-xl uppercase tracking-wide py-6 rounded-2xl border-2 border-emerald-400/40 shadow-xl shadow-emerald-900/50 transition-all flex items-center justify-center gap-3",
+          returnedFromMaps
+            ? "animate-pulse hover:animate-none hover:bg-emerald-400 active:bg-emerald-600 scale-[1.02]"
+            : "opacity-70 hover:opacity-100 hover:bg-emerald-400 active:bg-emerald-600"
+        )}
+      >
+        <CheckCircle2 className="w-7 h-7" />
+        I've Arrived
+      </button>
+      {returnedFromMaps && (
+        <p className="text-center text-emerald-400 text-sm font-semibold mt-2 animate-pulse">
+          ✓ Tap to confirm you're on site
+        </p>
+      )}
+      {!returnedFromMaps && (
+        <p className="text-center text-slate-500 text-xs mt-2">
+          Tap when you're parked and at the door
+        </p>
+      )}
     </div>
   );
 }
