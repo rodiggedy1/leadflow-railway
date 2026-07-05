@@ -1045,6 +1045,7 @@ function JobRunner({ job }: { job: PortalJob }) {
           ) : (
             currentStep && (
               <StepCard
+                key={currentStep.id}
                 step={currentStep}
                 onComplete={advance}
                 jobAddress={job.address}
