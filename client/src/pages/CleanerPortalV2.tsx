@@ -702,10 +702,12 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, 
   );
 }
 
-function SignoffCard({ onComplete }: { onComplete: (result: { satisfaction: string; notes: string; signature: string }) => void }) {
+function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { satisfaction: string; notes: string; signature: string }) => void; cleanerJobId: number | null }) {
   const [satisfaction, setSatisfaction] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const saveSignatureMutation = trpc.cleaner.saveSignature.useMutation({ throwOnError: false });
 
   // Signature canvas
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -761,8 +763,22 @@ function SignoffCard({ onComplete }: { onComplete: (result: { satisfaction: stri
   const handleSubmit = async () => {
     if (!satisfaction) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 600));
-    const sig = canvasRef.current?.toDataURL() ?? "";
+    const canvas = canvasRef.current;
+    const sig = canvas?.toDataURL("image/png") ?? "";
+
+    // Upload signature to S3 if we have a real job
+    if (cleanerJobId && sig && sig !== "data:,") {
+      const base64 = sig.split(",")[1];
+      if (base64) {
+        await new Promise<void>((resolve) => {
+          saveSignatureMutation.mutate(
+            { cleanerJobId, signatureBase64: base64 },
+            { onSettled: () => resolve() }
+          );
+        });
+      }
+    }
+
     setLoading(false);
     onComplete({ satisfaction, notes, signature: sig });
   };
@@ -899,7 +915,10 @@ export default function CleanerPortalV2() {
       return Math.min(saved, Math.max(0, visibleSteps.length - 1));
     } catch { return 0; }
   });
-  const [completed, setCompleted] = useState(false);
+  const COMPLETED_KEY = `portal_v2_completed_${job.id}`;
+  const [completed, setCompleted] = useState(() => {
+    try { return sessionStorage.getItem(COMPLETED_KEY) === "1"; } catch { return false; }
+  });
 
   // markComplete mutation — fires when sign-off is submitted
   const markCompleteMutation = trpc.cleaner.markComplete.useMutation({ throwOnError: false });
@@ -921,6 +940,9 @@ export default function CleanerPortalV2() {
   }, [visibleSteps.length]);
 
   const handleSignoffComplete = useCallback(() => {
+    // Persist completed state so page reload stays on completed screen
+    try { sessionStorage.setItem(COMPLETED_KEY, "1"); } catch {}
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
     // Fire markComplete — sends completion flow to customer
     if (job.cleanerJobId) {
       markCompleteMutation.mutate(
@@ -930,9 +952,7 @@ export default function CleanerPortalV2() {
     } else {
       setCompleted(true);
     }
-    // Clear session storage so next job starts fresh
-    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
-  }, [job.cleanerJobId, markCompleteMutation, SESSION_KEY]);
+  }, [job.cleanerJobId, markCompleteMutation, SESSION_KEY, COMPLETED_KEY]);
 
   if (completed) return <CompletedScreen job={job} />;
 
@@ -946,7 +966,7 @@ export default function CleanerPortalV2() {
         {/* Step card */}
         <div className="flex-1 pb-10">
           {isSignoff ? (
-            <SignoffCard onComplete={handleSignoffComplete} />
+            <SignoffCard onComplete={handleSignoffComplete} cleanerJobId={job.cleanerJobId} />
           ) : (
             currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} completedJobId={job.completedJobId} jobStartTime={job.time} />
           )}

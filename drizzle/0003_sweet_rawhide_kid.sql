@@ -1,0 +1,1 @@
+ALTER TABLE `cleaner_jobs` ADD `signatureUrl` varchar(1000);

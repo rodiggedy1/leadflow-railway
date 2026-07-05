@@ -1168,6 +1168,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   scheduleConfirmed: int("scheduleConfirmed").default(0).notNull(),
   /** Team requested by the customer in L27 (preferred cleaner/team name) */
   requestedTeam: varchar("requestedTeam", { length: 255 }),
+  /** S3 URL of the customer signature captured at sign-off */
+  signatureUrl: varchar("signatureUrl", { length: 1000 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [

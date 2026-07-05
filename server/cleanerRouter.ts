@@ -389,6 +389,38 @@ export const cleanerRouter = router({
     }),
 
   /**
+   * cleaner.saveSignature — upload customer signature PNG to S3 and save URL on the job.
+   */
+  saveSignature: cleanerProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      signatureBase64: z.string().max(2 * 1024 * 1024), // 2MB max for a signature PNG
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Verify the job belongs to this cleaner
+      const jobRows = await db
+        .select()
+        .from(cleanerJobs)
+        .where(and(eq(cleanerJobs.id, input.cleanerJobId), eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)))
+        .limit(1);
+      if (!jobRows[0]) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found or not yours" });
+
+      // Upload signature PNG to S3
+      const randomSuffix = Math.random().toString(36).slice(2, 10);
+      const fileKey = `cleaner-signatures/${ctx.cleaner.cleanerId}/${input.cleanerJobId}-${randomSuffix}.png`;
+      const buffer = Buffer.from(input.signatureBase64, "base64");
+      const { url } = await storagePut(fileKey, buffer, "image/png");
+
+      // Save URL on the job
+      await db.update(cleanerJobs).set({ signatureUrl: url }).where(eq(cleanerJobs.id, input.cleanerJobId));
+
+      return { signatureUrl: url };
+    }),
+
+  /**
    * cleaner.markComplete — mark a job as completed by the cleaner.
    * Sets bookingStatus to "completed" if it was "assigned".
    */
