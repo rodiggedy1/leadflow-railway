@@ -71,16 +71,7 @@ const MOCK_JOB: MockJob = {
       whyItMatters: "Being early protects the review before the cleaning even begins.",
       ctaText: "START NAVIGATION",
     },
-    {
-      id: "arrived",
-      type: "arrived",
-      label: "MANUAL CHECKPOINT",
-      emoji: "📍",
-      title: "Tap When Arrived",
-      description: "When you're parked and at the home, tap arrived. This replaces GPS and tells operations you're on site.",
-      whyItMatters: "Manual arrival keeps the day accurate even without location tracking.",
-      ctaText: "I'VE ARRIVED",
-    },
+
     {
       id: "greet",
       type: "greet",
@@ -222,16 +213,24 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
 
   // Request GPS on mount
   useEffect(() => {
+    if (!navigator?.geolocation) {
+      setGpsState("error");
+      return;
+    }
     setGpsState("fetching");
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setGpsState("ready");
-        setEtaEnabled(true);
-      },
-      () => setGpsState("error"),
-      { timeout: 8000, maximumAge: 60000 }
-    );
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setGpsState("ready");
+          setEtaEnabled(true);
+        },
+        () => setGpsState("error"),
+        { timeout: 8000, maximumAge: 60000 }
+      );
+    } catch {
+      setGpsState("error");
+    }
   }, []);
 
   // Detect when user returns from maps app (tab/page becomes visible again)
@@ -381,7 +380,17 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
 
       {/* Arrived CTA — pulses when user returns from maps */}
       <button
-        onClick={onComplete}
+        onClick={() => {
+          if (cleanerJobId) {
+            statusMutation.mutate(
+              { cleanerJobId, status: "arrived" },
+              { onSuccess: onComplete, onError: onComplete }
+            );
+          } else {
+            onComplete();
+          }
+        }}
+        disabled={statusMutation.isPending}
         className={cn(
           "w-full bg-emerald-500 text-white font-black text-xl uppercase tracking-wide py-6 rounded-2xl border-2 border-emerald-400/40 shadow-xl shadow-emerald-900/50 transition-all flex items-center justify-center gap-3",
           returnedFromMaps
@@ -408,7 +417,6 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
 
 function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
   const [loading, setLoading] = useState(false);
-  const statusMutation = trpc.cleaner.updateJobStatus.useMutation({ throwOnError: false });
 
   // Navigate step gets its own special card with ETA
   if (step.type === "navigate") {
@@ -417,19 +425,8 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; 
 
   const handleCta = useCallback(() => {
     setLoading(true);
-    // Fire real status updates for key steps, then always advance
-    if (cleanerJobId && step.type === "arrived") {
-      statusMutation.mutate(
-        { cleanerJobId, status: "arrived" },
-        {
-          onSuccess: () => { setLoading(false); onComplete(); },
-          onError: () => { setLoading(false); onComplete(); }, // advance even on error
-        }
-      );
-    } else {
-      setTimeout(() => { setLoading(false); onComplete(); }, 400);
-    }
-  }, [onComplete, step.type, cleanerJobId, statusMutation]);
+    setTimeout(() => { setLoading(false); onComplete(); }, 400);
+  }, [onComplete]);
 
   return (
     <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
