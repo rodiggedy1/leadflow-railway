@@ -209,7 +209,7 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
 
   const etaQuery = trpc.cleaner.getDriveEta.useQuery(
     { originLat: coords?.lat ?? 0, originLng: coords?.lng ?? 0, destination: jobAddress },
-    { enabled: etaEnabled && !!coords, retry: false }
+    { enabled: etaEnabled && !!coords, retry: false, throwOnError: false }
   );
 
   // Request GPS on mount
@@ -235,7 +235,7 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
       ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
       : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
     window.open(url, "_blank");
-    onComplete();
+    // Don't auto-advance — let the cleaner tap "Arrived" when they get there
   };
 
   return (
@@ -274,13 +274,19 @@ function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComp
         </div>
       )}
 
-      <div className="px-4 mt-5 mb-2">
+      <div className="px-4 mt-5 mb-2 flex flex-col gap-3">
         <button
           onClick={handleNavigate}
           className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-base uppercase tracking-wide py-4 rounded-2xl border-2 border-emerald-400/30 shadow-lg transition-all flex items-center justify-center gap-2"
         >
           <Navigation className="w-5 h-5" />
           {step.ctaText}
+        </button>
+        <button
+          onClick={onComplete}
+          className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-300 font-bold text-sm uppercase tracking-wide py-3 rounded-2xl border border-slate-600/50 transition-all"
+        >
+          Already there? Mark Arrived →
         </button>
       </div>
       <p className="text-center text-slate-500 text-xs pb-5 mt-2 px-6">

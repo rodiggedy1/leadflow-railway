@@ -1482,7 +1482,7 @@ export const cleanerRouter = router({
    * cleaner.getDriveEta — get drive time and ETA from current location to job address.
    * Uses Google Maps Directions API via Manus proxy.
    */
-  getDriveEta: cleanerProcedure
+  getDriveEta: publicProcedure
     .input(z.object({
       originLat: z.number(),
       originLng: z.number(),
