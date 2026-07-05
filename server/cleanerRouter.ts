@@ -1478,6 +1478,50 @@ export const cleanerRouter = router({
       return { ok: true, teamId: team.id, teamName: team.name };
     }),
 
+  /**
+   * cleaner.getDriveEta — get drive time and ETA from current location to job address.
+   * Uses Google Maps Directions API via Manus proxy.
+   */
+  getDriveEta: cleanerProcedure
+    .input(z.object({
+      originLat: z.number(),
+      originLng: z.number(),
+      destination: z.string(), // job address
+    }))
+    .query(async ({ input }) => {
+      const { makeRequest } = await import("./_core/map.js");
+      type DirectionsResponse = {
+        status: string;
+        routes: Array<{
+          legs: Array<{
+            duration: { value: number; text: string };
+            duration_in_traffic?: { value: number; text: string };
+          }>;
+        }>;
+      };
+      try {
+        const result = await makeRequest<DirectionsResponse>("/maps/api/directions/json", {
+          origin: `${input.originLat},${input.originLng}`,
+          destination: input.destination,
+          mode: "driving",
+          departure_time: "now",
+        });
+        if (result.status !== "OK" || !result.routes[0]?.legs[0]) {
+          return { ok: false as const, durationText: null, etaText: null, durationSeconds: null };
+        }
+        const leg = result.routes[0].legs[0];
+        const dur = leg.duration_in_traffic ?? leg.duration;
+        const durationSeconds = dur.value;
+        const durationText = dur.text;
+        const etaMs = Date.now() + durationSeconds * 1000;
+        const etaText = new Date(etaMs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+        return { ok: true as const, durationText, etaText, durationSeconds };
+      } catch (err) {
+        console.error("[getDriveEta] Maps API error:", err);
+        return { ok: false as const, durationText: null, etaText: null, durationSeconds: null };
+      }
+    }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

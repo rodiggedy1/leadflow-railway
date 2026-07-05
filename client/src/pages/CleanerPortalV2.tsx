@@ -6,9 +6,9 @@
  *
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
-import { useState, useRef, useCallback } from "react";
-import { Loader2, MapPin, CheckCircle2, Camera, Star, ChevronLeft, ChevronRight, X, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Loader2, MapPin, CheckCircle2, Camera, Star, ChevronLeft, ChevronRight, X, AlertTriangle, Navigation } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -202,12 +202,104 @@ function JobHeader({ job, stepIndex, totalSteps }: { job: MockJob; stepIndex: nu
   );
 }
 
-function StepCard({ step, onComplete }: { step: Step; onComplete: () => void }) {
+function NavigateStepCard({ step, onComplete, jobAddress }: { step: Step; onComplete: () => void; jobAddress: string }) {
+  const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [etaEnabled, setEtaEnabled] = useState(false);
+
+  const etaQuery = trpc.cleaner.getDriveEta.useQuery(
+    { originLat: coords?.lat ?? 0, originLng: coords?.lng ?? 0, destination: jobAddress },
+    { enabled: etaEnabled && !!coords, retry: false }
+  );
+
+  // Request GPS on mount
+  useEffect(() => {
+    setGpsState("fetching");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setGpsState("ready");
+        setEtaEnabled(true);
+      },
+      () => setGpsState("error"),
+      { timeout: 8000, maximumAge: 60000 }
+    );
+  }, []);
+
+  const eta = etaQuery.data;
+
+  const handleNavigate = () => {
+    const dest = encodeURIComponent(jobAddress);
+    // Opens Google Maps (Android) or Apple Maps (iOS) or falls back to Google Maps web
+    const url = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
+      : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
+    window.open(url, "_blank");
+    onComplete();
+  };
+
+  return (
+    <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
+      <div className="pt-5 pb-1 text-center">
+        <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">{step.label}</span>
+      </div>
+      <div className="text-center text-5xl mt-3 mb-2 leading-none">{step.emoji}</div>
+      <h2 className="text-center text-3xl font-black text-white px-6 leading-tight">{step.title}</h2>
+      <p className="text-center text-slate-300 text-base px-6 mt-3 leading-relaxed">{step.description}</p>
+
+      {/* ETA display */}
+      <div className="mx-4 mt-4 bg-slate-900/80 border border-slate-700/40 rounded-xl p-4 min-h-[64px] flex items-center justify-center">
+        {gpsState === "fetching" || (gpsState === "ready" && etaQuery.isLoading) ? (
+          <div className="flex items-center gap-2 text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm">Getting drive time...</span>
+          </div>
+        ) : gpsState === "error" || (eta && !eta.ok) ? (
+          <div className="flex items-center gap-2 text-slate-500">
+            <AlertTriangle className="w-4 h-4" />
+            <span className="text-sm">Location unavailable — tap to open maps</span>
+          </div>
+        ) : eta?.ok ? (
+          <div className="text-center">
+            <div className="text-2xl font-black text-white">{eta.durationText}</div>
+            <div className="text-slate-400 text-sm mt-0.5">Arrive by <span className="text-emerald-400 font-semibold">{eta.etaText}</span></div>
+          </div>
+        ) : null}
+      </div>
+
+      {step.whyItMatters && (
+        <div className="mx-4 mt-4 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
+          <p className="text-blue-400 font-bold text-sm">Why this matters</p>
+          <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
+        </div>
+      )}
+
+      <div className="px-4 mt-5 mb-2">
+        <button
+          onClick={handleNavigate}
+          className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-base uppercase tracking-wide py-4 rounded-2xl border-2 border-emerald-400/30 shadow-lg transition-all flex items-center justify-center gap-2"
+        >
+          <Navigation className="w-5 h-5" />
+          {step.ctaText}
+        </button>
+      </div>
+      <p className="text-center text-slate-500 text-xs pb-5 mt-2 px-6">
+        No dashboard. No scrolling. Finish this action to get the next one.
+      </p>
+    </div>
+  );
+}
+
+function StepCard({ step, onComplete, jobAddress }: { step: Step; onComplete: () => void; jobAddress: string }) {
   const [loading, setLoading] = useState(false);
+
+  // Navigate step gets its own special card with ETA
+  if (step.type === "navigate") {
+    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} />;
+  }
 
   const handleCta = useCallback(async () => {
     setLoading(true);
-    // Simulate async action
     await new Promise(r => setTimeout(r, 600));
     setLoading(false);
     onComplete();
@@ -492,7 +584,7 @@ export default function CleanerPortalV2() {
           {isSignoff ? (
             <SignoffCard onComplete={() => setCompleted(true)} />
           ) : (
-            currentStep && <StepCard step={currentStep} onComplete={advance} />
+            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} />
           )}
         </div>
 
