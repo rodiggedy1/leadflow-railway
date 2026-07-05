@@ -11,6 +11,28 @@ import { Loader2, MapPin, CheckCircle2, Camera, Star, ChevronLeft, ChevronRight,
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Parse a job start time string like "10:00 AM" into a Unix ms timestamp for today.
+ * Used as ETA fallback when GPS is unavailable.
+ */
+function parseJobTime(timeStr: string): number | null {
+  try {
+    const now = new Date();
+    const [time, meridiem] = timeStr.trim().split(' ');
+    const [hoursStr, minutesStr] = time.split(':');
+    let hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr ?? '0', 10);
+    if (meridiem?.toUpperCase() === 'PM' && hours !== 12) hours += 12;
+    if (meridiem?.toUpperCase() === 'AM' && hours === 12) hours = 0;
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes, 0, 0);
+    return isNaN(d.getTime()) ? null : d.getTime();
+  } catch {
+    return null;
+  }
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type StepType =
@@ -44,7 +66,7 @@ interface MockJob {
   completedJobId: number;       // 0 until job is completed
   customerName: string;
   address: string;
-  time: string;
+  time: string;                 // display time, also used as ETA fallback e.g. "10:00 AM"
   jobIndex: number;
   totalJobs: number;
   fiveStarChance: number;
@@ -209,7 +231,7 @@ function JobHeader({ job, stepIndex, totalSteps }: { job: MockJob; stepIndex: nu
   );
 }
 
-function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null }) {
+function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStartTime }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; jobStartTime: string }) {
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
@@ -287,10 +309,18 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
     // Fire on_the_way status update — sends customer the "on my way" SMS
     if (cleanerJobId) {
       const etaData = etaQuery.data;
-      const etaTimestampOverride = etaData?.ok && etaData.durationSeconds
-        ? Date.now() + etaData.durationSeconds * 1000
-        : undefined;
-      const etaLabel = etaData?.ok && etaData.durationText ? etaData.durationText : undefined;
+      let etaTimestampOverride: number | undefined;
+      let etaLabel: string | undefined;
+      if (etaData?.ok && etaData.durationSeconds) {
+        // GPS worked — use real drive time
+        etaTimestampOverride = Date.now() + etaData.durationSeconds * 1000;
+        etaLabel = etaData.durationText ?? undefined;
+      } else {
+        // GPS unavailable — fall back to job scheduled start time so SMS always has a real ETA
+        const fallbackTs = parseJobTime(jobStartTime);
+        if (fallbackTs) etaTimestampOverride = fallbackTs;
+        etaLabel = undefined;
+      }
       statusMutation.mutate({
         cleanerJobId,
         status: "on_the_way",
@@ -376,16 +406,19 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId }: { step
         <div className="text-center text-5xl mt-2 mb-2 leading-none">🗺️</div>
         <h2 className="text-center text-2xl font-black text-white px-6 leading-tight">Heading to {jobAddress.split(",")[0]}</h2>
 
-        {/* ETA reminder */}
-        {hasEta && (
-          <div className="mx-4 mt-3 bg-blue-900/20 border border-blue-700/30 rounded-xl px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-              <span className="text-blue-300 text-sm font-semibold">ETA {eta.etaText}</span>
-            </div>
-            <span className="text-slate-400 text-sm">{eta.durationText} drive</span>
+        {/* ETA reminder — show GPS ETA if available, else show scheduled start time */}
+        <div className="mx-4 mt-3 bg-blue-900/20 border border-blue-700/30 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+            <span className="text-blue-300 text-sm font-semibold">
+              {hasEta ? `ETA ${eta.etaText}` : `Scheduled ${jobStartTime}`}
+            </span>
           </div>
-        )}
+          {hasEta
+            ? <span className="text-slate-400 text-sm">{eta.durationText} drive</span>
+            : <span className="text-slate-500 text-xs">GPS unavailable</span>
+          }
+        </div>
 
         {/* Re-open maps */}
         <div className="px-4 mt-3 mb-4">
@@ -588,7 +621,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
   );
 }
 
-function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; completedJobId: number }) {
+function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, jobStartTime }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; completedJobId: number; jobStartTime: string }) {
   const [loading, setLoading] = useState(false);
 
   // MUST be before any conditional return — React hooks rules
@@ -599,7 +632,7 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId }
 
   // Navigate step gets its own special card with ETA
   if (step.type === "navigate") {
-    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} />;
+    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} jobStartTime={jobStartTime} />;
   }
 
   // Photo steps get the camera upload card
@@ -894,7 +927,7 @@ export default function CleanerPortalV2() {
           {isSignoff ? (
             <SignoffCard onComplete={() => setCompleted(true)} />
           ) : (
-            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} completedJobId={job.completedJobId} />
+            currentStep && <StepCard step={currentStep} onComplete={advance} jobAddress={job.address} cleanerJobId={job.cleanerJobId} completedJobId={job.completedJobId} jobStartTime={job.time} />
           )}
         </div>
 
