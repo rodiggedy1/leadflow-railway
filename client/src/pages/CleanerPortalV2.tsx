@@ -893,7 +893,11 @@ export default function CleanerPortalV2() {
 
   const SESSION_KEY = `portal_v2_step_${job.id}`;
   const [stepIndex, setStepIndex] = useState(() => {
-    try { return parseInt(sessionStorage.getItem(SESSION_KEY) ?? "0", 10) || 0; } catch { return 0; }
+    try {
+      const saved = parseInt(sessionStorage.getItem(SESSION_KEY) ?? "0", 10) || 0;
+      // Clamp to valid range — stale sessionStorage can point past end of visibleSteps
+      return Math.min(saved, Math.max(0, visibleSteps.length - 1));
+    } catch { return 0; }
   });
   const [completed, setCompleted] = useState(false);
 
