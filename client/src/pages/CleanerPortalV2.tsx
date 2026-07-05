@@ -948,7 +948,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
   );
 }
 
-function CompletedScreen({ customerName }: { customerName: string }) {
+function CompletedScreen({ customerName, onNextJob, nextJobName }: { customerName: string; onNextJob?: () => void; nextJobName?: string }) {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 px-6 text-center">
       <div className="text-6xl mb-4">🎉</div>
@@ -965,12 +965,21 @@ function CompletedScreen({ customerName }: { customerName: string }) {
           </div>
         </div>
       </div>
-      <button
-        onClick={() => window.location.reload()}
-        className="mt-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold px-8 py-3 rounded-xl transition-all"
-      >
-        Back to Schedule
-      </button>
+      {onNextJob ? (
+        <button
+          onClick={onNextJob}
+          className="mt-6 w-full max-w-sm bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
+        >
+          Next Mission →{nextJobName ? ` ${nextJobName}` : ''}
+        </button>
+      ) : (
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold px-8 py-3 rounded-xl transition-all"
+        >
+          Back to Schedule
+        </button>
+      )}
       {/* Dev reset — clears sessionStorage so the portal restarts from step 1 */}
       <button
         onClick={() => { try { sessionStorage.clear(); } catch {} window.location.reload(); }}
@@ -984,7 +993,7 @@ function CompletedScreen({ customerName }: { customerName: string }) {
 
 // ── Single Job Runner ─────────────────────────────────────────────────────────
 
-function JobRunner({ job }: { job: PortalJob }) {
+function JobRunner({ job, onNextJob, nextJobName }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string }) {
   const steps = buildStepsFromJob(job);
 
   const SESSION_KEY = `portal_v2_step_${job.cleanerJobId}`;
@@ -1033,7 +1042,7 @@ function JobRunner({ job }: { job: PortalJob }) {
     }
   }, [job.cleanerJobId, markCompleteMutation, SESSION_KEY, COMPLETED_KEY]);
 
-  if (completed) return <CompletedScreen customerName={job.customerName} />;
+  if (completed) return <CompletedScreen customerName={job.customerName} onNextJob={onNextJob} nextJobName={nextJobName} />;
 
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center">
@@ -1507,6 +1516,8 @@ export default function CleanerPortalV2() {
         <JobRunner
           key={activeJob.cleanerJobId}
           job={activeJob}
+          onNextJob={activeJobIdx < jobs.length - 1 ? () => setActiveJobIdx(i => i + 1) : undefined}
+          nextJobName={jobs[activeJobIdx + 1]?.customerName}
         />
       )}
     </>
