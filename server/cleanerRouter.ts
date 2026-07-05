@@ -1587,6 +1587,75 @@ export const cleanerRouter = router({
       }
     }),
 
+  /**
+   * cleaner.getMyJobsToday — get today's jobs for the authenticated cleaner.
+   * Returns all data needed to build the step-by-step portal workflow:
+   * address, customerName, bathrooms, extras, checklistItems, serviceDateTime, totalJobsToday.
+   */
+  getMyJobsToday: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+    // Compute today's date in ET timezone
+    const todayRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const [m, d, y] = todayRaw.split("/");
+    const todayStr = `${y}-${m}-${d}`;
+
+    const jobs = await db
+      .select()
+      .from(cleanerJobs)
+      .where(
+        and(
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
+          eq(cleanerJobs.jobDate, todayStr),
+          ne(cleanerJobs.bookingStatus, "rescheduled"),
+          ne(cleanerJobs.bookingStatus, "cancelled")
+        )
+      )
+      .orderBy(cleanerJobs.serviceDateTime);
+
+    const totalJobsToday = jobs.length;
+
+    return jobs.map((job, idx) => {
+      // Parse serviceDateTime (stored as "YYYY-MM-DD HH:MM:SS" in ET) to "10:00 AM"
+      let displayTime = "";
+      if (job.serviceDateTime) {
+        try {
+          const timePart = job.serviceDateTime.split(" ")[1] ?? "";
+          if (timePart) {
+            const [hStr, mStr] = timePart.split(":");
+            const h = parseInt(hStr, 10);
+            const min = parseInt(mStr ?? "0", 10);
+            const ampm = h >= 12 ? "PM" : "AM";
+            const h12 = h % 12 === 0 ? 12 : h % 12;
+            displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+          }
+        } catch { displayTime = ""; }
+      }
+
+      return {
+        cleanerJobId: job.id,
+        completedJobId: job.completedJobId,
+        customerName: job.customerName ?? "Customer",
+        customerPhone: job.customerPhone ?? "",
+        address: job.jobAddress ?? "",
+        time: displayTime,
+        serviceDateTime: job.serviceDateTime ?? "",
+        bathrooms: job.bathrooms ?? 1,
+        extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
+        checklistItems: job.checklistItems
+          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
+          : [],
+        bookingStatus: job.bookingStatus ?? "",
+        jobIndex: idx + 1,
+        totalJobsToday,
+      };
+    });
+  }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
