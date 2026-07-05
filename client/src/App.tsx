@@ -53,6 +53,7 @@ const AICallMatrix = lazy(() => import("./pages/AICallMatrix"));
 const CleanerCalls = lazy(() => import("./pages/CleanerCalls"));
 const CardAuth = lazy(() => import("./pages/CardAuth"));
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
+const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalV2"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -95,6 +96,7 @@ function Router() {
         <Route path={"/admin/revenue"} component={RevenueAttribution} />
         <Route path={"/admin/quality"} component={CleanerDashboard} />
         <Route path={"/cleaner"} component={CleanerPortal} />
+        <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
         <Route path={"/admin/settings"} component={SettingsPage} />
