@@ -500,30 +500,24 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
     setUploadProgress({ current: 0, total: valid.length });
     for (let i = 0; i < valid.length; i++) {
       setUploadProgress({ current: i + 1, total: valid.length });
-      await new Promise<void>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          if (cleanerJobId) {
+      // Show local preview immediately — same pattern as working CleanerPortal
+      const localUrl = URL.createObjectURL(valid[i]);
+      setPhotos(prev => [...prev, { id: Date.now() + i, photoUrl: localUrl, filename: valid[i].name }]);
+
+      if (cleanerJobId) {
+        // Upload to server in background — use onSettled (not onSuccess/onError) to resolve
+        await new Promise<void>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64 = (reader.result as string).split(',')[1];
             uploadMutation.mutate(
               { cleanerJobId, completedJobId, filename: valid[i].name, mimeType: valid[i].type, dataBase64: base64 },
-              {
-                onSuccess: (data) => {
-                  setPhotos(prev => [...prev, { id: Date.now() + i, photoUrl: data.url, filename: valid[i].name }]);
-                  resolve();
-                },
-                onError: () => resolve(),
-              }
+              { onSettled: () => resolve() }
             );
-          } else {
-            // Mock mode — just show a local preview
-            const url = URL.createObjectURL(valid[i]);
-            setPhotos(prev => [...prev, { id: Date.now() + i, photoUrl: url, filename: valid[i].name }]);
-            resolve();
-          }
-        };
-        reader.readAsDataURL(valid[i]);
-      });
+          };
+          reader.readAsDataURL(valid[i]);
+        });
+      }
     }
     setUploadProgress(null);
     setUploading(false);
