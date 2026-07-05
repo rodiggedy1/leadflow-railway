@@ -1620,18 +1620,34 @@ export const cleanerRouter = router({
     const totalJobsToday = jobs.length;
 
     return jobs.map((job, idx) => {
-      // Parse serviceDateTime (stored as "YYYY-MM-DD HH:MM:SS" in ET) to "10:00 AM"
+      // Parse serviceDateTime to "10:00 AM".
+      // Handles two formats:
+      //   "YYYY-MM-DD HH:MM:SS" — stored as ET local time (space separator)
+      //   "YYYY-MM-DDTHH:MM:SSZ" — stored as UTC ISO string (T separator)
       let displayTime = "";
       if (job.serviceDateTime) {
         try {
-          const timePart = job.serviceDateTime.split(" ")[1] ?? "";
-          if (timePart) {
-            const [hStr, mStr] = timePart.split(":");
-            const h = parseInt(hStr, 10);
-            const min = parseInt(mStr ?? "0", 10);
-            const ampm = h >= 12 ? "PM" : "AM";
-            const h12 = h % 12 === 0 ? 12 : h % 12;
-            displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+          const raw = job.serviceDateTime as string;
+          if (raw.includes("T")) {
+            // ISO UTC string — parse with Date and convert to ET
+            const dt = new Date(raw);
+            displayTime = dt.toLocaleTimeString("en-US", {
+              timeZone: "America/New_York",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            });
+          } else {
+            // "YYYY-MM-DD HH:MM:SS" local ET string
+            const timePart = raw.split(" ")[1] ?? "";
+            if (timePart) {
+              const [hStr, mStr] = timePart.split(":");
+              const h = parseInt(hStr, 10);
+              const min = parseInt(mStr ?? "0", 10);
+              const ampm = h >= 12 ? "PM" : "AM";
+              const h12 = h % 12 === 0 ? 12 : h % 12;
+              displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+            }
           }
         } catch { displayTime = ""; }
       }
