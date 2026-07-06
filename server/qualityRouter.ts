@@ -758,6 +758,7 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           basePay,
           checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
           requestedTeam: booking.requestedTeam || null,
+          extras: booking.extras.length > 0 ? JSON.stringify(booking.extras) : null,
         };
         if (existing) {
           const previousStatus = existing.bookingStatus;
@@ -1835,6 +1836,7 @@ export const qualityRouter = router({
               basePay,
               checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
               requestedTeam: booking.requestedTeam || null,
+              extras: booking.extras.length > 0 ? JSON.stringify(booking.extras) : null,
             };
 
             if (existing) {

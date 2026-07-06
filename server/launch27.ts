@@ -35,6 +35,7 @@ export interface Launch27Booking {
   serviceNames: string[]; // e.g. ["1 bedroom"]
   bedrooms: number | null;   // parsed from serviceNames (e.g. "2 bedrooms" → 2)
   bathrooms: number | null;  // summed from pricing_parameters entries with name containing "Bathroom"
+  extras: string[];          // internal extra keys, e.g. ["clean_inside_oven", "green_cleaning"]
   customerNotes: string;
   staffNotes: string;
   requestedTeam: string | null;
@@ -46,6 +47,33 @@ export interface Launch27SyncResult {
   bookings: Launch27Booking[];
   error?: string;
 }
+
+/**
+ * Maps L27 extra IDs to our internal extra keys.
+ * IDs confirmed from live API response on 2026-07-05.
+ */
+const L27_EXTRA_ID_TO_KEY: Record<number, string> = {
+  74:  "clean_finished_basement",
+  76:  "green_cleaning",
+  79:  "clean_inside_cabinets",
+  80:  "clean_inside_empty_fridge",
+  81:  "clean_inside_full_fridge",
+  82:  "clean_inside_oven",
+  83:  "clean_interior_windows",
+  84:  "move_in_move_out",
+  85:  "two_hours_organizing",
+  86:  "load_of_laundry",
+  87:  "i_have_pets",
+  88:  "wipe_walls",
+  89:  "sweep_garage",
+  90:  "balcony_sweep",
+  91:  "home_concierge",
+  92:  "same_day_booking",
+  93:  "clean_inside_microwave",
+  94:  "shed_pool_house",
+  95:  "wash_dishes",
+  96:  "pool_deck",
+};
 
 function getBaseUrl(): string {
   const subdomain = ENV.launch27Subdomain || "maidsinblack";
@@ -119,6 +147,19 @@ export async function getCompletedBookingsForDate(
     if (!Array.isArray(raw) || raw.length === 0) break;
 
     for (const b of raw) {
+      // Parse extras: collect all extra items across all services, map L27 IDs to internal keys
+      const extras: string[] = [];
+      for (const svc of b.services ?? []) {
+        const rawExtras = svc.extras;
+        if (!rawExtras || !Array.isArray(rawExtras)) continue;
+        for (const e of rawExtras as Array<{ id: number; name: string }>) {
+          const key = L27_EXTRA_ID_TO_KEY[e.id];
+          if (key && !extras.includes(key)) {
+            extras.push(key);
+          }
+        }
+      }
+
       allBookings.push({
         id: b.id,
         phone: b.phone ?? "",
@@ -163,20 +204,10 @@ export async function getCompletedBookingsForDate(
           }
           return total > 0 ? total : null;
         })(),
+        extras,
         customerNotes: b.customer_notes ?? "",
         staffNotes: b.staff_notes ?? "",
         requestedTeam: b.preferred_cleaner?.name ?? null,
-        // TEMP DEBUG: log raw extras structure so we can parse correctly
-        ...(() => {
-          const svcsWithExtras = (b.services ?? []).filter((s) => {
-            const e = s.extras;
-            return e && (Array.isArray(e) ? (e as unknown[]).length > 0 : typeof e === 'object' && Object.keys(e as object).length > 0);
-          });
-          if (svcsWithExtras.length > 0) {
-            console.log('[ExtrasDebug] booking', b.id, JSON.stringify(svcsWithExtras.map((s) => ({ name: s.name, extras: s.extras }))));
-          }
-          return {};
-        })(),
       });
     }
 
