@@ -166,6 +166,17 @@ export async function getCompletedBookingsForDate(
         customerNotes: b.customer_notes ?? "",
         staffNotes: b.staff_notes ?? "",
         requestedTeam: b.preferred_cleaner?.name ?? null,
+        // TEMP DEBUG: log raw extras structure so we can parse correctly
+        ...(() => {
+          const svcsWithExtras = (b.services ?? []).filter((s) => {
+            const e = s.extras;
+            return e && (Array.isArray(e) ? (e as unknown[]).length > 0 : typeof e === 'object' && Object.keys(e as object).length > 0);
+          });
+          if (svcsWithExtras.length > 0) {
+            console.log('[ExtrasDebug] booking', b.id, JSON.stringify(svcsWithExtras.map((s) => ({ name: s.name, extras: s.extras }))));
+          }
+          return {};
+        })(),
       });
     }
 
