@@ -384,6 +384,14 @@ function LocationProvider({ children }: { children: React.ReactNode }) {
         resolve(null);
         return;
       }
+      // Log Permissions API state immediately before calling getCurrentPosition
+      if (navigator?.permissions) {
+        navigator.permissions.query({ name: 'geolocation' }).then(r => {
+          dbgLog('PermissionsAPI state before getCurrentPosition: ' + r.state);
+        }).catch(e => dbgLog('PermissionsAPI query failed: ' + e));
+      } else {
+        dbgLog('PermissionsAPI not available');
+      }
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           setPermissionState("granted");
