@@ -191,6 +191,9 @@ export function registerGmailRoutes(app: Express) {
         ? new Date(state.watchExpiration).toISOString()
         : "none";
       diag.watchExpired = state?.watchExpiration ? state.watchExpiration < Date.now() : true;
+      const cooldownUntil = (state as any)?.gmailBackfillCooldownUntil ?? 0;
+      diag.backfillCooldownActive = cooldownUntil > Date.now();
+      diag.backfillCooldownUntil = cooldownUntil > 0 ? new Date(cooldownUntil).toISOString() : "none";
 
       // 2. Test token validity by calling Gmail profile
       try {
