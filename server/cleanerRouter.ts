@@ -27,6 +27,20 @@ import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Returns a YYYY-MM-DD date string in the America/New_York timezone.
+ * offsetDays=0 → today ET, offsetDays=1 → tomorrow ET, etc.
+ * Uses Intl.DateTimeFormat (DST-aware) instead of toISOString() which is UTC-only.
+ */
+function getEtDateStr(offsetDays = 0): string {
+  const raw = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(Date.now() + offsetDays * 86_400_000));
+  const [m, d, y] = raw.split("/");
+  return `${y}-${m}-${d}`;
+}
+
 // ── Router ────────────────────────────────────────────
 
 export const cleanerRouter = router({
@@ -1223,12 +1237,9 @@ export const cleanerRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      const now = new Date();
-      // submittedForDate = today, availabilityDate = tomorrow
-      const todayStr = now.toISOString().slice(0, 10);
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      // submittedForDate = today, availabilityDate = tomorrow (both in ET)
+      const todayStr = getEtDateStr(0);
+      const tomorrowStr = getEtDateStr(1);
 
       // Delete any existing check-in for this cleaner+tomorrow before inserting
       await db
@@ -1335,11 +1346,8 @@ export const cleanerRouter = router({
     const db = await getDb();
     if (!db) return { submitted: false };
 
-    // Compute tomorrow in UTC (server stores dates as YYYY-MM-DD UTC)
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    // Compute tomorrow in ET (consistent with job scheduling timezone)
+    const tomorrowStr = getEtDateStr(1);
 
     const rows = await db
       .select({ id: teamAvailabilityCheckins.id })
@@ -1363,10 +1371,8 @@ export const cleanerRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    // Compute tomorrow in ET (consistent with job scheduling timezone)
+    const tomorrowStr = getEtDateStr(1);
 
     const [payRules, customRulesRows, streakRows, availabilityRows] = await Promise.all([
       getPayRules(),
@@ -1488,12 +1494,9 @@ export const cleanerRouter = router({
       await db.insert(teamWorkSchedule)
         .values({ teamId: team.id, mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note })
         .onDuplicateKeyUpdate({ set: { mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note } });
-      // Record a check-in for tomorrow so the morning prompt doesn't re-fire
-      const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      // Record today/tomorrow in ET so the morning prompt doesn't re-fire (ET-consistent)
+      const todayStr = getEtDateStr(0);
+      const tomorrowStr = getEtDateStr(1);
       await db.delete(teamAvailabilityCheckins).where(
         and(eq(teamAvailabilityCheckins.cleanerProfileId, ctx.cleaner.cleanerId), eq(teamAvailabilityCheckins.availabilityDate, tomorrowStr))
       );
@@ -1659,6 +1662,7 @@ export const cleanerRouter = router({
         customerPhone: job.customerPhone ?? "",
         address: job.jobAddress ?? "",
         time: displayTime,
+        jobDate: job.jobDate ?? "",
         serviceDateTime: job.serviceDateTime ?? "",
         bathrooms: job.bathrooms ?? 1,
         extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
