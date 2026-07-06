@@ -1610,12 +1610,12 @@ export const cleanerRouter = router({
       .where(
         and(
           eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
-          gte(cleanerJobs.jobDate, todayStr),
+          eq(cleanerJobs.jobDate, todayStr),
           ne(cleanerJobs.bookingStatus, "rescheduled"),
           ne(cleanerJobs.bookingStatus, "cancelled")
         )
       )
-      .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
+      .orderBy(cleanerJobs.serviceDateTime);
 
     const totalJobsToday = jobs.length;
 
@@ -1673,6 +1673,95 @@ export const cleanerRouter = router({
     });
   }),
 
+  /**
+   * cleaner.getMyJobsWeek — returns jobs from today through end of this Sunday (ET)
+   * Returns jobs grouped by date so the UI can show Today / Tomorrow / This Week tabs.
+   */
+  getMyJobsWeek: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    // Compute today and end-of-week (Sunday) in ET
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const [m, d, y] = todayRaw.split("/");
+    const todayStr = `${y}-${m}-${d}`;
+    // End of this week = coming Sunday (day 0). If today is Sunday, use today.
+    const dayOfWeek = nowET.getDay(); // 0=Sun, 6=Sat
+    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    const endOfWeek = new Date(nowET);
+    endOfWeek.setDate(nowET.getDate() + daysUntilSunday);
+    const endRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(endOfWeek);
+    const [em, ed, ey] = endRaw.split("/");
+    const endStr = `${ey}-${em}-${ed}`;
+    const jobs = await db
+      .select()
+      .from(cleanerJobs)
+      .where(
+        and(
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
+          gte(cleanerJobs.jobDate, todayStr),
+          lte(cleanerJobs.jobDate, endStr),
+          ne(cleanerJobs.bookingStatus, "rescheduled"),
+          ne(cleanerJobs.bookingStatus, "cancelled")
+        )
+      )
+      .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
+    // Compute tomorrow string
+    const tomorrow = new Date(nowET);
+    tomorrow.setDate(nowET.getDate() + 1);
+    const tomRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(tomorrow);
+    const [tm, td, ty] = tomRaw.split("/");
+    const tomorrowStr = `${ty}-${tm}-${td}`;
+    return jobs.map((job) => {
+      let displayTime = "";
+      if (job.serviceDateTime) {
+        try {
+          const raw = job.serviceDateTime as string;
+          if (raw.includes("T")) {
+            const dt = new Date(raw);
+            displayTime = dt.toLocaleTimeString("en-US", {
+              timeZone: "America/New_York",
+              hour: "numeric", minute: "2-digit", hour12: true,
+            });
+          } else {
+            const timePart = raw.split(" ")[1] ?? "";
+            if (timePart) {
+              const [hStr, mStr] = timePart.split(":");
+              const h = parseInt(hStr, 10);
+              const min = parseInt(mStr ?? "0", 10);
+              const ampm = h >= 12 ? "PM" : "AM";
+              const h12 = h % 12 === 0 ? 12 : h % 12;
+              displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+            }
+          }
+        } catch { displayTime = ""; }
+      }
+      const dateLabel = job.jobDate === todayStr ? "today"
+        : job.jobDate === tomorrowStr ? "tomorrow"
+        : "week";
+      return {
+        cleanerJobId: job.id,
+        customerName: job.customerName ?? "Customer",
+        address: job.jobAddress ?? "",
+        time: displayTime,
+        jobDate: job.jobDate ?? "",
+        dateLabel,
+        bathrooms: job.bathrooms ?? 1,
+        extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
+        jobStatus: job.jobStatus ?? "",
+        bookingStatus: job.bookingStatus ?? "",
+      };
+    });
+  }),
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

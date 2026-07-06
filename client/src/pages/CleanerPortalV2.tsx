@@ -1394,9 +1394,43 @@ function WeeklySchedulePrompt({
 }
 
 // ── Day Briefing Screen ─────────────────────────────────────────────────────
+type WeekJob = {
+  cleanerJobId: number;
+  customerName: string;
+  address: string;
+  time: string;
+  jobDate: string;
+  dateLabel: string;
+  bathrooms: number;
+  extras: string[];
+  jobStatus: string;
+  bookingStatus: string;
+};
+
+function WeekJobCard({ job }: { job: WeekJob }) {
+  const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
+  return (
+    <div className={['rounded-2xl px-4 py-4 space-y-2', isDone ? 'bg-slate-800/40 border border-slate-700/30 opacity-60' : 'bg-slate-800/70 border border-slate-700/60'].join(' ')}>
+      <div className="flex items-center gap-2">
+        {isDone
+          ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+          : <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-0.5" />}
+        <span className={['font-bold text-sm leading-tight', isDone ? 'text-slate-500 line-through' : 'text-white'].join(' ')}>{job.customerName}</span>
+        {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">Done</span>}
+      </div>
+      <div className="flex items-center gap-1.5 text-slate-400 text-xs pl-4">
+        <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
+        <span className="text-slate-600">·</span>
+        <span className="truncate">{job.address}</span>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Shown after the schedule prompt (or on first load if already submitted).
  * Gives the cleaner a quick overview of today's jobs before they start.
+ * Tabs: Today | Tomorrow | This Week
  */
 function DayBriefing({
   jobs,
@@ -1409,94 +1443,126 @@ function DayBriefing({
   onStart: () => void;
   onJobSelect?: (idx: number) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'week'>('today');
+  const weekQuery = trpc.cleaner.getMyJobsWeek.useQuery(undefined, { staleTime: 60_000, throwOnError: false });
+  const weekJobs = weekQuery.data ?? [];
+  const tomorrowJobs = weekJobs.filter(j => j.dateLabel === 'tomorrow');
+  const otherWeekJobs = weekJobs.filter(j => j.dateLabel === 'week');
   const firstName = cleanerName.split(' ')[0];
   const hourET = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }));
   const greeting = hourET < 12 ? 'Good morning' : hourET < 17 ? 'Good afternoon' : 'Good evening';
   const completedCount = jobs.filter(j => j.jobStatus === 'completed' || j.bookingStatus === 'completed').length;
-  const allDone = completedCount === jobs.length;
+  const allDone = completedCount === jobs.length && jobs.length > 0;
   const firstIncompleteIdx = jobs.findIndex(j => j.jobStatus !== 'completed' && j.bookingStatus !== 'completed');
+  const tabs: { id: 'today' | 'tomorrow' | 'week'; label: string; count: number }[] = [
+    { id: 'today', label: 'Today', count: jobs.length },
+    { id: 'tomorrow', label: 'Tomorrow', count: tomorrowJobs.length },
+    { id: 'week', label: 'This Week', count: otherWeekJobs.length },
+  ];
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col px-4 pt-10 pb-8 max-w-lg mx-auto w-full">
+    <div className="min-h-screen bg-slate-900 flex flex-col px-4 pt-8 pb-8 max-w-lg mx-auto w-full">
       {/* Header */}
-      <div className="text-center mb-8 space-y-1">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-3">
-          <span className="text-2xl">{allDone ? '🏁' : '🧹'}</span>
+      <div className="text-center mb-6 space-y-1">
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-2">
+          <span className="text-xl">{allDone ? '🏁' : '🧹'}</span>
         </div>
-        <h1 className="text-white text-2xl font-black">
+        <h1 className="text-white text-xl font-black">
           {allDone ? `Great work, ${firstName}!` : `${greeting}, ${firstName}!`}
         </h1>
         <p className="text-slate-400 text-sm">
           {allDone
             ? 'All missions complete for today!'
             : completedCount > 0
-              ? `${completedCount} of ${jobs.length} missions done`
+              ? `${completedCount} of ${jobs.length} done today`
               : jobs.length === 1 ? 'You have 1 mission today' : `You have ${jobs.length} missions today`}
         </p>
       </div>
-      {/* Job cards */}
-      <div className="space-y-3 flex-1">
-        {jobs.map((job, idx) => {
-          const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
-          return (
-            <div
-              key={job.cleanerJobId}
-              onClick={() => { if (!isDone && onJobSelect) { onJobSelect(idx); onStart(); } }}
-              className={[
-                'rounded-2xl px-4 py-4 space-y-2 transition-all',
-                isDone
-                  ? 'bg-slate-800/40 border border-slate-700/30 opacity-60'
-                  : 'bg-slate-800/70 border border-slate-700/60 active:scale-[0.98] cursor-pointer',
-              ].join(' ')}
-            >
-              <div className="flex items-center gap-2">
-                {isDone ? (
-                  <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
-                ) : (
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shrink-0">
-                    {idx + 1}
-                  </span>
-                )}
-                <span className={['font-bold text-base leading-tight', isDone ? 'text-slate-500 line-through' : 'text-white'].join(' ')}>
-                  {job.customerName}
-                </span>
-                {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">Done</span>}
-              </div>
-              <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
-                <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
-                <span className="text-slate-600">·</span>
-                <span className="truncate">{job.address}</span>
-              </div>
-              {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
-                <div className="flex flex-wrap gap-1.5 pl-8">
-                  {job.bathrooms > 0 && (
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">
-                      {job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                  {(job.extras ?? []).map(e => (
-                    <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">
-                      {e.replace(/_/g, ' ')}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
+      {/* Tabs */}
+      <div className="flex gap-1 bg-slate-800/60 rounded-xl p-1 mb-4">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={[
+              'flex-1 py-2 rounded-lg text-sm font-semibold transition-all',
+              activeTab === tab.id
+                ? 'bg-emerald-600 text-white shadow'
+                : 'text-slate-400 hover:text-white',
+            ].join(' ')}
+          >
+            {tab.label}
+            {tab.count > 0 && (
+              <span className={['ml-1 text-xs', activeTab === tab.id ? 'text-emerald-200' : 'text-slate-500'].join(' ')}>
+                ({tab.count})
+              </span>
+            )}
+          </button>
+        ))}
       </div>
-      {/* CTA */}
-      {!allDone && (
-        <div className="mt-8">
+      {/* Tab content */}
+      <div className="space-y-3 flex-1 overflow-y-auto">
+        {activeTab === 'today' && (
+          jobs.length === 0
+            ? <p className="text-slate-500 text-sm text-center py-8">No jobs today</p>
+            : jobs.map((job, idx) => {
+                const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
+                return (
+                  <div
+                    key={job.cleanerJobId}
+                    onClick={() => { if (!isDone && onJobSelect) { onJobSelect(idx); onStart(); } }}
+                    className={[
+                      'rounded-2xl px-4 py-4 space-y-2 transition-all',
+                      isDone
+                        ? 'bg-slate-800/40 border border-slate-700/30 opacity-60'
+                        : 'bg-slate-800/70 border border-slate-700/60 active:scale-[0.98] cursor-pointer',
+                    ].join(' ')}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isDone ? (
+                        <CheckCircle2 className="w-6 h-6 text-emerald-500 shrink-0" />
+                      ) : (
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shrink-0">{idx + 1}</span>
+                      )}
+                      <span className={['font-bold text-base leading-tight', isDone ? 'text-slate-500 line-through' : 'text-white'].join(' ')}>{job.customerName}</span>
+                      {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">Done</span>}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
+                      <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
+                      <span className="text-slate-600">·</span>
+                      <span className="truncate">{job.address}</span>
+                    </div>
+                    {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
+                      <div className="flex flex-wrap gap-1.5 pl-8">
+                        {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}</span>}
+                        {(job.extras ?? []).map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{e.replace(/_/g, ' ')}</span>)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+        )}
+        {activeTab === 'tomorrow' && (
+          tomorrowJobs.length === 0
+            ? <p className="text-slate-500 text-sm text-center py-8">No jobs tomorrow</p>
+            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} />)
+        )}
+        {activeTab === 'week' && (
+          otherWeekJobs.length === 0
+            ? <p className="text-slate-500 text-sm text-center py-8">No other jobs this week</p>
+            : otherWeekJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} />)
+        )}
+      </div>
+      {/* CTA — only on Today tab */}
+      {activeTab === 'today' && !allDone && jobs.length > 0 && (
+        <div className="mt-6">
           <button
             onClick={() => { if (firstIncompleteIdx >= 0 && onJobSelect) onJobSelect(firstIncompleteIdx); onStart(); }}
             className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
           >
             {completedCount > 0 ? 'Continue →' : "Let's Go →"}
           </button>
-          {completedCount === 0 && (
-            <p className="text-center text-slate-600 text-xs mt-3">
-              Starting with Job {firstIncompleteIdx + 1}
-            </p>
+          {completedCount === 0 && firstIncompleteIdx >= 0 && (
+            <p className="text-center text-slate-600 text-xs mt-3">Starting with Job {firstIncompleteIdx + 1}</p>
           )}
         </div>
       )}
