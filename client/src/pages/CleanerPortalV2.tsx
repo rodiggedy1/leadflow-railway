@@ -1659,8 +1659,8 @@ function CleanerPortalV2Inner() {
     );
   }
 
-  // Jobs loading state
-  if (isLoading) {
+  // Jobs loading state — also covers the brief moment where isLoading is false but data hasn't arrived yet
+  if (isLoading || (!jobs && !error)) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
@@ -1705,8 +1705,7 @@ function CleanerPortalV2Inner() {
     );
   }
 
-  if (!jobs) return null;
-    const activeJob = jobs[activeJobIdx] ?? jobs[0];
+  const activeJob = jobs![activeJobIdx] ?? jobs![0];
 
   // Render the active job runner
   // Key on cleanerJobId so state resets when switching jobs
