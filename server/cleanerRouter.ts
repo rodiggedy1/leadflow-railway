@@ -1673,6 +1673,7 @@ export const cleanerRouter = router({
         jobStatus: job.jobStatus ?? "",
         jobIndex: idx + 1,
         totalJobsToday,
+        basePay: job.basePay ? parseFloat(job.basePay) : null,
       };
     });
   }),
@@ -1765,6 +1766,7 @@ export const cleanerRouter = router({
         extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
         jobStatus: job.jobStatus ?? "",
         bookingStatus: job.bookingStatus ?? "",
+        basePay: job.basePay ? parseFloat(job.basePay) : null,
       };
     });
   }),

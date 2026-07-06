@@ -114,6 +114,7 @@ interface PortalJob {
   jobStatus: string;
   jobIndex: number;
   totalJobsToday: number;
+  basePay: number | null;
 }
 
 // ── Extras that require a dedicated photo step ────────────────────────────────
@@ -1500,6 +1501,7 @@ type WeekJob = {
   extras: string[];
   jobStatus: string;
   bookingStatus: string;
+  basePay: number | null;
 };
 
 function formatWeekJobDate(dateStr: string): string {
@@ -1526,6 +1528,7 @@ function WeekJobCard({ job }: { job: WeekJob }) {
         <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
         <span className="text-slate-600">·</span>
         <span className="truncate">{job.address}</span>
+        {job.basePay != null && <><span className="text-slate-600">·</span><span className={isDone ? 'text-slate-500' : 'text-teal-400 font-semibold'}>${job.basePay.toFixed(2)}</span></>}
       </div>
       {!isDone && (job.extras ?? []).includes('move_in_move_out') && (
         <div className="pl-4">
@@ -1657,6 +1660,7 @@ function DayBriefing({
                       <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
                       <span className="text-slate-600">·</span>
                       <span className="truncate">{job.address}</span>
+                      {job.basePay != null && <><span className="text-slate-600">·</span><span className={isDone ? 'text-slate-500' : 'text-teal-400 font-semibold'}>${job.basePay.toFixed(2)}</span></>}
                     </div>
                     {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
                       <div className="flex flex-wrap gap-1.5 pl-8">
