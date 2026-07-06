@@ -325,39 +325,92 @@ export async function processThread(threadId: string): Promise<void> {
       existing?.subject && existing?.snippet &&
       existing?.lastMessageAt && existing?.messageCount);
 
-    if (!historyChanged && metadataComplete) {
-      // Full cache hit — history unchanged and display fields populated
-      _cacheHitCount++;
-      console.log(`[GlanceWorker][SKIP_ALREADY_UP_TO_DATE] threadId=${threadId} historyId=${currentHistoryId}`);
-      return;
-    }
-
     if (!historyChanged) {
-      // History unchanged but display fields missing — legacy row needing repair
-      console.log(`[GlanceWorker][METADATA_REPAIRED] threadId=${threadId} historyId=${currentHistoryId}`);
+      // History unchanged — log reason
+      if (metadataComplete) {
+        // Full cache hit — Phase 1 upsert is still idempotent (no-op for display fields),
+        // but we skip Phase 2 AI work below.
+        _cacheHitCount++;
+        console.log(`[GlanceWorker][CACHE_HIT] threadId=${threadId} historyId=${currentHistoryId}`);
+      } else {
+        // History unchanged but display fields missing — legacy row needing repair
+        console.log(`[GlanceWorker][METADATA_REPAIRED] threadId=${threadId} historyId=${currentHistoryId}`);
+      }
     } else {
       _cacheMissCount++;
       console.log(`[GlanceWorker][CacheMiss] threadId=${threadId} oldHistoryId=${existing?.aiHistoryId ?? "none"} newHistoryId=${currentHistoryId}`);
     }
 
-    // ── AI classification (only when history changed) ─────────────────────────
-    // Extract last 3 messages for LLM (cost control)
-    const lastMsgs = messages.slice(-3);
-    const transcript = lastMsgs.map((msg) => {
-      const headers: Record<string, string> = {};
-      (msg.payload?.headers ?? []).forEach((h: any) => { headers[h.name.toLowerCase()] = h.value; });
-      const from = headers["from"] ?? "Unknown";
-      const bodyData = findTextBody(msg.payload);
-      const text = bodyData.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
-      return `From: ${from}\n${text}`;
-    }).join("\n\n---\n\n");
+    // ── Phase 1: Immediate inbox write (objective Gmail facts only) ─────────────
+    // This write NEVER depends on AI. Inbox is live the moment Gmail data arrives.
+    await db
+      .insert(gmailThreadMeta)
+      .values({
+        threadId,
+        isIssue: 0,
+        isUnread,
+        isInInbox: 1,
+        senderName,
+        senderEmail,
+        subject,
+        snippet,
+        lastMessageAt,
+        messageCount,
+        aiStatus: "pending",
+      })
+      .onDuplicateKeyUpdate({
+        set: {
+          isUnread,
+          // isInInbox: intentionally NOT updated — archiveThread sets it to 0.
+          senderName,
+          senderEmail,
+          subject,
+          snippet,
+          lastMessageAt,
+          messageCount,
+          updatedAt: new Date(),
+        },
+      });
+    console.log(`[Worker] processThread INBOX_WRITE threadId=${threadId} isUnread=${isUnread}`);
+    // Broadcast immediately — inbox is live before AI runs
+    const { broadcastOpsUpdate } = await import("./sseBroadcast");
+    broadcastOpsUpdate("gmail_new_messages");
 
-    // Single LLM call — category + summary + urgency
-    const result = historyChanged ? await invokeLLM({
-      messages: [
-        {
-          role: "system",
-          content: `You are a customer service manager for a residential cleaning business (Maid in Black).
+    // ── Phase 2: AI enrichment (best-effort — inbox already written) ──────────
+    // If AI fails for any reason, thread stays in inbox with aiStatus='retry'.
+    // isActionable/actionableReason are also resolved here (not in Phase 1).
+    if (!historyChanged && metadataComplete) {
+      // Full cache hit — Phase 1 write was idempotent, nothing to do for AI
+      return;
+    }
+
+    // Mark AI attempt timestamp before calling LLM
+    await db
+      .update(gmailThreadMeta)
+      .set({ lastAiAttemptAt: new Date() })
+      .where(eq(gmailThreadMeta.threadId, threadId));
+
+    try {
+      // Resolve sender policy (pure DB lookup — no AI, no Gmail API calls)
+      const { isActionable, actionableReason } = await resolveIsActionable(senderEmail);
+
+      // Extract last 3 messages for LLM (cost control)
+      const lastMsgs = messages.slice(-3);
+      const transcript = lastMsgs.map((msg) => {
+        const headers: Record<string, string> = {};
+        (msg.payload?.headers ?? []).forEach((h: any) => { headers[h.name.toLowerCase()] = h.value; });
+        const from = headers["from"] ?? "Unknown";
+        const bodyData = findTextBody(msg.payload);
+        const text = bodyData.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+        return `From: ${from}\n${text}`;
+      }).join("\n\n---\n\n");
+
+      // Single LLM call — category + summary + urgency
+      const result = historyChanged ? await invokeLLM({
+        messages: [
+          {
+            role: "system",
+            content: `You are a customer service manager for a residential cleaning business (Maid in Black).
 Classify this email thread and summarize it.
 
 OVERRIDE RULE (highest priority, check this first):
@@ -374,122 +427,97 @@ Categories (pick exactly one):
 - general: anything else
 
 Return ONLY valid JSON. No markdown, no explanation.`,
-        },
-        {
-          role: "user",
-          content: `Subject: ${subject}\n\n${transcript}`,
-        },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "thread_classification",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              category: {
-                type: "string",
-                enum: ["refund_request", "quote_request", "booking_confirmation", "recurring_cancellation", "payroll_issue", "upset_customer", "revenue_opportunity", "general"],
+          },
+          {
+            role: "user",
+            content: `Subject: ${subject}\n\n${transcript}`,
+          },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "thread_classification",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                category: {
+                  type: "string",
+                  enum: ["refund_request", "quote_request", "booking_confirmation", "recurring_cancellation", "payroll_issue", "upset_customer", "revenue_opportunity", "general"],
+                },
+                summary: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "3-6 bullet points of key facts about this thread",
+                },
+                urgency: {
+                  type: "string",
+                  enum: ["high", "medium", "low"],
+                },
               },
-              summary: {
-                type: "array",
-                items: { type: "string" },
-                description: "3-6 bullet points of key facts about this thread",
-              },
-              urgency: {
-                type: "string",
-                enum: ["high", "medium", "low"],
-              },
+              required: ["category", "summary", "urgency"],
+              additionalProperties: false,
             },
-            required: ["category", "summary", "urgency"],
-            additionalProperties: false,
           },
         },
-      },
-    }) : null;
+      }) : null;
 
-    let aiFields: {
-      aiCategory?: GlanceCategory;
-      aiSummary?: string;
-      aiUrgency?: string;
-      aiHistoryId?: string;
-      aiProcessedAt?: Date;
-    } = {};
+      // Parse LLM result
+      let aiCategory: GlanceCategory | undefined;
+      let aiSummary: string | undefined;
+      let aiUrgency: string | undefined;
+      let aiHistoryId: string | undefined;
+      let aiProcessedAt: Date | undefined;
 
-    if (historyChanged && result) {
-      const raw = result.choices[0]?.message?.content as string ?? "{}";
-      let parsed: { category: GlanceCategory; summary: string[]; urgency: string };
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        console.error(`[GlanceWorker] Failed to parse LLM response for ${threadId}:`, raw);
-        return;
+      if (historyChanged && result) {
+        const raw = result.choices[0]?.message?.content as string ?? "{}";
+        const parsed: { category: GlanceCategory; summary: string[]; urgency: string } = JSON.parse(raw);
+        aiCategory = parsed.category as GlanceCategory;
+        aiSummary = JSON.stringify(parsed.summary ?? []);
+        aiUrgency = parsed.urgency ?? "medium";
+        aiHistoryId = currentHistoryId;
+        aiProcessedAt = new Date();
       }
-      aiFields = {
-        aiCategory: parsed.category as GlanceCategory,
-        aiSummary: JSON.stringify(parsed.summary ?? []),
-        aiUrgency: parsed.urgency ?? "medium",
-        aiHistoryId: currentHistoryId,
-        aiProcessedAt: new Date(),
-      };
-    }
 
-    // ── Single canonical upsert ───────────────────────────────────────────────
-    // Always writes display/metadata fields.
-    // AI fields (aiCategory, aiSummary, aiUrgency, aiHistoryId, aiProcessedAt) are
-    // only included when historyChanged — spreading {} adds no keys, so existing
-    // AI values are preserved untouched when we're only repairing display fields.
-    // Resolve sender policy (pure DB lookup — no AI, no Gmail API calls)
-    const { isActionable, actionableReason } = await resolveIsActionable(senderEmail);
-
-    await db
-      .insert(gmailThreadMeta)
-      .values({
-        threadId,
-        isIssue: 0,
-        isUnread,
-        isInInbox: 1,
-        senderName,
-        senderEmail,
-        subject,
-        snippet,
-        lastMessageAt,
-        messageCount,
-        isActionable,
-        actionableReason,
-        ...aiFields,
-      })
-      .onDuplicateKeyUpdate({
-        set: {
-          isUnread,
-          // isInInbox: intentionally NOT updated here — archiveThread sets it to 0.
-          // Worker only sets it to 1 on insert (new thread). Existing rows keep their value.
-          senderName,
-          senderEmail,
-          subject,
-          snippet,
-          lastMessageAt,
-          messageCount,
+      // Write AI fields + isActionable
+      await db
+        .update(gmailThreadMeta)
+        .set({
           isActionable,
           actionableReason,
-          ...aiFields,
+          ...(historyChanged && aiCategory ? {
+            aiCategory,
+            aiSummary,
+            aiUrgency,
+            aiHistoryId,
+            aiProcessedAt,
+          } : {}),
+          aiStatus: "completed",
+          lastAiError: null,
           updatedAt: new Date(),
-        },
-      });
+        })
+        .where(eq(gmailThreadMeta.threadId, threadId));
 
-    console.log(`[Worker] processThread COMMIT threadId=${threadId} isUnread=${isUnread} isActionable=${isActionable}`);
-
-    // Broadcast AFTER the DB commit so the UI refetch sees fresh data
-    const { broadcastOpsUpdate } = await import("./sseBroadcast");
-    broadcastOpsUpdate("gmail_new_messages");
-
-    console.log(`[Worker] processThread DONE threadId=${threadId}`);
-
-    if (historyChanged) {
-      console.log(`[GlanceWorker] Processed ${threadId} → ${aiFields.aiCategory} (${aiFields.aiUrgency})`);
-    } else {
-      console.log(`[GlanceWorker] Metadata repaired ${threadId}`);
+      console.log(`[Worker] processThread AI_DONE threadId=${threadId} category=${aiCategory ?? "(no change)"} isActionable=${isActionable}`);
+      if (historyChanged) {
+        console.log(`[GlanceWorker] Processed ${threadId} → ${aiCategory} (${aiUrgency})`);
+      } else {
+        console.log(`[GlanceWorker] Metadata repaired ${threadId}`);
+      }
+    } catch (aiErr: any) {
+      // AI failed — inbox write already committed, just mark for retry
+      const msg = aiErr?.message ?? String(aiErr);
+      let errorCode = "UNKNOWN";
+      if (msg.includes("JSON") || msg.includes("parse") || msg.includes("SyntaxError")) errorCode = "JSON_PARSE";
+      else if (msg.includes("timeout") || msg.includes("ETIMEDOUT") || msg.includes("ECONNRESET")) errorCode = "TIMEOUT";
+      else if (msg.includes("429") || msg.includes("rate limit") || msg.includes("quota")) errorCode = "RATE_LIMIT";
+      else if (msg.includes("500") || msg.includes("502") || msg.includes("503")) errorCode = "LLM_500";
+      console.error(`[GlanceWorker] AI enrichment failed for ${threadId} (${errorCode}):`, msg);
+      await db
+        .update(gmailThreadMeta)
+        .set({ aiStatus: "retry", lastAiError: errorCode, updatedAt: new Date() })
+        .where(eq(gmailThreadMeta.threadId, threadId))
+        .catch(() => {});
     }
   } catch (err) {
     // Never let errors bubble — purely additive

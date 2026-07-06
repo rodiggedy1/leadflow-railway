@@ -2920,6 +2920,20 @@ export const gmailThreadMeta = mysqlTable("gmail_thread_meta", {
    * Application-validated varchar — not a DB enum so new sources can be added without migrations.
    */
   actionableReason: varchar("actionableReason", { length: 20 }).default("DEFAULT").notNull(),
+  /**
+   * AI enrichment pipeline status.
+   * 'pending'   — not yet attempted
+   * 'completed' — AI ran successfully
+   * 'retry'     — AI failed; eligible for retry on next worker cycle
+   */
+  aiStatus: varchar("aiStatus", { length: 20 }).default("pending").notNull(),
+  /**
+   * Short error code from the last failed AI attempt.
+   * Values: 'JSON_PARSE' | 'TIMEOUT' | 'RATE_LIMIT' | 'LLM_500' | null
+   */
+  lastAiError: varchar("lastAiError", { length: 50 }),
+  /** When AI last attempted enrichment on this thread (for operational visibility). */
+  lastAiAttemptAt: timestamp("lastAiAttemptAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
