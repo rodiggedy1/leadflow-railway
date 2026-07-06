@@ -1692,9 +1692,11 @@ export const cleanerRouter = router({
     }).format(new Date());
     const [m, d, y] = todayRaw.split("/");
     const todayStr = `${y}-${m}-${d}`;
-    // End of this week = coming Sunday (day 0). If today is Sunday, use today.
+    // End of this week = coming Sunday (day 0).
+    // If today IS Sunday we still want to show the full next 7 days, so always use 7 - dayOfWeek
+    // treating Sunday (0) as 7 so we get next Sunday.
     const dayOfWeek = nowET.getDay(); // 0=Sun, 6=Sat
-    const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
     const endOfWeek = new Date(nowET);
     endOfWeek.setDate(nowET.getDate() + daysUntilSunday);
     const endRaw = new Intl.DateTimeFormat("en-US", {
