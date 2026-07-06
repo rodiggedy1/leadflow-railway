@@ -1136,7 +1136,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
         </button>
       </div>
 
-      {/* Customer Not Home bypass */
+      {/* Customer Not Home bypass */}
       <div className="px-4 mb-5">
         <button
           onClick={handleNotHome}
