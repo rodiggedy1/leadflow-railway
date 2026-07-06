@@ -1674,6 +1674,8 @@ export const cleanerRouter = router({
         jobIndex: idx + 1,
         totalJobsToday,
         basePay: job.basePay ? parseFloat(job.basePay) : null,
+        customerNotes: job.customerNotes ?? null,
+        staffNotes: job.staffNotes ?? null,
       };
     });
   }),
@@ -1767,6 +1769,8 @@ export const cleanerRouter = router({
         jobStatus: job.jobStatus ?? "",
         bookingStatus: job.bookingStatus ?? "",
         basePay: job.basePay ? parseFloat(job.basePay) : null,
+        customerNotes: job.customerNotes ?? null,
+        staffNotes: job.staffNotes ?? null,
       };
     });
   }),

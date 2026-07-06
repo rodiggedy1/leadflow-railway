@@ -7,13 +7,55 @@
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from "react";
-import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar, FileText, X } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { EXTRAS_LIST } from "@shared/extras";
+
+
+// ── Notes Popup ──────────────────────────────────────────────────────────────
+
+function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: string | null; staffNotes: string | null; onClose: () => void }) {
+  const hasNotes = !!(customerNotes?.trim() || staffNotes?.trim());
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div
+        className="relative w-full max-w-[430px] bg-slate-900 rounded-t-3xl px-5 pt-5 pb-10 space-y-4 border-t border-slate-700"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-1" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-yellow-400" />
+            <h2 className="text-white font-bold text-base">Job Notes</h2>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><X className="w-5 h-5" /></button>
+        </div>
+        {!hasNotes && <p className="text-slate-500 text-sm text-center py-4">No notes for this job.</p>}
+        {customerNotes?.trim() && (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-400">Customer Notes</p>
+            <div className="bg-blue-950/50 border border-blue-800/40 rounded-xl px-4 py-3">
+              <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">{customerNotes.trim()}</p>
+            </div>
+          </div>
+        )}
+        {staffNotes?.trim() && (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Staff Notes</p>
+            <div className="bg-amber-950/40 border border-amber-800/40 rounded-xl px-4 py-3">
+              <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">{staffNotes.trim()}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -84,6 +126,8 @@ interface PortalJob {
   jobIndex: number;
   totalJobsToday: number;
   basePay: number | null;
+  customerNotes: string | null;
+  staffNotes: string | null;
 }
 
 // ── Extras that require a dedicated photo step ────────────────────────────────
@@ -1142,6 +1186,9 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
     try { return sessionStorage.getItem(COMPLETED_KEY) === "1"; } catch { return false; }
   });
 
+  const hasNotes = !!(job.customerNotes?.trim() || job.staffNotes?.trim());
+  const [notesOpen, setNotesOpen] = useState(false);
+
   // markComplete mutation — fires when sign-off is submitted
   const utils = trpc.useUtils();
   const markCompleteMutation = trpc.cleaner.markComplete.useMutation({
@@ -1204,6 +1251,17 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
             )
           )}
         </div>
+        {/* Sticky Notes button — only shown when job has notes */}
+        {hasNotes && (
+          <button
+            onClick={() => setNotesOpen(true)}
+            className="fixed bottom-20 left-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 text-xs font-bold shadow-lg animate-pulse hover:animate-none hover:bg-yellow-500/30 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Notes
+          </button>
+        )}
+        {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} onClose={() => setNotesOpen(false)} />}
         {/* Dev nav — step through for testing */}
         <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
           <button
@@ -1454,6 +1512,8 @@ type WeekJob = {
   jobStatus: string;
   bookingStatus: string;
   basePay: number | null;
+  customerNotes: string | null;
+  staffNotes: string | null;
 };
 
 function formatWeekJobDate(dateStr: string): string {
@@ -1463,7 +1523,7 @@ function formatWeekJobDate(dateStr: string): string {
   return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-function WeekJobCard({ job }: { job: WeekJob }) {
+function WeekJobCard({ job, onNotesClick }: { job: WeekJob; onNotesClick?: () => void }) {
   const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
   return (
     <div className={['rounded-2xl px-4 py-4 space-y-2', isDone ? 'bg-slate-800/40 border border-slate-700/30 opacity-60' : 'bg-slate-800/70 border border-slate-700/60'].join(' ')}>
@@ -1487,6 +1547,17 @@ function WeekJobCard({ job }: { job: WeekJob }) {
           <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">Move-In/Out</span>
         </div>
       )}
+      {!isDone && (job.customerNotes?.trim() || job.staffNotes?.trim()) && (
+        <div className="pl-4">
+          <button
+            onClick={onNotesClick}
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 font-semibold animate-pulse hover:animate-none hover:bg-yellow-800/60 transition-colors"
+          >
+            <FileText className="w-3 h-3" />
+            Notes
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1508,6 +1579,7 @@ function DayBriefing({
   onJobSelect?: (idx: number) => void;
 }) {
   const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'week'>('today');
+  const [notesJob, setNotesJob] = useState<{ customerNotes: string | null; staffNotes: string | null } | null>(null);
   const weekQuery = trpc.cleaner.getMyJobsWeek.useQuery(undefined, { staleTime: 60_000, throwOnError: false });
   const weekJobs = weekQuery.data ?? [];
   const tomorrowJobs = weekJobs.filter(j => j.dateLabel === 'tomorrow');
@@ -1621,6 +1693,17 @@ function DayBriefing({
                         {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{e.replace(/_/g, ' ')}</span>)}
                       </div>
                     )}
+                    {!isDone && (job.customerNotes?.trim() || job.staffNotes?.trim()) && (
+                      <div className="pl-8">
+                        <button
+                          onClick={e => { e.stopPropagation(); setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes }); }}
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 font-semibold animate-pulse hover:animate-none hover:bg-yellow-800/60 transition-colors"
+                        >
+                          <FileText className="w-3 h-3" />
+                          Notes
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -1628,14 +1711,16 @@ function DayBriefing({
         {activeTab === 'tomorrow' && (
           tomorrowJobs.length === 0
             ? <p className="text-slate-500 text-sm text-center py-8">No jobs tomorrow</p>
-            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} />)
+            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes })} />)
         )}
         {activeTab === 'week' && (
           otherWeekJobs.length === 0
             ? <p className="text-slate-500 text-sm text-center py-8">No other jobs this week</p>
-            : otherWeekJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} />)
+            : otherWeekJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes })} />)
         )}
       </div>
+      {/* Notes popup */}
+      {notesJob && <NotesPopup customerNotes={notesJob.customerNotes} staffNotes={notesJob.staffNotes} onClose={() => setNotesJob(null)} />}
       {/* CTA — only on Today tab */}
       {activeTab === 'today' && !allDone && jobs.length > 0 && (
         <div className="mt-6">
