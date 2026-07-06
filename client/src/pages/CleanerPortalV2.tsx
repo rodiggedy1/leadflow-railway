@@ -345,6 +345,7 @@ function LocationProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const requestLocation = useCallback((): Promise<{ lat: number; lng: number } | null> => {
+    console.log('[LocationDebug] requestLocation CALLED', new Error().stack?.split('\n').slice(1, 5).join(' | '));
     return new Promise((resolve) => {
       if (!navigator?.geolocation) {
         setPermissionState("unavailable");
@@ -379,6 +380,10 @@ function useLocation() {
 // ── Navigate Step Card ───────────────────────────────────────────────────────
 function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStartTime, customerName }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; jobStartTime: string; customerName: string }) {
   const { requestLocation } = useLocation();
+  useEffect(() => {
+    console.log('[LocationDebug] NavigateStepCard MOUNTED cleanerJobId=', cleanerJobId);
+    return () => console.log('[LocationDebug] NavigateStepCard UNMOUNTED cleanerJobId=', cleanerJobId);
+  }, [cleanerJobId]);
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
@@ -1122,6 +1127,10 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
 // ── Single Job Runner ─────────────────────────────────────────────────────────
 
 function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string; onBackToSchedule?: () => void }) {
+  useEffect(() => {
+    console.log('[LocationDebug] JobRunner MOUNTED cleanerJobId=', job.cleanerJobId);
+    return () => console.log('[LocationDebug] JobRunner UNMOUNTED cleanerJobId=', job.cleanerJobId);
+  }, [job.cleanerJobId]);
   const steps = buildStepsFromJob(job);
 
   const SESSION_KEY = `portal_v2_step_${job.cleanerJobId}`;
