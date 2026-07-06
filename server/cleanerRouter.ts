@@ -1610,12 +1610,12 @@ export const cleanerRouter = router({
       .where(
         and(
           eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
-          eq(cleanerJobs.jobDate, todayStr),
+          gte(cleanerJobs.jobDate, todayStr),
           ne(cleanerJobs.bookingStatus, "rescheduled"),
           ne(cleanerJobs.bookingStatus, "cancelled")
         )
       )
-      .orderBy(cleanerJobs.serviceDateTime);
+      .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
 
     const totalJobsToday = jobs.length;
 

@@ -1620,14 +1620,14 @@ function CleanerPortalV2Inner() {
     );
   }
 
-  // No jobs today
-  if (!jobs || jobs.length === 0) {
+  // No jobs at all — only show this if the query succeeded and truly returned nothing
+  if (jobs && jobs.length === 0) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-6 text-center">
         <div className="text-6xl mb-4">🌟</div>
-        <h1 className="text-2xl font-black text-white">No Jobs Today</h1>
+        <h1 className="text-2xl font-black text-white">No Upcoming Jobs</h1>
         <p className="text-slate-400 mt-2 text-sm">
-          You don't have any jobs scheduled for today. Check back tomorrow!
+          You have no jobs scheduled. Check back soon!
         </p>
         <button
           onClick={() => window.location.reload()}
