@@ -12,8 +12,44 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import i18n from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { EXTRAS_LIST } from "@shared/extras";
+
+
+// ── Language Picker ───────────────────────────────────────────────────────────
+function LanguagePicker() {
+  const { t, i18n: i18nInst } = useTranslation();
+  const updateLang = trpc.cleaner.updateLanguage.useMutation({ throwOnError: false });
+  const current = i18nInst.language as 'en' | 'es' | 'pt';
+  const langs: { code: 'en' | 'es' | 'pt'; label: string }[] = [
+    { code: 'en', label: t('lang.en') },
+    { code: 'es', label: t('lang.es') },
+    { code: 'pt', label: t('lang.pt') },
+  ];
+  const handleChange = (code: 'en' | 'es' | 'pt') => {
+    i18nInst.changeLanguage(code);
+    updateLang.mutate({ language: code });
+  };
+  return (
+    <div className="flex gap-1 bg-slate-800/60 rounded-xl p-1">
+      {langs.map(l => (
+        <button
+          key={l.code}
+          onClick={() => handleChange(l.code)}
+          className={cn(
+            'px-2.5 py-1 rounded-lg text-xs font-semibold transition-all',
+            current === l.code
+              ? 'bg-emerald-600 text-white shadow'
+              : 'text-slate-400 hover:text-white'
+          )}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 
 // ── Notes Popup ──────────────────────────────────────────────────────────────
@@ -32,14 +68,14 @@ function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: str
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-yellow-400" />
-            <h2 className="text-white font-bold text-base">{t('notes.title')}</h2>
+            <h2 className="text-white font-bold text-base">{t('v2.notes.title')}</h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><X className="w-5 h-5" /></button>
         </div>
-        {!hasNotes && <p className="text-slate-500 text-sm text-center py-4">{t('notes.noNotes')}</p>}
+        {!hasNotes && <p className="text-slate-500 text-sm text-center py-4">{t('v2.notes.empty')}</p>}
         {customerNotes?.trim() && (
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-widest text-blue-400">{t('notes.customerNotes')}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-blue-400">{t('v2.notes.customerLabel')}</p>
             <div className="bg-blue-950/50 border border-blue-800/40 rounded-xl px-4 py-3">
               <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">{customerNotes.trim()}</p>
             </div>
@@ -47,7 +83,7 @@ function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: str
         )}
         {staffNotes?.trim() && (
           <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">{t('notes.staffNotes')}</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">{t('v2.notes.staffLabel')}</p>
             <div className="bg-amber-950/40 border border-amber-800/40 rounded-xl px-4 py-3">
               <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">{staffNotes.trim()}</p>
             </div>
@@ -58,40 +94,6 @@ function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: str
   );
 }
 
-
-// ── Language Picker ─────────────────────────────────────────────────────────
-
-function LanguagePicker() {
-  const { i18n } = useTranslation();
-  const updateLanguageMutation = trpc.cleaner.updateLanguage.useMutation();
-  const langs: { code: string; label: string }[] = [
-    { code: 'en', label: 'EN' },
-    { code: 'es', label: 'ES' },
-    { code: 'pt', label: 'PT' },
-  ];
-  const handleChange = (code: string) => {
-    i18n.changeLanguage(code);
-    updateLanguageMutation.mutate({ language: code });
-  };
-  return (
-    <div className="flex gap-1">
-      {langs.map(l => (
-        <button
-          key={l.code}
-          onClick={() => handleChange(l.code)}
-          className={[
-            'px-2 py-0.5 rounded text-xs font-bold transition-all',
-            i18n.language === l.code
-              ? 'bg-emerald-600 text-white'
-              : 'text-slate-500 hover:text-slate-300',
-          ].join(' ')}
-        >
-          {l.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -189,43 +191,43 @@ const EXTRAS_LABEL: Record<string, string> = Object.fromEntries(
 
 // ── Dynamic Step Builder ──────────────────────────────────────────────────────
 
-function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string, unknown>) => string): Step[] {
+function buildStepsFromJob(job: PortalJob): Step[] {
   const steps: Step[] = [];
 
   // 1. Navigate
   steps.push({
     id: "navigate",
     type: "navigate",
-    label: t('nav.label'),
+    label: "NEXT REQUIRED ACTION",
     emoji: "🚗",
-    title: t('nav.title'),
-    description: t('nav.description'),
-    whyItMatters: t('nav.whyItMatters'),
-    ctaText: t('nav.cta'),
+    title: "Start Navigation",
+    description: "Leave now. You'll arrive a few minutes early and the customer will get an automatic on-my-way text.",
+    whyItMatters: "Being early protects the review before the cleaning even begins.",
+    ctaText: "START NAVIGATION",
   });
 
   // 2. Greet
   steps.push({
     id: "greet",
     type: "greet",
-    label: t('step.greet.label'),
+    label: "NEXT REQUIRED ACTION",
     emoji: "👋",
-    title: t('step.greet.title'),
-    description: t('step.greet.description'),
-    whyItMatters: t('step.greet.whyItMatters'),
-    ctaText: t('step.greet.cta'),
+    title: "Greet Customer",
+    description: "Introduce yourself, confirm the requested rooms, and ask if there are priority areas.",
+    whyItMatters: "A strong greeting reduces complaints because expectations are clear before cleaning starts.",
+    ctaText: "CUSTOMER GREETED",
   });
 
   // 3. Before photos
   steps.push({
     id: "before_photos",
     type: "before_photos",
-    label: t('step.beforePhotos.label'),
+    label: "NEXT REQUIRED ACTION",
     emoji: "📷",
-    title: t('step.beforePhotos.title'),
-    description: t('step.beforePhotos.description'),
-    whyItMatters: t('step.beforePhotos.whyItMatters'),
-    ctaText: t('step.beforePhotos.cta'),
+    title: "Take Before Photos",
+    description: "Photograph kitchen, bathroom, and any problem areas before cleaning starts.",
+    whyItMatters: "Before photos protect the team and make the after photos more impressive.",
+    ctaText: "BEFORE PHOTOS DONE",
     photoType: "before",
   });
 
@@ -235,27 +237,28 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
     steps.push({
       id: `checklist_${safeId}`,
       type: "checklist_item",
-      label: t('step.checklist.label'),
+      label: "NEXT REQUIRED ACTION",
       emoji: "🧽",
       title: item.text,
-      description: t('step.checklist.description'),
-      whyItMatters: t('step.checklist.whyItMatters'),
-      ctaText: t('step.checklist.cta'),
+      description: "Complete this checklist item before moving on.",
+      whyItMatters: "Paid add-ons are the easiest place to create a complaint if missed.",
+      ctaText: "DONE",
     });
   }
 
   // 5. Bathroom photo steps (one per bathroom)
   for (let i = 1; i <= job.bathrooms; i++) {
+    const label = job.bathrooms > 1 ? `Bathroom ${i}` : "Bathroom";
     steps.push({
       id: `bathroom_${i}_photos`,
       type: "photo_objective",
-      label: t('step.bathroom.label'),
+      label: "YOUR NEXT OBJECTIVE",
       emoji: "🚿",
-      title: job.bathrooms > 1 ? t('step.bathroom.titleNumbered', { n: i }) : t('step.bathroom.titleSingle'),
-      description: job.bathrooms > 1 ? t('step.bathroom.descNumbered', { n: i }) : t('step.bathroom.descSingle'),
-      aiCoach: t('step.bathroom.aiCoach'),
+      title: `Photograph ${label}`,
+      description: `Take after photos of ${label.toLowerCase()} — toilet, sink, shower/tub, and floor.`,
+      aiCoach: "Get a wide shot of the whole room, then close-ups of the toilet and sink.",
       badge: "+$5 Bonus",
-      ctaText: t('step.bathroom.cta'),
+      ctaText: "PHOTOS DONE",
       photoType: "after",
     });
   }
@@ -264,13 +267,13 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
   steps.push({
     id: "kitchen_photos",
     type: "photo_objective",
-    label: t('step.kitchen.label'),
+    label: "YOUR NEXT OBJECTIVE",
     emoji: "🍳",
-    title: t('step.kitchen.title'),
-    description: t('step.kitchen.description'),
-    aiCoach: t('step.kitchen.aiCoach'),
+    title: "Photograph Kitchen",
+    description: "Take after photos of the kitchen — sink, counters, stovetop, and appliances.",
+    aiCoach: "Take a close-up of the sink and counters before leaving the kitchen.",
     badge: "+$5 Bonus",
-    ctaText: t('step.kitchen.cta'),
+    ctaText: "PHOTOS DONE",
     photoType: "after",
   });
 
@@ -281,13 +284,13 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
     steps.push({
       id: `extra_${extraKey}_photos`,
       type: "photo_objective",
-      label: t('step.extraPhoto.label'),
+      label: "PAID ADD-ON — PHOTO REQUIRED",
       emoji: "📸",
-      title: t('step.extraPhoto.title', { label }),
-      description: t('step.extraPhoto.description', { label }),
-      whyItMatters: t('step.extraPhoto.whyItMatters'),
-      badge: t('step.extraPhoto.badge'),
-      ctaText: t('step.extraPhoto.cta'),
+      title: `Photograph: ${label}`,
+      description: `Customer paid for ${label}. Take a clear after photo showing the completed work.`,
+      whyItMatters: "Paid add-ons need photo proof — this is the #1 source of complaints when skipped.",
+      badge: "Paid Add-on",
+      ctaText: "PHOTO DONE",
       photoType: "after",
     });
   }
@@ -296,13 +299,13 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
   steps.push({
     id: "after_photos",
     type: "after_photos",
-    label: t('step.afterPhotos.label'),
+    label: "NEXT REQUIRED ACTION",
     emoji: "📸",
-    title: t('step.afterPhotos.title'),
-    description: t('step.afterPhotos.description'),
-    whyItMatters: t('step.afterPhotos.whyItMatters'),
-    badge: t('step.afterPhotos.badge'),
-    ctaText: t('step.afterPhotos.cta'),
+    title: "Take After Photos",
+    description: "Photograph every room you cleaned — bedrooms, living areas, hallways. Aim for 10+ photos total.",
+    whyItMatters: "After photos unlock the +$5 bonus and protect the team if a customer claims something was missed.",
+    badge: "+$5 Bonus at 10 photos",
+    ctaText: "AFTER PHOTOS DONE",
     photoType: "after",
   });
 
@@ -310,23 +313,23 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
   steps.push({
     id: "walk_through",
     type: "walk_through",
-    label: t('step.walkThrough.label'),
+    label: "YOUR NEXT OBJECTIVE",
     emoji: "😊",
-    title: t('step.walkThrough.title'),
-    description: t('step.walkThrough.description'),
-    aiCoach: t('step.walkThrough.aiCoach'),
-    ctaText: t('step.walkThrough.cta'),
+    title: "Walk Customer Through Home",
+    description: "This is the biggest predictor of 5-star reviews.",
+    aiCoach: "Ask: 'Is there anything you'd like us to touch up while we're here?'",
+    ctaText: "WALK-THROUGH DONE",
   });
 
   // 10. Sign-off
   steps.push({
     id: "signoff",
     type: "signoff",
-    label: t('step.signoff.label'),
+    label: "FINAL STEP",
     emoji: "✍️",
-    title: t('step.signoff.title'),
-    description: t('step.signoff.description'),
-    ctaText: t('step.signoff.cta'),
+    title: "Customer Sign-off",
+    description: "Walk the home together before finishing.",
+    ctaText: "COMPLETE SIGN-OFF",
   });
 
   // 11. Next job (only if more jobs today)
@@ -334,12 +337,12 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
     steps.push({
       id: "next_job",
       type: "next_job",
-      label: t('step.nextJob.label'),
+      label: "YOUR NEXT OBJECTIVE",
       emoji: "🚀",
-      title: t('step.nextJob.title', { n: job.jobIndex + 1 }),
-      description: t('step.nextJob.description'),
-      badge: t('step.nextJob.badge'),
-      ctaText: t('step.nextJob.cta', { n: job.jobIndex + 1 }),
+      title: `Start Job #${job.jobIndex + 1}`,
+      description: `Everything is complete. Time for the next customer.`,
+      badge: "Next Job Unlocked",
+      ctaText: `Start Job #${job.jobIndex + 1} →`,
     });
   }
 
@@ -361,28 +364,27 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 }
 
 function JobHeader({ job, stepIndex, totalSteps }: { job: PortalJob; stepIndex: number; totalSteps: number }) {
-  const { t } = useTranslation();
   return (
     <div className="px-4 pt-5 pb-3 bg-slate-900">
       <h1 className="text-2xl font-black text-white leading-tight">
-        {t('jobHeader.jobFor', { name: job.customerName })}
+        Job for {job.customerName}
       </h1>
       <p className="text-slate-400 text-sm mt-0.5">
-        {t('jobHeader.jobOf', { current: job.jobIndex, total: job.totalJobsToday })} · {job.time} · {job.address.split(",")[0]}
+        Job {job.jobIndex} of {job.totalJobsToday} · {job.time} · {job.address.split(",")[0]}
       </p>
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-2 mt-3">
         <div className="bg-slate-800 rounded-xl p-3 text-center">
           <div className="text-xl font-black text-white">{job.bathrooms}🛁</div>
-          <div className="text-xs text-slate-400 mt-0.5">{t('jobHeader.bathrooms')}</div>
+          <div className="text-xs text-slate-400 mt-0.5">bathrooms</div>
         </div>
         <div className="bg-slate-800 rounded-xl p-3 text-center">
           <div className="text-xl font-black text-white">{job.extras.length > 0 ? `+${job.extras.length}` : "—"}</div>
-          <div className="text-xs text-slate-400 mt-0.5">{t('jobHeader.addOns')}</div>
+          <div className="text-xs text-slate-400 mt-0.5">add-ons</div>
         </div>
         <div className="bg-slate-800 rounded-xl p-3 text-center">
           <div className="text-xl font-black text-white">{stepIndex + 1}/{totalSteps}</div>
-          <div className="text-xs text-slate-400 mt-0.5">{t('jobHeader.step')}</div>
+          <div className="text-xs text-slate-400 mt-0.5">step</div>
         </div>
       </div>
       {/* Progress bar */}
@@ -582,39 +584,39 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
           {gpsState === "fetching" && (
             <div className="flex items-center gap-1.5 text-slate-400">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span className="text-xs">{t('nav.gettingEta')}</span>
+              <span className="text-xs">{t('v2.nav.gettingEta')}</span>
             </div>
           )}
           {gpsState === "ready" && hasEta && (
             <div className="text-right">
               <div className="text-emerald-400 font-black text-sm">{eta.etaText}</div>
-              <div className="text-slate-400 text-xs mt-0.5">{t('nav.arriveBy')}</div>
+              <div className="text-slate-400 text-xs mt-0.5">{t('v2.nav.arriveBy')}</div>
             </div>
           )}
           {(gpsState === "error" || (gpsState === "ready" && !hasEta)) && (
             <div className="flex items-center gap-2 text-slate-500">
-              <span className="text-xs">{t('nav.tapDirections')}</span>
+              <span className="text-xs">{t('v2.nav.tapForDirections')}</span>
             </div>
           )}
         </div>
-          {step.whyItMatters && (
-            <div className="mx-4 mt-3 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-              <p className="text-blue-400 font-bold text-sm">{t('step.whyItMatters')}</p>
-              <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
-            </div>
-          )}
-          <div className="px-4 mt-5 pb-5">
-            <button
-              onClick={() => setShowConfirm(true)}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-5 rounded-2xl border-2 border-emerald-400/30 shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-3"
-            >
-              <Navigation className="w-6 h-6" />
-              {step.ctaText}
-            </button>
-            <p className="text-center text-slate-500 text-xs mt-3">
-              {t('nav.opensMaps')}
-            </p>
+        {step.whyItMatters && (
+          <div className="mx-4 mt-3 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
+            <p className="text-blue-400 font-bold text-sm">{t('v2.step.whyItMatters')}</p>
+            <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
           </div>
+        )}
+        <div className="px-4 mt-5 pb-5">
+          <button
+            onClick={() => setShowConfirm(true)}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-5 rounded-2xl border-2 border-emerald-400/30 shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-3"
+          >
+            <Navigation className="w-6 h-6" />
+            {step.ctaText}
+          </button>
+          <p className="text-center text-slate-500 text-xs mt-3">
+            {t('v2.nav.opensMaps')}
+          </p>
+        </div>
         {/* Confirmation bottom sheet */}
         {showConfirm && (
           <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowConfirm(false)}>
@@ -627,23 +629,23 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
               <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5" />
               <div className="text-center text-4xl mb-3">📱</div>
               <h3 className="text-white text-xl font-black text-center leading-tight">
-                {t('nav.confirmTitle', { name: customerName })}
+                {t('v2.nav.confirmTitle', { name: customerName })}
               </h3>
               <p className="text-slate-400 text-sm text-center mt-3 leading-relaxed">
-                {t('nav.confirmDesc')}
+                {t('v2.nav.confirmDesc')}
               </p>
               <div className="flex gap-3 mt-6">
                 <button
                   onClick={() => setShowConfirm(false)}
                   className="flex-1 py-4 rounded-2xl bg-slate-700 text-slate-300 font-bold text-base border border-slate-600 active:bg-slate-600 transition-all"
                 >
-                  {t('nav.confirmCancel')}
+                  {t('v2.common.cancel')}
                 </button>
                 <button
                   onClick={() => { setShowConfirm(false); handleNavigate(); }}
                   className="flex-1 py-4 rounded-2xl bg-emerald-500 text-white font-black text-base shadow-lg shadow-emerald-900/40 active:bg-emerald-600 transition-all"
                 >
-                  {t('nav.confirmSend')}
+                  {t('v2.nav.confirmCta')}
                 </button>
               </div>
             </div>
@@ -658,21 +660,21 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
       {/* En route card */}
       <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl mb-3">
         <div className="pt-4 pb-1 text-center">
-          <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">{t('nav.enRoute')}</span>
+          <span className="text-xs font-bold tracking-widest text-blue-400 uppercase">🚗 {t('v2.nav.enRoute')}</span>
         </div>
         <div className="text-center text-5xl mt-2 mb-2 leading-none">🗺️</div>
-        <h2 className="text-center text-2xl font-black text-white px-6 leading-tight">{t('nav.headingTo', { address: jobAddress.split(',')[0] })}</h2>
+        <h2 className="text-center text-2xl font-black text-white px-6 leading-tight">{t('v2.nav.headingTo', { address: jobAddress.split(",")[0] })}</h2>
         {/* ETA reminder — show GPS ETA if available, else show scheduled start time */}
         <div className="mx-4 mt-3 bg-blue-900/20 border border-blue-700/30 rounded-xl px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
             <span className="text-blue-300 text-sm font-semibold">
-              {hasEta ? `ETA ${eta.etaText}` : `Scheduled ${jobStartTime}`}
+              {hasEta ? `ETA ${eta.etaText}` : `${t('v2.nav.scheduled')} ${jobStartTime}`}
             </span>
           </div>
-            {hasEta
-            ? <span className="text-slate-400 text-sm">{t('nav.drive', { duration: eta.durationText })}</span>
-            : <span className="text-slate-500 text-xs">{t('nav.gpsUnavailable')}</span>
+          {hasEta
+            ? <span className="text-slate-400 text-sm">{eta.durationText} {t('v2.nav.drive')}</span>
+            : <span className="text-slate-500 text-xs">{t('v2.nav.gpsUnavailable')}</span>
           }
         </div>
         {/* Re-open maps — opens maps only, does NOT re-fire on_the_way SMS */}
@@ -682,7 +684,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
             className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-300 font-semibold text-sm py-3 rounded-xl border border-slate-600/50 transition-all flex items-center justify-center gap-2"
           >
             <Navigation className="w-4 h-4" />
-            {t('nav.reopenMaps')}
+            {t('v2.nav.reopenMaps')}
           </button>
         </div>
       </div>
@@ -708,16 +710,16 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
         )}
       >
         <CheckCircle2 className="w-7 h-7" />
-        {t('nav.iArrived')}
+        {t('v2.nav.arrived')}
       </button>
       {returnedFromMaps && (
         <p className="text-center text-emerald-400 text-sm font-semibold mt-2 animate-pulse">
-          {t('nav.tapToConfirm')}
+          {t('v2.nav.arrivedHint')}
         </p>
       )}
       {!returnedFromMaps && (
         <p className="text-center text-slate-500 text-xs mt-2">
-          {t('nav.tapWhenParked')}
+          {t('v2.nav.arrivedSubhint')}
         </p>
       )}
     </div>
@@ -803,7 +805,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
       <p className="text-center text-slate-300 text-base px-6 mt-3 leading-relaxed">{step.description}</p>
       {step.whyItMatters && (
         <div className="mx-4 mt-4 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-          <p className="text-blue-400 font-bold text-sm">{t('step.whyItMatters')}</p>
+          <p className="text-blue-400 font-bold text-sm">{t('v2.step.whyItMatters')}</p>
           <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
         </div>
       )}
@@ -811,8 +813,10 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
       {photos.length > 0 && (
         <div className="mx-4 mt-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">{photos.length === 1 ? t('photo.photosUploaded', { count: photos.length }) : t('photo.photosUploadedPlural', { count: photos.length })}</span>
-            {photos.length >= 10 && <span className="text-emerald-400 text-xs font-bold">{t('photo.bonusEarned')}</span>}
+            <span className="text-slate-400 text-xs font-semibold uppercase tracking-wide">
+              {t('v2.photo.uploaded', { count: photos.length })}
+            </span>
+            {photos.length >= 10 && <span className="text-emerald-400 text-xs font-bold">{t('v2.photo.bonusEarned')}</span>}
           </div>
           <div className="grid grid-cols-3 gap-2">
             {photos.map(p => (
@@ -827,7 +831,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
               <div className="w-full bg-slate-700 rounded-full h-1.5">
                 <div className="bg-amber-400 h-1.5 rounded-full transition-all" style={{ width: `${Math.min((photos.length / 10) * 100, 100)}%` }} />
               </div>
-              <p className="text-amber-500 text-[10px] mt-0.5">{t('photo.bonusProgress', { count: photos.length, remaining: 10 - photos.length })}</p>
+              <p className="text-amber-500 text-[10px] mt-0.5">{photos.length}/10 — {10 - photos.length} {t('v2.photo.moreForBonus')}</p>
             </div>
           )}
         </div>
@@ -838,7 +842,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
           <div className="mb-3 bg-slate-900/60 border border-slate-700/40 rounded-xl px-4 py-3 flex items-center gap-3">
             <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
             <span className="text-slate-300 text-sm">
-              {t('photo.uploading', { current: uploadProgress.current, total: uploadProgress.total })}
+              {t('v2.photo.uploading', { current: uploadProgress.current, total: uploadProgress.total })}
             </span>
           </div>
         )}
@@ -849,7 +853,9 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
           className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-semibold text-base py-4 rounded-2xl border border-slate-600/50 transition-all disabled:opacity-60 flex items-center justify-center gap-3"
         >
           {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
-          {uploading ? t('photo.uploading', { current: uploadProgress?.current ?? '', total: uploadProgress?.total ?? '' }) : photos.length > 0 ? t('photo.addMore') : t('photo.openCamera')}
+          {uploading
+            ? t('v2.photo.uploadingProgress', { current: uploadProgress?.current ?? '', total: uploadProgress?.total ?? '' })
+            : photos.length > 0 ? t('v2.photo.addMore') : t('v2.photo.openCamera')}
         </button>
       </div>
       {/* Done CTA — only enabled once at least 1 photo uploaded */}
@@ -865,11 +871,13 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
           )}
         >
           <CheckCircle2 className="w-4 h-4" />
-          {canAdvance ? step.ctaText : t('step.uploadAtLeastOne')}
+          {canAdvance ? step.ctaText : t('v2.photo.uploadFirst')}
         </button>
       </div>
       <p className="text-center text-slate-500 text-xs pb-5 mt-1 px-6">
-        {canAdvance ? t('photo.readyHint', { count: photos.length, s: photos.length !== 1 ? 's' : '' }) : t('photo.takeFirst')}
+        {canAdvance
+          ? t('v2.photo.readyHint', { count: photos.length })
+          : t('v2.photo.takeFirst')}
       </p>
     </div>
   );
@@ -922,14 +930,14 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, 
       {/* Why it matters */}
       {step.whyItMatters && (
         <div className="mx-4 mt-4 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-          <p className="text-blue-400 font-bold text-sm">{t('step.whyItMatters')}</p>
+          <p className="text-blue-400 font-bold text-sm">{t('v2.step.whyItMatters')}</p>
           <p className="text-slate-300 text-sm mt-1 leading-relaxed">{step.whyItMatters}</p>
         </div>
       )}
       {/* AI Coach */}
       {step.aiCoach && (
         <div className="mx-4 mt-4 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-          <p className="text-white font-bold text-sm mb-1">{t('step.aiCoach')}</p>
+          <p className="text-white font-bold text-sm mb-1">{t('v2.step.aiCoach')}</p>
           <p className="text-slate-300 text-sm leading-relaxed">{step.aiCoach}</p>
         </div>
       )}
@@ -946,7 +954,7 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, 
       </div>
       {/* Footer hint */}
       <p className="text-center text-slate-500 text-xs pb-5 mt-2 px-6">
-        {t('step.noScrollHint')}
+        {t('v2.step.footerHint')}
       </p>
     </div>
   );
@@ -1054,22 +1062,22 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
   };
 
   const options = [
-    { value: "great", label: t('signoff.optionGreat') },
-    { value: "touchup", label: t('signoff.optionTouchup') },
-    { value: "issue", label: t('signoff.optionIssue') },
+    { value: "great", label: t('v2.signoff.optionGreat') },
+    { value: "touchup", label: t('v2.signoff.optionTouchup') },
+    { value: "issue", label: t('v2.signoff.optionIssue') },
   ];
 
   return (
     <div className="mx-4 mt-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl overflow-hidden shadow-xl">
       <div className="pt-5 pb-1 text-center">
-        <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">{t('signoff.finalStep')}</span>
+        <span className="text-xs font-bold tracking-widest text-slate-400 uppercase">{t('v2.signoff.label')}</span>
       </div>
-      <h2 className="text-center text-2xl font-black text-white px-6 mt-2">{t('signoff.title')}</h2>
-      <p className="text-center text-slate-400 text-sm px-6 mt-1">{t('signoff.subtitle')}</p>
+      <h2 className="text-center text-2xl font-black text-white px-6 mt-2">{t('v2.signoff.title')}</h2>
+      <p className="text-center text-slate-400 text-sm px-6 mt-1">{t('v2.signoff.subtitle')}</p>
 
       {/* Satisfaction */}
       <div className="mx-4 mt-5 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-        <p className="text-white font-semibold text-sm mb-3">{t('signoff.howDidItLook')}</p>
+        <p className="text-white font-semibold text-sm mb-3">{t('v2.signoff.howDidItLook')}</p>
         <div className="space-y-2">
           {options.map(o => (
             <button
@@ -1090,11 +1098,11 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
 
       {/* Customer Notes */}
       <div className="mx-4 mt-3 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-        <p className="text-white font-semibold text-sm mb-2">{t('signoff.customerNotes')}</p>
+        <p className="text-white font-semibold text-sm mb-2">{t('v2.signoff.customerNotesLabel')}</p>
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          placeholder={t('signoff.notesPlaceholder')}
+          placeholder={t('v2.signoff.notesPlaceholder')}
           rows={3}
           className="w-full bg-slate-800 border border-blue-500/50 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-500 resize-none focus:outline-none focus:border-blue-400"
         />
@@ -1102,7 +1110,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
 
       {/* Signature */}
       <div className="mx-4 mt-3 bg-slate-900/60 border border-slate-700/40 rounded-xl p-4">
-        <p className="text-white font-semibold text-sm mb-2">{t('signoff.signature')}</p>
+        <p className="text-white font-semibold text-sm mb-2">{t('v2.signoff.signatureLabel')}</p>
         <canvas
           ref={canvasRef}
           width={600}
@@ -1120,7 +1128,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
           onClick={clearCanvas}
           className="w-full mt-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3 rounded-xl transition-all"
         >
-          {t('signoff.clearSignature')}
+          {t('v2.signoff.clearSignature')}
         </button>
       </div>
 
@@ -1132,7 +1140,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
           className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-base uppercase tracking-wide py-4 rounded-2xl border-2 border-emerald-400/30 shadow-lg transition-all disabled:opacity-40 flex items-center justify-center gap-2"
         >
           {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {t('signoff.completeCta')}
+          {t('v2.signoff.completeCta')}
         </button>
       </div>
 
@@ -1144,7 +1152,7 @@ function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { sati
           className="w-full bg-transparent border border-slate-600 text-slate-400 hover:text-slate-200 hover:border-slate-400 text-sm py-3 rounded-2xl transition-all flex items-center justify-center gap-2"
         >
           {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>🚪</span>}
-          {t('signoff.notHome')}
+          {t('v2.signoff.notHome')}
         </button>
       </div>
     </div>
@@ -1163,20 +1171,20 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
     <div className="flex flex-col items-center justify-center min-h-screen bg-slate-900 px-6 text-center">
       <div className="text-6xl mb-4">{isLastJob ? '🏁' : '🎉'}</div>
       <h1 className="text-3xl font-black text-white">
-        {isLastJob ? t('completed.lastJobTitle') : t('completed.jobCompleteTitle')}
+        {isLastJob ? t('v2.completed.lastJobDone') : t('v2.completed.jobComplete')}
       </h1>
       {isLastJob && (
-        <p className="text-emerald-400 font-semibold mt-1 text-sm">{t('completed.allMissionsToday')}</p>
+        <p className="text-emerald-400 font-semibold mt-1 text-sm">{t('v2.completed.allMissions')}</p>
       )}
       <p className="text-slate-400 mt-2 text-base">
-        {t('completed.signedOff', { name: customerName })}
+        {t('v2.completed.signedOff', { name: customerName })}
       </p>
       <div className="mt-6 bg-slate-800 rounded-2xl p-5 w-full max-w-sm">
         <div className="flex items-center gap-3">
           <CheckCircle2 className="w-8 h-8 text-emerald-400 shrink-0" />
           <div className="text-left">
-            <p className="text-white font-bold text-sm">{t('completed.allStepsComplete')}</p>
-            <p className="text-slate-400 text-xs mt-0.5">{t('completed.customerSignedOff')}</p>
+            <p className="text-white font-bold text-sm">{t('v2.completed.allSteps')}</p>
+            <p className="text-slate-400 text-xs mt-0.5">{t('v2.completed.photosSubmitted')}</p>
           </div>
         </div>
       </div>
@@ -1185,14 +1193,14 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
           onClick={onNextJob}
           className="mt-6 w-full max-w-sm bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
         >
-          {nextJobName ? t('completed.nextMissionNamed', { name: nextJobName }) : t('completed.nextMission')}
+          {t('v2.completed.nextMission')}{nextJobName ? ` ${nextJobName}` : ''}
         </button>
       ) : (
         <button
           onClick={onBackToSchedule ?? (() => window.location.reload())}
           className="mt-6 w-full max-w-sm bg-slate-700 hover:bg-slate-600 text-white font-semibold px-8 py-4 rounded-2xl transition-all"
         >
-          {t('completed.viewDaySummary')}
+          {t('v2.completed.viewSummary')}
         </button>
       )}
       {/* Dev reset — clears sessionStorage so the portal restarts from step 1 */}
@@ -1298,7 +1306,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
             className="fixed bottom-20 left-4 z-40 inline-flex items-center gap-1.5 px-3 py-2 rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 text-xs font-bold shadow-lg animate-pulse hover:animate-none hover:bg-yellow-500/30 transition-colors"
           >
             <FileText className="w-3.5 h-3.5" />
-            {t('notes.badge')}
+            {t('v2.common.notes')}
           </button>
         )}
         {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} onClose={() => setNotesOpen(false)} />}
@@ -1341,10 +1349,11 @@ function WeeklySchedulePrompt({
   cleanerName: string;
   onSubmitted: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n: i18nInst } = useTranslation();
   const DAYS = ['sun','mon','tue','wed','thu','fri','sat'] as const;
   type Day = typeof DAYS[number];
-  const getDayLabel = (d: Day) => t(`day.${d}`);
+
+  const getDayLabel = (d: Day) => t(`v2.day.${d}`);
 
   const weekDates = useMemo(() => {
     const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
@@ -1380,7 +1389,7 @@ function WeeklySchedulePrompt({
 
   const submitWeeklySchedule = trpc.cleaner.submitWeeklySchedule.useMutation({
     onSuccess: () => { setStep('confirmed'); setTimeout(onSubmitted, 2000); },
-    onError: (err) => toast.error(t('schedule.submitFailed', { message: err.message })),
+    onError: (err) => toast.error(`Submission failed: ${err.message}`),
   });
 
   const toggleDay = (day: Day) => setSchedule(s => ({ ...s, [day]: !s[day] }));
@@ -1420,14 +1429,14 @@ function WeeklySchedulePrompt({
                 <CalendarDays className="w-7 h-7 text-emerald-400" />
               </div>
               <h2 className="text-white text-2xl font-bold leading-tight">
-                {t('schedule.confirmTitle')}
+                {t('v2.schedule.confirmTitle')}
               </h2>
               <p className="text-slate-400 text-sm">
-                {t('schedule.confirmSubtitle', { name: firstName })}
+                {t('v2.schedule.confirmSubtitle', { name: firstName })}
               </p>
             </div>
             <div className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-2.5 border border-slate-700/50">
-              <span className="text-slate-300 text-sm font-semibold">{t('schedule.thisWeek')}</span>
+              <span className="text-slate-300 text-sm font-semibold">{t('v2.schedule.thisWeek')}</span>
               <div className="flex items-center gap-1.5 text-slate-400 text-sm">
                 <Calendar className="w-3.5 h-3.5" />
                 <span>{weekRange}</span>
@@ -1447,11 +1456,11 @@ function WeeklySchedulePrompt({
                     <div className="flex items-center bg-slate-800 rounded-full p-0.5 border border-slate-700">
                       <button onClick={e => { e.stopPropagation(); if (isWorking) toggleDay(key); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${!isWorking ? 'bg-slate-600 text-white shadow' : 'text-slate-500 hover:text-slate-300'}`}>
                         {!isWorking && <CheckCircle2 className="w-3.5 h-3.5" />}
-                        <span>{t('schedule.notWorking')}</span>
+                        <span>{t('v2.schedule.notWorking')}</span>
                       </button>
                       <button onClick={e => { e.stopPropagation(); if (!isWorking) toggleDay(key); }} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-all ${isWorking ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/40' : 'text-slate-500 hover:text-slate-300'}`}>
                         {isWorking && <CheckCircle2 className="w-3.5 h-3.5" />}
-                        <span>{t('schedule.working')}</span>
+                        <span>{t('v2.schedule.working')}</span>
                       </button>
                     </div>
                   </div>
@@ -1461,12 +1470,14 @@ function WeeklySchedulePrompt({
             <div className="flex items-center gap-2 px-4 py-3 bg-slate-800/40 rounded-xl border border-slate-700/40">
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
               <p className="text-slate-300 text-sm">
-                {workingCount === 0 ? t('schedule.noDaysSelected') : t('schedule.workingDaysCount', { count: workingCount })}
+                {workingCount === 0
+                  ? t('v2.schedule.noDaysSelected')
+                  : t('v2.schedule.workingDays', { count: workingCount })}
               </p>
             </div>
             <Button className="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold py-4 text-base h-auto rounded-2xl shadow-lg shadow-emerald-900/30 transition-all" onClick={handleConfirmSchedule}>
               <CheckCircle2 className="w-4 h-4 mr-2" />
-              {t('schedule.confirmCta')}
+              {t('v2.schedule.confirmBtn')}
             </Button>
           </div>
         )}
@@ -1477,14 +1488,14 @@ function WeeklySchedulePrompt({
                 <span className="text-2xl">📝</span>
               </div>
               <h2 className="text-white text-2xl font-bold">
-                {t('schedule.notesTitle')}
+                {t('v2.schedule.anyNotes')}
               </h2>
               <p className="text-slate-400 text-sm">
-                {t('schedule.notesSubtitle')}
+                {t('v2.schedule.anyNotesSubtitle')}
               </p>
             </div>
             <div className="bg-slate-800/60 rounded-xl border border-slate-700/50 px-4 py-3 space-y-1">
-              <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">{t('schedule.yourSchedule')}</p>
+              <p className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">{t('v2.schedule.yourSchedule')}</p>
               <div className="flex flex-wrap gap-1.5">
                 {DAYS.map(d => (
                   <span key={d} className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${schedule[d] ? 'bg-emerald-900/40 border-emerald-600/60 text-emerald-300' : 'bg-slate-700/40 border-slate-600/40 text-slate-500'}`}>
@@ -1494,16 +1505,16 @@ function WeeklySchedulePrompt({
               </div>
             </div>
             <div className="space-y-2">
-              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={t('schedule.notesPlaceholder')} rows={4} maxLength={500} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3.5 py-3 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors" autoFocus />
+              <textarea value={note} onChange={e => setNote(e.target.value)} placeholder={t('v2.schedule.notePlaceholder')} rows={4} maxLength={500} className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3.5 py-3 text-white placeholder:text-slate-500 text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors" autoFocus />
               <p className="text-slate-600 text-xs text-right">{note.length}/500</p>
             </div>
             <div className="space-y-3">
               <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-4 text-base h-auto rounded-2xl" onClick={handleFinalSubmit} disabled={submitWeeklySchedule.isPending}>
                 {submitWeeklySchedule.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle2 className="w-4 h-4 mr-2" />}
-                {t('schedule.submitCta')}
+                {t('v2.schedule.submit')}
               </Button>
               <button onClick={() => setStep('schedule')} className="w-full text-slate-500 text-sm hover:text-slate-300 py-2 transition-colors">
-                ← {t('common.back')}
+                ← {t('v2.common.back')}
               </button>
             </div>
           </div>
@@ -1514,8 +1525,8 @@ function WeeklySchedulePrompt({
               <CheckCircle2 className="w-10 h-10 text-emerald-400" />
             </div>
             <div className="space-y-2">
-              <h2 className="text-white text-2xl font-bold">{t('schedule.confirmedTitle')}</h2>
-              <p className="text-slate-400 text-base">{t('schedule.confirmedBody')}</p>
+              <h2 className="text-white text-2xl font-bold">{t('v2.schedule.allSet')}</h2>
+              <p className="text-slate-400 text-base">{t('v2.schedule.recorded')}</p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center">
               {DAYS.map(d => (
@@ -1524,7 +1535,7 @@ function WeeklySchedulePrompt({
                 </span>
               ))}
             </div>
-            <p className="text-slate-500 text-sm">{t('schedule.haveGreatDay')}</p>
+            <p className="text-slate-500 text-sm">{t('v2.schedule.haveGreatDay')}</p>
           </div>
         )}
       </div>
@@ -1566,7 +1577,7 @@ function WeekJobCard({ job, onNotesClick }: { job: WeekJob; onNotesClick?: () =>
           ? <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
           : <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 mt-0.5" />}
         <span className={['font-bold text-sm leading-tight', isDone ? 'text-slate-500 line-through' : 'text-white'].join(' ')}>{job.customerName}</span>
-        {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">{t('job.done')}</span>}
+        {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">{t('v2.common.done')}</span>}
       </div>
       <div className="flex items-center gap-1.5 text-slate-400 text-xs pl-4">
         {job.jobDate && <span className={isDone ? 'text-slate-500' : 'text-slate-400'}>{formatWeekJobDate(job.jobDate)}</span>}
@@ -1578,7 +1589,7 @@ function WeekJobCard({ job, onNotesClick }: { job: WeekJob; onNotesClick?: () =>
       </div>
       {!isDone && (job.extras ?? []).includes('move_in_move_out') && (
         <div className="pl-4">
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">{t('job.moveInOut')}</span>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">{t('v2.common.moveInOut')}</span>
         </div>
       )}
       {!isDone && (job.customerNotes?.trim() || job.staffNotes?.trim()) && (
@@ -1588,7 +1599,7 @@ function WeekJobCard({ job, onNotesClick }: { job: WeekJob; onNotesClick?: () =>
             className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 font-semibold animate-pulse hover:animate-none hover:bg-yellow-800/60 transition-colors"
           >
             <FileText className="w-3 h-3" />
-            {t('notes.badge')}
+            {t('v2.common.notes')}
           </button>
         </div>
       )}
@@ -1612,6 +1623,7 @@ function DayBriefing({
   onStart: () => void;
   onJobSelect?: (idx: number) => void;
 }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'week'>('today');
   const [notesJob, setNotesJob] = useState<{ customerNotes: string | null; staffNotes: string | null } | null>(null);
   const weekQuery = trpc.cleaner.getMyJobsWeek.useQuery(undefined, { staleTime: 60_000, throwOnError: false });
@@ -1620,8 +1632,7 @@ function DayBriefing({
   const otherWeekJobs = weekJobs.filter(j => j.dateLabel === 'week');
   const firstName = cleanerName.split(' ')[0];
   const hourET = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }));
-  const { t } = useTranslation();
-  const greeting = hourET < 12 ? t('greeting.morning') : hourET < 17 ? t('greeting.afternoon') : t('greeting.evening');
+  const greetingKey = hourET < 12 ? 'v2.greeting.morning' : hourET < 17 ? 'v2.greeting.afternoon' : 'v2.greeting.evening';
   // Format a YYYY-MM-DD string as "Monday, July 6th" in ET
   const formatJobDate = (dateStr: string): string => {
     if (!dateStr) return '';
@@ -1639,30 +1650,29 @@ function DayBriefing({
   const allDone = completedCount === jobs.length && jobs.length > 0;
   const firstIncompleteIdx = jobs.findIndex(j => j.jobStatus !== 'completed' && j.bookingStatus !== 'completed');
   const tabs: { id: 'today' | 'tomorrow' | 'week'; label: string; count: number }[] = [
-    { id: 'today', label: t('briefing.tabToday'), count: jobs.length },
-    { id: 'tomorrow', label: t('briefing.tabTomorrow'), count: tomorrowJobs.length },
-    { id: 'week', label: t('briefing.tabWeek'), count: otherWeekJobs.length },
+    { id: 'today', label: t('v2.briefing.tabToday'), count: jobs.length },
+    { id: 'tomorrow', label: t('v2.briefing.tabTomorrow'), count: tomorrowJobs.length },
+    { id: 'week', label: t('v2.briefing.tabWeek'), count: otherWeekJobs.length },
   ];
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col px-4 pt-8 pb-8 max-w-lg mx-auto w-full">
-      {/* Language picker — top right */}
-      <div className="flex justify-end mb-2">
-        <LanguagePicker />
-      </div>
       {/* Header */}
       <div className="text-center mb-6 space-y-1">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-900/50 border border-emerald-700/50 mb-2">
-          <span className="text-xl">{allDone ? '🏁' : '🧹'}</span>
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-900/50 border border-emerald-700/50">
+            <span className="text-xl">{allDone ? '🏁' : '🧹'}</span>
+          </div>
+          <LanguagePicker />
         </div>
         <h1 className="text-white text-xl font-black">
-          {allDone ? t('briefing.greatWork', { name: firstName }) : t('briefing.greeting', { greeting, name: firstName })}
+          {allDone ? t('v2.briefing.greatWork', { name: firstName }) : t(greetingKey, { name: firstName })}
         </h1>
         <p className="text-slate-400 text-sm">
           {allDone
-            ? t('briefing.allMissionsComplete')
+            ? t('v2.briefing.allMissionsComplete')
             : completedCount > 0
-              ? t('briefing.progressCount', { done: completedCount, total: jobs.length })
-              : t('briefing.missionCount', { count: jobs.length })}
+              ? t('v2.briefing.progressCount', { done: completedCount, total: jobs.length })
+              : jobs.length === 1 ? t('v2.briefing.oneMission') : t('v2.briefing.missionCount', { count: jobs.length })}
         </p>
         {todayDateLabel && (
           <p className="text-slate-500 text-xs mt-1">{todayDateLabel}</p>
@@ -1694,7 +1704,7 @@ function DayBriefing({
       <div className="space-y-3 flex-1 overflow-y-auto">
         {activeTab === 'today' && (
           jobs.length === 0
-            ? <p className="text-slate-500 text-sm text-center py-8">{t('briefing.noJobsToday')}</p>
+            ? <p className="text-slate-500 text-sm text-center py-8">{t('v2.briefing.noJobsToday')}</p>
             : jobs.map((job, idx) => {
                 const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
                 return (
@@ -1715,7 +1725,7 @@ function DayBriefing({
                         <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white text-xs font-black shrink-0">{idx + 1}</span>
                       )}
                       <span className={['font-bold text-base leading-tight', isDone ? 'text-slate-500 line-through' : 'text-white'].join(' ')}>{job.customerName}</span>
-                      {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">{t('job.done')}</span>}
+                      {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">{t('v2.common.done')}</span>}
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
                       {job.jobDate && <span className={isDone ? 'text-slate-500' : 'text-slate-400'}>{formatJobDate(job.jobDate)}</span>}
@@ -1727,8 +1737,8 @@ function DayBriefing({
                     </div>
                     {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
                       <div className="flex flex-wrap gap-1.5 pl-8">
-                        {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{t('job.bathrooms', { count: job.bathrooms })}</span>}
-                        {(job.extras ?? []).includes('move_in_move_out') && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">{t('job.moveInOut')}</span>}
+                        {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}</span>}
+                        {(job.extras ?? []).includes('move_in_move_out') && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">{t('v2.common.moveInOut')}</span>}
                         {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{e.replace(/_/g, ' ')}</span>)}
                       </div>
                     )}
@@ -1739,7 +1749,7 @@ function DayBriefing({
                           className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 font-semibold animate-pulse hover:animate-none hover:bg-yellow-800/60 transition-colors"
                         >
                           <FileText className="w-3 h-3" />
-                          {t('notes.badge')}
+                          {t('v2.common.notes')}
                         </button>
                       </div>
                     )}
@@ -1749,12 +1759,12 @@ function DayBriefing({
         )}
         {activeTab === 'tomorrow' && (
           tomorrowJobs.length === 0
-            ? <p className="text-slate-500 text-sm text-center py-8">{t('briefing.noJobsTomorrow')}</p>
+            ? <p className="text-slate-500 text-sm text-center py-8">{t('v2.briefing.noJobsTomorrow')}</p>
             : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes })} />)
         )}
         {activeTab === 'week' && (
           otherWeekJobs.length === 0
-            ? <p className="text-slate-500 text-sm text-center py-8">{t('briefing.noJobsWeek')}</p>
+            ? <p className="text-slate-500 text-sm text-center py-8">{t('v2.briefing.noJobsWeek')}</p>
             : otherWeekJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes })} />)
         )}
       </div>
@@ -1767,10 +1777,10 @@ function DayBriefing({
             onClick={() => { if (firstIncompleteIdx >= 0 && onJobSelect) onJobSelect(firstIncompleteIdx); onStart(); }}
             className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg shadow-emerald-900/40 transition-all"
           >
-            {completedCount > 0 ? t('briefing.continue') : t('briefing.letsGo')}
+            {completedCount > 0 ? t('v2.briefing.continue') : t('v2.briefing.letsGo')}
           </button>
           {completedCount === 0 && firstIncompleteIdx >= 0 && (
-            <p className="text-center text-slate-600 text-xs mt-3">{t('briefing.startingWith', { num: firstIncompleteIdx + 1 })}</p>
+            <p className="text-center text-slate-600 text-xs mt-3">{t('v2.briefing.startingWith', { n: firstIncompleteIdx + 1 })}</p>
           )}
         </div>
       )}
@@ -1780,21 +1790,20 @@ function DayBriefing({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 function CleanerPortalV2Inner() {
-  const { t, i18n } = useTranslation();
-
+  const { t } = useTranslation();
   // Auth guard — check session before loading jobs.
   // Only redirect to /cleaner on an explicit UNAUTHORIZED error (expired/missing cookie).
   // Transient network failures during deploys must NOT redirect — show an error state instead.
   const meQuery = trpc.cleaner.me.useQuery(undefined, { retry: 1, throwOnError: false });
 
-  // Sync language from DB once session resolves
-  const updateLanguageMutation = trpc.cleaner.updateLanguage.useMutation();
+  // Sync language from DB once meQuery resolves
   useEffect(() => {
-    const lang = meQuery.data?.language;
-    if (lang && ['en', 'es', 'pt'].includes(lang) && i18n.language !== lang) {
+    if (!meQuery.data?.language) return;
+    const lang = meQuery.data.language as string;
+    if (['en', 'es', 'pt'].includes(lang) && i18n.language !== lang) {
       i18n.changeLanguage(lang);
     }
-  }, [meQuery.data?.language, i18n]);
+  }, [meQuery.data?.language]);
 
   // Portal data — includes tomorrowAvailability.submitted to gate the schedule prompt
   const portalDataQuery = trpc.cleaner.portalData.useQuery(undefined, {
@@ -1844,7 +1853,7 @@ function CleanerPortalV2Inner() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
-        <p className="text-slate-400 text-sm">{t('common.loading')}</p>
+        <p className="text-slate-400 text-sm">{t('v2.loading.session')}</p>
       </div>
     );
   }
@@ -1861,7 +1870,7 @@ function CleanerPortalV2Inner() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
-        <p className="text-slate-400 text-sm">{t('common.redirecting')}</p>
+        <p className="text-slate-400 text-sm">{t('v2.loading.redirecting')}</p>
       </div>
     );
   }
@@ -1869,12 +1878,12 @@ function CleanerPortalV2Inner() {
   if (meQuery.isError && !isUnauthorized) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center gap-4 px-6">
-        <p className="text-slate-300 text-center">{t('error.connectionError')}</p>
+        <p className="text-slate-300 text-center">{t('v2.error.connection')}</p>
         <button
           onClick={() => window.location.reload()}
           className="bg-emerald-500 text-white font-bold px-6 py-3 rounded-xl"
         >
-          {t('common.retry')}
+          {t('v2.error.retry')}
         </button>
       </div>
     );
@@ -1885,7 +1894,7 @@ function CleanerPortalV2Inner() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
-        <p className="text-slate-400 text-sm">{t('common.loadingJobs')}</p>
+        <p className="text-slate-400 text-sm">{t('v2.loading.jobs')}</p>
       </div>
     );
   }
@@ -1895,36 +1904,20 @@ function CleanerPortalV2Inner() {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-6 text-center">
         <div className="text-5xl mb-4">⚠️</div>
-        <h1 className="text-2xl font-black text-white">{t('error.couldNotLoad')}</h1>
+        <h1 className="text-2xl font-black text-white">{t('v2.error.couldNotLoad')}</h1>
         <p className="text-slate-400 mt-2 text-sm">{error.message}</p>
         <button
           onClick={() => window.location.reload()}
           className="mt-6 bg-emerald-500 hover:bg-emerald-400 text-white font-semibold px-8 py-3 rounded-xl transition-all"
         >
-          {t('common.retry')}
+          {t('v2.error.retry')}
         </button>
       </div>
     );
   }
 
-  // No jobs at all — only show this if the query succeeded and truly returned nothing
-  if (jobs && jobs.length === 0) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center px-6 text-center">
-        <div className="text-6xl mb-4">🌟</div>
-        <h1 className="text-2xl font-black text-white">{t('error.noJobs')}</h1>
-        <p className="text-slate-400 mt-2 text-sm">
-          {t('error.noJobsDesc')}
-        </p>
-        <button
-          onClick={() => window.location.reload()}
-          className="mt-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold px-8 py-3 rounded-xl transition-all"
-        >
-          {t('common.refresh')}
-        </button>
-      </div>
-    );
-  }
+  // NOTE: The "no jobs" full-screen block has been intentionally removed.
+  // DayBriefing handles the empty Today tab inline with a "No jobs today" message.
 
   const activeJob = jobs![activeJobIdx] ?? jobs![0];
 
@@ -1946,14 +1939,14 @@ function CleanerPortalV2Inner() {
       {/* Day briefing — shown after schedule prompt or on first load if already submitted */}
       {!showSchedulePrompt && showBriefing && (
         <DayBriefing
-          jobs={jobs}
+          jobs={jobs ?? []}
           cleanerName={meQuery.data?.name ?? ""}
           onStart={() => setShowBriefing(false)}
           onJobSelect={(idx) => setActiveJobIdx(idx)}
         />
       )}
       {/* Job runner — shown after briefing is dismissed */}
-      {!showSchedulePrompt && !showBriefing && (
+      {!showSchedulePrompt && !showBriefing && jobs && jobs.length > 0 && (
         <JobRunner
           key={activeJob.cleanerJobId}
           job={activeJob}
