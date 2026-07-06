@@ -295,6 +295,228 @@ const en = {
 
     // No rating
     "rating.none": "No rating yet",
+
+    // ── V2 Portal — Notes popup ──────────────────────────────────────────────
+    "notes.title": "Job Notes",
+    "notes.customerNotes": "Customer Notes",
+    "notes.staffNotes": "Staff Notes",
+    "notes.noNotes": "No notes for this job.",
+    "notes.badge": "Notes",
+
+    // ── V2 Portal — Navigate step ────────────────────────────────────────────
+    "nav.label": "NEXT REQUIRED ACTION",
+    "nav.title": "Start Navigation",
+    "nav.description": "Leave now. You'll arrive a few minutes early and the customer will get an automatic on-my-way text.",
+    "nav.whyItMatters": "Being early protects the review before the cleaning even begins.",
+    "nav.cta": "START NAVIGATION",
+    "nav.opensMaps": "Opens Google Maps · Come back when you arrive",
+    "nav.tapDirections": "Tap to get directions",
+    "nav.gettingEta": "Getting ETA…",
+    "nav.arriveBy": "arrive by",
+    "nav.enRoute": "🚗 En Route",
+    "nav.headingTo": "Heading to",
+    "nav.scheduled": "Scheduled",
+    "nav.gpsUnavailable": "GPS unavailable",
+    "nav.drive": "drive",
+    "nav.reopenMaps": "Re-open Maps",
+    "nav.iArrived": "I've Arrived",
+    "nav.tapToConfirm": "✓ Tap to confirm you're on site",
+    "nav.tapWhenParked": "Tap when you're parked and at the door",
+    "nav.confirmTitle": "Send on-my-way text to {{name}}?",
+    "nav.confirmDesc": "Only send if you are in your car and driving now.\nThis will text them and send an ETA.",
+    "nav.confirmCancel": "Cancel",
+    "nav.confirmSend": "Yes, Send & Navigate →",
+
+    // ── V2 Portal — Step card generic ────────────────────────────────────────
+    "step.whyItMatters": "Why this matters",
+    "step.aiCoach": "🤖 AI Coach",
+    "step.noScrollHint": "No dashboard. No scrolling. Finish this action to get the next one.",
+    "step.uploadAtLeastOne": "Upload at least 1 photo to continue",
+
+    // ── V2 Portal — Step definitions ─────────────────────────────────────────
+    "step.greet.label": "NEXT REQUIRED ACTION",
+    "step.greet.title": "Greet Customer",
+    "step.greet.description": "Introduce yourself, confirm the requested rooms, and ask if there are priority areas.",
+    "step.greet.whyItMatters": "A strong greeting reduces complaints because expectations are clear before cleaning starts.",
+    "step.greet.cta": "CUSTOMER GREETED",
+
+    "step.beforePhotos.label": "NEXT REQUIRED ACTION",
+    "step.beforePhotos.title": "Take Before Photos",
+    "step.beforePhotos.description": "Photograph kitchen, bathroom, and any problem areas before cleaning starts.",
+    "step.beforePhotos.whyItMatters": "Before photos protect the team and make the after photos more impressive.",
+    "step.beforePhotos.cta": "BEFORE PHOTOS DONE",
+
+    "step.checklist.label": "NEXT REQUIRED ACTION",
+    "step.checklist.description": "Complete this checklist item before moving on.",
+    "step.checklist.whyItMatters": "Paid add-ons are the easiest place to create a complaint if missed.",
+    "step.checklist.cta": "DONE",
+
+    "step.bathroom.label": "YOUR NEXT OBJECTIVE",
+    "step.bathroom.titleSingle": "Photograph Bathroom",
+    "step.bathroom.titleNumbered": "Photograph Bathroom {{n}}",
+    "step.bathroom.descSingle": "Take after photos of bathroom — toilet, sink, shower/tub, and floor.",
+    "step.bathroom.descNumbered": "Take after photos of bathroom {{n}} — toilet, sink, shower/tub, and floor.",
+    "step.bathroom.aiCoach": "Get a wide shot of the whole room, then close-ups of the toilet and sink.",
+    "step.bathroom.cta": "PHOTOS DONE",
+
+    "step.kitchen.label": "YOUR NEXT OBJECTIVE",
+    "step.kitchen.title": "Photograph Kitchen",
+    "step.kitchen.description": "Take after photos of the kitchen — sink, counters, stovetop, and appliances.",
+    "step.kitchen.aiCoach": "Take a close-up of the sink and counters before leaving the kitchen.",
+    "step.kitchen.cta": "PHOTOS DONE",
+
+    "step.extraPhoto.label": "PAID ADD-ON — PHOTO REQUIRED",
+    "step.extraPhoto.title": "Photograph: {{label}}",
+    "step.extraPhoto.description": "Customer paid for {{label}}. Take a clear after photo showing the completed work.",
+    "step.extraPhoto.whyItMatters": "Paid add-ons need photo proof — this is the #1 source of complaints when skipped.",
+    "step.extraPhoto.badge": "Paid Add-on",
+    "step.extraPhoto.cta": "PHOTO DONE",
+
+    "step.afterPhotos.label": "NEXT REQUIRED ACTION",
+    "step.afterPhotos.title": "Take After Photos",
+    "step.afterPhotos.description": "Photograph every room you cleaned — bedrooms, living areas, hallways. Aim for 10+ photos total.",
+    "step.afterPhotos.whyItMatters": "After photos unlock the +$5 bonus and protect the team if a customer claims something was missed.",
+    "step.afterPhotos.badge": "+$5 Bonus at 10 photos",
+    "step.afterPhotos.cta": "AFTER PHOTOS DONE",
+
+    "step.walkThrough.label": "YOUR NEXT OBJECTIVE",
+    "step.walkThrough.title": "Walk Customer Through Home",
+    "step.walkThrough.description": "This is the biggest predictor of 5-star reviews.",
+    "step.walkThrough.aiCoach": "Ask: 'Is there anything you'd like us to touch up while we're here?'",
+    "step.walkThrough.cta": "WALK-THROUGH DONE",
+
+    "step.signoff.label": "FINAL STEP",
+    "step.signoff.title": "Customer Sign-off",
+    "step.signoff.description": "Walk the home together before finishing.",
+    "step.signoff.cta": "COMPLETE SIGN-OFF",
+
+    "step.nextJob.label": "YOUR NEXT OBJECTIVE",
+    "step.nextJob.title": "Start Job #{{n}}",
+    "step.nextJob.description": "Everything is complete. Time for the next customer.",
+    "step.nextJob.badge": "Next Job Unlocked",
+    "step.nextJob.cta": "Start Job #{{n}} →",
+
+    // ── V2 Portal — Photo step UI ────────────────────────────────────────────
+    "photo.photosUploaded": "{{count}} photo uploaded",
+    "photo.photosUploadedPlural": "{{count}} photos uploaded",
+    "photo.bonusEarned": "✓ Bonus earned",
+    "photo.bonusProgress": "{{count}}/10 — {{remaining}} more for +$5 bonus",
+    "photo.uploading": "Uploading {{current}}/{{total}}...",
+    "photo.openCamera": "Open Camera / Gallery",
+    "photo.addMore": "Add More Photos",
+    "photo.readyHint": "{{count}} photo{{s}} ready · tap done to continue",
+    "photo.takeFirst": "Take photos first, then tap done",
+
+    // ── V2 Portal — Sign-off ─────────────────────────────────────────────────
+    "signoff.finalStep": "FINAL STEP",
+    "signoff.title": "Customer Sign-off",
+    "signoff.subtitle": "Walk the home together before finishing.",
+    "signoff.howDidItLook": "How did everything look?",
+    "signoff.optionGreat": "😍 Everything looks great",
+    "signoff.optionTouchup": "🛠️ Needs one touch-up",
+    "signoff.optionIssue": "⚠️ Major issue",
+    "signoff.customerNotes": "Customer Notes",
+    "signoff.notesPlaceholder": "Optional notes...",
+    "signoff.signature": "Signature",
+    "signoff.clearSignature": "Clear Signature",
+    "signoff.completeCta": "COMPLETE SIGN-OFF",
+    "signoff.notHome": "Customer not home — skip sign-off",
+
+    // ── V2 Portal — Completed screen ─────────────────────────────────────────
+    "completed.lastJobTitle": "Last Job Done!",
+    "completed.jobCompleteTitle": "Job Complete!",
+    "completed.allMissionsToday": "That's all your missions today!",
+    "completed.signedOff": "{{name}} has been signed off. Great work!",
+    "completed.allStepsComplete": "All steps complete",
+    "completed.customerSignedOff": "Customer signed off · Photos submitted",
+    "completed.nextMission": "Next Mission →",
+    "completed.nextMissionNamed": "Next Mission → {{name}}",
+    "completed.viewDaySummary": "View Day Summary",
+
+    // ── V2 Portal — Job header ────────────────────────────────────────────────
+    "jobHeader.jobFor": "Job for {{name}}",
+    "jobHeader.jobOf": "Job {{current}} of {{total}}",
+    "jobHeader.bathrooms": "bathrooms",
+    "jobHeader.addOns": "add-ons",
+    "jobHeader.step": "step",
+
+    // ── V2 Portal — Day briefing ──────────────────────────────────────────────
+    "briefing.greeting.morning": "Good morning",
+    "briefing.greeting.afternoon": "Good afternoon",
+    "briefing.greeting.evening": "Good evening",
+    "briefing.allDone": "Great work, {{name}}!",
+    "briefing.greeting": "{{greeting}}, {{name}}!",
+    "briefing.allMissionsComplete": "All missions complete for today!",
+    "briefing.progressCount": "{{done}} of {{total}} done today",
+    "briefing.oneMission": "You have 1 mission today",
+    "briefing.manyMissions": "You have {{count}} missions today",
+    "briefing.tabToday": "Today",
+    "briefing.tabTomorrow": "Tomorrow",
+    "briefing.tabWeek": "This Week",
+    "briefing.noJobsToday": "No jobs today",
+    "briefing.noJobsTomorrow": "No jobs tomorrow",
+    "briefing.noJobsWeek": "No other jobs this week",
+    "briefing.done": "Done",
+    "briefing.moveInOut": "Move-In/Out",
+    "briefing.bath": "bath",
+    "briefing.baths": "baths",
+    "briefing.letsGo": "Let's Go →",
+    "briefing.continue": "Continue →",
+    "briefing.startingWith": "Starting with Job {{n}}",
+
+    // ── V2 Portal — Loading / error states ───────────────────────────────────
+    "loading.session": "Loading…",
+    "loading.jobs": "Loading today's jobs…",
+    "loading.redirecting": "Redirecting to login…",
+    "error.connection": "Connection error. Please check your signal and try again.",
+    "error.couldNotLoad": "Could not load jobs",
+    "error.noJobs": "No Upcoming Jobs",
+    "error.noJobsDesc": "You have no jobs scheduled. Check back soon!",
+    "error.retry": "Retry",
+    "error.refresh": "Refresh",
+
+    // ── V2 Portal — Language picker ───────────────────────────────────────────
+    "langPicker.label": "Language",
+
+    // ── V2 Portal — Missing keys ─────────────────────────────────────────────
+    "greeting.morning": "Good morning",
+    "greeting.afternoon": "Good afternoon",
+    "greeting.evening": "Good evening",
+
+    "common.back": "Back",
+    "common.loading": "Loading…",
+    "common.loadingJobs": "Loading today's jobs…",
+    "common.redirecting": "Redirecting to login…",
+    "common.refresh": "Refresh",
+    "common.retry": "Retry",
+
+    "day.sun": "Sunday",
+    "day.mon": "Monday",
+    "day.tue": "Tuesday",
+    "day.wed": "Wednesday",
+    "day.thu": "Thursday",
+    "day.fri": "Friday",
+    "day.sat": "Saturday",
+
+    "tabs.tomorrow": "Tomorrow",
+
+    "job.done": "Done",
+    "job.moveInOut": "Move-In/Out",
+    "job.bathrooms": "{{count}} bath",
+
+    "briefing.greatWork": "Great work, {{name}}!",
+    "briefing.missionCount": "You have {{count}} mission{{s}} today",
+    "briefing.startingWith": "Starting with Job {{num}}",
+
+    "schedule.confirmSubtitle": "Hey {{name}} — select the days you'll be working",
+    "schedule.workingDaysCount": "{{count}} working day{{s}} this week",
+    "schedule.submitFailed": "Submission failed: {{message}}",
+
+    "error.connectionError": "Connection error. Please check your signal and try again.",
+
+    "briefing.tabToday": "Today",
+    "briefing.tabTomorrow": "Tomorrow",
+    "briefing.tabWeek": "This Week",
   },
 };
 
@@ -592,6 +814,228 @@ const es = {
 
     // No rating
     "rating.none": "Sin calificación aún",
+
+    // ── V2 Portal — Notes popup ──────────────────────────────────────────────
+    "notes.title": "Notas del trabajo",
+    "notes.customerNotes": "Notas del cliente",
+    "notes.staffNotes": "Notas del personal",
+    "notes.noNotes": "No hay notas para este trabajo.",
+    "notes.badge": "Notas",
+
+    // ── V2 Portal — Navigate step ────────────────────────────────────────────
+    "nav.label": "PRÓXIMA ACCIÓN REQUERIDA",
+    "nav.title": "Iniciar navegación",
+    "nav.description": "Sal ahora. Llegarás unos minutos antes y el cliente recibirá un mensaje automático.",
+    "nav.whyItMatters": "Llegar temprano protege la reseña antes de que empiece la limpieza.",
+    "nav.cta": "INICIAR NAVEGACIÓN",
+    "nav.opensMaps": "Abre Google Maps · Regresa cuando llegues",
+    "nav.tapDirections": "Toca para obtener indicaciones",
+    "nav.gettingEta": "Obteniendo ETA…",
+    "nav.arriveBy": "llegar a las",
+    "nav.enRoute": "🚗 En camino",
+    "nav.headingTo": "Dirigiéndose a",
+    "nav.scheduled": "Programado",
+    "nav.gpsUnavailable": "GPS no disponible",
+    "nav.drive": "de manejo",
+    "nav.reopenMaps": "Reabrir Maps",
+    "nav.iArrived": "He llegado",
+    "nav.tapToConfirm": "✓ Toca para confirmar que estás en el lugar",
+    "nav.tapWhenParked": "Toca cuando estés estacionado y en la puerta",
+    "nav.confirmTitle": "¿Enviar mensaje de 'estoy en camino' a {{name}}?",
+    "nav.confirmDesc": "Solo envía si estás en tu auto y conduciendo ahora.\nEsto les enviará un mensaje con el ETA.",
+    "nav.confirmCancel": "Cancelar",
+    "nav.confirmSend": "Sí, Enviar y Navegar →",
+
+    // ── V2 Portal — Step card generic ────────────────────────────────────────
+    "step.whyItMatters": "Por qué importa",
+    "step.aiCoach": "🤖 Coach IA",
+    "step.noScrollHint": "Sin panel. Sin desplazamiento. Termina esta acción para obtener la siguiente.",
+    "step.uploadAtLeastOne": "Sube al menos 1 foto para continuar",
+
+    // ── V2 Portal — Step definitions ─────────────────────────────────────────
+    "step.greet.label": "PRÓXIMA ACCIÓN REQUERIDA",
+    "step.greet.title": "Saludar al cliente",
+    "step.greet.description": "Preséntate, confirma las habitaciones solicitadas y pregunta si hay áreas prioritarias.",
+    "step.greet.whyItMatters": "Un saludo sólido reduce las quejas porque las expectativas son claras antes de comenzar.",
+    "step.greet.cta": "CLIENTE SALUDADO",
+
+    "step.beforePhotos.label": "PRÓXIMA ACCIÓN REQUERIDA",
+    "step.beforePhotos.title": "Tomar fotos antes",
+    "step.beforePhotos.description": "Fotografía la cocina, el baño y cualquier área problemática antes de comenzar.",
+    "step.beforePhotos.whyItMatters": "Las fotos antes protegen al equipo y hacen que las fotos después sean más impresionantes.",
+    "step.beforePhotos.cta": "FOTOS ANTES LISTAS",
+
+    "step.checklist.label": "PRÓXIMA ACCIÓN REQUERIDA",
+    "step.checklist.description": "Completa este elemento antes de continuar.",
+    "step.checklist.whyItMatters": "Los extras pagados son el lugar más fácil para crear una queja si se omiten.",
+    "step.checklist.cta": "LISTO",
+
+    "step.bathroom.label": "TU PRÓXIMO OBJETIVO",
+    "step.bathroom.titleSingle": "Fotografiar baño",
+    "step.bathroom.titleNumbered": "Fotografiar baño {{n}}",
+    "step.bathroom.descSingle": "Toma fotos del baño — inodoro, lavabo, ducha/bañera y piso.",
+    "step.bathroom.descNumbered": "Toma fotos del baño {{n}} — inodoro, lavabo, ducha/bañera y piso.",
+    "step.bathroom.aiCoach": "Toma una foto amplia de toda la habitación, luego primeros planos del inodoro y el lavabo.",
+    "step.bathroom.cta": "FOTOS LISTAS",
+
+    "step.kitchen.label": "TU PRÓXIMO OBJETIVO",
+    "step.kitchen.title": "Fotografiar cocina",
+    "step.kitchen.description": "Toma fotos de la cocina — fregadero, encimeras, estufa y electrodomésticos.",
+    "step.kitchen.aiCoach": "Toma un primer plano del fregadero y las encimeras antes de salir de la cocina.",
+    "step.kitchen.cta": "FOTOS LISTAS",
+
+    "step.extraPhoto.label": "EXTRA PAGADO — FOTO REQUERIDA",
+    "step.extraPhoto.title": "Fotografiar: {{label}}",
+    "step.extraPhoto.description": "El cliente pagó por {{label}}. Toma una foto clara mostrando el trabajo completado.",
+    "step.extraPhoto.whyItMatters": "Los extras pagados necesitan prueba fotográfica — esta es la fuente #1 de quejas cuando se omite.",
+    "step.extraPhoto.badge": "Extra pagado",
+    "step.extraPhoto.cta": "FOTO LISTA",
+
+    "step.afterPhotos.label": "PRÓXIMA ACCIÓN REQUERIDA",
+    "step.afterPhotos.title": "Tomar fotos después",
+    "step.afterPhotos.description": "Fotografía cada habitación que limpiaste — dormitorios, áreas de estar, pasillos. Apunta a 10+ fotos.",
+    "step.afterPhotos.whyItMatters": "Las fotos después desbloquean el bono de +$5 y protegen al equipo si un cliente dice que algo se omitió.",
+    "step.afterPhotos.badge": "+$5 Bono con 10 fotos",
+    "step.afterPhotos.cta": "FOTOS DESPUÉS LISTAS",
+
+    "step.walkThrough.label": "TU PRÓXIMO OBJETIVO",
+    "step.walkThrough.title": "Recorrer el hogar con el cliente",
+    "step.walkThrough.description": "Este es el mayor predictor de reseñas de 5 estrellas.",
+    "step.walkThrough.aiCoach": "Pregunta: '¿Hay algo que le gustaría que retocáramos mientras estamos aquí?'",
+    "step.walkThrough.cta": "RECORRIDO LISTO",
+
+    "step.signoff.label": "PASO FINAL",
+    "step.signoff.title": "Firma del cliente",
+    "step.signoff.description": "Recorre el hogar juntos antes de terminar.",
+    "step.signoff.cta": "COMPLETAR FIRMA",
+
+    "step.nextJob.label": "TU PRÓXIMO OBJETIVO",
+    "step.nextJob.title": "Iniciar trabajo #{{n}}",
+    "step.nextJob.description": "Todo está completo. Es hora del siguiente cliente.",
+    "step.nextJob.badge": "Siguiente trabajo desbloqueado",
+    "step.nextJob.cta": "Iniciar trabajo #{{n}} →",
+
+    // ── V2 Portal — Photo step UI ────────────────────────────────────────────
+    "photo.photosUploaded": "{{count}} foto subida",
+    "photo.photosUploadedPlural": "{{count}} fotos subidas",
+    "photo.bonusEarned": "✓ Bono ganado",
+    "photo.bonusProgress": "{{count}}/10 — {{remaining}} más para +$5 bono",
+    "photo.uploading": "Subiendo {{current}}/{{total}}...",
+    "photo.openCamera": "Abrir cámara / galería",
+    "photo.addMore": "Agregar más fotos",
+    "photo.readyHint": "{{count}} foto{{s}} lista · toca listo para continuar",
+    "photo.takeFirst": "Toma fotos primero, luego toca listo",
+
+    // ── V2 Portal — Sign-off ─────────────────────────────────────────────────
+    "signoff.finalStep": "PASO FINAL",
+    "signoff.title": "Firma del cliente",
+    "signoff.subtitle": "Recorre el hogar juntos antes de terminar.",
+    "signoff.howDidItLook": "¿Cómo quedó todo?",
+    "signoff.optionGreat": "😍 Todo se ve genial",
+    "signoff.optionTouchup": "🛠️ Necesita un retoque",
+    "signoff.optionIssue": "⚠️ Problema mayor",
+    "signoff.customerNotes": "Notas del cliente",
+    "signoff.notesPlaceholder": "Notas opcionales...",
+    "signoff.signature": "Firma",
+    "signoff.clearSignature": "Borrar firma",
+    "signoff.completeCta": "COMPLETAR FIRMA",
+    "signoff.notHome": "Cliente no está en casa — omitir firma",
+
+    // ── V2 Portal — Completed screen ─────────────────────────────────────────
+    "completed.lastJobTitle": "¡Último trabajo listo!",
+    "completed.jobCompleteTitle": "¡Trabajo completo!",
+    "completed.allMissionsToday": "¡Esas son todas tus misiones de hoy!",
+    "completed.signedOff": "{{name}} ha firmado. ¡Buen trabajo!",
+    "completed.allStepsComplete": "Todos los pasos completos",
+    "completed.customerSignedOff": "Cliente firmó · Fotos enviadas",
+    "completed.nextMission": "Siguiente misión →",
+    "completed.nextMissionNamed": "Siguiente misión → {{name}}",
+    "completed.viewDaySummary": "Ver resumen del día",
+
+    // ── V2 Portal — Job header ────────────────────────────────────────────────
+    "jobHeader.jobFor": "Trabajo para {{name}}",
+    "jobHeader.jobOf": "Trabajo {{current}} de {{total}}",
+    "jobHeader.bathrooms": "baños",
+    "jobHeader.addOns": "extras",
+    "jobHeader.step": "paso",
+
+    // ── V2 Portal — Day briefing ──────────────────────────────────────────────
+    "briefing.greeting.morning": "Buenos días",
+    "briefing.greeting.afternoon": "Buenas tardes",
+    "briefing.greeting.evening": "Buenas noches",
+    "briefing.allDone": "¡Buen trabajo, {{name}}!",
+    "briefing.greeting": "{{greeting}}, {{name}}!",
+    "briefing.allMissionsComplete": "¡Todas las misiones completas por hoy!",
+    "briefing.progressCount": "{{done}} de {{total}} completados hoy",
+    "briefing.oneMission": "Tienes 1 misión hoy",
+    "briefing.manyMissions": "Tienes {{count}} misiones hoy",
+    "briefing.tabToday": "Hoy",
+    "briefing.tabTomorrow": "Mañana",
+    "briefing.tabWeek": "Esta semana",
+    "briefing.noJobsToday": "No hay trabajos hoy",
+    "briefing.noJobsTomorrow": "No hay trabajos mañana",
+    "briefing.noJobsWeek": "No hay otros trabajos esta semana",
+    "briefing.done": "Listo",
+    "briefing.moveInOut": "Entrada/Salida",
+    "briefing.bath": "baño",
+    "briefing.baths": "baños",
+    "briefing.letsGo": "¡Vamos! →",
+    "briefing.continue": "Continuar →",
+    "briefing.startingWith": "Comenzando con el trabajo {{n}}",
+
+    // ── V2 Portal — Loading / error states ───────────────────────────────────
+    "loading.session": "Cargando…",
+    "loading.jobs": "Cargando trabajos de hoy…",
+    "loading.redirecting": "Redirigiendo al inicio de sesión…",
+    "error.connection": "Error de conexión. Verifica tu señal e intenta de nuevo.",
+    "error.couldNotLoad": "No se pudieron cargar los trabajos",
+    "error.noJobs": "Sin trabajos próximos",
+    "error.noJobsDesc": "No tienes trabajos programados. ¡Vuelve pronto!",
+    "error.retry": "Reintentar",
+    "error.refresh": "Actualizar",
+
+    // ── V2 Portal — Language picker ──────────────────────────────────────────
+    "langPicker.label": "Idioma",
+
+    // ── V2 Portal — Missing keys ─────────────────────────────────────────────
+    "greeting.morning": "Buenos días",
+    "greeting.afternoon": "Buenas tardes",
+    "greeting.evening": "Buenas noches",
+
+    "common.back": "Atrás",
+    "common.loading": "Cargando…",
+    "common.loadingJobs": "Cargando trabajos de hoy…",
+    "common.redirecting": "Redirigiendo al inicio de sesión…",
+    "common.refresh": "Actualizar",
+    "common.retry": "Reintentar",
+
+    "day.sun": "Domingo",
+    "day.mon": "Lunes",
+    "day.tue": "Martes",
+    "day.wed": "Miércoles",
+    "day.thu": "Jueves",
+    "day.fri": "Viernes",
+    "day.sat": "Sábado",
+
+    "tabs.tomorrow": "Mañana",
+
+    "job.done": "Listo",
+    "job.moveInOut": "Entrada/Salida",
+    "job.bathrooms": "{{count}} baño",
+
+    "briefing.greatWork": "¡Buen trabajo, {{name}}!",
+    "briefing.missionCount": "Tienes {{count}} misión hoy",
+    "briefing.startingWith": "Comenzando con el trabajo {{num}}",
+
+    "schedule.confirmSubtitle": "Hola {{name}} — marca los días que trabajarás",
+    "schedule.workingDaysCount": "{{count}} día de trabajo esta semana",
+    "schedule.submitFailed": "Error al enviar: {{message}}",
+
+    "error.connectionError": "Error de conexión. Verifica tu señal e inténtalo de nuevo.",
+
+    "briefing.tabToday": "Hoy",
+    "briefing.tabTomorrow": "Mañana",
+    "briefing.tabWeek": "Esta semana",
   },
 };
 
@@ -889,6 +1333,228 @@ const pt = {
 
     // No rating
     "rating.none": "Sem avaliação ainda",
+
+    // ── V2 Portal — Notes popup ──────────────────────────────────────────────
+    "notes.title": "Notas do serviço",
+    "notes.customerNotes": "Notas do cliente",
+    "notes.staffNotes": "Notas da equipe",
+    "notes.noNotes": "Nenhuma nota para este serviço.",
+    "notes.badge": "Notas",
+
+    // ── V2 Portal — Navigate step ────────────────────────────────────────────
+    "nav.label": "PRÓXIMA AÇÃO NECESSÁRIA",
+    "nav.title": "Iniciar navegação",
+    "nav.description": "Saia agora. Você chegará alguns minutos antes e o cliente receberá uma mensagem automática.",
+    "nav.whyItMatters": "Chegar cedo protege a avaliação antes mesmo de começar a limpeza.",
+    "nav.cta": "INICIAR NAVEGAÇÃO",
+    "nav.opensMaps": "Abre o Google Maps · Volte quando chegar",
+    "nav.tapDirections": "Toque para obter instruções",
+    "nav.gettingEta": "Obtendo ETA…",
+    "nav.arriveBy": "chegar às",
+    "nav.enRoute": "🚗 A caminho",
+    "nav.headingTo": "Indo para",
+    "nav.scheduled": "Agendado",
+    "nav.gpsUnavailable": "GPS indisponível",
+    "nav.drive": "de carro",
+    "nav.reopenMaps": "Reabrir Maps",
+    "nav.iArrived": "Cheguei",
+    "nav.tapToConfirm": "✓ Toque para confirmar que você está no local",
+    "nav.tapWhenParked": "Toque quando estiver estacionado e na porta",
+    "nav.confirmTitle": "Enviar mensagem 'estou a caminho' para {{name}}?",
+    "nav.confirmDesc": "Envie apenas se estiver no carro e dirigindo agora.\nIsso vai mandar uma mensagem com o ETA.",
+    "nav.confirmCancel": "Cancelar",
+    "nav.confirmSend": "Sim, Enviar e Navegar →",
+
+    // ── V2 Portal — Step card generic ────────────────────────────────────────
+    "step.whyItMatters": "Por que isso importa",
+    "step.aiCoach": "🤖 Coach IA",
+    "step.noScrollHint": "Sem painel. Sem rolagem. Conclua esta ação para obter a próxima.",
+    "step.uploadAtLeastOne": "Envie pelo menos 1 foto para continuar",
+
+    // ── V2 Portal — Step definitions ─────────────────────────────────────────
+    "step.greet.label": "PRÓXIMA AÇÃO NECESSÁRIA",
+    "step.greet.title": "Cumprimentar o cliente",
+    "step.greet.description": "Apresente-se, confirme os cômodos solicitados e pergunte se há áreas prioritárias.",
+    "step.greet.whyItMatters": "Uma saudacão forte reduz reclamações porque as expectativas ficam claras antes de começar.",
+    "step.greet.cta": "CLIENTE CUMPRIMENTADO",
+
+    "step.beforePhotos.label": "PRÓXIMA AÇÃO NECESSÁRIA",
+    "step.beforePhotos.title": "Tirar fotos antes",
+    "step.beforePhotos.description": "Fotografe a cozinha, o banheiro e qualquer área problemática antes de começar.",
+    "step.beforePhotos.whyItMatters": "Fotos antes protegem a equipe e tornam as fotos depois mais impressionantes.",
+    "step.beforePhotos.cta": "FOTOS ANTES PRONTAS",
+
+    "step.checklist.label": "PRÓXIMA AÇÃO NECESSÁRIA",
+    "step.checklist.description": "Conclua este item antes de continuar.",
+    "step.checklist.whyItMatters": "Extras pagos são o lugar mais fácil de gerar reclamação se forem esquecidos.",
+    "step.checklist.cta": "PRONTO",
+
+    "step.bathroom.label": "SEU PRÓXIMO OBJETIVO",
+    "step.bathroom.titleSingle": "Fotografar banheiro",
+    "step.bathroom.titleNumbered": "Fotografar banheiro {{n}}",
+    "step.bathroom.descSingle": "Tire fotos do banheiro — vaso, pia, chuveiro/banheira e piso.",
+    "step.bathroom.descNumbered": "Tire fotos do banheiro {{n}} — vaso, pia, chuveiro/banheira e piso.",
+    "step.bathroom.aiCoach": "Tire uma foto ampla do cômodo inteiro, depois closes do vaso e da pia.",
+    "step.bathroom.cta": "FOTOS PRONTAS",
+
+    "step.kitchen.label": "SEU PRÓXIMO OBJETIVO",
+    "step.kitchen.title": "Fotografar cozinha",
+    "step.kitchen.description": "Tire fotos da cozinha — pia, bancadas, fogão e eletrodomésticos.",
+    "step.kitchen.aiCoach": "Tire um close da pia e das bancadas antes de sair da cozinha.",
+    "step.kitchen.cta": "FOTOS PRONTAS",
+
+    "step.extraPhoto.label": "EXTRA PAGO — FOTO OBRIGATÓRIA",
+    "step.extraPhoto.title": "Fotografar: {{label}}",
+    "step.extraPhoto.description": "O cliente pagou por {{label}}. Tire uma foto clara mostrando o trabalho concluído.",
+    "step.extraPhoto.whyItMatters": "Extras pagos precisam de prova fotográfica — esta é a fonte #1 de reclamações quando esquecida.",
+    "step.extraPhoto.badge": "Extra pago",
+    "step.extraPhoto.cta": "FOTO PRONTA",
+
+    "step.afterPhotos.label": "PRÓXIMA AÇÃO NECESSÁRIA",
+    "step.afterPhotos.title": "Tirar fotos depois",
+    "step.afterPhotos.description": "Fotografe cada cômodo que você limpou — quartos, salas, corredores. Mire em 10+ fotos.",
+    "step.afterPhotos.whyItMatters": "Fotos depois desbloqueiam o bônus de +$5 e protegem a equipe se o cliente alegar que algo foi esquecido.",
+    "step.afterPhotos.badge": "+$5 Bônus com 10 fotos",
+    "step.afterPhotos.cta": "FOTOS DEPOIS PRONTAS",
+
+    "step.walkThrough.label": "SEU PRÓXIMO OBJETIVO",
+    "step.walkThrough.title": "Percorrer a casa com o cliente",
+    "step.walkThrough.description": "Este é o maior preditor de avaliações de 5 estrelas.",
+    "step.walkThrough.aiCoach": "Pergunte: 'Há algo que você gostaria que a gente retocasse enquanto estamos aqui?'",
+    "step.walkThrough.cta": "PERCURSO CONCLUÍDO",
+
+    "step.signoff.label": "ETAPA FINAL",
+    "step.signoff.title": "Assinatura do cliente",
+    "step.signoff.description": "Percorra a casa juntos antes de terminar.",
+    "step.signoff.cta": "CONCLUIR ASSINATURA",
+
+    "step.nextJob.label": "SEU PRÓXIMO OBJETIVO",
+    "step.nextJob.title": "Iniciar serviço #{{n}}",
+    "step.nextJob.description": "Tudo concluído. Hora do próximo cliente.",
+    "step.nextJob.badge": "Próximo serviço desbloqueado",
+    "step.nextJob.cta": "Iniciar serviço #{{n}} →",
+
+    // ── V2 Portal — Photo step UI ────────────────────────────────────────────
+    "photo.photosUploaded": "{{count}} foto enviada",
+    "photo.photosUploadedPlural": "{{count}} fotos enviadas",
+    "photo.bonusEarned": "✓ Bônus ganho",
+    "photo.bonusProgress": "{{count}}/10 — {{remaining}} mais para +$5 bônus",
+    "photo.uploading": "Enviando {{current}}/{{total}}...",
+    "photo.openCamera": "Abrir câmera / galeria",
+    "photo.addMore": "Adicionar mais fotos",
+    "photo.readyHint": "{{count}} foto{{s}} pronta · toque em pronto para continuar",
+    "photo.takeFirst": "Tire fotos primeiro, depois toque em pronto",
+
+    // ── V2 Portal — Sign-off ─────────────────────────────────────────────────
+    "signoff.finalStep": "ETAPA FINAL",
+    "signoff.title": "Assinatura do cliente",
+    "signoff.subtitle": "Percorra a casa juntos antes de terminar.",
+    "signoff.howDidItLook": "Como ficou tudo?",
+    "signoff.optionGreat": "😍 Tudo ficou ótimo",
+    "signoff.optionTouchup": "🛠️ Precisa de um retoque",
+    "signoff.optionIssue": "⚠️ Problema grave",
+    "signoff.customerNotes": "Notas do cliente",
+    "signoff.notesPlaceholder": "Notas opcionais...",
+    "signoff.signature": "Assinatura",
+    "signoff.clearSignature": "Limpar assinatura",
+    "signoff.completeCta": "CONCLUIR ASSINATURA",
+    "signoff.notHome": "Cliente não está em casa — pular assinatura",
+
+    // ── V2 Portal — Completed screen ─────────────────────────────────────────
+    "completed.lastJobTitle": "Último serviço concluído!",
+    "completed.jobCompleteTitle": "Serviço concluído!",
+    "completed.allMissionsToday": "Essas são todas as suas missões de hoje!",
+    "completed.signedOff": "{{name}} assinou. Bom trabalho!",
+    "completed.allStepsComplete": "Todas as etapas concluídas",
+    "completed.customerSignedOff": "Cliente assinou · Fotos enviadas",
+    "completed.nextMission": "Próxima missão →",
+    "completed.nextMissionNamed": "Próxima missão → {{name}}",
+    "completed.viewDaySummary": "Ver resumo do dia",
+
+    // ── V2 Portal — Job header ────────────────────────────────────────────────
+    "jobHeader.jobFor": "Serviço para {{name}}",
+    "jobHeader.jobOf": "Serviço {{current}} de {{total}}",
+    "jobHeader.bathrooms": "banheiros",
+    "jobHeader.addOns": "extras",
+    "jobHeader.step": "etapa",
+
+    // ── V2 Portal — Day briefing ──────────────────────────────────────────────
+    "briefing.greeting.morning": "Bom dia",
+    "briefing.greeting.afternoon": "Boa tarde",
+    "briefing.greeting.evening": "Boa noite",
+    "briefing.allDone": "Bom trabalho, {{name}}!",
+    "briefing.greeting": "{{greeting}}, {{name}}!",
+    "briefing.allMissionsComplete": "Todas as missões de hoje concluídas!",
+    "briefing.progressCount": "{{done}} de {{total}} concluídos hoje",
+    "briefing.oneMission": "Você tem 1 missão hoje",
+    "briefing.manyMissions": "Você tem {{count}} missões hoje",
+    "briefing.tabToday": "Hoje",
+    "briefing.tabTomorrow": "Amanhã",
+    "briefing.tabWeek": "Esta semana",
+    "briefing.noJobsToday": "Nenhum serviço hoje",
+    "briefing.noJobsTomorrow": "Nenhum serviço amanhã",
+    "briefing.noJobsWeek": "Nenhum outro serviço esta semana",
+    "briefing.done": "Pronto",
+    "briefing.moveInOut": "Entrada/Saída",
+    "briefing.bath": "banheiro",
+    "briefing.baths": "banheiros",
+    "briefing.letsGo": "Vamos! →",
+    "briefing.continue": "Continuar →",
+    "briefing.startingWith": "Começando com o serviço {{n}}",
+
+    // ── V2 Portal — Loading / error states ───────────────────────────────────
+    "loading.session": "Carregando…",
+    "loading.jobs": "Carregando serviços de hoje…",
+    "loading.redirecting": "Redirecionando para o login…",
+    "error.connection": "Erro de conexão. Verifique seu sinal e tente novamente.",
+    "error.couldNotLoad": "Não foi possível carregar os serviços",
+    "error.noJobs": "Nenhum serviço próximo",
+    "error.noJobsDesc": "Você não tem serviços agendados. Volte em breve!",
+    "error.retry": "Tentar novamente",
+    "error.refresh": "Atualizar",
+
+    // ── V2 Portal — Language picker ──────────────────────────────────────────
+    "langPicker.label": "Idioma",
+
+    // ── V2 Portal — Missing keys ─────────────────────────────────────────────
+    "greeting.morning": "Bom dia",
+    "greeting.afternoon": "Boa tarde",
+    "greeting.evening": "Boa noite",
+
+    "common.back": "Voltar",
+    "common.loading": "Carregando…",
+    "common.loadingJobs": "Carregando serviços de hoje…",
+    "common.redirecting": "Redirecionando para o login…",
+    "common.refresh": "Atualizar",
+    "common.retry": "Tentar novamente",
+
+    "day.sun": "Domingo",
+    "day.mon": "Segunda",
+    "day.tue": "Terça",
+    "day.wed": "Quarta",
+    "day.thu": "Quinta",
+    "day.fri": "Sexta",
+    "day.sat": "Sábado",
+
+    "tabs.tomorrow": "Amanhã",
+
+    "job.done": "Pronto",
+    "job.moveInOut": "Entrada/Saída",
+    "job.bathrooms": "{{count}} banheiro",
+
+    "briefing.greatWork": "Bom trabalho, {{name}}!",
+    "briefing.missionCount": "Você tem {{count}} missão hoje",
+    "briefing.startingWith": "Começando com o serviço {{num}}",
+
+    "schedule.confirmSubtitle": "Olá {{name}} — marque os dias que você vai trabalhar",
+    "schedule.workingDaysCount": "{{count}} dia de trabalho esta semana",
+    "schedule.submitFailed": "Falha ao enviar: {{message}}",
+
+    "error.connectionError": "Erro de conexão. Verifique seu sinal e tente novamente.",
+
+    "briefing.tabToday": "Hoje",
+    "briefing.tabTomorrow": "Amanhã",
+    "briefing.tabWeek": "Esta semana",
   },
 };
 
