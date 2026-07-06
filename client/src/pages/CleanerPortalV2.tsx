@@ -15,6 +15,38 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { EXTRAS_LIST } from "@shared/extras";
 
+// ── Debug Panel (on-screen log for mobile debugging) ────────────────────────
+const _debugLogs: string[] = [];
+let _debugSetLogs: ((logs: string[]) => void) | null = null;
+function dbgLog(msg: string) {
+  const line = `${new Date().toLocaleTimeString('en-US', { hour12: false })} ${msg}`;
+  console.log('[LocationDebug]', msg);
+  _debugLogs.unshift(line);
+  if (_debugLogs.length > 30) _debugLogs.pop();
+  _debugSetLogs?.([..._debugLogs]);
+}
+function DebugPanel() {
+  const [logs, setLogs] = useState<string[]>([..._debugLogs]);
+  const [open, setOpen] = useState(false);
+  useEffect(() => { _debugSetLogs = setLogs; return () => { _debugSetLogs = null; }; }, []);
+  return (
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999, fontFamily: 'monospace', fontSize: 11 }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ background: '#1e293b', color: '#94a3b8', padding: '4px 12px', borderTop: '1px solid #334155', cursor: 'pointer' }}
+      >
+        🐛 Debug {open ? '▼' : '▲'} ({logs.length} logs)
+      </div>
+      {open && (
+        <div style={{ background: '#0f172a', color: '#e2e8f0', maxHeight: 200, overflowY: 'auto', padding: '8px 12px' }}>
+          {logs.length === 0 && <div style={{ color: '#64748b' }}>No logs yet</div>}
+          {logs.map((l, i) => <div key={i} style={{ borderBottom: '1px solid #1e293b', paddingBottom: 2, marginBottom: 2 }}>{l}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
@@ -345,7 +377,7 @@ function LocationProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const requestLocation = useCallback((): Promise<{ lat: number; lng: number } | null> => {
-    console.log('[LocationDebug] requestLocation CALLED', new Error().stack?.split('\n').slice(1, 5).join(' | '));
+    dbgLog('requestLocation CALLED ' + (new Error().stack?.split('\n').slice(1, 5).join(' | ') ?? ''));
     return new Promise((resolve) => {
       if (!navigator?.geolocation) {
         setPermissionState("unavailable");
@@ -381,8 +413,8 @@ function useLocation() {
 function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStartTime, customerName }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; jobStartTime: string; customerName: string }) {
   const { requestLocation } = useLocation();
   useEffect(() => {
-    console.log('[LocationDebug] NavigateStepCard MOUNTED cleanerJobId=', cleanerJobId);
-    return () => console.log('[LocationDebug] NavigateStepCard UNMOUNTED cleanerJobId=', cleanerJobId);
+    dbgLog('NavigateStepCard MOUNTED id=' + cleanerJobId);
+    return () => dbgLog('NavigateStepCard UNMOUNTED id=' + cleanerJobId);
   }, [cleanerJobId]);
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -1128,8 +1160,8 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
 
 function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string; onBackToSchedule?: () => void }) {
   useEffect(() => {
-    console.log('[LocationDebug] JobRunner MOUNTED cleanerJobId=', job.cleanerJobId);
-    return () => console.log('[LocationDebug] JobRunner UNMOUNTED cleanerJobId=', job.cleanerJobId);
+    dbgLog('JobRunner MOUNTED id=' + job.cleanerJobId);
+    return () => dbgLog('JobRunner UNMOUNTED id=' + job.cleanerJobId);
   }, [job.cleanerJobId]);
   const steps = buildStepsFromJob(job);
 
@@ -1832,6 +1864,7 @@ const CleanerPortalV2WithLocation = function CleanerPortalV2WithLocation() {
   return (
     <LocationProvider>
       <CleanerPortalV2Inner />
+      <DebugPanel />
     </LocationProvider>
   );
 };
