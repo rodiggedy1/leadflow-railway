@@ -172,6 +172,60 @@ export function registerGmailRoutes(app: Express) {
     }
   });
 
+  // ── Diagnostics: full Gmail pipeline health check (no auth required — no secrets exposed) ──
+  app.get("/api/gmail/diag", async (_req, res) => {
+    try {
+      const db = await getDb();
+      const diag: Record<string, any> = { ts: new Date().toISOString() };
+
+      if (!db) {
+        diag.db = "UNAVAILABLE";
+        return res.json(diag);
+      }
+
+      // 1. Gmail state row
+      const [state] = await db.select().from(gmailState).where(eq(gmailState.id, 1));
+      diag.hasRefreshToken = !!state?.refreshToken;
+      diag.historyId = state?.historyId ?? "none";
+      diag.watchExpiration = state?.watchExpiration
+        ? new Date(state.watchExpiration).toISOString()
+        : "none";
+      diag.watchExpired = state?.watchExpiration ? state.watchExpiration < Date.now() : true;
+
+      // 2. Test token validity by calling Gmail profile
+      try {
+        const { google } = await import("googleapis");
+        const oauth2 = new google.auth.OAuth2(
+          ENV.gmailClientId,
+          ENV.gmailClientSecret,
+          ENV.gmailRedirectUri
+        );
+        if (state?.refreshToken) oauth2.setCredentials({ refresh_token: state.refreshToken });
+        const gmail = google.gmail({ version: "v1", auth: oauth2 });
+        const profile = await gmail.users.getProfile({ userId: "me" });
+        diag.tokenValid = true;
+        diag.gmailAddress = profile.data.emailAddress;
+        diag.gmailMessagesTotal = profile.data.messagesTotal;
+      } catch (tokenErr: any) {
+        diag.tokenValid = false;
+        diag.tokenError = tokenErr?.response?.data?.error ?? tokenErr?.message ?? String(tokenErr);
+      }
+
+      // 3. Most recent thread in DB
+      const recentThreads = await db
+        .select({ threadId: gmailThreadMeta.threadId, lastMessageAt: gmailThreadMeta.lastMessageAt, subject: gmailThreadMeta.subject })
+        .from(gmailThreadMeta)
+        .orderBy(gmailThreadMeta.lastMessageAt)
+        .limit(3);
+      diag.threadsInDb = recentThreads.length;
+      diag.mostRecentThread = recentThreads[recentThreads.length - 1] ?? null;
+
+      return res.json(diag);
+    } catch (err) {
+      return res.status(500).json({ error: String(err) });
+    }
+  });
+
   // ── Manual backfill: re-process last 100 inbox threads ──────────────────────
   // Safe to call at any time — only enqueues threads not yet in DB.
   // Auth: ?secret=CRON_SECRET in query string.
