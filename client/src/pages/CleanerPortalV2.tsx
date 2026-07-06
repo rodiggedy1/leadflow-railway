@@ -1139,7 +1139,13 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
   });
 
   // markComplete mutation — fires when sign-off is submitted
-  const markCompleteMutation = trpc.cleaner.markComplete.useMutation({ throwOnError: false });
+  const utils = trpc.useUtils();
+  const markCompleteMutation = trpc.cleaner.markComplete.useMutation({
+    throwOnError: false,
+    onSettled: () => {
+      utils.cleaner.getMyJobsToday.invalidate();
+    },
+  });
 
   // Persist step index so navigating back from maps restores the right step
   useEffect(() => {
