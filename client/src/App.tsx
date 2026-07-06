@@ -95,7 +95,7 @@ function Router() {
         <Route path={"/admin/calls"} component={AllCalls} />
         <Route path={"/admin/revenue"} component={RevenueAttribution} />
         <Route path={"/admin/quality"} component={CleanerDashboard} />
-        <Route path={"/cleaner"} component={CleanerPortal} />
+        <Route path={"/cleaner"} component={() => { window.location.replace("/portal-v2"); return null; }} />
         <Route path={"/portal-v2"} component={CleanerPortalV2} />
         <Route path={"/auth/cleaner-callback"} component={CleanerAuthCallback} />
         <Route path={"/track/:token"} component={JobTracker} />
