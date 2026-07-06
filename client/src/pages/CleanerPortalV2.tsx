@@ -1705,6 +1705,7 @@ function CleanerPortalV2Inner() {
     );
   }
 
+  if (!jobs) return null;
     const activeJob = jobs[activeJobIdx] ?? jobs[0];
 
   // Render the active job runner
