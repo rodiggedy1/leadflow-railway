@@ -73,6 +73,7 @@ interface PortalJob {
   customerPhone: string;
   address: string;
   time: string;                 // display time, also used as ETA fallback e.g. "10:00 AM"
+  jobDate: string;               // YYYY-MM-DD in ET, used for date label display
   serviceDateTime: string;
   bathrooms: number;
   extras: string[];             // extra keys from booking
@@ -1407,6 +1408,13 @@ type WeekJob = {
   bookingStatus: string;
 };
 
+function formatWeekJobDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+}
+
 function WeekJobCard({ job }: { job: WeekJob }) {
   const isDone = job.jobStatus === 'completed' || job.bookingStatus === 'completed';
   return (
@@ -1419,6 +1427,8 @@ function WeekJobCard({ job }: { job: WeekJob }) {
         {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">Done</span>}
       </div>
       <div className="flex items-center gap-1.5 text-slate-400 text-xs pl-4">
+        {job.jobDate && <span className={isDone ? 'text-slate-500' : 'text-slate-400'}>{formatWeekJobDate(job.jobDate)}</span>}
+        {job.jobDate && <span className="text-slate-600">·</span>}
         <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
         <span className="text-slate-600">·</span>
         <span className="truncate">{job.address}</span>
@@ -1451,6 +1461,19 @@ function DayBriefing({
   const firstName = cleanerName.split(' ')[0];
   const hourET = parseInt(new Date().toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/New_York' }));
   const greeting = hourET < 12 ? 'Good morning' : hourET < 17 ? 'Good afternoon' : 'Good evening';
+  // Format a YYYY-MM-DD string as "Monday, July 6th" in ET
+  const formatJobDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d); // local midnight — no timezone shift needed for display
+    return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  };
+  // Today's date label shown in the header (e.g. "Monday, July 6th")
+  const todayDateLabel = formatJobDate(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+      .format(new Date())
+      .replace(/(\d+)\/(\d+)\/(\d+)/, '$3-$1-$2')
+  );
   const completedCount = jobs.filter(j => j.jobStatus === 'completed' || j.bookingStatus === 'completed').length;
   const allDone = completedCount === jobs.length && jobs.length > 0;
   const firstIncompleteIdx = jobs.findIndex(j => j.jobStatus !== 'completed' && j.bookingStatus !== 'completed');
@@ -1476,6 +1499,9 @@ function DayBriefing({
               ? `${completedCount} of ${jobs.length} done today`
               : jobs.length === 1 ? 'You have 1 mission today' : `You have ${jobs.length} missions today`}
         </p>
+        {todayDateLabel && (
+          <p className="text-slate-500 text-xs mt-1">{todayDateLabel}</p>
+        )}
       </div>
       {/* Tabs */}
       <div className="flex gap-1 bg-slate-800/60 rounded-xl p-1 mb-4">
@@ -1527,6 +1553,8 @@ function DayBriefing({
                       {isDone && <span className="ml-auto text-emerald-500 text-xs font-semibold">Done</span>}
                     </div>
                     <div className="flex items-center gap-1.5 text-slate-400 text-sm pl-8">
+                      {job.jobDate && <span className={isDone ? 'text-slate-500' : 'text-slate-400'}>{formatJobDate(job.jobDate)}</span>}
+                      {job.jobDate && <span className="text-slate-600">·</span>}
                       <span className={isDone ? 'text-slate-500' : 'text-emerald-400 font-semibold'}>{job.time}</span>
                       <span className="text-slate-600">·</span>
                       <span className="truncate">{job.address}</span>
