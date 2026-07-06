@@ -377,11 +377,12 @@ function useLocation() {
 }
 
 // ── Navigate Step Card ───────────────────────────────────────────────────────
-function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStartTime }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; jobStartTime: string }) {
+function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStartTime, customerName }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; jobStartTime: string; customerName: string }) {
   const { requestLocation } = useLocation();
   const [gpsState, setGpsState] = useState<"idle" | "fetching" | "ready" | "error">("idle");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   // After user taps START NAVIGATION, show the pulsing "I've Arrived" CTA
   const LAUNCHED_KEY = `portal_v2_launched_${cleanerJobId ?? 'mock'}`;
   const [hasLaunched, setHasLaunched] = useState(() => {
@@ -520,7 +521,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
         )}
         <div className="px-4 mt-5 pb-5">
           <button
-            onClick={handleNavigate}
+            onClick={() => setShowConfirm(true)}
             className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-5 rounded-2xl border-2 border-emerald-400/30 shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-3"
           >
             <Navigation className="w-6 h-6" />
@@ -530,6 +531,41 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
             Opens Google Maps · Come back when you arrive
           </p>
         </div>
+        {/* Confirmation bottom sheet */}
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowConfirm(false)}>
+            <div className="absolute inset-0 bg-black/60" />
+            <div
+              className="relative w-full max-w-lg bg-slate-800 border border-slate-700 rounded-t-3xl px-6 pt-6 pb-10 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Handle */}
+              <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5" />
+              <div className="text-center text-4xl mb-3">📱</div>
+              <h3 className="text-white text-xl font-black text-center leading-tight">
+                Send on-my-way text to {customerName}?
+              </h3>
+              <p className="text-slate-400 text-sm text-center mt-3 leading-relaxed">
+                Only send if you are in your car and driving now.<br />
+                This will text them and send an ETA.
+              </p>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowConfirm(false)}
+                  className="flex-1 py-4 rounded-2xl bg-slate-700 text-slate-300 font-bold text-base border border-slate-600 active:bg-slate-600 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { setShowConfirm(false); handleNavigate(); }}
+                  className="flex-1 py-4 rounded-2xl bg-emerald-500 text-white font-black text-base shadow-lg shadow-emerald-900/40 active:bg-emerald-600 transition-all"
+                >
+                  Yes, Send &amp; Navigate →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -755,7 +791,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
   );
 }
 
-function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, jobStartTime }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; completedJobId: number; jobStartTime: string }) {
+function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, jobStartTime, customerName }: { step: Step; onComplete: () => void; jobAddress: string; cleanerJobId: number | null; completedJobId: number; jobStartTime: string; customerName: string }) {
   const [loading, setLoading] = useState(false);
   // MUST be before any conditional return — React hooks rules
   const handleCta = useCallback(() => {
@@ -764,7 +800,7 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, 
   }, [onComplete]);
   // Navigate step gets its own special card with ETA
   if (step.type === "navigate") {
-    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} jobStartTime={jobStartTime} />;
+    return <NavigateStepCard step={step} onComplete={onComplete} jobAddress={jobAddress} cleanerJobId={cleanerJobId} jobStartTime={jobStartTime} customerName={customerName} />;
   }
   // Photo steps get the camera upload card
   if (step.type === 'before_photos' || step.type === 'after_photos' || step.type === 'photo_objective') {
@@ -1153,6 +1189,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
                 cleanerJobId={job.cleanerJobId}
                 completedJobId={job.completedJobId}
                 jobStartTime={job.time}
+                customerName={job.customerName}
               />
             )
           )}
