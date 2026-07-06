@@ -626,10 +626,10 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
 }
 
 /**
- * Send an ETA update SMS to the client every time the cleaner submits a new ETA
- * while already on_the_way. No dedup — fires every time intentionally.
- * Logs to field_mgmt_log with a unique step name per update (eta_update_<timestamp>)
- * so each update is traceable without blocking future updates.
+ * Send an ETA update SMS to the client when the cleaner updates their ETA.
+ * Hard-deduped via tryClaimStep("client_eta_update") — fires AT MOST ONCE per job.
+ * The initial on-the-way SMS already covers the first notification; this only fires
+ * if the cleaner explicitly updates their ETA after that, and only once.
  */
 export async function sendClientEtaUpdateSms(cleanerJobId: number): Promise<void> {
   if (!FIELD_MGMT_ENABLED) return;
@@ -637,14 +637,12 @@ export async function sendClientEtaUpdateSms(cleanerJobId: number): Promise<void
   if (!db) return;
 
   // Only send ETA updates if the initial on-the-way SMS has already been sent.
-  // On the first tap, sendClientOnTheWaySms handles it; this function handles repeats.
   const firstAlreadySent = await stepAlreadyFired(cleanerJobId, "client_on_the_way");
   if (!firstAlreadySent) return;
 
   // NOTE: isJobAssigned check intentionally omitted here.
   // A cleaner who has already set on_the_way is actively working the job regardless
   // of bookingStatus (which may be 'new' for jobs synced before assignment completes).
-  // Blocking ETA updates in that state silently drops customer notifications.
 
   const jobRows = await db
     .select()
@@ -681,34 +679,22 @@ export async function sendClientEtaUpdateSms(cleanerJobId: number): Promise<void
     `Sorry for the delay — we appreciate your patience!`,
   ].join("\n");
 
-  // Use a unique step name per update so each is logged without blocking the next
-  const stepName = `eta_update_${Date.now()}`;
-
-  // Log to field_mgmt_log directly (no dedup guard — intentional)
-  await db.insert(fieldMgmtLog).values({
-    cleanerJobId,
-    step: stepName as any,
-    success: 1,
-    smsSent: msg,
-    recipientPhone: clientPhone,
-    firedAt: new Date(),
-  }).catch(err => console.error(`[FieldMgmt] ETA update log insert failed for job ${cleanerJobId}:`, err));
+  // Hard dedup: tryClaimStep returns false if this step was already claimed for this job.
+  // This guarantees at most ONE ETA update SMS per job, regardless of how many times
+  // the cleaner taps "Update ETA" or how many concurrent calls reach this function.
+  const claimed = await tryClaimStep({ cleanerJobId, step: "client_eta_update", smsSent: msg, recipientPhone: clientPhone });
+  if (!claimed) {
+    console.log(`[FieldMgmt] ETA update SMS already sent for job ${cleanerJobId} — skipping duplicate`);
+    return;
+  }
 
   const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] ETA update SMS sent to ${clientPhone} for job ${cleanerJobId} (eta: ${etaStr})`);
-    if (result.messageId) {
-      await db.update(fieldMgmtLog)
-        .set({ openPhoneMessageId: result.messageId, deliveryStatus: "sent" })
-        .where(eq(fieldMgmtLog.step, stepName as any))
-        .catch(() => {});
-    }
+    if (result.messageId) await updateStepMessageId(cleanerJobId, "client_eta_update", result.messageId);
   } else {
-    await db.update(fieldMgmtLog)
-      .set({ success: 0, errorDetail: result.error ?? "unknown" })
-      .where(eq(fieldMgmtLog.step, stepName as any))
-      .catch(() => {});
+    await updateStepOutcome(cleanerJobId, "client_eta_update", false, result.error);
     console.error(`[FieldMgmt] ETA update SMS FAILED for job ${cleanerJobId}:`, result.error);
   }
 }

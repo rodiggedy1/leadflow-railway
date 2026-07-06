@@ -466,18 +466,17 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
   const eta = etaQuery.data;
   const hasEta = eta?.ok;
   const utils = trpc.useUtils();
+    /** Opens maps + fires on_the_way SMS. Only called on the FIRST launch. */
   const handleNavigate = useCallback(async () => {
     const dest = encodeURIComponent(jobAddress);
     const url = /iPhone|iPad|iPod/i.test(navigator.userAgent)
       ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
       : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
-
     // 1. Launch maps immediately — don't block the user on GPS
     window.open(url, "_blank");
     setHasLaunched(true);
     try { sessionStorage.setItem(LAUNCHED_KEY, '1'); } catch {}
     setTimeout(() => setReturnedFromMaps(true), 1500);
-
     // 2. Fetch fresh GPS coords (user-gesture triggered — no auto-prompt on mount)
     const freshCoords = await requestLocation();
     if (freshCoords) {
@@ -486,14 +485,9 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
     } else {
       setGpsState("error");
     }
-
     // 3. Resolve ETA imperatively before firing the status mutation.
-    //    We cannot rely on etaQuery.data here because the query hasn't run yet
-    //    (etaEnabled was false until step 2). Fetch it directly so the SMS
-    //    always carries the correct ETA timestamp.
     let etaTimestampOverride: number | undefined;
     let etaLabel: string | undefined;
-
     if (freshCoords) {
       try {
         const etaData = await utils.cleaner.getDriveEta.fetch({
@@ -504,28 +498,34 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
         if (etaData?.ok && etaData.durationSeconds) {
           etaTimestampOverride = Date.now() + etaData.durationSeconds * 1000;
           etaLabel = etaData.durationText ?? undefined;
-          // Also update the reactive query cache so the UI shows the ETA badge
           setEtaEnabled(true);
         }
       } catch {
         // ETA fetch failed — fall through to scheduled time fallback
       }
     }
-
     if (!etaTimestampOverride) {
-      // GPS unavailable or ETA fetch failed — fall back to scheduled start time
       const fallbackTs = parseJobTime(jobStartTime);
       if (fallbackTs) {
         etaTimestampOverride = fallbackTs;
         etaLabel = jobStartTime;
       }
     }
-
     // 4. Fire on_the_way — ETA is fully resolved before this call
     if (cleanerJobId) {
       statusMutation.mutate({ cleanerJobId, status: "on_the_way", etaTimestampOverride, etaLabel });
     }
   }, [jobAddress, cleanerJobId, jobStartTime, requestLocation, utils, statusMutation, LAUNCHED_KEY]);
+
+  /** Re-opens maps ONLY — no SMS, no status mutation. Safe to call multiple times. */
+  const handleReopenMaps = useCallback(() => {
+    const dest = encodeURIComponent(jobAddress);
+    const url = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
+      : `https://maps.google.com/?daddr=${dest}&travelmode=driving`;
+    window.open(url, "_blank");
+    setTimeout(() => setReturnedFromMaps(true), 1500);
+  }, [jobAddress]);
 
   // ── Phase: not yet launched — show the navigate CTA ──────────────────────
   if (!hasLaunched) {
@@ -640,10 +640,10 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
             : <span className="text-slate-500 text-xs">GPS unavailable</span>
           }
         </div>
-        {/* Re-open maps */}
+        {/* Re-open maps — opens maps only, does NOT re-fire on_the_way SMS */}
         <div className="px-4 mt-3 mb-4">
           <button
-            onClick={handleNavigate}
+            onClick={handleReopenMaps}
             className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-slate-300 font-semibold text-sm py-3 rounded-xl border border-slate-600/50 transition-all flex items-center justify-center gap-2"
           >
             <Navigation className="w-4 h-4" />
