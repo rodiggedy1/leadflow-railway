@@ -1630,12 +1630,14 @@ function CleanerPortalV2Inner() {
     );
   }
 
-  // Not authenticated — only redirect on explicit UNAUTHORIZED (cookie expired/missing).
-  // Any other error (network, deploy restart) shows a retry screen instead.
+  // Not authenticated — redirect to /cleaner if:
+  // 1. Explicit UNAUTHORIZED error (cookie expired/missing)
+  // 2. meQuery resolved with null data (no session at all)
   const isUnauthorized = meQuery.isError &&
     (meQuery.error?.message?.includes("10001") || meQuery.error?.message?.includes("UNAUTHORIZED"));
+  const hasNoSession = !meQuery.isLoading && !meQuery.isError && !meQuery.data;
 
-  if (isUnauthorized) {
+  if (isUnauthorized || hasNoSession) {
     window.location.replace("/cleaner");
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
@@ -1659,8 +1661,8 @@ function CleanerPortalV2Inner() {
     );
   }
 
-  // Jobs loading state — also covers the brief moment where isLoading is false but data hasn't arrived yet
-  if (isLoading || (!jobs && !error)) {
+  // Jobs loading state
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
         <Loader2 className="w-10 h-10 text-emerald-400 animate-spin mb-4" />
