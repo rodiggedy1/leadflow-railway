@@ -123,8 +123,10 @@ const PHYSICAL_EXTRAS_PHOTO_KEYS = new Set([
   "clean_inside_empty_fridge",
   "clean_inside_full_fridge",
   "clean_inside_microwave",
+  "clean_inside_cabinets",
   "clean_interior_windows",
   "clean_finished_basement",
+  "wipe_walls",
   "sweep_garage",
   "balcony_sweep",
   "shed_pool_house",
@@ -1525,6 +1527,11 @@ function WeekJobCard({ job }: { job: WeekJob }) {
         <span className="text-slate-600">·</span>
         <span className="truncate">{job.address}</span>
       </div>
+      {!isDone && (job.extras ?? []).includes('move_in_move_out') && (
+        <div className="pl-4">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">Move-In/Out</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -1654,7 +1661,8 @@ function DayBriefing({
                     {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
                       <div className="flex flex-wrap gap-1.5 pl-8">
                         {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}</span>}
-                        {(job.extras ?? []).map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{e.replace(/_/g, ' ')}</span>)}
+                        {(job.extras ?? []).includes('move_in_move_out') && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">Move-In/Out</span>}
+                        {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{e.replace(/_/g, ' ')}</span>)}
                       </div>
                     )}
                   </div>
