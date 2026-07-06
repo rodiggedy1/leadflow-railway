@@ -1705,6 +1705,7 @@ export const cleanerRouter = router({
     }).format(endOfWeek);
     const [em, ed, ey] = endRaw.split("/");
     const endStr = `${ey}-${em}-${ed}`;
+    console.log(`[getMyJobsWeek] cleanerId=${ctx.cleaner.cleanerId} todayStr=${todayStr} endStr=${endStr}`);
     const jobs = await db
       .select()
       .from(cleanerJobs)
@@ -1718,6 +1719,7 @@ export const cleanerRouter = router({
         )
       )
       .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
+    console.log(`[getMyJobsWeek] jobs found: ${jobs.length}`, jobs.map(j => ({ id: j.id, customer: j.customerName, date: j.jobDate, status: j.bookingStatus, profileId: j.cleanerProfileId })));
     // Compute tomorrow string
     const tomorrow = new Date(nowET);
     tomorrow.setDate(nowET.getDate() + 1);
