@@ -95,14 +95,16 @@ function NotesPopup({
   // Fetch translation inside the popup so it re-renders when data arrives
   const queryEnabled = typeof cleanerJobId === 'number' && cleanerJobId > 0 && !!(rawCustomerNotes?.trim() || rawStaffNotes?.trim()) && lang !== 'en';
   console.log('[NotesPopup] cleanerJobId:', cleanerJobId, '| typeof:', typeof cleanerJobId, '| lang:', lang, '| queryEnabled:', queryEnabled);
-  const { data: notesData, isLoading: notesLoading } = trpc.cleaner.getNotesForLanguage.useQuery(
+  const { data: notesData, isLoading: notesLoading, error: notesError } = trpc.cleaner.getNotesForLanguage.useQuery(
     { cleanerJobId: cleanerJobId ?? 0, lang },
     {
       enabled: queryEnabled,
       staleTime: 30 * 60 * 1000,
       retry: false,
+      throwOnError: false,
     }
   );
+  if (notesError) console.error('[NotesPopup] getNotesForLanguage error:', notesError.message, notesError);
 
   const customerNotes = notesData?.customerNotes ?? rawCustomerNotes;
   const staffNotes = notesData?.staffNotes ?? rawStaffNotes;
