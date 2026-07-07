@@ -408,6 +408,7 @@ const en = {
     // Notes popup
     "v2.notes.title": "Job Notes",
     "v2.notes.empty": "No notes for this job",
+    "v2.notes.translating": "Translating notes…",
     "v2.notes.customerLabel": "Customer Notes",
     "v2.notes.staffLabel": "Staff Notes",
 
@@ -895,6 +896,7 @@ const es = {
     "v2.schedule.haveGreatDay": "¡Que tengas una excelente semana!",
     "v2.notes.title": "Notas del trabajo",
     "v2.notes.empty": "Sin notas para este trabajo",
+    "v2.notes.translating": "Traduciendo notas…",
     "v2.notes.customerLabel": "Notas del cliente",
     "v2.notes.staffLabel": "Notas del personal",
     "v2.loading.session": "Cargando tu sesión…",
@@ -1378,6 +1380,7 @@ const pt = {
     "v2.schedule.haveGreatDay": "Tenha uma ótima semana!",
     "v2.notes.title": "Notas do serviço",
     "v2.notes.empty": "Sem notas para este serviço",
+    "v2.notes.translating": "Traduzindo notas…",
     "v2.notes.customerLabel": "Notas do cliente",
     "v2.notes.staffLabel": "Notas da equipe",
     "v2.loading.session": "Carregando sua sessão…",

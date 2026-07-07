@@ -24,6 +24,8 @@ import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunn
 import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
 import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
+import { invokeLLM } from "./_core/llm";
+import { parseChecklistEnvelope } from "./qualityRouter";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -179,9 +181,7 @@ export const cleanerRouter = router({
 
       return jobs.map(job => ({
         ...job,
-        checklistItems: job.checklistItems
-          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
-          : null,
+        checklistItems: parseChecklistEnvelope(job.checklistItems)?.items ?? null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
         customRules: appliedCustomRules
           .filter(r => r.cleanerJobId === job.id)
@@ -290,9 +290,7 @@ export const cleanerRouter = router({
 
       return jobs.map(job => ({
         ...job,
-        checklistItems: job.checklistItems
-          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
-          : null,
+        checklistItems: parseChecklistEnvelope(job.checklistItems)?.items ?? null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
       }));
     }),
@@ -989,18 +987,18 @@ export const cleanerRouter = router({
       if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       if (!job.checklistItems) throw new TRPCError({ code: "BAD_REQUEST", message: "No checklist for this job" });
 
-      const items = JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>;
+      const envelope = parseChecklistEnvelope(job.checklistItems);
+      const items = envelope?.items ?? [];
       if (input.itemIndex < 0 || input.itemIndex >= items.length) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid item index" });
       }
-
       items[input.itemIndex].checked = input.checked;
-
+      // Preserve envelope format when writing back
+      const updatedEnvelope = { sourceLang: envelope?.sourceLang ?? 'en', items };
       await db
         .update(cleanerJobs)
-        .set({ checklistItems: JSON.stringify(items) })
+        .set({ checklistItems: JSON.stringify(updatedEnvelope) })
         .where(eq(cleanerJobs.id, job.id));
-
       return { success: true, items };
     }),
 
@@ -1657,9 +1655,7 @@ export const cleanerRouter = router({
         serviceDateTime: job.serviceDateTime ?? "",
         bathrooms: job.bathrooms ?? 1,
         extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
-        checklistItems: job.checklistItems
-          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
-          : [],
+        checklistItems: parseChecklistEnvelope(job.checklistItems)?.items ?? [],
         bookingStatus: job.bookingStatus ?? "",
         jobStatus: job.jobStatus ?? "",
         jobIndex: idx + 1,
@@ -1765,6 +1761,176 @@ export const cleanerRouter = router({
       };
     });
   }),
+  /**
+   * cleaner.getChecklistForLanguage — returns checklist items for a job in the requested language.
+   * If lang is 'en' or items are already in the target language, returns as-is.
+   * Otherwise translates the entire list in a single LLM call.
+   * The client should cache the result using React Query's staleTime.
+   */
+  getChecklistForLanguage: cleanerProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      lang: z.enum(["en", "es", "pt"]),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Verify ownership
+      const [job] = await db
+        .select({ checklistItems: cleanerJobs.checklistItems })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.id, input.cleanerJobId),
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+        ))
+        .limit(1);
+
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found" });
+      if (!job.checklistItems) return { items: [], sourceLang: 'en', translated: false };
+      const envelope = parseChecklistEnvelope(job.checklistItems);
+      if (!envelope || envelope.items.length === 0) return { items: [], sourceLang: 'en', translated: false };
+      const { items, sourceLang } = envelope;
+      // No translation needed
+      if (input.lang === 'en' || sourceLang === input.lang) {
+        return { items, sourceLang, translated: false };
+      }
+
+      // Translate entire checklist in a single LLM call
+      const langNames: Record<string, string> = { es: 'Spanish (Español)', pt: 'Portuguese (Português)' };
+      const langName = langNames[input.lang] ?? 'English';
+      try {
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content:
+                `You are a professional translator. Translate the following cleaning task list into ${langName}. ` +
+                'Return ONLY a JSON object with a "tasks" array of strings in the same order as the input. ' +
+                'Do not add, remove, or reorder items. Keep each task concise and actionable.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(items.map(i => i.text)),
+            },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'translated_checklist',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  tasks: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['tasks'],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = response?.choices?.[0]?.message?.content;
+        if (!content) return { items, sourceLang, translated: false }; // fallback
+        const parsed = JSON.parse(content as string) as { tasks: string[] };
+        if (!parsed.tasks || parsed.tasks.length !== items.length) return { items, sourceLang, translated: false }; // fallback
+        const translatedItems = items.map((item, i) => ({ ...item, text: parsed.tasks[i] }));
+        return { items: translatedItems, sourceLang, translated: true };
+      } catch {
+        return { items, sourceLang, translated: false }; // Graceful fallback — cleaner sees original
+      }
+    }),
+
+  /**
+   * cleaner.getNotesForLanguage — returns customerNotes and staffNotes translated to the requested language.
+   * If lang is 'en', returns the original notes as-is.
+   * Otherwise translates both notes in a single LLM call.
+   * Falls back to original notes on any error so the cleaner is never blocked.
+   */
+  getNotesForLanguage: cleanerProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      lang: z.enum(["en", "es", "pt"]),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [job] = await db
+        .select({ customerNotes: cleanerJobs.customerNotes, staffNotes: cleanerJobs.staffNotes })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.id, input.cleanerJobId),
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+        ))
+        .limit(1);
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found" });
+
+      const customerNotes = job.customerNotes ?? null;
+      const staffNotes = job.staffNotes ?? null;
+
+      // No translation needed
+      if (input.lang === 'en' || (!customerNotes && !staffNotes)) {
+        return { customerNotes, staffNotes, translated: false };
+      }
+
+      const langNames: Record<string, string> = { es: 'Spanish (Español)', pt: 'Portuguese (Português)' };
+      const langName = langNames[input.lang] ?? 'English';
+
+      try {
+        const notesToTranslate: Record<string, string> = {};
+        if (customerNotes) notesToTranslate.customerNotes = customerNotes;
+        if (staffNotes) notesToTranslate.staffNotes = staffNotes;
+
+        // Build a dynamic schema based on which notes are present
+        const schemaProperties: Record<string, { type: string }> = {};
+        const schemaRequired: string[] = [];
+        if (customerNotes) { schemaProperties.customerNotes = { type: 'string' }; schemaRequired.push('customerNotes'); }
+        if (staffNotes) { schemaProperties.staffNotes = { type: 'string' }; schemaRequired.push('staffNotes'); }
+
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a professional translator. Translate the provided cleaning job notes into ${langName}. ` +
+                'Preserve all specific instructions, product names, and proper nouns exactly as written. ' +
+                'Return ONLY a JSON object with the same keys as the input, with translated values.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(notesToTranslate),
+            },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'translated_notes',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: schemaProperties,
+                required: schemaRequired,
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = response?.choices?.[0]?.message?.content;
+        if (!content) {
+          console.error('[getNotesForLanguage] LLM returned no content for job', input.cleanerJobId);
+          return { customerNotes, staffNotes, translated: false };
+        }
+        const parsed = JSON.parse(content as string) as { customerNotes?: string; staffNotes?: string };
+        return {
+          customerNotes: customerNotes ? (parsed.customerNotes || customerNotes) : null,
+          staffNotes: staffNotes ? (parsed.staffNotes || staffNotes) : null,
+          translated: true,
+        };
+      } catch (err) {
+        console.error('[getNotesForLanguage] Translation failed for job', input.cleanerJobId, err);
+        return { customerNotes, staffNotes, translated: false }; // Graceful fallback
+      }
+    }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });

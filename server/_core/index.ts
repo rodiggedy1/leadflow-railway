@@ -504,16 +504,16 @@ async function startServer() {
           teamId = (teamResult as any).insertId as number;
         }
 
-        // 3. Check if a cleaner_job already exists for this profile
+        // 3. Check how many jobs exist for this profile today
         const existingJobRows = await db.select({ id: cleanerJobs.id })
           .from(cleanerJobs)
-          .where(eq(cleanerJobs.cleanerProfileId, profileId))
-          .limit(1);
+          .where(eq(cleanerJobs.cleanerProfileId, profileId));
 
-        if (!existingJobRows[0]) {
-          // Use raw SQL INSERT to bypass any DB-level FK constraints on completedJobId.
-          // We use completedJobId=0 as a sentinel (no real completed job needed for portal testing).
-          // jobStatus is an enum — omit it so it defaults to NULL (job not yet started)
+        const jobsNeeded = 2;
+        let seeded = existingJobRows.length;
+
+        if (existingJobRows.length < 1) {
+          // Job 1: Simple job with notes, no extras
           await db.execute(drizzleSql`
             INSERT INTO cleaner_jobs
               (completedJobId, cleanerProfileId, cleanerName, teamName, teamId,
@@ -527,11 +527,33 @@ async function startServer() {
                'Please use the key under the mat. Dog is friendly.', 'VIP client — extra care.',
                '150.00', '50', '75.00')
           `);
+          seeded++;
+        }
+
+        if (existingJobRows.length < 2) {
+          // Job 2: Job with extras AND notes — tests both translation paths
+          const extrasJson = JSON.stringify(['clean_inside_oven', 'clean_inside_cabinets', 'load_of_laundry']);
+          const serviceDateTime2 = `${todayStr} 13:00:00`;
+          await db.execute(drizzleSql`
+            INSERT INTO cleaner_jobs
+              (completedJobId, cleanerProfileId, cleanerName, teamName, teamId,
+               jobDate, serviceDateTime, customerName, customerPhone, jobAddress,
+               serviceType, bedrooms, bathrooms, extras, frequency, bookingStatus,
+               customerNotes, staffNotes, jobRevenue, payPercent, basePay)
+            VALUES
+              (0, ${profileId}, 'Demo Cleaner', ${demoTeamName}, ${teamId ?? null},
+               ${todayStr}, ${serviceDateTime2}, 'Carlos Rivera', '+10000000002', '456 Ocean Drive, Miami Beach, FL 33139',
+               'Deep Clean', 3, 2, ${extrasJson}, 'One-time', 'assigned',
+               'Please clean inside the oven thoroughly. The fridge has some old food — please remove it. Use the green cleaning products under the sink only.',
+               'Client is very particular about the cabinets. Make sure to wipe all shelves. Dog crate in bedroom — do not move it.',
+               '250.00', '50', '125.00')
+          `);
+          seeded++;
         }
 
         return res.json({
           ok: true,
-          message: existingJobRows[0] ? "Demo cleaner already seeded" : "Demo cleaner seeded",
+          message: seeded > existingJobRows.length ? `Seeded ${seeded - existingJobRows.length} new job(s)` : "Demo cleaner already fully seeded",
           loginEmail: demoEmail,
           loginPassword: "demo1234",
           profileId,
