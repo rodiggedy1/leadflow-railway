@@ -418,6 +418,7 @@ const en = {
     "v2.error.connection": "Connection error. Please check your internet and try again.",
     "v2.error.retry": "Retry",
     "v2.error.couldNotLoad": "Could not load jobs",
+    "v2.logout": "Log out",
 
     // Common
     "v2.common.cancel": "Cancel",
@@ -824,6 +825,7 @@ const es = {
     "v2.error.connection": "Error de conexión. Verifica tu internet e intenta de nuevo.",
     "v2.error.retry": "Reintentar",
     "v2.error.couldNotLoad": "No se pudieron cargar los trabajos",
+    "v2.logout": "Cerrar sesión",
     "v2.common.cancel": "Cancelar",
     "v2.common.back": "Atrás",
     "v2.common.done": "Listo ✓",
@@ -1228,6 +1230,7 @@ const pt = {
     "v2.error.connection": "Erro de conexão. Verifique sua internet e tente novamente.",
     "v2.error.retry": "Tentar novamente",
     "v2.error.couldNotLoad": "Não foi possível carregar os serviços",
+    "v2.logout": "Sair",
     "v2.common.cancel": "Cancelar",
     "v2.common.back": "Voltar",
     "v2.common.done": "Pronto ✓",

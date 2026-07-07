@@ -7,7 +7,7 @@
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from "react";
-import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar, FileText, X } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar, FileText, X, LogOut } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -51,6 +51,28 @@ function LanguagePicker() {
   );
 }
 
+
+// ── Portal Header (Language + Logout) ───────────────────────────────────────
+function PortalHeader() {
+  const { t } = useTranslation();
+  const logoutMutation = trpc.cleaner.logout.useMutation({
+    onSuccess: () => { window.location.replace('/cleaner'); },
+    throwOnError: false,
+  });
+  return (
+    <div className="flex items-center justify-between px-4 pt-4 pb-2">
+      <LanguagePicker />
+      <button
+        onClick={() => logoutMutation.mutate()}
+        disabled={logoutMutation.isPending}
+        className="flex items-center gap-1.5 text-slate-400 hover:text-white text-xs font-medium transition-colors px-2 py-1.5 rounded-lg hover:bg-slate-800/60"
+      >
+        <LogOut className="w-3.5 h-3.5" />
+        <span>{t('v2.logout')}</span>
+      </button>
+    </div>
+  );
+}
 
 // ── Notes Popup ──────────────────────────────────────────────────────────────
 
@@ -1421,11 +1443,11 @@ function WeeklySchedulePrompt({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
-      {/* Language picker — always visible at top-right */}
-      <div className="absolute top-4 right-4 z-10">
-        <LanguagePicker />
+      {/* Header: language picker + logout */}
+      <div className="max-w-lg mx-auto w-full">
+        <PortalHeader />
       </div>
-      <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-6 pb-6 max-w-lg mx-auto w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-4 pb-6 max-w-lg mx-auto w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {step === 'schedule' && (
           <div className="space-y-6">
             <div className="text-center space-y-1.5">
@@ -1659,14 +1681,16 @@ function DayBriefing({
     { id: 'week', label: t('v2.briefing.tabWeek'), count: otherWeekJobs.length },
   ];
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col px-4 pt-8 pb-8 max-w-lg mx-auto w-full">
+    <div className="min-h-screen bg-slate-900 flex flex-col max-w-lg mx-auto w-full">
+      {/* Top bar: language + logout */}
+      <PortalHeader />
+      <div className="flex flex-col px-4 pt-4 pb-8">
       {/* Header */}
       <div className="text-center mb-6 space-y-1">
         <div className="flex items-center justify-center gap-3 mb-2">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-900/50 border border-emerald-700/50">
             <span className="text-xl">{allDone ? '🏁' : '🧹'}</span>
           </div>
-          <LanguagePicker />
         </div>
         <h1 className="text-white text-xl font-black">
           {allDone ? t('v2.briefing.greatWork', { name: firstName }) : t(greetingKey, { name: firstName })}
@@ -1788,6 +1812,7 @@ function DayBriefing({
           )}
         </div>
       )}
+      </div>{/* end inner padding wrapper */}
     </div>
   );
 }
