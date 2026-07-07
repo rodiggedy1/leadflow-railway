@@ -252,29 +252,64 @@ function fetchDriveTimes(
 // ── Distance Matrix helper ────────────────────────────────────────────────────
 
 /**
- * Fetch a travel-time matrix for N origins × N destinations.
- * Google Distance Matrix API supports max 25 origins × 25 destinations per request.
- * We chunk if needed.
+ * Build a haversine-based N×N drive-time matrix (straight-line / ~22 mph).
+ * Used as fallback when OSRM is unavailable.
  */
-async function buildTravelMatrix(
-  points: LatLng[],
-  // db param kept for signature compatibility — no longer used for API calls
-  _db?: NonNullable<Awaited<ReturnType<typeof getDb>>>
-): Promise<number[][]> {
-  // Use haversine (straight-line / avg speed) for the optimizer matrix.
-  // Eliminates Google Distance Matrix API cost for optimization runs (~$3/click).
-  // Haversine is accurate enough for routing decisions — real drive times are
-  // fetched and stored in DB after assignments are saved.
+function buildHaversineMatrix(points: LatLng[]): number[][] {
   const n = points.length;
   const matrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
   for (let i = 0; i < n; i++) {
     for (let j = 0; j < n; j++) {
       if (i === j) continue;
-      // Estimate drive time: haversine meters / 10 m/s (~22 mph avg urban speed)
       matrix[i][j] = Math.round(haversineMeters(points[i], points[j]) / 10);
     }
   }
   return matrix;
+}
+
+/**
+ * Fetch a real-road N×N drive-time matrix from OSRM's free table API.
+ * Single HTTP request for all N×N pairs — no API key, no cost.
+ * Falls back to haversine if OSRM is unavailable or times out.
+ */
+async function osrmTableMatrix(points: LatLng[]): Promise<number[][]> {
+  const n = points.length;
+  if (n === 0) return [];
+  // OSRM coords format: lng,lat;lng,lat;...
+  const coords = points.map(p => `${p.lng},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=duration`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`OSRM table HTTP ${res.status}`);
+    const data = await res.json() as { code: string; durations: number[][] };
+    if (data.code !== 'Ok' || !data.durations || data.durations.length !== n) {
+      throw new Error(`OSRM table bad response: ${data.code}`);
+    }
+    // OSRM returns null for unreachable pairs — replace with haversine fallback
+    const fallback = buildHaversineMatrix(points);
+    return data.durations.map((row, i) =>
+      row.map((val, j) => (val == null || val <= 0) ? fallback[i][j] : Math.round(val))
+    );
+  } catch (err) {
+    clearTimeout(timeout);
+    console.warn('[buildTravelMatrix] OSRM table failed, falling back to haversine:', (err as Error).message);
+    return buildHaversineMatrix(points);
+  }
+}
+
+/**
+ * Fetch a travel-time matrix for N points.
+ * Uses OSRM table API (real road times, single request, free).
+ * Falls back to haversine if OSRM is unavailable.
+ */
+async function buildTravelMatrix(
+  points: LatLng[],
+  _db?: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<number[][]> {
+  return osrmTableMatrix(points);
 }
 
 function haversineMeters(a: LatLng, b: LatLng): number {
