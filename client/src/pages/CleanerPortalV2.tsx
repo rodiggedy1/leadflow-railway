@@ -1332,6 +1332,19 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
   const hasNotes = !!(job.customerNotes?.trim() || job.staffNotes?.trim());
   const [notesOpen, setNotesOpen] = useState(false);
 
+  // Fetch translated notes for the cleaner's current language.
+  // Same pattern as getChecklistForLanguage — single LLM call, React Query cache, graceful fallback.
+  const { data: notesData } = trpc.cleaner.getNotesForLanguage.useQuery(
+    { cleanerJobId: job.cleanerJobId!, lang },
+    {
+      enabled: !!job.cleanerJobId && hasNotes && lang !== 'en',
+      staleTime: 30 * 60 * 1000,
+      retry: false,
+    }
+  );
+  const displayCustomerNotes = notesData?.customerNotes ?? job.customerNotes;
+  const displayStaffNotes = notesData?.staffNotes ?? job.staffNotes;
+
   // markComplete mutation — fires when sign-off is submitted
   const utils = trpc.useUtils();
   const markCompleteMutation = trpc.cleaner.markComplete.useMutation({
@@ -1404,7 +1417,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
             {t('v2.common.notes')}
           </button>
         )}
-        {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} onClose={() => setNotesOpen(false)} />}
+        {notesOpen && <NotesPopup customerNotes={displayCustomerNotes} staffNotes={displayStaffNotes} onClose={() => setNotesOpen(false)} />}
         {/* Dev nav — step through for testing */}
         <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
           <button

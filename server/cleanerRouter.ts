@@ -1841,6 +1841,89 @@ export const cleanerRouter = router({
       }
     }),
 
+  /**
+   * cleaner.getNotesForLanguage — returns customerNotes and staffNotes translated to the requested language.
+   * If lang is 'en', returns the original notes as-is.
+   * Otherwise translates both notes in a single LLM call.
+   * Falls back to original notes on any error so the cleaner is never blocked.
+   */
+  getNotesForLanguage: cleanerProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      lang: z.enum(["en", "es", "pt"]),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const [job] = await db
+        .select({ customerNotes: cleanerJobs.customerNotes, staffNotes: cleanerJobs.staffNotes })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.id, input.cleanerJobId),
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+        ))
+        .limit(1);
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found" });
+
+      const customerNotes = job.customerNotes ?? null;
+      const staffNotes = job.staffNotes ?? null;
+
+      // No translation needed
+      if (input.lang === 'en' || (!customerNotes && !staffNotes)) {
+        return { customerNotes, staffNotes, translated: false };
+      }
+
+      const langNames: Record<string, string> = { es: 'Spanish (Español)', pt: 'Portuguese (Português)' };
+      const langName = langNames[input.lang] ?? 'English';
+
+      try {
+        const notesToTranslate: Record<string, string> = {};
+        if (customerNotes) notesToTranslate.customerNotes = customerNotes;
+        if (staffNotes) notesToTranslate.staffNotes = staffNotes;
+
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content: `You are a professional translator. Translate the provided cleaning job notes into ${langName}. ` +
+                'Preserve all specific instructions, product names, and proper nouns exactly as written. ' +
+                'Return ONLY a JSON object with the same keys as the input, with translated values.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(notesToTranslate),
+            },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'translated_notes',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  customerNotes: { type: 'string' },
+                  staffNotes: { type: 'string' },
+                },
+                required: ['customerNotes', 'staffNotes'],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = response?.choices?.[0]?.message?.content;
+        if (!content) return { customerNotes, staffNotes, translated: false };
+        const parsed = JSON.parse(content as string) as { customerNotes: string; staffNotes: string };
+        return {
+          customerNotes: customerNotes ? (parsed.customerNotes || customerNotes) : null,
+          staffNotes: staffNotes ? (parsed.staffNotes || staffNotes) : null,
+          translated: true,
+        };
+      } catch {
+        return { customerNotes, staffNotes, translated: false }; // Graceful fallback
+      }
+    }),
+
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
