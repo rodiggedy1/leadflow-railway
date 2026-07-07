@@ -426,6 +426,84 @@ const en = {
     "v2.common.done": "Done ✓",
     "v2.common.notes": "Notes",
     "v2.common.moveInOut": "Move In/Out",
+
+    // Step builder labels
+    "v2.step.labelRequired": "NEXT REQUIRED ACTION",
+    "v2.step.labelObjective": "YOUR NEXT OBJECTIVE",
+    "v2.step.labelAddon": "PAID ADD-ON — PHOTO REQUIRED",
+    "v2.step.labelFinal": "FINAL STEP",
+    "v2.step.done": "DONE",
+    "v2.step.photosDone": "PHOTOS DONE",
+    "v2.step.photoDone": "PHOTO DONE",
+    "v2.step.bonusBadge": "+$5 Bonus",
+    "v2.step.addonBadge": "Paid Add-on",
+    "v2.step.bathroom": "Bathroom",
+    "v2.step.bathroomN": "Bathroom {{n}}",
+    // Navigate step
+    "v2.step.navigate.title": "Start Navigation",
+    "v2.step.navigate.desc": "Leave now. You'll arrive a few minutes early and the customer will get an automatic on-my-way text.",
+    "v2.step.navigate.why": "Being early protects the review before the cleaning even begins.",
+    "v2.step.navigate.cta": "START NAVIGATION",
+    // Greet step
+    "v2.step.greet.title": "Greet Customer",
+    "v2.step.greet.desc": "Introduce yourself, confirm the requested rooms, and ask if there are priority areas.",
+    "v2.step.greet.why": "A strong greeting reduces complaints because expectations are clear before cleaning starts.",
+    "v2.step.greet.cta": "CUSTOMER GREETED",
+    // Before photos step
+    "v2.step.beforePhotos.title": "Take Before Photos",
+    "v2.step.beforePhotos.desc": "Photograph kitchen, bathroom, and any problem areas before cleaning starts.",
+    "v2.step.beforePhotos.why": "Before photos protect the team and make the after photos more impressive.",
+    "v2.step.beforePhotos.cta": "BEFORE PHOTOS DONE",
+    // Checklist step
+    "v2.step.checklist.desc": "Complete this checklist item before moving on.",
+    "v2.step.checklist.why": "Paid add-ons are the easiest place to create a complaint if missed.",
+    // Bathroom photos step
+    "v2.step.bathroomPhotos.title": "Photograph {{label}}",
+    "v2.step.bathroomPhotos.desc": "Take after photos of {{label}} — toilet, sink, shower/tub, and floor.",
+    "v2.step.bathroomPhotos.coach": "Get a wide shot of the whole room, then close-ups of the toilet and sink.",
+    // Kitchen photos step
+    "v2.step.kitchenPhotos.title": "Photograph Kitchen",
+    "v2.step.kitchenPhotos.desc": "Take after photos of the kitchen — sink, counters, stovetop, and appliances.",
+    "v2.step.kitchenPhotos.coach": "Take a close-up of the sink and counters before leaving the kitchen.",
+    // Add-on photos step
+    "v2.step.addonPhotos.title": "Photograph: {{label}}",
+    "v2.step.addonPhotos.desc": "Customer paid for {{label}}. Take a clear after photo showing the completed work.",
+    "v2.step.addonPhotos.why": "Paid add-ons need photo proof — this is the #1 source of complaints when skipped.",
+    // After photos step
+    "v2.step.afterPhotos.title": "Take After Photos",
+    "v2.step.afterPhotos.desc": "Photograph every room you cleaned — bedrooms, living areas, hallways. Aim for 10+ photos total.",
+    "v2.step.afterPhotos.why": "After photos unlock the +$5 bonus and protect the team if a customer claims something was missed.",
+    "v2.step.afterPhotos.badge": "+$5 Bonus at 10 photos",
+    "v2.step.afterPhotos.cta": "AFTER PHOTOS DONE",
+    // Walk-through step
+    "v2.step.walkThrough.title": "Walk Customer Through Home",
+    "v2.step.walkThrough.desc": "This is the biggest predictor of 5-star reviews.",
+    "v2.step.walkThrough.coach": "Ask: 'Is there anything you'd like us to touch up while we're here?'",
+    "v2.step.walkThrough.cta": "WALK-THROUGH DONE",
+    // Sign-off step
+    "v2.step.signoff.title": "Customer Sign-off",
+    "v2.step.signoff.desc": "Walk the home together before finishing.",
+    "v2.step.signoff.cta": "COMPLETE SIGN-OFF",
+    // Next job step
+    "v2.step.nextJob.title": "Start Job #{{n}}",
+    "v2.step.nextJob.desc": "Everything is complete. Time for the next customer.",
+    "v2.step.nextJob.badge": "Next Job Unlocked",
+    "v2.step.nextJob.cta": "Start Job #{{n}} →",
+    // Job header
+    "v2.jobHeader.title": "Job for {{name}}",
+    "v2.jobHeader.subtitle": "Job {{index}} of {{total}} · {{time}} · {{address}}",
+    "v2.jobHeader.bathrooms": "bathrooms",
+    "v2.jobHeader.addons": "add-ons",
+    "v2.jobHeader.step": "step",
+    // Briefing chips
+    "v2.briefing.bathChip": "{{count}} bath",
+    "v2.briefing.bathChip_plural": "{{count}} baths",
+    // Photo oversize
+    "v2.photo.oversized": "{{count}} photo(s) exceed 8MB and were skipped",
+    // Schedule error
+    "v2.schedule.submitError": "Submission failed: {{msg}}",
+    // Completed reset
+    "v2.completed.reset": "Reset (dev)",
   },
 };
 
@@ -831,6 +909,84 @@ const es = {
     "v2.common.done": "Listo ✓",
     "v2.common.notes": "Notas",
     "v2.common.moveInOut": "Mudanza",
+
+    // Step builder labels
+    "v2.step.labelRequired": "SIGUIENTE ACCIÓN REQUERIDA",
+    "v2.step.labelObjective": "TU SIGUIENTE OBJETIVO",
+    "v2.step.labelAddon": "SERVICIO EXTRA — FOTO REQUERIDA",
+    "v2.step.labelFinal": "PASO FINAL",
+    "v2.step.done": "LISTO",
+    "v2.step.photosDone": "FOTOS LISTAS",
+    "v2.step.photoDone": "FOTO LISTA",
+    "v2.step.bonusBadge": "+$5 de Bono",
+    "v2.step.addonBadge": "Servicio Extra",
+    "v2.step.bathroom": "Baño",
+    "v2.step.bathroomN": "Baño {{n}}",
+    // Navigate step
+    "v2.step.navigate.title": "Iniciar Navegación",
+    "v2.step.navigate.desc": "Sál ahora. Llegarás unos minutos antes y el cliente recibirá un mensaje automático de que estás en camino.",
+    "v2.step.navigate.why": "Llegar temprano protege la reseña antes de que empiece la limpieza.",
+    "v2.step.navigate.cta": "INICIAR NAVEGACIÓN",
+    // Greet step
+    "v2.step.greet.title": "Saludar al Cliente",
+    "v2.step.greet.desc": "Preséntate, confirma las habitaciones solicitadas y pregunta si hay áreas prioritarias.",
+    "v2.step.greet.why": "Un buen saludo reduce las quejas porque las expectativas quedan claras antes de empezar.",
+    "v2.step.greet.cta": "CLIENTE SALUDADO",
+    // Before photos step
+    "v2.step.beforePhotos.title": "Tomar Fotos de Antes",
+    "v2.step.beforePhotos.desc": "Fotografiar cocina, baño y cualquier área problemática antes de comenzar la limpieza.",
+    "v2.step.beforePhotos.why": "Las fotos de antes protegen al equipo y hacen que las fotos de después sean más impresionantes.",
+    "v2.step.beforePhotos.cta": "FOTOS DE ANTES LISTAS",
+    // Checklist step
+    "v2.step.checklist.desc": "Completa este elemento de la lista antes de continuar.",
+    "v2.step.checklist.why": "Los servicios extra son el lugar más fácil para generar una queja si se omiten.",
+    // Bathroom photos step
+    "v2.step.bathroomPhotos.title": "Fotografiar {{label}}",
+    "v2.step.bathroomPhotos.desc": "Toma fotos del {{label}} después de limpiar — inodoro, lavabo, ducha/bañera y piso.",
+    "v2.step.bathroomPhotos.coach": "Toma una foto amplia de toda la habitación y luego primeros planos del inodoro y el lavabo.",
+    // Kitchen photos step
+    "v2.step.kitchenPhotos.title": "Fotografiar Cocina",
+    "v2.step.kitchenPhotos.desc": "Toma fotos de la cocina después de limpiar — fregadero, encimeras, estufa y electrodomésticos.",
+    "v2.step.kitchenPhotos.coach": "Toma un primer plano del fregadero y las encimeras antes de salir de la cocina.",
+    // Add-on photos step
+    "v2.step.addonPhotos.title": "Fotografiar: {{label}}",
+    "v2.step.addonPhotos.desc": "El cliente pagó por {{label}}. Toma una foto clara que muestre el trabajo terminado.",
+    "v2.step.addonPhotos.why": "Los servicios extra necesitan prueba fotográfica — esta es la principal fuente de quejas cuando se omite.",
+    // After photos step
+    "v2.step.afterPhotos.title": "Tomar Fotos de Después",
+    "v2.step.afterPhotos.desc": "Fotografiar cada habitación que limpiaste — dormitorios, áreas de estar, pasillos. Apunta a 10+ fotos en total.",
+    "v2.step.afterPhotos.why": "Las fotos de después desbloquean el bono de +$5 y protegen al equipo si un cliente dice que se omitió algo.",
+    "v2.step.afterPhotos.badge": "+$5 de Bono con 10 fotos",
+    "v2.step.afterPhotos.cta": "FOTOS DE DESPUÉS LISTAS",
+    // Walk-through step
+    "v2.step.walkThrough.title": "Recorrer el Hogar con el Cliente",
+    "v2.step.walkThrough.desc": "Este es el mayor predictor de reseñas de 5 estrellas.",
+    "v2.step.walkThrough.coach": "Pregunta: '¿Hay algo que le gustaría que retocemos mientras estamos aquí?'",
+    "v2.step.walkThrough.cta": "RECORRIDO TERMINADO",
+    // Sign-off step
+    "v2.step.signoff.title": "Aprobación del Cliente",
+    "v2.step.signoff.desc": "Recorran el hogar juntos antes de terminar.",
+    "v2.step.signoff.cta": "COMPLETAR APROBACIÓN",
+    // Next job step
+    "v2.step.nextJob.title": "Iniciar Trabajo #{{n}}",
+    "v2.step.nextJob.desc": "Todo está completo. Es hora del siguiente cliente.",
+    "v2.step.nextJob.badge": "Siguiente Trabajo Desbloqueado",
+    "v2.step.nextJob.cta": "Iniciar Trabajo #{{n}} →",
+    // Job header
+    "v2.jobHeader.title": "Trabajo para {{name}}",
+    "v2.jobHeader.subtitle": "Trabajo {{index}} de {{total}} · {{time}} · {{address}}",
+    "v2.jobHeader.bathrooms": "baños",
+    "v2.jobHeader.addons": "extras",
+    "v2.jobHeader.step": "paso",
+    // Briefing chips
+    "v2.briefing.bathChip": "{{count}} baño",
+    "v2.briefing.bathChip_plural": "{{count}} baños",
+    // Photo oversize
+    "v2.photo.oversized": "{{count}} foto(s) superan los 8MB y fueron omitidas",
+    // Schedule error
+    "v2.schedule.submitError": "Error al enviar: {{msg}}",
+    // Completed reset
+    "v2.completed.reset": "Reiniciar (dev)",
   },
 };
 
@@ -1236,6 +1392,84 @@ const pt = {
     "v2.common.done": "Pronto ✓",
     "v2.common.notes": "Notas",
     "v2.common.moveInOut": "Mudança",
+
+    // Step builder labels
+    "v2.step.labelRequired": "PRÓXIMA AÇÃO NECESSÁRIA",
+    "v2.step.labelObjective": "SEU PRÓXIMO OBJETIVO",
+    "v2.step.labelAddon": "SERVIÇO EXTRA — FOTO NECESSÁRIA",
+    "v2.step.labelFinal": "PASSO FINAL",
+    "v2.step.done": "PRONTO",
+    "v2.step.photosDone": "FOTOS PRONTAS",
+    "v2.step.photoDone": "FOTO PRONTA",
+    "v2.step.bonusBadge": "+$5 de Bônus",
+    "v2.step.addonBadge": "Serviço Extra",
+    "v2.step.bathroom": "Banheiro",
+    "v2.step.bathroomN": "Banheiro {{n}}",
+    // Navigate step
+    "v2.step.navigate.title": "Iniciar Navegação",
+    "v2.step.navigate.desc": "Saia agora. Você chegará alguns minutos antes e o cliente receberá uma mensagem automática de que está a caminho.",
+    "v2.step.navigate.why": "Chegar cedo protege a avaliação antes mesmo de a limpeza começar.",
+    "v2.step.navigate.cta": "INICIAR NAVEGAÇÃO",
+    // Greet step
+    "v2.step.greet.title": "Cumprimentar o Cliente",
+    "v2.step.greet.desc": "Apresente-se, confirme os cômodos solicitados e pergunte se há áreas prioritárias.",
+    "v2.step.greet.why": "Uma boa recepção reduz reclamações porque as expectativas ficam claras antes de começar.",
+    "v2.step.greet.cta": "CLIENTE CUMPRIMENTADO",
+    // Before photos step
+    "v2.step.beforePhotos.title": "Tirar Fotos do Antes",
+    "v2.step.beforePhotos.desc": "Fotografar cozinha, banheiro e qualquer área problemática antes de começar a limpeza.",
+    "v2.step.beforePhotos.why": "As fotos do antes protegem a equipe e tornam as fotos do depois mais impressionantes.",
+    "v2.step.beforePhotos.cta": "FOTOS DO ANTES PRONTAS",
+    // Checklist step
+    "v2.step.checklist.desc": "Conclua este item da lista antes de continuar.",
+    "v2.step.checklist.why": "Os serviços extras são o lugar mais fácil de gerar uma reclamação se forem ignorados.",
+    // Bathroom photos step
+    "v2.step.bathroomPhotos.title": "Fotografar {{label}}",
+    "v2.step.bathroomPhotos.desc": "Tire fotos do {{label}} após limpar — vaso sanitário, pia, chuveiro/bañera e piso.",
+    "v2.step.bathroomPhotos.coach": "Tire uma foto ampla de todo o cômodo e depois closes do vaso e da pia.",
+    // Kitchen photos step
+    "v2.step.kitchenPhotos.title": "Fotografar Cozinha",
+    "v2.step.kitchenPhotos.desc": "Tire fotos da cozinha após limpar — pia, bancadas, fogão e eletrodomésticos.",
+    "v2.step.kitchenPhotos.coach": "Tire um close da pia e das bancadas antes de sair da cozinha.",
+    // Add-on photos step
+    "v2.step.addonPhotos.title": "Fotografar: {{label}}",
+    "v2.step.addonPhotos.desc": "O cliente pagou por {{label}}. Tire uma foto clara mostrando o trabalho concluído.",
+    "v2.step.addonPhotos.why": "Serviços extras precisam de prova fotográfica — esta é a principal fonte de reclamações quando ignorada.",
+    // After photos step
+    "v2.step.afterPhotos.title": "Tirar Fotos do Depois",
+    "v2.step.afterPhotos.desc": "Fotografar cada cômodo que você limpou — quartos, salas, corredores. Mire em 10+ fotos no total.",
+    "v2.step.afterPhotos.why": "As fotos do depois desbloqueiam o bônus de +$5 e protegem a equipe se o cliente alegar que algo foi perdido.",
+    "v2.step.afterPhotos.badge": "+$5 de Bônus com 10 fotos",
+    "v2.step.afterPhotos.cta": "FOTOS DO DEPOIS PRONTAS",
+    // Walk-through step
+    "v2.step.walkThrough.title": "Percorrer a Casa com o Cliente",
+    "v2.step.walkThrough.desc": "Este é o maior preditor de avaliações de 5 estrelas.",
+    "v2.step.walkThrough.coach": "Pergunte: 'Há algo que gostaria que a gente retocasse enquanto estamos aqui?'",
+    "v2.step.walkThrough.cta": "PERCURSO CONCLUÍDO",
+    // Sign-off step
+    "v2.step.signoff.title": "Aprovação do Cliente",
+    "v2.step.signoff.desc": "Percorram a casa juntos antes de terminar.",
+    "v2.step.signoff.cta": "CONCLUIR APROVAÇÃO",
+    // Next job step
+    "v2.step.nextJob.title": "Iniciar Serviço #{{n}}",
+    "v2.step.nextJob.desc": "Tudo está concluído. Hora do próximo cliente.",
+    "v2.step.nextJob.badge": "Próximo Serviço Desbloqueado",
+    "v2.step.nextJob.cta": "Iniciar Serviço #{{n}} →",
+    // Job header
+    "v2.jobHeader.title": "Serviço para {{name}}",
+    "v2.jobHeader.subtitle": "Serviço {{index}} de {{total}} · {{time}} · {{address}}",
+    "v2.jobHeader.bathrooms": "banheiros",
+    "v2.jobHeader.addons": "extras",
+    "v2.jobHeader.step": "passo",
+    // Briefing chips
+    "v2.briefing.bathChip": "{{count}} banheiro",
+    "v2.briefing.bathChip_plural": "{{count}} banheiros",
+    // Photo oversize
+    "v2.photo.oversized": "{{count}} foto(s) ultrapassam 8MB e foram ignoradas",
+    // Schedule error
+    "v2.schedule.submitError": "Falha ao enviar: {{msg}}",
+    // Completed reset
+    "v2.completed.reset": "Reiniciar (dev)",
   },
 };
 

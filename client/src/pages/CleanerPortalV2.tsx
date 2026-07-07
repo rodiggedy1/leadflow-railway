@@ -213,43 +213,43 @@ const EXTRAS_LABEL: Record<string, string> = Object.fromEntries(
 
 // ── Dynamic Step Builder ──────────────────────────────────────────────────────
 
-function buildStepsFromJob(job: PortalJob): Step[] {
+function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string, unknown>) => string): Step[] {
   const steps: Step[] = [];
 
   // 1. Navigate
   steps.push({
     id: "navigate",
     type: "navigate",
-    label: "NEXT REQUIRED ACTION",
+    label: t('v2.step.labelRequired'),
     emoji: "🚗",
-    title: "Start Navigation",
-    description: "Leave now. You'll arrive a few minutes early and the customer will get an automatic on-my-way text.",
-    whyItMatters: "Being early protects the review before the cleaning even begins.",
-    ctaText: "START NAVIGATION",
+    title: t('v2.step.navigate.title'),
+    description: t('v2.step.navigate.desc'),
+    whyItMatters: t('v2.step.navigate.why'),
+    ctaText: t('v2.step.navigate.cta'),
   });
 
   // 2. Greet
   steps.push({
     id: "greet",
     type: "greet",
-    label: "NEXT REQUIRED ACTION",
+    label: t('v2.step.labelRequired'),
     emoji: "👋",
-    title: "Greet Customer",
-    description: "Introduce yourself, confirm the requested rooms, and ask if there are priority areas.",
-    whyItMatters: "A strong greeting reduces complaints because expectations are clear before cleaning starts.",
-    ctaText: "CUSTOMER GREETED",
+    title: t('v2.step.greet.title'),
+    description: t('v2.step.greet.desc'),
+    whyItMatters: t('v2.step.greet.why'),
+    ctaText: t('v2.step.greet.cta'),
   });
 
   // 3. Before photos
   steps.push({
     id: "before_photos",
     type: "before_photos",
-    label: "NEXT REQUIRED ACTION",
+    label: t('v2.step.labelRequired'),
     emoji: "📷",
-    title: "Take Before Photos",
-    description: "Photograph kitchen, bathroom, and any problem areas before cleaning starts.",
-    whyItMatters: "Before photos protect the team and make the after photos more impressive.",
-    ctaText: "BEFORE PHOTOS DONE",
+    title: t('v2.step.beforePhotos.title'),
+    description: t('v2.step.beforePhotos.desc'),
+    whyItMatters: t('v2.step.beforePhotos.why'),
+    ctaText: t('v2.step.beforePhotos.cta'),
     photoType: "before",
   });
 
@@ -259,28 +259,28 @@ function buildStepsFromJob(job: PortalJob): Step[] {
     steps.push({
       id: `checklist_${safeId}`,
       type: "checklist_item",
-      label: "NEXT REQUIRED ACTION",
+      label: t('v2.step.labelRequired'),
       emoji: "🧽",
       title: item.text,
-      description: "Complete this checklist item before moving on.",
-      whyItMatters: "Paid add-ons are the easiest place to create a complaint if missed.",
-      ctaText: "DONE",
+      description: t('v2.step.checklist.desc'),
+      whyItMatters: t('v2.step.checklist.why'),
+      ctaText: t('v2.step.done'),
     });
   }
 
   // 5. Bathroom photo steps (one per bathroom)
   for (let i = 1; i <= job.bathrooms; i++) {
-    const label = job.bathrooms > 1 ? `Bathroom ${i}` : "Bathroom";
+    const bathroomLabel = job.bathrooms > 1 ? t('v2.step.bathroomN', { n: i }) : t('v2.step.bathroom');
     steps.push({
       id: `bathroom_${i}_photos`,
       type: "photo_objective",
-      label: "YOUR NEXT OBJECTIVE",
+      label: t('v2.step.labelObjective'),
       emoji: "🚿",
-      title: `Photograph ${label}`,
-      description: `Take after photos of ${label.toLowerCase()} — toilet, sink, shower/tub, and floor.`,
-      aiCoach: "Get a wide shot of the whole room, then close-ups of the toilet and sink.",
-      badge: "+$5 Bonus",
-      ctaText: "PHOTOS DONE",
+      title: t('v2.step.bathroomPhotos.title', { label: bathroomLabel }),
+      description: t('v2.step.bathroomPhotos.desc', { label: bathroomLabel }),
+      aiCoach: t('v2.step.bathroomPhotos.coach'),
+      badge: t('v2.step.bonusBadge'),
+      ctaText: t('v2.step.photosDone'),
       photoType: "after",
     });
   }
@@ -289,13 +289,13 @@ function buildStepsFromJob(job: PortalJob): Step[] {
   steps.push({
     id: "kitchen_photos",
     type: "photo_objective",
-    label: "YOUR NEXT OBJECTIVE",
+    label: t('v2.step.labelObjective'),
     emoji: "🍳",
-    title: "Photograph Kitchen",
-    description: "Take after photos of the kitchen — sink, counters, stovetop, and appliances.",
-    aiCoach: "Take a close-up of the sink and counters before leaving the kitchen.",
-    badge: "+$5 Bonus",
-    ctaText: "PHOTOS DONE",
+    title: t('v2.step.kitchenPhotos.title'),
+    description: t('v2.step.kitchenPhotos.desc'),
+    aiCoach: t('v2.step.kitchenPhotos.coach'),
+    badge: t('v2.step.bonusBadge'),
+    ctaText: t('v2.step.photosDone'),
     photoType: "after",
   });
 
@@ -306,13 +306,13 @@ function buildStepsFromJob(job: PortalJob): Step[] {
     steps.push({
       id: `extra_${extraKey}_photos`,
       type: "photo_objective",
-      label: "PAID ADD-ON — PHOTO REQUIRED",
+      label: t('v2.step.labelAddon'),
       emoji: "📸",
-      title: `Photograph: ${label}`,
-      description: `Customer paid for ${label}. Take a clear after photo showing the completed work.`,
-      whyItMatters: "Paid add-ons need photo proof — this is the #1 source of complaints when skipped.",
-      badge: "Paid Add-on",
-      ctaText: "PHOTO DONE",
+      title: t('v2.step.addonPhotos.title', { label }),
+      description: t('v2.step.addonPhotos.desc', { label }),
+      whyItMatters: t('v2.step.addonPhotos.why'),
+      badge: t('v2.step.addonBadge'),
+      ctaText: t('v2.step.photoDone'),
       photoType: "after",
     });
   }
@@ -321,13 +321,13 @@ function buildStepsFromJob(job: PortalJob): Step[] {
   steps.push({
     id: "after_photos",
     type: "after_photos",
-    label: "NEXT REQUIRED ACTION",
+    label: t('v2.step.labelRequired'),
     emoji: "📸",
-    title: "Take After Photos",
-    description: "Photograph every room you cleaned — bedrooms, living areas, hallways. Aim for 10+ photos total.",
-    whyItMatters: "After photos unlock the +$5 bonus and protect the team if a customer claims something was missed.",
-    badge: "+$5 Bonus at 10 photos",
-    ctaText: "AFTER PHOTOS DONE",
+    title: t('v2.step.afterPhotos.title'),
+    description: t('v2.step.afterPhotos.desc'),
+    whyItMatters: t('v2.step.afterPhotos.why'),
+    badge: t('v2.step.afterPhotos.badge'),
+    ctaText: t('v2.step.afterPhotos.cta'),
     photoType: "after",
   });
 
@@ -335,23 +335,23 @@ function buildStepsFromJob(job: PortalJob): Step[] {
   steps.push({
     id: "walk_through",
     type: "walk_through",
-    label: "YOUR NEXT OBJECTIVE",
+    label: t('v2.step.labelObjective'),
     emoji: "😊",
-    title: "Walk Customer Through Home",
-    description: "This is the biggest predictor of 5-star reviews.",
-    aiCoach: "Ask: 'Is there anything you'd like us to touch up while we're here?'",
-    ctaText: "WALK-THROUGH DONE",
+    title: t('v2.step.walkThrough.title'),
+    description: t('v2.step.walkThrough.desc'),
+    aiCoach: t('v2.step.walkThrough.coach'),
+    ctaText: t('v2.step.walkThrough.cta'),
   });
 
   // 10. Sign-off
   steps.push({
     id: "signoff",
     type: "signoff",
-    label: "FINAL STEP",
+    label: t('v2.step.labelFinal'),
     emoji: "✍️",
-    title: "Customer Sign-off",
-    description: "Walk the home together before finishing.",
-    ctaText: "COMPLETE SIGN-OFF",
+    title: t('v2.step.signoff.title'),
+    description: t('v2.step.signoff.desc'),
+    ctaText: t('v2.step.signoff.cta'),
   });
 
   // 11. Next job (only if more jobs today)
@@ -359,12 +359,12 @@ function buildStepsFromJob(job: PortalJob): Step[] {
     steps.push({
       id: "next_job",
       type: "next_job",
-      label: "YOUR NEXT OBJECTIVE",
+      label: t('v2.step.labelObjective'),
       emoji: "🚀",
-      title: `Start Job #${job.jobIndex + 1}`,
-      description: `Everything is complete. Time for the next customer.`,
-      badge: "Next Job Unlocked",
-      ctaText: `Start Job #${job.jobIndex + 1} →`,
+      title: t('v2.step.nextJob.title', { n: job.jobIndex + 1 }),
+      description: t('v2.step.nextJob.desc'),
+      badge: t('v2.step.nextJob.badge'),
+      ctaText: t('v2.step.nextJob.cta', { n: job.jobIndex + 1 }),
     });
   }
 
@@ -386,27 +386,28 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
 }
 
 function JobHeader({ job, stepIndex, totalSteps }: { job: PortalJob; stepIndex: number; totalSteps: number }) {
+  const { t } = useTranslation();
   return (
     <div className="px-4 pt-5 pb-3 bg-slate-900">
       <h1 className="text-2xl font-black text-white leading-tight">
-        Job for {job.customerName}
+        {t('v2.jobHeader.title', { name: job.customerName })}
       </h1>
       <p className="text-slate-400 text-sm mt-0.5">
-        Job {job.jobIndex} of {job.totalJobsToday} · {job.time} · {job.address.split(",")[0]}
+        {t('v2.jobHeader.subtitle', { index: job.jobIndex, total: job.totalJobsToday, time: job.time, address: job.address.split(',')[0] })}
       </p>
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-2 mt-3">
         <div className="bg-slate-800 rounded-xl p-3 text-center">
           <div className="text-xl font-black text-white">{job.bathrooms}🛁</div>
-          <div className="text-xs text-slate-400 mt-0.5">bathrooms</div>
+          <div className="text-xs text-slate-400 mt-0.5">{t('v2.jobHeader.bathrooms')}</div>
         </div>
         <div className="bg-slate-800 rounded-xl p-3 text-center">
           <div className="text-xl font-black text-white">{job.extras.length > 0 ? `+${job.extras.length}` : "—"}</div>
-          <div className="text-xs text-slate-400 mt-0.5">add-ons</div>
+          <div className="text-xs text-slate-400 mt-0.5">{t('v2.jobHeader.addons')}</div>
         </div>
         <div className="bg-slate-800 rounded-xl p-3 text-center">
           <div className="text-xl font-black text-white">{stepIndex + 1}/{totalSteps}</div>
-          <div className="text-xs text-slate-400 mt-0.5">step</div>
+          <div className="text-xs text-slate-400 mt-0.5">{t('v2.jobHeader.step')}</div>
         </div>
       </div>
       {/* Progress bar */}
@@ -779,7 +780,7 @@ function PhotoStepCard({ step, onComplete, cleanerJobId, completedJobId }: {
     if (files.length === 0) return;
     const oversized = files.filter(f => f.size > 8 * 1024 * 1024);
     const valid = files.filter(f => f.size <= 8 * 1024 * 1024);
-    if (oversized.length > 0) alert(`${oversized.length} photo(s) exceed 8MB and were skipped`);
+    if (oversized.length > 0) alert(t('v2.photo.oversized', { count: oversized.length }));
     if (valid.length === 0) return;
 
     setUploading(true);
@@ -1230,7 +1231,7 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
         onClick={() => { try { sessionStorage.clear(); } catch {} window.location.reload(); }}
         className="mt-3 text-slate-600 text-xs underline"
       >
-        Reset (dev)
+        {t('v2.completed.reset')}
       </button>
     </div>
   );
@@ -1240,7 +1241,7 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
 
 function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string; onBackToSchedule?: () => void }) {
   const { t } = useTranslation();
-  const steps = buildStepsFromJob(job);
+  const steps = buildStepsFromJob(job, t);
 
   const SESSION_KEY = `portal_v2_step_${job.cleanerJobId}`;
   const COMPLETED_KEY = `portal_v2_completed_${job.cleanerJobId}`;
@@ -1409,9 +1410,10 @@ function WeeklySchedulePrompt({
     setSeeded(true);
   }, [savedScheduleQuery.data, seeded]);
 
+  const { t: tSchedule } = useTranslation();
   const submitWeeklySchedule = trpc.cleaner.submitWeeklySchedule.useMutation({
     onSuccess: () => { setStep('confirmed'); setTimeout(onSubmitted, 2000); },
-    onError: (err) => toast.error(`Submission failed: ${err.message}`),
+    onError: (err) => toast.error(tSchedule('v2.schedule.submitError', { msg: err.message })),
   });
 
   const toggleDay = (day: Day) => setSchedule(s => ({ ...s, [day]: !s[day] }));
@@ -1765,9 +1767,9 @@ function DayBriefing({
                     </div>
                     {!isDone && (job.bathrooms > 0 || (job.extras?.length ?? 0) > 0) && (
                       <div className="flex flex-wrap gap-1.5 pl-8">
-                        {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{job.bathrooms} bath{job.bathrooms !== 1 ? 's' : ''}</span>}
+                        {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{t('v2.briefing.bathChip', { count: job.bathrooms })}</span>}
                         {(job.extras ?? []).includes('move_in_move_out') && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">{t('v2.common.moveInOut')}</span>}
-                        {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{e.replace(/_/g, ' ')}</span>)}
+                        {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{EXTRAS_LABEL[e] ?? e.replace(/_/g, ' ')}</span>)}
                       </div>
                     )}
                     {!isDone && (job.customerNotes?.trim() || job.staffNotes?.trim()) && (
