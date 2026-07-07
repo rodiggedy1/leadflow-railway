@@ -65,12 +65,46 @@ export const STREAK_TARGET = DEFAULT_PAY_RULES.streakTarget;
  * Uses LLM to parse customerNotes and staffNotes into a unified checklist of actionable tasks.
  * Returns null if no actionable tasks are found.
  */
+/** Envelope stored in checklistItems JSON column */
+export type ChecklistEnvelope = {
+  sourceLang: string; // ISO 639-1 language the items were generated in
+  items: Array<{ text: string; checked: boolean }>;
+};
+
+/**
+ * Parse a raw checklistItems JSON string from the DB.
+ * Handles both legacy flat-array format and the new envelope format.
+ */
+export function parseChecklistEnvelope(raw: string | null): ChecklistEnvelope | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    // New envelope format: { sourceLang, items }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && Array.isArray(parsed.items)) {
+      return { sourceLang: parsed.sourceLang ?? 'en', items: parsed.items };
+    }
+    // Legacy flat-array format: [{ text, checked }]
+    if (Array.isArray(parsed)) {
+      return { sourceLang: 'en', items: parsed };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 async function parseChecklistFromNotes(
   customerNotes: string | null,
-  staffNotes: string | null
-): Promise<Array<{ text: string; checked: boolean }> | null> {
+  staffNotes: string | null,
+  language = 'en'
+): Promise<ChecklistEnvelope | null> {
   const combined = [customerNotes, staffNotes].filter(Boolean).join("\n\n");
   if (!combined || combined.trim().length < 5) return null;
+  const langInstructions: Record<string, string> = {
+    es: "Write every task in Spanish (Español). ",
+    pt: "Write every task in Portuguese (Português). ",
+  };
+  const langHint = langInstructions[language] ?? "";
   try {
     const response = await invokeLLM({
       messages: [
@@ -79,6 +113,7 @@ async function parseChecklistFromNotes(
           content:
             "You are a cleaning job assistant. Extract a list of discrete, actionable tasks from the provided notes for a cleaning crew. " +
             "The notes may include customer instructions and internal staff notes — combine them into one unified checklist. " +
+            langHint +
             "Return ONLY a JSON object with a \"tasks\" array of strings. Each string should be a clear, concise action item. " +
             "If the notes contain no actionable tasks (e.g. just greetings, compliments, or purely informational context), return {\"tasks\": []}. " +
             "Do not include vague items. Fold context into the relevant task (e.g. 'Clean shower door \u2014 use blue spray under sink').",
@@ -111,7 +146,8 @@ async function parseChecklistFromNotes(
     if (!content) return null;
     const parsed = JSON.parse(content as string) as { tasks: string[] };
     if (!parsed.tasks || parsed.tasks.length === 0) return null;
-    return parsed.tasks.map((text: string) => ({ text, checked: false }));
+    const items = parsed.tasks.map((text: string) => ({ text, checked: false }));
+    return { sourceLang: language, items };
   } catch {
     return null;
   }
@@ -634,26 +670,24 @@ export async function handleRatingReply(
 export async function resolveCleanerProfile(
   db: Awaited<ReturnType<typeof getDb>>,
   team: { id: number; title: string; share: number }
-): Promise<{ id: number; payPercent: string | null }> {
+): Promise<{ id: number; payPercent: string | null; language: string }> {
   if (!db) throw new Error("DB unavailable");
-
   // ── Step 1: ID-based lookup (only for real teams) ──────────────────────────
   if (team.id > 0) {
     const [byId] = await db
-      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
+      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent, language: cleanerProfiles.language })
       .from(cleanerProfiles)
       .where(eq(cleanerProfiles.launch27TeamId, team.id))
       .limit(1);
     if (byId) return byId;
   }
-
   // ── Step 2: Name fallback + transactional self-heal ───────────────────────
   // Wrapped in a transaction so two concurrent sync workers can't both try to
   // write launch27TeamId to the same row simultaneously.
   const healed = await (db as any).transaction(async (tx: typeof db) => {
     const normalizedTitle = team.title.trim().toLowerCase();
     const [nameMatch] = await (tx as any)
-      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent })
+      .select({ id: cleanerProfiles.id, payPercent: cleanerProfiles.payPercent, language: cleanerProfiles.language })
       .from(cleanerProfiles)
       .where(and(sql`LOWER(TRIM(${cleanerProfiles.name})) = ${normalizedTitle}`, isNull(cleanerProfiles.launch27TeamId)))
       .limit(1);
@@ -689,7 +723,7 @@ export async function resolveCleanerProfile(
     isActive: 1,
     launch27TeamId: team.id > 0 ? team.id : null,
   });
-  return { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null };
+  return { id: (ins as any).insertId as number, payPercent: team.share > 0 ? String(team.share) : null, language: 'en' };
 }
 
 /**
@@ -734,7 +768,7 @@ export async function runSyncTodayJobs(dateStr: string): Promise<{
           .limit(1);
         const parsedChecklist =
           booking.customerNotes || booking.staffNotes
-            ? await parseChecklistFromNotes(booking.customerNotes || null, booking.staffNotes || null)
+            ? await parseChecklistFromNotes(booking.customerNotes || null, booking.staffNotes || null, profile.language ?? 'en')
             : null;
         const jobData = {
           bookingId: booking.id,
@@ -1392,9 +1426,7 @@ export const qualityRouter = router({
           signatureUrl: (cj as any).signatureUrl ?? null,
           customerResponse: (cj as any).customerResponse ?? null,
           customerNotHome: (cj as any).customerNotHome === 1,
-          checklistItems: cj.checklistItems
-            ? (JSON.parse(cj.checklistItems) as Array<{ text: string; checked: boolean }>)
-            : null,
+          checklistItems: parseChecklistEnvelope(cj.checklistItems)?.items ?? null,
           appliedCustomRules: appliedRules
             .filter((r) => r.cleanerJobId === cj.id)
             .map((r) => ({

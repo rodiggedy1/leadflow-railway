@@ -206,14 +206,67 @@ const PHYSICAL_EXTRAS_PHOTO_KEYS = new Set([
   "pool_deck",
 ]);
 
-/** Build the extras label map once from the shared catalog */
-const EXTRAS_LABEL: Record<string, string> = Object.fromEntries(
+/** Translated extras labels — ES and PT translations for all known extra keys */
+const EXTRAS_LABELS_ES: Record<string, string> = {
+  clean_inside_cabinets:     "Limpiar Dentro de los Gabinetes",
+  clean_inside_empty_fridge: "Limpiar Refrigerador Vacío",
+  clean_inside_full_fridge:  "Limpiar Refrigerador Lleno",
+  clean_inside_oven:         "Limpiar Horno por Dentro",
+  clean_interior_windows:    "Limpiar Ventanas Interiores",
+  clean_finished_basement:   "Limpiar Sótano Terminado",
+  green_cleaning:            "Limpieza Verde",
+  move_in_move_out:          "Mudanza",
+  two_hours_organizing:      "2 Horas de Organización",
+  load_of_laundry:           "Carga de Ropa",
+  i_have_pets:               "Tengo Mascotas",
+  wipe_walls:                "Limpiar Paredes",
+  sweep_garage:              "Barrer Garaje",
+  balcony_sweep:             "Barrer Balcón",
+  home_concierge:            "Conserjería del Hogar",
+  same_day_booking:          "Reserva el Mismo Día",
+  clean_inside_microwave:    "Limpiar Microondas por Dentro",
+  shed_pool_house:           "Cobertizo / Casa de Piscina",
+  wash_dishes:               "Lavar Platos",
+  pool_deck:                 "Terraza de Piscina",
+};
+const EXTRAS_LABELS_PT: Record<string, string> = {
+  clean_inside_cabinets:     "Limpar Dentro dos Armários",
+  clean_inside_empty_fridge: "Limpar Geladeira Vazia",
+  clean_inside_full_fridge:  "Limpar Geladeira Cheia",
+  clean_inside_oven:         "Limpar Forno por Dentro",
+  clean_interior_windows:    "Limpar Janelas Internas",
+  clean_finished_basement:   "Limpar Porão Acabado",
+  green_cleaning:            "Limpeza Verde",
+  move_in_move_out:          "Mudança",
+  two_hours_organizing:      "2 Horas de Organização",
+  load_of_laundry:           "Carga de Roupa",
+  i_have_pets:               "Tenho Animais de Estimação",
+  wipe_walls:                "Limpar Paredes",
+  sweep_garage:              "Varrer Garagem",
+  balcony_sweep:             "Varrer Varanda",
+  home_concierge:            "Concierge Residencial",
+  same_day_booking:          "Reserva no Mesmo Dia",
+  clean_inside_microwave:    "Limpar Micro-ondas por Dentro",
+  shed_pool_house:           "Galpão / Casa da Piscina",
+  wash_dishes:               "Lavar Louça",
+  pool_deck:                 "Deck da Piscina",
+};
+/** English fallback map from the shared catalog */
+const EXTRAS_LABEL_EN: Record<string, string> = Object.fromEntries(
   EXTRAS_LIST.map(e => [e.key, e.label])
 );
+/** Return the translated label for an extra key given the current i18n language */
+function getExtraLabel(key: string, lang: string): string {
+  if (lang === 'es') return EXTRAS_LABELS_ES[key] ?? EXTRAS_LABEL_EN[key] ?? key.replace(/_/g, ' ');
+  if (lang === 'pt') return EXTRAS_LABELS_PT[key] ?? EXTRAS_LABEL_EN[key] ?? key.replace(/_/g, ' ');
+  return EXTRAS_LABEL_EN[key] ?? key.replace(/_/g, ' ');
+}
+/** Legacy alias for places that don't have language context yet */
+const EXTRAS_LABEL: Record<string, string> = EXTRAS_LABEL_EN;
 
 // ── Dynamic Step Builder ──────────────────────────────────────────────────────
 
-function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string, unknown>) => string): Step[] {
+function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string, unknown>) => string, lang = 'en'): Step[] {
   const steps: Step[] = [];
 
   // 1. Navigate
@@ -302,7 +355,7 @@ function buildStepsFromJob(job: PortalJob, t: (key: string, opts?: Record<string
   // 7. Extra-specific photo steps (only for physical extras that need documentation)
   for (const extraKey of job.extras) {
     if (!PHYSICAL_EXTRAS_PHOTO_KEYS.has(extraKey)) continue;
-    const label = EXTRAS_LABEL[extraKey] ?? extraKey.replace(/_/g, " ");
+    const label = getExtraLabel(extraKey, lang);
     steps.push({
       id: `extra_${extraKey}_photos`,
       type: "photo_objective",
@@ -1240,8 +1293,27 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
 // ── Single Job Runner ─────────────────────────────────────────────────────────
 
 function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: PortalJob; onNextJob?: () => void; nextJobName?: string; onBackToSchedule?: () => void }) {
-  const { t } = useTranslation();
-  const steps = buildStepsFromJob(job, t);
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
+
+  // Fetch translated checklist items for the cleaner's current language.
+  // The server owns the translation logic — it generates in the right language for new jobs,
+  // and translates existing English items on demand via a single LLM call.
+  // React Query caches the result for the session (staleTime: 30min) so we don't re-translate on every render.
+  const { data: checklistData } = trpc.cleaner.getChecklistForLanguage.useQuery(
+    { cleanerJobId: job.cleanerJobId!, lang },
+    {
+      enabled: !!job.cleanerJobId && job.checklistItems.length > 0,
+      staleTime: 30 * 60 * 1000, // 30 minutes — translation is stable for a session
+      retry: false, // Don't retry on failure — fall back to original items
+    }
+  );
+
+  // Use translated items if available, fall back to original items from the job
+  const effectiveChecklistItems = checklistData?.items ?? job.checklistItems;
+  const effectiveJob = { ...job, checklistItems: effectiveChecklistItems };
+
+  const steps = buildStepsFromJob(effectiveJob, t, lang);
 
   const SESSION_KEY = `portal_v2_step_${job.cleanerJobId}`;
   const COMPLETED_KEY = `portal_v2_completed_${job.cleanerJobId}`;
@@ -1651,7 +1723,7 @@ function DayBriefing({
   onStart: () => void;
   onJobSelect?: (idx: number) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'week'>('today');
   const [notesJob, setNotesJob] = useState<{ customerNotes: string | null; staffNotes: string | null } | null>(null);
   const weekQuery = trpc.cleaner.getMyJobsWeek.useQuery(undefined, { staleTime: 60_000, throwOnError: false });
@@ -1769,7 +1841,7 @@ function DayBriefing({
                       <div className="flex flex-wrap gap-1.5 pl-8">
                         {job.bathrooms > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-slate-700 text-slate-300 border border-slate-600/50">{t('v2.briefing.bathChip', { count: job.bathrooms })}</span>}
                         {(job.extras ?? []).includes('move_in_move_out') && <span className="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300 border border-amber-700/50 font-semibold">{t('v2.common.moveInOut')}</span>}
-                        {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{EXTRAS_LABEL[e] ?? e.replace(/_/g, ' ')}</span>)}
+                        {(job.extras ?? []).filter(e => e !== 'move_in_move_out').map(e => <span key={e} className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-700/40">{getExtraLabel(e, i18n.language)}</span>)}
                       </div>
                     )}
                     {!isDone && (job.customerNotes?.trim() || job.staffNotes?.trim()) && (

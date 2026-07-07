@@ -20,12 +20,28 @@ import { publicProcedure, cleanerProcedure, agentProcedure, opsChatProcedure, ro
 import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
-import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms, sendClientEtaUpdateSms } from "./fieldMgmtEngine";
+import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
 import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
 import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
+import { invokeLLM } from "./_core/llm";
+import { parseChecklistEnvelope } from "./qualityRouter";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a YYYY-MM-DD date string in the America/New_York timezone.
+ * offsetDays=0 → today ET, offsetDays=1 → tomorrow ET, etc.
+ * Uses Intl.DateTimeFormat (DST-aware) instead of toISOString() which is UTC-only.
+ */
+function getEtDateStr(offsetDays = 0): string {
+  const raw = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(Date.now() + offsetDays * 86_400_000));
+  const [m, d, y] = raw.split("/");
+  return `${y}-${m}-${d}`;
+}
 
 // ── Router ────────────────────────────────────────────
 
@@ -165,9 +181,7 @@ export const cleanerRouter = router({
 
       return jobs.map(job => ({
         ...job,
-        checklistItems: job.checklistItems
-          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
-          : null,
+        checklistItems: parseChecklistEnvelope(job.checklistItems)?.items ?? null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
         customRules: appliedCustomRules
           .filter(r => r.cleanerJobId === job.id)
@@ -276,9 +290,7 @@ export const cleanerRouter = router({
 
       return jobs.map(job => ({
         ...job,
-        checklistItems: job.checklistItems
-          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
-          : null,
+        checklistItems: parseChecklistEnvelope(job.checklistItems)?.items ?? null,
         photos: photos.filter(p => p.cleanerJobId === job.id),
       }));
     }),
@@ -697,20 +709,11 @@ export const cleanerRouter = router({
       }
 
       if (input.status === "on_the_way") {
-        // sendClientOnTheWaySms handles the initial SMS (guarded by tryClaimStep — no-op on repeat).
-        // sendClientEtaUpdateSms fires ONLY when etaLabel is present, which means the cleaner
-        // tapped "Update ETA" (not the first "On the Way" tap). This prevents the double-SMS
-        // bug where both functions fired in parallel on the first tap, causing the client to
-        // receive two identical texts within seconds.
+        // sendClientOnTheWaySms is deduped via tryClaimStep — fires exactly once per job.
+        // ETA update SMS intentionally removed: one "on the way" text per job is the rule.
         sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
           console.error("[FieldMgmt] sendClientOnTheWaySms error:", err)
         );
-        if (input.etaLabel) {
-          // etaLabel present = cleaner is updating an existing ETA (Update ETA button)
-          sendClientEtaUpdateSms(input.cleanerJobId).catch(err =>
-            console.error("[FieldMgmt] sendClientEtaUpdateSms error:", err)
-          );
-        }
       }
       if (input.status === "arrived") {
         sendArrivedCheckin(input.cleanerJobId).catch(err =>
@@ -984,18 +987,18 @@ export const cleanerRouter = router({
       if (!job) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       if (!job.checklistItems) throw new TRPCError({ code: "BAD_REQUEST", message: "No checklist for this job" });
 
-      const items = JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>;
+      const envelope = parseChecklistEnvelope(job.checklistItems);
+      const items = envelope?.items ?? [];
       if (input.itemIndex < 0 || input.itemIndex >= items.length) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid item index" });
       }
-
       items[input.itemIndex].checked = input.checked;
-
+      // Preserve envelope format when writing back
+      const updatedEnvelope = { sourceLang: envelope?.sourceLang ?? 'en', items };
       await db
         .update(cleanerJobs)
-        .set({ checklistItems: JSON.stringify(items) })
+        .set({ checklistItems: JSON.stringify(updatedEnvelope) })
         .where(eq(cleanerJobs.id, job.id));
-
       return { success: true, items };
     }),
 
@@ -1223,12 +1226,9 @@ export const cleanerRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-      const now = new Date();
-      // submittedForDate = today, availabilityDate = tomorrow
-      const todayStr = now.toISOString().slice(0, 10);
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      // submittedForDate = today, availabilityDate = tomorrow (both in ET)
+      const todayStr = getEtDateStr(0);
+      const tomorrowStr = getEtDateStr(1);
 
       // Delete any existing check-in for this cleaner+tomorrow before inserting
       await db
@@ -1335,11 +1335,8 @@ export const cleanerRouter = router({
     const db = await getDb();
     if (!db) return { submitted: false };
 
-    // Compute tomorrow in UTC (server stores dates as YYYY-MM-DD UTC)
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    // Compute tomorrow in ET (consistent with job scheduling timezone)
+    const tomorrowStr = getEtDateStr(1);
 
     const rows = await db
       .select({ id: teamAvailabilityCheckins.id })
@@ -1363,10 +1360,8 @@ export const cleanerRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
-    const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    // Compute tomorrow in ET (consistent with job scheduling timezone)
+    const tomorrowStr = getEtDateStr(1);
 
     const [payRules, customRulesRows, streakRows, availabilityRows] = await Promise.all([
       getPayRules(),
@@ -1488,12 +1483,9 @@ export const cleanerRouter = router({
       await db.insert(teamWorkSchedule)
         .values({ teamId: team.id, mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note })
         .onDuplicateKeyUpdate({ set: { mon: input.mon, tue: input.tue, wed: input.wed, thu: input.thu, fri: input.fri, sat: input.sat, sun: input.sun, note: input.note } });
-      // Record a check-in for tomorrow so the morning prompt doesn't re-fire
-      const now = new Date();
-      const todayStr = now.toISOString().slice(0, 10);
-      const tomorrow = new Date(now);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+      // Record today/tomorrow in ET so the morning prompt doesn't re-fire (ET-consistent)
+      const todayStr = getEtDateStr(0);
+      const tomorrowStr = getEtDateStr(1);
       await db.delete(teamAvailabilityCheckins).where(
         and(eq(teamAvailabilityCheckins.cleanerProfileId, ctx.cleaner.cleanerId), eq(teamAvailabilityCheckins.availabilityDate, tomorrowStr))
       );
@@ -1620,18 +1612,34 @@ export const cleanerRouter = router({
     const totalJobsToday = jobs.length;
 
     return jobs.map((job, idx) => {
-      // Parse serviceDateTime (stored as "YYYY-MM-DD HH:MM:SS" in ET) to "10:00 AM"
+      // Parse serviceDateTime to "10:00 AM".
+      // Handles two formats:
+      //   "YYYY-MM-DD HH:MM:SS" — stored as ET local time (space separator)
+      //   "YYYY-MM-DDTHH:MM:SSZ" — stored as UTC ISO string (T separator)
       let displayTime = "";
       if (job.serviceDateTime) {
         try {
-          const timePart = job.serviceDateTime.split(" ")[1] ?? "";
-          if (timePart) {
-            const [hStr, mStr] = timePart.split(":");
-            const h = parseInt(hStr, 10);
-            const min = parseInt(mStr ?? "0", 10);
-            const ampm = h >= 12 ? "PM" : "AM";
-            const h12 = h % 12 === 0 ? 12 : h % 12;
-            displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+          const raw = job.serviceDateTime as string;
+          if (raw.includes("T")) {
+            // ISO UTC string — parse with Date and convert to ET
+            const dt = new Date(raw);
+            displayTime = dt.toLocaleTimeString("en-US", {
+              timeZone: "America/New_York",
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true,
+            });
+          } else {
+            // "YYYY-MM-DD HH:MM:SS" local ET string
+            const timePart = raw.split(" ")[1] ?? "";
+            if (timePart) {
+              const [hStr, mStr] = timePart.split(":");
+              const h = parseInt(hStr, 10);
+              const min = parseInt(mStr ?? "0", 10);
+              const ampm = h >= 12 ? "PM" : "AM";
+              const h12 = h % 12 === 0 ? 12 : h % 12;
+              displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+            }
           }
         } catch { displayTime = ""; }
       }
@@ -1643,18 +1651,195 @@ export const cleanerRouter = router({
         customerPhone: job.customerPhone ?? "",
         address: job.jobAddress ?? "",
         time: displayTime,
+        jobDate: job.jobDate ?? "",
         serviceDateTime: job.serviceDateTime ?? "",
         bathrooms: job.bathrooms ?? 1,
         extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
-        checklistItems: job.checklistItems
-          ? (JSON.parse(job.checklistItems) as Array<{ text: string; checked: boolean }>)
-          : [],
+        checklistItems: parseChecklistEnvelope(job.checklistItems)?.items ?? [],
         bookingStatus: job.bookingStatus ?? "",
+        jobStatus: job.jobStatus ?? "",
         jobIndex: idx + 1,
         totalJobsToday,
+        basePay: job.basePay ? parseFloat(job.basePay) : null,
+        customerNotes: job.customerNotes ?? null,
+        staffNotes: job.staffNotes ?? null,
       };
     });
   }),
+
+  /**
+   * cleaner.getMyJobsWeek — returns jobs from today through end of this Sunday (ET)
+   * Returns jobs grouped by date so the UI can show Today / Tomorrow / This Week tabs.
+   */
+  getMyJobsWeek: cleanerProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    // Compute today and end-of-week (Sunday) in ET
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const todayRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const [m, d, y] = todayRaw.split("/");
+    const todayStr = `${y}-${m}-${d}`;
+    // End of this week = coming Sunday (day 0).
+    // If today IS Sunday we still want to show the full next 7 days, so always use 7 - dayOfWeek
+    // treating Sunday (0) as 7 so we get next Sunday.
+    const dayOfWeek = nowET.getDay(); // 0=Sun, 6=Sat
+    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek;
+    const endOfWeek = new Date(nowET);
+    endOfWeek.setDate(nowET.getDate() + daysUntilSunday);
+    const endRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(endOfWeek);
+    const [em, ed, ey] = endRaw.split("/");
+    const endStr = `${ey}-${em}-${ed}`;
+    const jobs = await db
+      .select()
+      .from(cleanerJobs)
+      .where(
+        and(
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId),
+          gte(cleanerJobs.jobDate, todayStr),
+          lte(cleanerJobs.jobDate, endStr),
+          ne(cleanerJobs.bookingStatus, "rescheduled"),
+          ne(cleanerJobs.bookingStatus, "cancelled")
+        )
+      )
+      .orderBy(cleanerJobs.jobDate, cleanerJobs.serviceDateTime);
+    // Compute tomorrow string
+    const tomorrow = new Date(nowET);
+    tomorrow.setDate(nowET.getDate() + 1);
+    const tomRaw = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(tomorrow);
+    const [tm, td, ty] = tomRaw.split("/");
+    const tomorrowStr = `${ty}-${tm}-${td}`;
+    return jobs.map((job) => {
+      let displayTime = "";
+      if (job.serviceDateTime) {
+        try {
+          const raw = job.serviceDateTime as string;
+          if (raw.includes("T")) {
+            const dt = new Date(raw);
+            displayTime = dt.toLocaleTimeString("en-US", {
+              timeZone: "America/New_York",
+              hour: "numeric", minute: "2-digit", hour12: true,
+            });
+          } else {
+            const timePart = raw.split(" ")[1] ?? "";
+            if (timePart) {
+              const [hStr, mStr] = timePart.split(":");
+              const h = parseInt(hStr, 10);
+              const min = parseInt(mStr ?? "0", 10);
+              const ampm = h >= 12 ? "PM" : "AM";
+              const h12 = h % 12 === 0 ? 12 : h % 12;
+              displayTime = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+            }
+          }
+        } catch { displayTime = ""; }
+      }
+      const dateLabel = job.jobDate === todayStr ? "today"
+        : job.jobDate === tomorrowStr ? "tomorrow"
+        : "week";
+      return {
+        cleanerJobId: job.id,
+        customerName: job.customerName ?? "Customer",
+        address: job.jobAddress ?? "",
+        time: displayTime,
+        jobDate: job.jobDate ?? "",
+        dateLabel,
+        bathrooms: job.bathrooms ?? 1,
+        extras: job.extras ? (JSON.parse(job.extras) as string[]) : [],
+        jobStatus: job.jobStatus ?? "",
+        bookingStatus: job.bookingStatus ?? "",
+        basePay: job.basePay ? parseFloat(job.basePay) : null,
+        customerNotes: job.customerNotes ?? null,
+        staffNotes: job.staffNotes ?? null,
+      };
+    });
+  }),
+  /**
+   * cleaner.getChecklistForLanguage — returns checklist items for a job in the requested language.
+   * If lang is 'en' or items are already in the target language, returns as-is.
+   * Otherwise translates the entire list in a single LLM call.
+   * The client should cache the result using React Query's staleTime.
+   */
+  getChecklistForLanguage: cleanerProcedure
+    .input(z.object({
+      cleanerJobId: z.number(),
+      lang: z.enum(["en", "es", "pt"]),
+    }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Verify ownership
+      const [job] = await db
+        .select({ checklistItems: cleanerJobs.checklistItems })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.id, input.cleanerJobId),
+          eq(cleanerJobs.cleanerProfileId, ctx.cleaner.cleanerId)
+        ))
+        .limit(1);
+
+      if (!job) throw new TRPCError({ code: "FORBIDDEN", message: "Job not found" });
+      if (!job.checklistItems) return { items: [], sourceLang: 'en', translated: false };
+      const envelope = parseChecklistEnvelope(job.checklistItems);
+      if (!envelope || envelope.items.length === 0) return { items: [], sourceLang: 'en', translated: false };
+      const { items, sourceLang } = envelope;
+      // No translation needed
+      if (input.lang === 'en' || sourceLang === input.lang) {
+        return { items, sourceLang, translated: false };
+      }
+
+      // Translate entire checklist in a single LLM call
+      const langNames: Record<string, string> = { es: 'Spanish (Español)', pt: 'Portuguese (Português)' };
+      const langName = langNames[input.lang] ?? 'English';
+      try {
+        const response = await invokeLLM({
+          messages: [
+            {
+              role: 'system',
+              content:
+                `You are a professional translator. Translate the following cleaning task list into ${langName}. ` +
+                'Return ONLY a JSON object with a "tasks" array of strings in the same order as the input. ' +
+                'Do not add, remove, or reorder items. Keep each task concise and actionable.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify(items.map(i => i.text)),
+            },
+          ],
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: 'translated_checklist',
+              strict: true,
+              schema: {
+                type: 'object',
+                properties: {
+                  tasks: { type: 'array', items: { type: 'string' } },
+                },
+                required: ['tasks'],
+                additionalProperties: false,
+              },
+            },
+          },
+        });
+        const content = response?.choices?.[0]?.message?.content;
+        if (!content) return { items, sourceLang, translated: false }; // fallback
+        const parsed = JSON.parse(content as string) as { tasks: string[] };
+        if (!parsed.tasks || parsed.tasks.length !== items.length) return { items, sourceLang, translated: false }; // fallback
+        const translatedItems = items.map((item, i) => ({ ...item, text: parsed.tasks[i] }));
+        return { items: translatedItems, sourceLang, translated: true };
+      } catch {
+        return { items, sourceLang, translated: false }; // Graceful fallback — cleaner sees original
+      }
+    }),
 
   listProfiles: agentProcedure.query(async () => {
     const db = await getDb();
