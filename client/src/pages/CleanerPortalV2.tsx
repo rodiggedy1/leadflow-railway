@@ -76,9 +76,34 @@ function PortalHeader() {
 
 // ── Notes Popup ──────────────────────────────────────────────────────────────
 
-function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: string | null; staffNotes: string | null; onClose: () => void }) {
-  const { t } = useTranslation();
+function NotesPopup({
+  customerNotes: rawCustomerNotes,
+  staffNotes: rawStaffNotes,
+  cleanerJobId,
+  onClose,
+}: {
+  customerNotes: string | null;
+  staffNotes: string | null;
+  cleanerJobId: number | null | undefined;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language as 'en' | 'es' | 'pt';
+
+  // Fetch translation inside the popup so it re-renders when data arrives
+  const { data: notesData, isLoading: notesLoading } = trpc.cleaner.getNotesForLanguage.useQuery(
+    { cleanerJobId: cleanerJobId!, lang },
+    {
+      enabled: !!cleanerJobId && !!(rawCustomerNotes?.trim() || rawStaffNotes?.trim()) && lang !== 'en',
+      staleTime: 30 * 60 * 1000,
+      retry: false,
+    }
+  );
+
+  const customerNotes = notesData?.customerNotes ?? rawCustomerNotes;
+  const staffNotes = notesData?.staffNotes ?? rawStaffNotes;
   const hasNotes = !!(customerNotes?.trim() || staffNotes?.trim());
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" />
@@ -94,8 +119,14 @@ function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: str
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><X className="w-5 h-5" /></button>
         </div>
-        {!hasNotes && <p className="text-slate-500 text-sm text-center py-4">{t('v2.notes.empty')}</p>}
-        {customerNotes?.trim() && (
+        {notesLoading && (
+          <div className="flex items-center justify-center gap-2 py-4 text-slate-400 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>{t('v2.notes.translating')}</span>
+          </div>
+        )}
+        {!notesLoading && !hasNotes && <p className="text-slate-500 text-sm text-center py-4">{t('v2.notes.empty')}</p>}
+        {!notesLoading && customerNotes?.trim() && (
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-blue-400">{t('v2.notes.customerLabel')}</p>
             <div className="bg-blue-950/50 border border-blue-800/40 rounded-xl px-4 py-3">
@@ -103,7 +134,7 @@ function NotesPopup({ customerNotes, staffNotes, onClose }: { customerNotes: str
             </div>
           </div>
         )}
-        {staffNotes?.trim() && (
+        {!notesLoading && staffNotes?.trim() && (
           <div className="space-y-1">
             <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">{t('v2.notes.staffLabel')}</p>
             <div className="bg-amber-950/40 border border-amber-800/40 rounded-xl px-4 py-3">
@@ -1332,19 +1363,6 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
   const hasNotes = !!(job.customerNotes?.trim() || job.staffNotes?.trim());
   const [notesOpen, setNotesOpen] = useState(false);
 
-  // Fetch translated notes for the cleaner's current language.
-  // Same pattern as getChecklistForLanguage — single LLM call, React Query cache, graceful fallback.
-  const { data: notesData } = trpc.cleaner.getNotesForLanguage.useQuery(
-    { cleanerJobId: job.cleanerJobId!, lang },
-    {
-      enabled: !!job.cleanerJobId && hasNotes && lang !== 'en',
-      staleTime: 30 * 60 * 1000,
-      retry: false,
-    }
-  );
-  const displayCustomerNotes = notesData?.customerNotes ?? job.customerNotes;
-  const displayStaffNotes = notesData?.staffNotes ?? job.staffNotes;
-
   // markComplete mutation — fires when sign-off is submitted
   const utils = trpc.useUtils();
   const markCompleteMutation = trpc.cleaner.markComplete.useMutation({
@@ -1417,7 +1435,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
             {t('v2.common.notes')}
           </button>
         )}
-        {notesOpen && <NotesPopup customerNotes={displayCustomerNotes} staffNotes={displayStaffNotes} onClose={() => setNotesOpen(false)} />}
+        {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} cleanerJobId={job.cleanerJobId} onClose={() => setNotesOpen(false)} />}
         {/* Dev nav — step through for testing */}
         <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
           <button
@@ -1738,7 +1756,7 @@ function DayBriefing({
 }) {
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<'today' | 'tomorrow' | 'week'>('today');
-  const [notesJob, setNotesJob] = useState<{ customerNotes: string | null; staffNotes: string | null } | null>(null);
+  const [notesJob, setNotesJob] = useState<{ customerNotes: string | null; staffNotes: string | null; cleanerJobId?: number | null } | null>(null);
   const weekQuery = trpc.cleaner.getMyJobsWeek.useQuery(undefined, { staleTime: 60_000, throwOnError: false });
   const weekJobs = weekQuery.data ?? [];
   const tomorrowJobs = weekJobs.filter(j => j.dateLabel === 'tomorrow');
@@ -1860,7 +1878,7 @@ function DayBriefing({
                     {!isDone && (job.customerNotes?.trim() || job.staffNotes?.trim()) && (
                       <div className="pl-8">
                         <button
-                          onClick={e => { e.stopPropagation(); setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes }); }}
+                          onClick={e => { e.stopPropagation(); setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes, cleanerJobId: job.cleanerJobId }); }}
                           className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700/50 font-semibold animate-pulse hover:animate-none hover:bg-yellow-800/60 transition-colors"
                         >
                           <FileText className="w-3 h-3" />
@@ -1875,16 +1893,16 @@ function DayBriefing({
         {activeTab === 'tomorrow' && (
           tomorrowJobs.length === 0
             ? <p className="text-slate-500 text-sm text-center py-8">{t('v2.briefing.noJobsTomorrow')}</p>
-            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes })} />)
+            : tomorrowJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes, cleanerJobId: job.cleanerJobId })} />)
         )}
         {activeTab === 'week' && (
           otherWeekJobs.length === 0
             ? <p className="text-slate-500 text-sm text-center py-8">{t('v2.briefing.noJobsWeek')}</p>
-            : otherWeekJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes })} />)
+            : otherWeekJobs.map(job => <WeekJobCard key={job.cleanerJobId} job={job} onNotesClick={() => setNotesJob({ customerNotes: job.customerNotes, staffNotes: job.staffNotes, cleanerJobId: job.cleanerJobId })} />)
         )}
       </div>
       {/* Notes popup */}
-      {notesJob && <NotesPopup customerNotes={notesJob.customerNotes} staffNotes={notesJob.staffNotes} onClose={() => setNotesJob(null)} />}
+      {notesJob && <NotesPopup customerNotes={notesJob.customerNotes} staffNotes={notesJob.staffNotes} cleanerJobId={notesJob.cleanerJobId} onClose={() => setNotesJob(null)} />}
       {/* CTA — only on Today tab */}
       {activeTab === 'today' && !allDone && jobs.length > 0 && (
         <div className="mt-6">
