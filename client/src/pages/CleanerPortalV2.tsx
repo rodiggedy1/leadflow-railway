@@ -88,13 +88,17 @@ function NotesPopup({
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const lang = i18n.language as 'en' | 'es' | 'pt';
+  // Normalize to base language code (e.g. 'es-ES' → 'es') to handle any locale variants
+  const rawLang = i18n.language ?? 'en';
+  const lang = (['en', 'es', 'pt'].includes(rawLang) ? rawLang : rawLang.slice(0, 2)) as 'en' | 'es' | 'pt';
 
   // Fetch translation inside the popup so it re-renders when data arrives
+  const queryEnabled = !!cleanerJobId && !!(rawCustomerNotes?.trim() || rawStaffNotes?.trim()) && lang !== 'en';
+  console.log('[NotesPopup] query enabled:', queryEnabled, '| cleanerJobId:', cleanerJobId, '| lang:', lang);
   const { data: notesData, isLoading: notesLoading } = trpc.cleaner.getNotesForLanguage.useQuery(
-    { cleanerJobId: cleanerJobId!, lang },
+    { cleanerJobId: cleanerJobId ?? 0, lang },
     {
-      enabled: !!cleanerJobId && !!(rawCustomerNotes?.trim() || rawStaffNotes?.trim()) && lang !== 'en',
+      enabled: queryEnabled,
       staleTime: 30 * 60 * 1000,
       retry: false,
     }

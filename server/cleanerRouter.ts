@@ -1881,6 +1881,12 @@ export const cleanerRouter = router({
         if (customerNotes) notesToTranslate.customerNotes = customerNotes;
         if (staffNotes) notesToTranslate.staffNotes = staffNotes;
 
+        // Build a dynamic schema based on which notes are present
+        const schemaProperties: Record<string, { type: string }> = {};
+        const schemaRequired: string[] = [];
+        if (customerNotes) { schemaProperties.customerNotes = { type: 'string' }; schemaRequired.push('customerNotes'); }
+        if (staffNotes) { schemaProperties.staffNotes = { type: 'string' }; schemaRequired.push('staffNotes'); }
+
         const response = await invokeLLM({
           messages: [
             {
@@ -1901,25 +1907,26 @@ export const cleanerRouter = router({
               strict: true,
               schema: {
                 type: 'object',
-                properties: {
-                  customerNotes: { type: 'string' },
-                  staffNotes: { type: 'string' },
-                },
-                required: ['customerNotes', 'staffNotes'],
+                properties: schemaProperties,
+                required: schemaRequired,
                 additionalProperties: false,
               },
             },
           },
         });
         const content = response?.choices?.[0]?.message?.content;
-        if (!content) return { customerNotes, staffNotes, translated: false };
-        const parsed = JSON.parse(content as string) as { customerNotes: string; staffNotes: string };
+        if (!content) {
+          console.error('[getNotesForLanguage] LLM returned no content for job', input.cleanerJobId);
+          return { customerNotes, staffNotes, translated: false };
+        }
+        const parsed = JSON.parse(content as string) as { customerNotes?: string; staffNotes?: string };
         return {
           customerNotes: customerNotes ? (parsed.customerNotes || customerNotes) : null,
           staffNotes: staffNotes ? (parsed.staffNotes || staffNotes) : null,
           translated: true,
         };
-      } catch {
+      } catch (err) {
+        console.error('[getNotesForLanguage] Translation failed for job', input.cleanerJobId, err);
         return { customerNotes, staffNotes, translated: false }; // Graceful fallback
       }
     }),
