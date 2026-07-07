@@ -513,18 +513,19 @@ async function startServer() {
         if (!existingJobRows[0]) {
           // Use raw SQL INSERT to bypass any DB-level FK constraints on completedJobId.
           // We use completedJobId=0 as a sentinel (no real completed job needed for portal testing).
+          // jobStatus is an enum — omit it so it defaults to NULL (job not yet started)
           await db.execute(drizzleSql`
             INSERT INTO cleaner_jobs
               (completedJobId, cleanerProfileId, cleanerName, teamName, teamId,
                jobDate, serviceDateTime, customerName, customerPhone, jobAddress,
                serviceType, bedrooms, bathrooms, extras, frequency, bookingStatus,
-               customerNotes, staffNotes, jobRevenue, payPercent, basePay, jobStatus)
+               customerNotes, staffNotes, jobRevenue, payPercent, basePay)
             VALUES
               (0, ${profileId}, 'Demo Cleaner', ${demoTeamName}, ${teamId ?? null},
                ${todayStr}, ${serviceDateTime}, 'Jane Smith', '+10000000001', '123 Demo Street, Miami, FL 33101',
                'Standard Clean', 2, 2, '[]', 'Weekly', 'assigned',
                'Please use the key under the mat. Dog is friendly.', 'VIP client — extra care.',
-               '150.00', '50', '75.00', 'scheduled')
+               '150.00', '50', '75.00')
           `);
         }
 
@@ -540,7 +541,14 @@ async function startServer() {
         });
       } catch (err: any) {
         console.error("[Preview Seed] Error:", err);
-        return res.status(500).json({ ok: false, error: err?.message ?? String(err) });
+        return res.status(500).json({
+          ok: false,
+          error: err?.message ?? String(err),
+          errno: err?.errno,
+          sqlMessage: err?.sqlMessage,
+          sqlState: err?.sqlState,
+          code: err?.code,
+        });
       }
     });
     console.log("[Preview] Demo seed endpoint registered: GET /api/preview-seed-cleaner");
