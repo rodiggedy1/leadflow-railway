@@ -1421,6 +1421,10 @@ function WeeklySchedulePrompt({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col overflow-hidden">
+      {/* Language picker — always visible at top-right */}
+      <div className="absolute top-4 right-4 z-10">
+        <LanguagePicker />
+      </div>
       <div className="flex-1 overflow-y-auto flex flex-col px-4 pt-6 pb-6 max-w-lg mx-auto w-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {step === 'schedule' && (
           <div className="space-y-6">

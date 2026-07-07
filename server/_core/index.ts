@@ -444,6 +444,128 @@ async function startServer() {
       }
     });
     console.log("[Preview] Auto-login endpoint registered: GET /api/preview-login");
+
+    // Preview seed: creates a demo cleaner + team + today's job so the portal can be fully tested.
+    // Safe to call multiple times — uses INSERT IGNORE / upsert so it won't duplicate.
+    app.get("/api/preview-seed-cleaner", async (req, res) => {
+      try {
+        const db = await getDb();
+        if (!db) return res.status(500).json({ ok: false, error: "DB unavailable" });
+
+        const { cleanerProfiles, cleanerJobs, schedulingTeams, completedJobs } = await import("../../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        // 1. Upsert demo cleaner profile (email = demo@preview.local)
+        const demoEmail = "demo@preview.local";
+        const bcrypt = await import("bcryptjs");
+        const passwordHash = await bcrypt.hash("demo1234", 10);
+
+        let profileId: number | undefined;
+        const existingProfileRows = await db.select({ id: cleanerProfiles.id })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.email, demoEmail))
+          .limit(1);
+        if (existingProfileRows[0]) {
+          profileId = existingProfileRows[0].id;
+        } else {
+          const [profileResult] = await db.insert(cleanerProfiles).values({
+            name: "Demo Cleaner",
+            email: demoEmail,
+            phone: "+10000000000",
+            payPercent: "50",
+            isActive: 1,
+            passwordHash,
+            language: "en",
+          });
+          profileId = (profileResult as any).insertId as number;
+        }
+        if (!profileId) return res.status(500).json({ ok: false, error: "Could not find demo profile" });
+
+        // 2. Upsert demo team (no unique constraint on name, so select-first)
+        const demoTeamName = "Team Demo";
+        let teamId: number | undefined;
+        const existingTeamRows = await db.select({ id: schedulingTeams.id })
+          .from(schedulingTeams)
+          .where(eq(schedulingTeams.name, demoTeamName))
+          .limit(1);
+        if (existingTeamRows[0]) {
+          teamId = existingTeamRows[0].id;
+        } else {
+          const [teamResult] = await db.insert(schedulingTeams).values({ name: demoTeamName });
+          teamId = (teamResult as any).insertId as number;
+        }
+
+        // 3. Create a stub completed_job row (needed for FK)
+        const todayET = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York",
+          year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(new Date());
+        const [m, d, y] = todayET.split("/");
+        const todayStr = `${y}-${m}-${d}`;
+        const serviceDateTime = `${todayStr} 10:00:00`;
+
+        const [completedJobResult] = await db.insert(completedJobs).values({
+          batchId: 1,
+          phone: "+10000000001",
+          name: "Jane Smith",
+          firstName: "Jane",
+          address: "123 Demo Street, Miami, FL 33101",
+          serviceType: "Standard Clean",
+          frequency: "Weekly",
+          bedrooms: 2,
+          bathrooms: 2,
+          jobDate: todayStr,
+          status: "PENDING",
+        });
+        const completedJobId = (completedJobResult as any).insertId as number;
+
+        // 4. Insert cleaner_job for today (only if none exists for this profile+date)
+        const existingJobRows = await db.select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.cleanerProfileId, profileId))
+          .limit(1);
+        if (!existingJobRows[0]) {
+          await db.insert(cleanerJobs).values({
+            completedJobId,
+            cleanerProfileId: profileId,
+            cleanerName: "Demo Cleaner",
+            teamName: demoTeamName,
+            teamId: teamId ?? null,
+            jobDate: todayStr,
+            serviceDateTime,
+            customerName: "Jane Smith",
+            customerPhone: "+10000000001",
+            jobAddress: "123 Demo Street, Miami, FL 33101",
+            serviceType: "Standard Clean",
+            bedrooms: 2,
+            bathrooms: 2,
+            extras: JSON.stringify([]),
+            frequency: "Weekly",
+            bookingStatus: "assigned",
+            customerNotes: "Please use the key under the mat. Dog is friendly.",
+            staffNotes: "VIP client — extra care.",
+            jobRevenue: "150.00",
+            payPercent: "50",
+            basePay: "75.00",
+            jobStatus: "scheduled",
+          });
+        }
+
+        return res.json({
+          ok: true,
+          message: "Demo cleaner seeded",
+          loginEmail: demoEmail,
+          loginPassword: "demo1234",
+          profileId,
+          teamName: demoTeamName,
+          jobDate: todayStr,
+        });
+      } catch (err: any) {
+        console.error("[Preview Seed] Error:", err);
+        return res.status(500).json({ ok: false, error: err?.message ?? String(err) });
+      }
+    });
+    console.log("[Preview] Demo seed endpoint registered: GET /api/preview-seed-cleaner");
   }
   // TEMPORARY emergency magic-link login — remove after Manus support fixes 429
   registerEmergencyAgentLoginRoute(app as any);
