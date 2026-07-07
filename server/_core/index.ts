@@ -444,6 +444,114 @@ async function startServer() {
       }
     });
     console.log("[Preview] Auto-login endpoint registered: GET /api/preview-login");
+
+    // Preview seed: creates a demo cleaner + team + today's job so the portal can be fully tested.
+    // Uses raw SQL to bypass Drizzle FK checks. Safe to call multiple times.
+    app.get("/api/preview-seed-cleaner", async (req, res) => {
+      try {
+        const db = await getDb();
+        if (!db) return res.status(500).json({ ok: false, error: "DB unavailable" });
+
+        const { cleanerProfiles, cleanerJobs, schedulingTeams } = await import("../../drizzle/schema");
+        const { eq, sql: drizzleSql } = await import("drizzle-orm");
+
+        // Today's date in ET
+        const todayET = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York",
+          year: "numeric", month: "2-digit", day: "2-digit",
+        }).format(new Date());
+        const [m, d, y] = todayET.split("/");
+        const todayStr = `${y}-${m}-${d}`;
+        const serviceDateTime = `${todayStr} 10:00:00`;
+
+        // 1. Upsert demo cleaner profile
+        const demoEmail = "demo@preview.local";
+        const bcrypt = await import("bcryptjs");
+        const passwordHash = await bcrypt.hash("demo1234", 10);
+
+        let profileId: number | undefined;
+        const existingProfileRows = await db.select({ id: cleanerProfiles.id })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.email, demoEmail))
+          .limit(1);
+        if (existingProfileRows[0]) {
+          profileId = existingProfileRows[0].id;
+        } else {
+          const [profileResult] = await db.insert(cleanerProfiles).values({
+            name: "Demo Cleaner",
+            email: demoEmail,
+            phone: "+10000000000",
+            payPercent: "50",
+            isActive: 1,
+            passwordHash,
+            language: "en",
+          });
+          profileId = (profileResult as any).insertId as number;
+        }
+        if (!profileId) return res.status(500).json({ ok: false, error: "Could not create demo profile" });
+
+        // 2. Upsert demo team
+        const demoTeamName = "Team Demo";
+        let teamId: number | undefined;
+        const existingTeamRows = await db.select({ id: schedulingTeams.id })
+          .from(schedulingTeams)
+          .where(eq(schedulingTeams.name, demoTeamName))
+          .limit(1);
+        if (existingTeamRows[0]) {
+          teamId = existingTeamRows[0].id;
+        } else {
+          const [teamResult] = await db.insert(schedulingTeams).values({ name: demoTeamName });
+          teamId = (teamResult as any).insertId as number;
+        }
+
+        // 3. Check if a cleaner_job already exists for this profile
+        const existingJobRows = await db.select({ id: cleanerJobs.id })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.cleanerProfileId, profileId))
+          .limit(1);
+
+        if (!existingJobRows[0]) {
+          // Use raw SQL INSERT to bypass any DB-level FK constraints on completedJobId.
+          // We use completedJobId=0 as a sentinel (no real completed job needed for portal testing).
+          // jobStatus is an enum — omit it so it defaults to NULL (job not yet started)
+          await db.execute(drizzleSql`
+            INSERT INTO cleaner_jobs
+              (completedJobId, cleanerProfileId, cleanerName, teamName, teamId,
+               jobDate, serviceDateTime, customerName, customerPhone, jobAddress,
+               serviceType, bedrooms, bathrooms, extras, frequency, bookingStatus,
+               customerNotes, staffNotes, jobRevenue, payPercent, basePay)
+            VALUES
+              (0, ${profileId}, 'Demo Cleaner', ${demoTeamName}, ${teamId ?? null},
+               ${todayStr}, ${serviceDateTime}, 'Jane Smith', '+10000000001', '123 Demo Street, Miami, FL 33101',
+               'Standard Clean', 2, 2, '[]', 'Weekly', 'assigned',
+               'Please use the key under the mat. Dog is friendly.', 'VIP client — extra care.',
+               '150.00', '50', '75.00')
+          `);
+        }
+
+        return res.json({
+          ok: true,
+          message: existingJobRows[0] ? "Demo cleaner already seeded" : "Demo cleaner seeded",
+          loginEmail: demoEmail,
+          loginPassword: "demo1234",
+          profileId,
+          teamName: demoTeamName,
+          jobDate: todayStr,
+          portalUrl: "/portal-v2",
+        });
+      } catch (err: any) {
+        console.error("[Preview Seed] Error:", err);
+        return res.status(500).json({
+          ok: false,
+          error: err?.message ?? String(err),
+          errno: err?.errno,
+          sqlMessage: err?.sqlMessage,
+          sqlState: err?.sqlState,
+          code: err?.code,
+        });
+      }
+    });
+    console.log("[Preview] Demo seed endpoint registered: GET /api/preview-seed-cleaner");
   }
   // TEMPORARY emergency magic-link login — remove after Manus support fixes 429
   registerEmergencyAgentLoginRoute(app as any);
