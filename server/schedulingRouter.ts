@@ -233,18 +233,62 @@ async function geocodeWithCache(address: string): Promise<{ lat: number; lng: nu
 
 // ── Drive Time helper ────────────────────────────────────────────────────────
 /**
- * Fetch drive times for N independent origin→destination pairs directly from Google.
- * Each pair is called as 1 origin × 1 destination — no batching ambiguity, no cache.
- * Always returns a fresh Google value. Returns 0 if Google fails.
+ * Fetch real-road drive times for a list of point-to-point pairs using OSRM.
+ * Uses the OSRM /table API: all pairs in one request if they share the same points,
+ * otherwise falls back to individual /route calls batched via the table API.
+ * Falls back to haversine per-pair if OSRM fails.
  */
-function fetchDriveTimes(
+async function fetchDriveTimes(
   pairs: { fromLat: number; fromLng: number; toLat: number; toLng: number }[]
-): number[] {
-  // Haversine-based drive time estimate: straight-line distance / 10 m/s (~22 mph avg urban speed).
-  // No API calls, no cost.
-  return pairs.map(p =>
-    Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10)
-  );
+): Promise<number[]> {
+  if (pairs.length === 0) return [];
+
+  // Collect all unique points and build a lookup
+  const pointKey = (lat: number, lng: number) => `${lat.toFixed(6)},${lng.toFixed(6)}`;
+  const uniquePoints: LatLng[] = [];
+  const pointIndex = new Map<string, number>();
+  for (const p of pairs) {
+    for (const [lat, lng] of [[p.fromLat, p.fromLng], [p.toLat, p.toLng]] as [number, number][]) {
+      const key = pointKey(lat, lng);
+      if (!pointIndex.has(key)) {
+        pointIndex.set(key, uniquePoints.length);
+        uniquePoints.push({ lat, lng });
+      }
+    }
+  }
+
+  // Build sources (from) and destinations (to) index lists for OSRM table
+  const sources = pairs.map(p => pointIndex.get(pointKey(p.fromLat, p.fromLng))!);
+  const dests   = pairs.map(p => pointIndex.get(pointKey(p.toLat,   p.toLng))!);
+
+  const coords = uniquePoints.map(p => `${p.lng},${p.lat}`).join(';');
+  const srcParam  = sources.join(';');
+  const dstParam  = dests.join(';');
+  const url = `https://router.project-osrm.org/table/v1/driving/${coords}?sources=${srcParam}&destinations=${dstParam}&annotations=duration`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+    const data = await res.json() as { code: string; durations: (number | null)[][] };
+    if (data.code !== 'Ok' || !data.durations) throw new Error(`OSRM bad response: ${data.code}`);
+    return pairs.map((p, i) => {
+      const val = data.durations[i]?.[0];
+      if (val == null || val <= 0) {
+        // Fallback to haversine for this pair
+        return Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10);
+      }
+      return Math.round(val);
+    });
+  } catch (err) {
+    clearTimeout(timeout);
+    console.warn('[fetchDriveTimes] OSRM failed, falling back to haversine:', (err as Error).message);
+    return pairs.map(p =>
+      Math.round(haversineMeters({ lat: p.fromLat, lng: p.fromLng }, { lat: p.toLat, lng: p.toLng }) / 10)
+    );
+  }
 }
 
 
@@ -2007,7 +2051,7 @@ ${callBlocks.join("\n\n")}`;
       // Fetch drive times for the affected legs (with cache)
       const driveUpdates = new Map<number, number>(); // jobId -> driveTimeSecs
       if (affectedPairs.length > 0) {
-        const driveSecs = fetchDriveTimes(affectedPairs);
+        const driveSecs = await fetchDriveTimes(affectedPairs);
         affectedPairs.forEach((p, idx) => {
           if (driveSecs[idx] > 0) driveUpdates.set(p.toJobId, driveSecs[idx]);
         });
@@ -2735,10 +2779,10 @@ ${callBlocks.join("\n\n")}`;
             pairs.push({ fromLat, fromLng, toLat: curGeo.lat, toLng: curGeo.lng, jobId: active[i].cleanerJobId });
           }
         }
-        // Fetch fresh Google drive times
+        // Fetch real-road drive times via OSRM (falls back to haversine if unavailable)
         const pairsOnly = pairs.map(p => ({ fromLat: p.fromLat, fromLng: p.fromLng, toLat: p.toLat, toLng: p.toLng }));
         console.log(`[RERUN] team=${team.name} date=${input.date} pairs=${pairs.length}:`, pairs.map(p => `job${p.jobId}(${p.fromLat.toFixed(4)},${p.fromLng.toFixed(4)})->(${p.toLat.toFixed(4)},${p.toLng.toFixed(4)})`).join(', '));
-        const driveSecs = fetchDriveTimes(pairsOnly);
+        const driveSecs = await fetchDriveTimes(pairsOnly);
         // Persist updated driveTimeSecs
         for (let i = 0; i < pairs.length; i++) {
           const secs = driveSecs[i];
@@ -3542,7 +3586,7 @@ async function recalcTeamRoute(
   // Fetch drive times for the chain (with cache)
   const driveMap = new Map<number, number>(); // jobId -> driveTimeSecs
   if (chainPairs.length > 0) {
-    const chainDriveSecs = fetchDriveTimes(chainPairs);
+    const chainDriveSecs = await fetchDriveTimes(chainPairs);
     chainPairs.forEach((p, idx) => {
       if (chainDriveSecs[idx] > 0) driveMap.set(p.toJobId, chainDriveSecs[idx]);
     });
