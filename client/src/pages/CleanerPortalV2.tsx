@@ -1072,7 +1072,8 @@ function StepCard({ step, onComplete, jobAddress, cleanerJobId, completedJobId, 
 }
 
 function SignoffCard({ onComplete, cleanerJobId }: { onComplete: (result: { satisfaction: string; notes: string; signature: string }) => void; cleanerJobId: number | null }) {
-  const { t } = useTranslation();
+  // Signoff screen is always in English — it's shown to the client, not just the cleaner
+  const { t } = useTranslation(undefined, { lng: 'en' });
   const [satisfaction, setSatisfaction] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
