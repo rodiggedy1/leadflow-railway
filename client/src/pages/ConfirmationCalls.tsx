@@ -528,41 +528,12 @@ export default function ConfirmationCalls() {
   const [date, setDate] = useState(todayLocal);
   const [activeTab, setActiveTab] = useState<"dispatch" | "results">("dispatch");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [pollingActive, setPollingActive] = useState(false);
   const [isFiringBatch, setIsFiringBatch] = useState(false);
 
   const { data: jobs, isLoading, refetch, isFetching } = trpc.confirmationCalls.getJobsForDay.useQuery(
     { date },
     { staleTime: 0, refetchInterval: 5_000 }
   );
-
-  const pollFiredCalls = trpc.confirmationCalls.pollFiredCalls.useMutation();
-
-  // Poll VAPI directly every 5s while calls are in-flight — don't wait for webhook
-  useEffect(() => {
-    if (!pollingActive) return;
-    const interval = setInterval(async () => {
-      try {
-        const result = await pollFiredCalls.mutateAsync({ jobDate: date });
-        if (result.updated > 0) {
-          refetch();
-        }
-      } catch (e) {
-        console.error("[ConfirmationCalls] pollFiredCalls error:", e);
-      }
-    }, 5_000);
-    return () => clearInterval(interval);
-  }, [pollingActive, date]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Stop polling once all in-flight calls settle
-  useEffect(() => {
-    if (!jobs || !pollingActive) return;
-    const stillFiring = jobs.some(j => j.confirmationCall?.status === "fired");
-    if (!stillFiring) {
-      setPollingActive(false);
-      setIsFiringBatch(false);
-    }
-  }, [jobs, pollingActive]);
 
   // Reset selection on date change
   useEffect(() => { setSelectedIds(new Set()); }, [date]);
@@ -589,7 +560,6 @@ export default function ConfirmationCalls() {
     if (toCall.length === 0) return;
 
     setIsFiringBatch(true);
-    setPollingActive(true);
     setSelectedIds(new Set());
 
     for (const job of toCall) {
@@ -605,8 +575,9 @@ export default function ConfirmationCalls() {
       } catch (err) {
         console.error(`[ConfirmationCalls] Failed for job ${job.id}:`, err);
       }
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 400));
     }
+    setIsFiringBatch(false);
     refetch();
   }, [jobs, selectedIds, date, placeCall, refetch]);
 
@@ -632,10 +603,10 @@ export default function ConfirmationCalls() {
           {/* Header */}
           <div>
             <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Phone className="w-5 h-5 text-[#E8735A]" />
-              Confirmation Calls
+              <MessageSquare className="w-5 h-5 text-[#E8735A]" />
+              Confirmation Messages
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">AI calls clients to confirm appointments and capture arrival flexibility.</p>
+            <p className="text-sm text-gray-500 mt-0.5">Send SMS confirmations to clients and capture arrival flexibility.</p>
           </div>
 
           {/* Date nav */}
@@ -691,7 +662,7 @@ export default function ConfirmationCalls() {
               {totalJobs > 0 && (
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-sm text-gray-500">
-                    {totalJobs} job{totalJobs !== 1 ? "s" : ""} · <span className="text-emerald-600 font-medium">{calledCount} called</span> · {totalJobs - calledCount} remaining
+                    {totalJobs} job{totalJobs !== 1 ? "s" : ""} · <span className="text-emerald-600 font-medium">{calledCount} sent</span> · {totalJobs - calledCount} remaining
                   </div>
                   <button
                     onClick={allPendingSelected ? clearAll : selectAll}
@@ -707,14 +678,14 @@ export default function ConfirmationCalls() {
                 <div className="sticky top-0 z-10 py-1">
                   <Button
                     onClick={handleCallAll}
-                    disabled={isFiringBatch || pollingActive}
+                    disabled={isFiringBatch}
                     className="w-full gap-2 bg-[#E8735A] hover:bg-[#d4634c] text-white font-semibold shadow-lg"
                     size="lg"
                   >
-                    {isFiringBatch ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
+                    {isFiringBatch ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
                     {isFiringBatch
-                      ? "Placing calls…"
-                      : `Call ${selectedIds.size} selected`}
+                      ? "Sending messages…"
+                      : `Send SMS to ${selectedIds.size} selected`}
                   </Button>
                 </div>
               )}
@@ -726,7 +697,7 @@ export default function ConfirmationCalls() {
                 </div>
               ) : !jobs || jobs.length === 0 ? (
                 <div className="text-center py-16 text-gray-400">
-                  <Phone className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">No jobs scheduled for this day.</p>
                 </div>
               ) : (
