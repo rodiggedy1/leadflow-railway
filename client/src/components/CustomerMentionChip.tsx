@@ -1695,8 +1695,8 @@ export function CustomerMentionChip({ name, phone, openToCall, onClose: onCloseP
       {/* Side-by-side pill: customer left | team right */}
       <span
         data-chip-pill
-        className="inline-flex flex-row items-stretch rounded-2xl border border-white/20 bg-gradient-to-b from-white/14 to-white/7 backdrop-blur-sm shadow-md select-none align-middle overflow-hidden text-white transition-all hover:border-white/30"
-        style={{ verticalAlign: "middle" }}
+        className="inline-flex flex-row items-stretch rounded-2xl border border-white/20 shadow-md select-none align-middle overflow-hidden text-white transition-all hover:border-white/30"
+        style={{ background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)", verticalAlign: "middle" }}
       >
         {/* ── Customer side ── */}
         <span
