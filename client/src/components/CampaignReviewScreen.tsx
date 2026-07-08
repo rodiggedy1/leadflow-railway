@@ -230,7 +230,7 @@ export default function CampaignReviewScreen({
   });
 
   // ── Personalized preview for selected recipient ────────────────────────────
-  const previewName = selectedRecipient?.snapshotFirstName ?? testFirstName || "Customer";
+  const previewName = (selectedRecipient?.snapshotFirstName ?? testFirstName) || "Customer";
   const previewMessage = localMessage
     .replace(/\{\{first_name\}\}/gi, previewName)
     .replace(/\{\{name\}\}/gi, previewName);
