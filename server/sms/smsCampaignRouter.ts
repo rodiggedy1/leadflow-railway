@@ -24,6 +24,7 @@ import { getDb } from "../db";
 import { planAudience } from "./AudiencePlanner";
 import type { AudienceDefinition } from "./plannerTypes";
 import { freezeAudience as doFreezeAudience } from "./AudienceFreezer";
+import { sendCampaign as doSendCampaign } from "./CampaignSender";
 import {
   smsCampaigns,
   smsCampaignRecipients,
@@ -506,6 +507,28 @@ export const smsCampaignRouter = router({
         remainingCount: Number(remaining?.total ?? 0),
       };
     }),
-});
 
+  /**
+   * sendCampaign — Stage 5
+   * Executes the send loop for an APPROVED campaign.
+   * On preview: writes TEST_SENT log entries, no real SMS sent.
+   * On production: replace the stub in CampaignSender.sendOneMessage().
+   */
+  sendCampaign: adminAgentProcedure
+    .input(z.object({ campaignId: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const db = getDb();
+      const agentId = ctx.agent.agentId;
+      const agentName = ctx.agent.agentName;
+
+      const result = await doSendCampaign(db, input.campaignId, agentId, agentName);
+
+      console.info(
+        `[smsCampaignRouter] Campaign ${input.campaignId} sent by ${agentName} (id=${agentId}): ` +
+        `${result.sentCount} sent, ${result.failedCount} failed, ${result.durationMs}ms`
+      );
+
+      return result;
+    }),
+});
 export type SmsCampaignRouter = typeof smsCampaignRouter;

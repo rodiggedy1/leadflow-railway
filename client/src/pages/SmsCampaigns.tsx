@@ -1462,20 +1462,17 @@ function SmsCampaignsContent() {
   // Debounce the query input 800ms
   const debouncedDef = useDebounce(audienceDefinition, 800);
 
-  // ── Stage 4: campaign lifecycle mutations (lifted to top level so buttons are visible in header) ──
+  // ── Stage 4 & 5: campaign lifecycle mutations (lifted to top level so buttons are visible in header) ──
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
+  const [sendConfirmText, setSendConfirmText] = useState("");
 
   const saveDraftMutation = trpc.smsCampaign.saveDraft.useMutation({
     onSuccess: (data) => {
-      console.log("SAVE SUCCESS", data);
-      console.log("campaignId should become", data.campaignId);
       setCampaignId(data.campaignId);
       toast.success("Draft saved");
     },
-    onError: (err) => {
-      console.error("SAVE ERROR", err);
-      toast.error(err.message);
-    },
+    onError: (err) => toast.error(err.message),
   });
 
   const freezeAudienceMutation = trpc.smsCampaign.freezeAudience.useMutation({
@@ -1497,8 +1494,27 @@ function SmsCampaignsContent() {
     onError: (err) => toast.error(err.message),
   });
 
+  const sendCampaignMutation = trpc.smsCampaign.sendCampaign.useMutation({
+    onSuccess: (result) => {
+      setCampaignStatus("COMPLETED");
+      setSendConfirmOpen(false);
+      setSendConfirmText("");
+      toast.success(`Campaign sent — ${result.sentCount} messages delivered${result.failedCount > 0 ? `, ${result.failedCount} failed` : ""}`);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSend = () => {
+    if (!campaignId) return;
+    const expected = `SEND ${frozenCount}`;
+    if (sendConfirmText.trim() !== expected) {
+      toast.error(`Type exactly: ${expected}`);
+      return;
+    }
+    sendCampaignMutation.mutate({ campaignId });
+  };
+
   const handleSaveDraft = () => {
-    console.log("save clicked", { campaignName, campaignId });
     saveDraftMutation.mutate({
       ...(campaignId ? { campaignId } : {}),
       name: campaignName || "Untitled Campaign",
@@ -1513,9 +1529,6 @@ function SmsCampaignsContent() {
     if (count === 0) { toast.error("Audience is empty — add rules or select a preset"); return; }
     freezeAudienceMutation.mutate({ campaignId });
   };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { console.log("campaignId state", campaignId); }, [campaignId]);
 
   const hasAudience = selectedPresets.size > 0 || rules.length > 0;
 
@@ -1588,11 +1601,6 @@ function SmsCampaignsContent() {
         </span>
       </div>
 
-      {/* DEBUG OVERLAY — remove after confirming save flow */}
-      <div style={{ position: "fixed", top: 0, right: 0, zIndex: 999999, background: "red", color: "white", padding: "4px 8px", fontSize: 12, fontFamily: "monospace" }}>
-        campaignId:{String(campaignId)} status:{String(campaignStatus)}
-      </div>
-
       {/* Campaign name + action bar — always visible */}
       <div className="flex items-center gap-2 mt-2 mb-1 flex-wrap">
         <Input
@@ -1637,11 +1645,18 @@ function SmsCampaignsContent() {
                 : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />Freeze Audience</span>}
             </Button>
           )}
-          {/* Approve — shown in FROZEN state */}
+          {/* Send Campaign — shown when APPROVED */}
           {campaignStatus === 'APPROVED' && (
-            <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-700">
-              <CheckCircle2 className="w-4 h-4" />Ready to send
-            </span>
+            <Button
+              size="sm"
+              onClick={() => setSendConfirmOpen(true)}
+              disabled={sendCampaignMutation.isPending}
+              className="rounded-xl font-bold h-9 bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {sendCampaignMutation.isPending
+                ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Sending…</span>
+                : <span className="flex items-center gap-1.5"><Send className="w-3.5 h-3.5" />Send {frozenCount} Messages</span>}
+            </Button>
           )}
         </div>
       </div>
@@ -1715,6 +1730,45 @@ function SmsCampaignsContent() {
         onApprove={() => approveCampaignMutation.mutate({ campaignId: campaignId! })}
         isApproving={approveCampaignMutation.isPending}
       />
+
+      {/* Send Confirmation dialog — Stage 5 */}
+      <Dialog open={sendConfirmOpen} onOpenChange={(o) => { setSendConfirmOpen(o); if (!o) setSendConfirmText(""); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-700">
+              <Send className="w-5 h-5" /> Send {frozenCount} Real Messages?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-gray-600">
+              You are about to send <strong>{frozenCount} SMS messages</strong> to real customers.
+              This cannot be undone.
+            </p>
+            <p className="text-sm text-gray-500">
+              Type <span className="font-mono font-bold text-gray-800">SEND {frozenCount}</span> to confirm:
+            </p>
+            <Input
+              value={sendConfirmText}
+              onChange={(e) => setSendConfirmText(e.target.value)}
+              placeholder={`SEND ${frozenCount}`}
+              className="font-mono"
+              onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setSendConfirmOpen(false); setSendConfirmText(""); }}>Cancel</Button>
+            <Button
+              onClick={handleSend}
+              disabled={sendCampaignMutation.isPending || sendConfirmText.trim() !== `SEND ${frozenCount}`}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {sendCampaignMutation.isPending
+                ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Sending…</span>
+                : "Confirm Send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
