@@ -151,6 +151,203 @@ const CATEGORIES = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Live Audience Sentence
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Converts selected presets + active rules into a single plain-English sentence.
+ * Highlighted keywords are wrapped in <strong> spans for visual emphasis.
+ */
+function buildAudienceSentence(
+  selectedPresets: Set<string>,
+  rules: ActiveRule[]
+): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+
+  // ── Subject from presets ──────────────────────────────────────────────────
+  const presetLabels = [...selectedPresets].map(
+    (id) => AUDIENCE_PRESETS.find((p) => p.id === id)?.label ?? id
+  );
+
+  let subject: React.ReactNode;
+  if (presetLabels.length === 0) {
+    subject = <><strong>all customers</strong></>;
+  } else if (presetLabels.length === 1) {
+    subject = <><strong>{presetLabels[0].toLowerCase()}</strong></>;
+  } else {
+    const joined = presetLabels
+      .map((l, i) => (
+        <span key={i}>
+          {i > 0 && (i === presetLabels.length - 1 ? " and " : ", ")}
+          <strong>{l.toLowerCase()}</strong>
+        </span>
+      ));
+    subject = <>{joined}</>;
+  }
+
+  // ── Rule clauses ──────────────────────────────────────────────────────────
+  const clauses: React.ReactNode[] = [];
+
+  for (const rule of rules) {
+    const def = RULE_CATALOG.find((d) => d.id === rule.defId);
+    if (!def || !rule.value) continue;
+    const v = rule.value;
+    const op = rule.operator;
+
+    switch (rule.defId) {
+      case "radius":
+        clauses.push(<>within <strong>{v} miles</strong></>);
+        break;
+      case "city":
+        clauses.push(<>in <strong>{v}</strong></>);
+        break;
+      case "zip":
+        clauses.push(<>in ZIP <strong>{v}</strong></>);
+        break;
+      case "neighborhood":
+        clauses.push(<>in the <strong>{v}</strong> neighborhood</>);
+        break;
+      case "last-booking":
+        clauses.push(<>who {op === ">" || op === ">=" ? "have not booked in" : "booked within"} <strong>{v} days</strong></>);
+        break;
+      case "num-bookings":
+        clauses.push(<>with <strong>{op} {v} booking{Number(v) !== 1 ? "s" : ""}</strong></>);
+        break;
+      case "recurring":
+        clauses.push(<>with <strong>{v.toLowerCase()}</strong> recurring status</>);
+        break;
+      case "service-type":
+        clauses.push(<>who booked a <strong>{v.toLowerCase()}</strong></>);
+        break;
+      case "bedrooms":
+        clauses.push(<>with <strong>{op} {v} bedroom{Number(v) !== 1 ? "s" : ""}</strong></>);
+        break;
+      case "bathrooms":
+        clauses.push(<>with <strong>{op} {v} bathroom{Number(v) !== 1 ? "s" : ""}</strong></>);
+        break;
+      case "ltv":
+        clauses.push(<>who spent <strong>{op} ${v}</strong> lifetime</>);
+        break;
+      case "avg-ticket":
+        clauses.push(<>with an average ticket <strong>{op} ${v}</strong></>);
+        break;
+      case "tips":
+        clauses.push(<>who tipped <strong>{op} ${v}</strong></>);
+        break;
+      case "review-score":
+        clauses.push(<>with a <strong>{v}★ or higher</strong> review</>);
+        break;
+      case "complaints":
+        clauses.push(
+          Number(v) === 0
+            ? <>with <strong>no complaints</strong></>
+            : <>with <strong>{op} {v} complaint{Number(v) !== 1 ? "s" : ""}</strong></>
+        );
+        break;
+      case "refunds":
+        clauses.push(
+          Number(v) === 0
+            ? <>with <strong>no refunds</strong></>
+            : <>with <strong>{op} {v} refund{Number(v) !== 1 ? "s" : ""}</strong></>
+        );
+        break;
+      case "chargebacks":
+        clauses.push(
+          Number(v) === 0
+            ? <>with <strong>no chargebacks</strong></>
+            : <>with <strong>{op} {v} chargeback{Number(v) !== 1 ? "s" : ""}</strong></>
+        );
+        break;
+      case "last-sms":
+        clauses.push(<>not texted in <strong>{v} days</strong></>);
+        break;
+      case "last-email":
+        clauses.push(<>not emailed in <strong>{v} days</strong></>);
+        break;
+      case "prev-campaign":
+        clauses.push(<>who were {op === "is not" ? "not" : ""} in the <strong>{v}</strong> campaign</>);
+        break;
+      case "stop-status":
+        clauses.push(<>who have <strong>{v.toLowerCase()}</strong></>);
+        break;
+      case "open-rate":
+        clauses.push(<>with an open rate <strong>{op} {v}%</strong></>);
+        break;
+      case "reply-rate":
+        clauses.push(<>with a reply rate <strong>{op} {v}%</strong></>);
+        break;
+      case "ai-book":
+        clauses.push(<>with a <strong>{op} {v}% likelihood</strong> to book</>);
+        break;
+      case "ai-respond":
+        clauses.push(<>with a <strong>{op} {v}% likelihood</strong> to respond</>);
+        break;
+      default:
+        clauses.push(<><strong>{def.label}</strong> {op} {v}</>);
+    }
+  }
+
+  // ── Assemble ──────────────────────────────────────────────────────────────
+  if (selectedPresets.size === 0 && rules.length === 0) {
+    return null;
+  }
+
+  const clauseNodes = clauses.map((c, i) => (
+    <span key={i}>
+      {i === 0 && clauses.length > 0 ? " " : ""}
+      {i > 0 ? (i === clauses.length - 1 && clauses.length > 1 ? " and " : ", ") : ""}
+      {c}
+    </span>
+  ));
+
+  return (
+    <>
+      You are messaging {subject}{clauseNodes.length > 0 ? <>{clauseNodes}</> : ""}.
+    </>
+  );
+}
+
+function AudienceSentence({
+  selectedPresets,
+  rules,
+}: {
+  selectedPresets: Set<string>;
+  rules: ActiveRule[];
+}) {
+  const sentence = buildAudienceSentence(selectedPresets, rules);
+
+  if (!sentence) {
+    return (
+      <div className="rounded-2xl border border-dashed border-gray-200 px-5 py-4 mb-4 text-sm text-gray-300 italic">
+        Your audience description will appear here as you build it.
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="rounded-2xl px-5 py-4 mb-4 text-sm leading-relaxed"
+      style={{
+        background: "linear-gradient(135deg, #f0f9ff 0%, #fafafa 100%)",
+        border: "1px solid #bae6fd",
+      }}
+    >
+      <div className="flex items-start gap-2.5">
+        <div
+          className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+          style={{ background: "#0ea5e9", boxShadow: "0 0 0 4px rgba(14,165,233,0.12)" }}
+        >
+          <MessageSquare className="w-3 h-3 text-white" />
+        </div>
+        <p className="text-gray-700 leading-relaxed" style={{ fontStyle: "normal" }}>
+          {sentence}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SavedAudiencePicker
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -945,6 +1142,7 @@ function SmsCampaignsContent() {
         {/* LEFT */}
         <div>
           <HeroCard count={recipientCount} ruleCount={rules.length + selectedPresets.size} excluded={excluded} expectedReplies={expectedReplies} />
+          <AudienceSentence selectedPresets={selectedPresets} rules={rules} />
           <SavedAudiencePicker selectedPresets={selectedPresets} setSelectedPresets={setSelectedPresets} />
           <AudienceRuleBuilder rules={rules} setRules={setRules} />
         </div>
