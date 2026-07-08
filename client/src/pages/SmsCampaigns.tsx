@@ -6,7 +6,7 @@
  *
  * UI-only for now — logic will be wired in a subsequent phase.
  */
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
@@ -31,21 +31,129 @@ import {
   ChevronLeft,
   Zap,
   Phone,
+  Star,
+  DollarSign,
+  RefreshCw,
+  CalendarClock,
+  ThumbsUp,
+  Timer,
+  ChevronDown,
+  ChevronUp,
+  Layers,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Step = 1 | 2 | 3 | 4 | 5;
-type LastBookingFilter = "30d" | "90d" | "6mo" | "1yr" | "any";
-type FrequencyFilter = "one-time" | "former-recurring" | "active-recurring";
-type RadiusFilter = "3mi" | "5mi" | "10mi" | "15mi";
 
-interface AudienceState {
-  lastBooking: LastBookingFilter;
-  frequencies: Set<FrequencyFilter>;
-  radius: RadiusFilter;
-  location: string;
+interface AudiencePreset {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  estimatedCount: number;
+  color: string; // tailwind bg class for icon bg
+  iconColor: string; // tailwind text class
 }
+
+interface AdvancedFilters {
+  radiusEnabled: boolean;
+  location: string;
+  radius: "3mi" | "5mi" | "10mi" | "15mi";
+  minSpend: string;
+  minRating: string;
+  notContactedDays: string;
+  lastBookingDays: string;
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const AUDIENCE_PRESETS: AudiencePreset[] = [
+  {
+    id: "last-minute",
+    label: "Last-minute openings",
+    description: "Customers likely to book on short notice",
+    icon: <Timer className="w-4 h-4" />,
+    estimatedCount: 94,
+    color: "bg-orange-50",
+    iconColor: "text-orange-500",
+  },
+  {
+    id: "win-back",
+    label: "Win back inactive",
+    description: "Haven't booked in 90+ days",
+    icon: <RefreshCw className="w-4 h-4" />,
+    estimatedCount: 211,
+    color: "bg-blue-50",
+    iconColor: "text-blue-500",
+  },
+  {
+    id: "former-recurring",
+    label: "Former recurring",
+    description: "Used to have a recurring plan, now lapsed",
+    icon: <CalendarClock className="w-4 h-4" />,
+    estimatedCount: 138,
+    color: "bg-purple-50",
+    iconColor: "text-purple-500",
+  },
+  {
+    id: "nearby",
+    label: "Customers within X miles",
+    description: "Based on service address proximity",
+    icon: <MapPin className="w-4 h-4" />,
+    estimatedCount: 184,
+    color: "bg-emerald-50",
+    iconColor: "text-emerald-500",
+  },
+  {
+    id: "due-recurring",
+    label: "Due for recurring clean",
+    description: "Recurring customers whose next clean is overdue",
+    icon: <CalendarClock className="w-4 h-4" />,
+    estimatedCount: 47,
+    color: "bg-amber-50",
+    iconColor: "text-amber-500",
+  },
+  {
+    id: "five-star",
+    label: "5★ reviewers",
+    description: "Customers who left a 5-star review",
+    icon: <Star className="w-4 h-4" />,
+    estimatedCount: 73,
+    color: "bg-yellow-50",
+    iconColor: "text-yellow-500",
+  },
+  {
+    id: "no-complaints",
+    label: "No complaints",
+    description: "Zero open issues or complaint history",
+    icon: <ThumbsUp className="w-4 h-4" />,
+    estimatedCount: 302,
+    color: "bg-teal-50",
+    iconColor: "text-teal-500",
+  },
+  {
+    id: "high-spend",
+    label: "Spent over $500",
+    description: "High-value customers by lifetime spend",
+    icon: <DollarSign className="w-4 h-4" />,
+    estimatedCount: 89,
+    color: "bg-green-50",
+    iconColor: "text-green-600",
+  },
+  {
+    id: "not-contacted",
+    label: "Not contacted in 30 days",
+    description: "No outbound SMS in the past month",
+    icon: <MessageSquare className="w-4 h-4" />,
+    estimatedCount: 256,
+    color: "bg-slate-50",
+    iconColor: "text-slate-500",
+  },
+];
+
+const DEFAULT_MESSAGE =
+  "Hi {{first_name}}, this is Madison from Maid in Black 😊 We have a few openings near {{area}} this week and wanted to see if you'd like help with a cleaning. Want me to send available times?";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -59,9 +167,26 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function randomCount() {
-  const vals = [184, 92, 137, 221, 156, 203];
-  return vals[Math.floor(Math.random() * vals.length)];
+function computeRecipientCount(
+  selectedPresets: Set<string>,
+  filters: AdvancedFilters
+): number {
+  if (selectedPresets.size === 0) return 0;
+  // Simulated: sum preset counts with overlap reduction
+  let total = 0;
+  for (const id of selectedPresets) {
+    const p = AUDIENCE_PRESETS.find((x) => x.id === id);
+    if (p) total += p.estimatedCount;
+  }
+  // Simulate overlap reduction for multiple selections
+  if (selectedPresets.size > 1) total = Math.round(total * 0.72);
+  // Simulate filter narrowing
+  if (filters.radiusEnabled) total = Math.round(total * 0.65);
+  if (filters.minSpend) total = Math.round(total * 0.6);
+  if (filters.minRating) total = Math.round(total * 0.7);
+  if (filters.notContactedDays) total = Math.round(total * 0.8);
+  if (filters.lastBookingDays) total = Math.round(total * 0.75);
+  return Math.max(total, 0);
 }
 
 // ── WorkflowBar ───────────────────────────────────────────────────────────────
@@ -74,7 +199,6 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
     { id: 4, label: "Test",      icon: <FlaskConical className="w-3.5 h-3.5" /> },
     { id: 5, label: "Type SEND", icon: <Send className="w-3.5 h-3.5" /> },
   ];
-
   return (
     <div className="flex items-center gap-1.5 my-4">
       {steps.map((s, idx) => {
@@ -111,10 +235,12 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
 
 function HeroCard({
   count,
+  selectedCount,
   excluded,
   expectedReplies,
 }: {
   count: number;
+  selectedCount: number;
   excluded: number;
   expectedReplies: number;
 }) {
@@ -127,12 +253,22 @@ function HeroCard({
         Recipients
       </div>
       <div
-        className="font-black text-white leading-none mb-1 tabular-nums"
+        className="font-black text-white leading-none mb-1 tabular-nums transition-all duration-300"
         style={{ fontSize: 72 }}
       >
         {count}
       </div>
-      <div className="text-sm text-gray-300 mb-5">eligible customers</div>
+      <div className="text-sm text-gray-300 mb-1">eligible customers</div>
+      {selectedCount > 0 && (
+        <div className="text-xs text-gray-500 mb-4">
+          across {selectedCount} audience{selectedCount > 1 ? "s" : ""}
+        </div>
+      )}
+      {selectedCount === 0 && (
+        <div className="text-xs text-gray-500 mb-4">
+          Select an audience to get started
+        </div>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <div
           className="rounded-2xl p-3"
@@ -159,201 +295,287 @@ function HeroCard({
   );
 }
 
-// ── Chip ──────────────────────────────────────────────────────────────────────
+// ── AudienceBuilder ───────────────────────────────────────────────────────────
 
-function Chip({
-  label,
-  active,
-  onClick,
+function AudienceBuilder({
+  selectedPresets,
+  setSelectedPresets,
+  filters,
+  setFilters,
 }: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
+  selectedPresets: Set<string>;
+  setSelectedPresets: React.Dispatch<React.SetStateAction<Set<string>>>;
+  filters: AdvancedFilters;
+  setFilters: React.Dispatch<React.SetStateAction<AdvancedFilters>>;
 }) {
-  return (
-    <button
-      onClick={onClick}
-      className={[
-        "px-3 py-2 rounded-full text-xs font-bold border transition-all mr-1.5 mb-1.5",
-        active
-          ? "bg-gray-900 text-white border-gray-900"
-          : "bg-white text-gray-700 border-gray-300 hover:border-gray-500",
-      ].join(" ")}
-    >
-      {label}
-    </button>
-  );
-}
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-// ── MapPlaceholder ────────────────────────────────────────────────────────────
+  const togglePreset = (id: string) => {
+    setSelectedPresets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-function MapPlaceholder({ location }: { location: string }) {
-  return (
-    <div
-      className="rounded-2xl flex flex-col items-center justify-center my-3 relative overflow-hidden"
-      style={{
-        height: 160,
-        background:
-          "radial-gradient(circle at center, #dbeafe 0% 34%, #eef2ff 35% 55%, #f8fafc 56%)",
-        border: "1px solid #e5e7eb",
-      }}
-    >
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div
-          className="rounded-full border border-blue-200 opacity-50"
-          style={{ width: 120, height: 120 }}
-        />
-        <div
-          className="absolute rounded-full border border-blue-300 opacity-40"
-          style={{ width: 80, height: 80 }}
-        />
-      </div>
-      <div className="relative z-10 flex flex-col items-center">
-        <div
-          className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center"
-          style={{ boxShadow: "0 0 0 10px rgba(239,68,68,0.12)" }}
-        >
-          <MapPin className="w-3 h-3 text-white" />
-        </div>
-        <div className="mt-2 text-xs font-semibold text-gray-600 bg-white/80 px-2 py-0.5 rounded-full shadow-sm">
-          {location || "Set location"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── StepAudience ──────────────────────────────────────────────────────────────
-
-function StepAudience({
-  audience,
-  setAudience,
-  setRecipientCount,
-}: {
-  audience: AudienceState;
-  setAudience: React.Dispatch<React.SetStateAction<AudienceState>>;
-  setRecipientCount: (n: number) => void;
-}) {
-  const lastBookingOptions: { value: LastBookingFilter; label: string }[] = [
-    { value: "30d",  label: "30 days" },
-    { value: "90d",  label: "90 days" },
-    { value: "6mo",  label: "6 months" },
-    { value: "1yr",  label: "1 year" },
-    { value: "any",  label: "Any" },
-  ];
-  const frequencyOptions: { value: FrequencyFilter; label: string }[] = [
-    { value: "one-time",         label: "One-time" },
-    { value: "former-recurring", label: "Former recurring" },
-    { value: "active-recurring", label: "Active recurring" },
-  ];
-  const radiusOptions: { value: RadiusFilter; label: string }[] = [
+  const radiusOptions: { value: AdvancedFilters["radius"]; label: string }[] = [
     { value: "3mi",  label: "3 mi" },
     { value: "5mi",  label: "5 mi" },
     { value: "10mi", label: "10 mi" },
     { value: "15mi", label: "15 mi" },
   ];
 
-  const toggleFrequency = (f: FrequencyFilter) => {
-    setAudience((prev) => {
-      const next = new Set(prev.frequencies);
-      if (next.has(f)) next.delete(f);
-      else next.add(f);
-      return { ...prev, frequencies: next };
-    });
-    setRecipientCount(randomCount());
-  };
-
-  const useAiRecommendation = () => {
-    setAudience({
-      lastBooking: "90d",
-      frequencies: new Set<FrequencyFilter>(["one-time", "former-recurring"]),
-      radius: "10mi",
-      location: audience.location,
-    });
-    setRecipientCount(137);
-    toast.success("AI recommended audience applied — 90 days, 10 mi radius");
-  };
-
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
-      <h2 className="font-bold text-gray-900 text-base mb-4">Audience Filters</h2>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
+          <Layers className="w-4 h-4 text-gray-500" />
+          Saved Audiences
+        </h2>
+        {selectedPresets.size > 0 && (
+          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+            {selectedPresets.size} selected
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-gray-400 mb-4">
+        Select one or more audiences to combine. Overlap is automatically deduplicated.
+      </p>
 
-      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
-        Last booking
-      </div>
-      <div className="flex flex-wrap mb-4">
-        {lastBookingOptions.map((o) => (
-          <Chip
-            key={o.value}
-            label={o.label}
-            active={audience.lastBooking === o.value}
-            onClick={() => {
-              setAudience((p) => ({ ...p, lastBooking: o.value }));
-              setRecipientCount(randomCount());
-            }}
-          />
-        ))}
+      {/* Preset cards */}
+      <div className="flex flex-col gap-2">
+        {AUDIENCE_PRESETS.map((preset) => {
+          const active = selectedPresets.has(preset.id);
+          return (
+            <button
+              key={preset.id}
+              onClick={() => togglePreset(preset.id)}
+              className={[
+                "flex items-center gap-3 p-3 rounded-2xl border text-left transition-all",
+                active
+                  ? "border-gray-900 bg-gray-900 shadow-sm"
+                  : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white",
+              ].join(" ")}
+            >
+              {/* Icon */}
+              <div
+                className={[
+                  "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0",
+                  active ? "bg-white/15" : preset.color,
+                ].join(" ")}
+              >
+                <span className={active ? "text-white" : preset.iconColor}>
+                  {preset.icon}
+                </span>
+              </div>
+
+              {/* Text */}
+              <div className="flex-1 min-w-0">
+                <div
+                  className={[
+                    "text-sm font-bold leading-tight",
+                    active ? "text-white" : "text-gray-900",
+                  ].join(" ")}
+                >
+                  {preset.label}
+                </div>
+                <div
+                  className={[
+                    "text-xs mt-0.5 truncate",
+                    active ? "text-gray-300" : "text-gray-400",
+                  ].join(" ")}
+                >
+                  {preset.description}
+                </div>
+              </div>
+
+              {/* Count badge */}
+              <div
+                className={[
+                  "text-xs font-black rounded-full px-2 py-0.5 flex-shrink-0",
+                  active
+                    ? "bg-white/20 text-white"
+                    : "bg-white text-gray-500 border border-gray-200",
+                ].join(" ")}
+              >
+                ~{preset.estimatedCount}
+              </div>
+
+              {/* Checkmark */}
+              {active && (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
-        Frequency
-      </div>
-      <div className="flex flex-wrap mb-4">
-        {frequencyOptions.map((o) => (
-          <Chip
-            key={o.value}
-            label={o.label}
-            active={audience.frequencies.has(o.value)}
-            onClick={() => toggleFrequency(o.value)}
-          />
-        ))}
-      </div>
-
-      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-2">
-        Target radius
-      </div>
-      <Input
-        value={audience.location}
-        onChange={(e) => setAudience((p) => ({ ...p, location: e.target.value }))}
-        placeholder="e.g. Arlington, VA 22201"
-        className="mb-0 rounded-xl border-gray-300"
-      />
-      <MapPlaceholder location={audience.location} />
-      <div className="flex flex-wrap">
-        {radiusOptions.map((o) => (
-          <Chip
-            key={o.value}
-            label={o.label}
-            active={audience.radius === o.value}
-            onClick={() => {
-              setAudience((p) => ({ ...p, radius: o.value }));
-              setRecipientCount(randomCount());
-            }}
-          />
-        ))}
-      </div>
-
-      {/* AI Recommendation */}
-      <div
-        className="mt-4 rounded-2xl p-4"
-        style={{ background: "#eef4ff", border: "1px solid #b2ccff" }}
+      {/* Advanced Filters toggle */}
+      <button
+        onClick={() => setShowAdvanced((v) => !v)}
+        className="mt-5 w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-dashed border-gray-300 text-sm font-bold text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
       >
-        <div className="flex items-center gap-2 mb-2">
-          <Sparkles className="w-4 h-4 text-blue-700" />
-          <span className="font-bold text-blue-900 text-sm">AI Recommendation</span>
+        <span className="flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5" />
+          Advanced Filters
+        </span>
+        {showAdvanced ? (
+          <ChevronUp className="w-4 h-4" />
+        ) : (
+          <ChevronDown className="w-4 h-4" />
+        )}
+      </button>
+
+      {/* Advanced Filters panel */}
+      {showAdvanced && (
+        <div className="mt-3 space-y-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+
+          {/* Radius */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-black uppercase tracking-widest text-gray-400">
+                Target radius
+              </label>
+              <button
+                onClick={() => setFilters((f) => ({ ...f, radiusEnabled: !f.radiusEnabled }))}
+                className={[
+                  "text-xs font-bold px-2 py-0.5 rounded-full border transition-colors",
+                  filters.radiusEnabled
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-400 border-gray-200",
+                ].join(" ")}
+              >
+                {filters.radiusEnabled ? "On" : "Off"}
+              </button>
+            </div>
+            {filters.radiusEnabled && (
+              <>
+                <Input
+                  value={filters.location}
+                  onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
+                  placeholder="e.g. Arlington, VA 22201"
+                  className="mb-2 rounded-xl border-gray-300 text-sm"
+                />
+                <div className="flex gap-1.5 flex-wrap">
+                  {radiusOptions.map((o) => (
+                    <button
+                      key={o.value}
+                      onClick={() => setFilters((f) => ({ ...f, radius: o.value }))}
+                      className={[
+                        "px-3 py-1.5 rounded-full text-xs font-bold border transition-all",
+                        filters.radius === o.value
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-600 border-gray-300 hover:border-gray-500",
+                      ].join(" ")}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Min spend */}
+          <div>
+            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
+              Minimum lifetime spend
+            </label>
+            <div className="relative">
+              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input
+                value={filters.minSpend}
+                onChange={(e) => setFilters((f) => ({ ...f, minSpend: e.target.value }))}
+                placeholder="e.g. 500"
+                className="pl-8 rounded-xl border-gray-300 text-sm"
+                type="number"
+                min="0"
+              />
+            </div>
+          </div>
+
+          {/* Min rating */}
+          <div>
+            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
+              Minimum star rating
+            </label>
+            <div className="flex gap-1.5">
+              {[3, 4, 5].map((r) => (
+                <button
+                  key={r}
+                  onClick={() =>
+                    setFilters((f) => ({
+                      ...f,
+                      minRating: f.minRating === String(r) ? "" : String(r),
+                    }))
+                  }
+                  className={[
+                    "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-all",
+                    filters.minRating === String(r)
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-500",
+                  ].join(" ")}
+                >
+                  <Star className="w-3 h-3" />
+                  {r}+
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Not contacted in N days */}
+          <div>
+            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
+              Not texted in (days)
+            </label>
+            <Input
+              value={filters.notContactedDays}
+              onChange={(e) => setFilters((f) => ({ ...f, notContactedDays: e.target.value }))}
+              placeholder="e.g. 30"
+              className="rounded-xl border-gray-300 text-sm"
+              type="number"
+              min="0"
+            />
+          </div>
+
+          {/* Last booking within N days */}
+          <div>
+            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
+              Last booking within (days)
+            </label>
+            <Input
+              value={filters.lastBookingDays}
+              onChange={(e) => setFilters((f) => ({ ...f, lastBookingDays: e.target.value }))}
+              placeholder="e.g. 180"
+              className="rounded-xl border-gray-300 text-sm"
+              type="number"
+              min="0"
+            />
+          </div>
+
+          {/* Clear filters */}
+          {(filters.radiusEnabled || filters.minSpend || filters.minRating || filters.notContactedDays || filters.lastBookingDays) && (
+            <button
+              onClick={() =>
+                setFilters({
+                  radiusEnabled: false,
+                  location: "Arlington, VA 22201",
+                  radius: "5mi",
+                  minSpend: "",
+                  minRating: "",
+                  notContactedDays: "",
+                  lastBookingDays: "",
+                })
+              }
+              className="text-xs text-red-500 font-bold hover:text-red-700 transition-colors"
+            >
+              Clear all filters
+            </button>
+          )}
         </div>
-        <p className="text-sm text-blue-800 mb-3">
-          Best segment: customers 90–180 days since last clean within 7 miles. Expected reply
-          rate: <strong>17%</strong>.
-        </p>
-        <Button
-          size="sm"
-          className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold"
-          onClick={useAiRecommendation}
-        >
-          Use Recommendation
-        </Button>
-      </div>
+      )}
     </div>
   );
 }
@@ -362,12 +584,11 @@ function StepAudience({
 
 function SafetySummary() {
   const stats = [
-    { icon: <Ban className="w-4 h-4 text-red-500" />,           label: "STOP / opt-out",  value: 8,  color: "text-red-600" },
-    { icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, label: "Open issues",    value: 11, color: "text-amber-600" },
-    { icon: <Clock className="w-4 h-4 text-blue-500" />,         label: "Recently texted", value: 22, color: "text-blue-600" },
-    { icon: <Copy className="w-4 h-4 text-gray-400" />,          label: "Duplicates",      value: 0,  color: "text-gray-500" },
+    { icon: <Ban className="w-4 h-4 text-red-500" />,            label: "STOP / opt-out",  value: 8,  color: "text-red-600" },
+    { icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, label: "Open issues",     value: 11, color: "text-amber-600" },
+    { icon: <Clock className="w-4 h-4 text-blue-500" />,          label: "Recently texted", value: 22, color: "text-blue-600" },
+    { icon: <Copy className="w-4 h-4 text-gray-400" />,           label: "Duplicates",      value: 0,  color: "text-gray-500" },
   ];
-
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
@@ -395,7 +616,8 @@ const PREVIEW_PEOPLE = [
   { name: "Nina Lee",       rating: 4, lastClean: "92 days ago",  distance: "4.4 miles", type: "Former recurring" },
 ];
 
-function LiveAudiencePreview() {
+function LiveAudiencePreview({ selectedCount }: { selectedCount: number }) {
+  if (selectedCount === 0) return null;
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
@@ -420,9 +642,6 @@ function LiveAudiencePreview() {
 }
 
 // ── MessageEditor ─────────────────────────────────────────────────────────────
-
-const DEFAULT_MESSAGE =
-  "Hi {{first_name}}, this is Madison from Maid in Black 😊 We have a few openings near {{area}} this week and wanted to see if you'd like help with a cleaning. Want me to send available times?";
 
 function MessageEditor({
   message,
@@ -463,9 +682,7 @@ function MessageEditor({
       />
       <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
         <span>{charCount} chars</span>
-        <span>
-          {smsCount} SMS segment{smsCount > 1 ? "s" : ""}
-        </span>
+        <span>{smsCount} SMS segment{smsCount > 1 ? "s" : ""}</span>
       </div>
     </div>
   );
@@ -479,7 +696,6 @@ function PersonalizedPreviews({ message }: { message: string }) {
     { name: "Alex",     firstName: "Alex",     area: "Arlington" },
     { name: "Nina",     firstName: "Nina",     area: "Arlington" },
   ];
-
   const personalize = (tpl: string, firstName: string, area: string) =>
     tpl.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{area\}\}/g, area);
 
@@ -499,10 +715,7 @@ function PersonalizedPreviews({ message }: { message: string }) {
             <div className="text-white font-bold text-sm mb-1">{p.name}</div>
             <div
               className="text-white text-xs leading-relaxed mt-3 p-3"
-              style={{
-                background: "#2563eb",
-                borderRadius: "18px 18px 4px 18px",
-              }}
+              style={{ background: "#2563eb", borderRadius: "18px 18px 4px 18px" }}
             >
               {personalize(message, p.firstName, p.area)}
             </div>
@@ -515,21 +728,13 @@ function PersonalizedPreviews({ message }: { message: string }) {
 
 // ── StepTest ──────────────────────────────────────────────────────────────────
 
-function StepTest({
-  onTestSent,
-}: {
-  message: string;
-  onTestSent: () => void;
-}) {
+function StepTest({ message, onTestSent }: { message: string; onTestSent: () => void }) {
   const [phone, setPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
   const handleSend = () => {
-    if (!phone.trim()) {
-      toast.error("Enter a phone number");
-      return;
-    }
+    if (!phone.trim()) { toast.error("Enter a phone number"); return; }
     setSending(true);
     setTimeout(() => {
       setSending(false);
@@ -546,8 +751,7 @@ function StepTest({
         Send Test SMS
       </h2>
       <p className="text-sm text-gray-500 mb-4">
-        Send yourself a preview before the real campaign goes out. The message will be
-        personalized with your name.
+        Send yourself a preview before the real campaign goes out.
       </p>
       <div className="flex gap-2">
         <Input
@@ -561,9 +765,7 @@ function StepTest({
           disabled={sending || sent}
           className={[
             "rounded-xl font-bold px-5 flex-shrink-0",
-            sent
-              ? "bg-emerald-600 hover:bg-emerald-600"
-              : "bg-gray-900 hover:bg-gray-800",
+            sent ? "bg-emerald-600 hover:bg-emerald-600" : "bg-gray-900 hover:bg-gray-800",
           ].join(" ")}
         >
           {sending ? (
@@ -573,8 +775,7 @@ function StepTest({
             </span>
           ) : sent ? (
             <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Sent!
+              <CheckCircle2 className="w-3.5 h-3.5" /> Sent!
             </span>
           ) : (
             "Send Test"
@@ -606,10 +807,10 @@ function StepFinalApproval({
   const isReady = testSent && confirmText.trim() === expectedConfirm;
 
   const checks = [
-    { label: "Audience reviewed",    status: "passed",                                         note: "" },
-    { label: "Test SMS sent",        status: testSent ? "passed" : "pending",                  note: "" },
-    { label: "Quiet hours protected", status: "passed",                                         note: "9am–8pm local time" },
-    { label: "Opt-outs excluded",    status: "passed",                                         note: "8 contacts excluded" },
+    { label: "Audience selected",   status: recipientCount > 0 ? "passed" : "pending", note: "" },
+    { label: "Test SMS sent",        status: testSent ? "passed" : "pending",           note: "" },
+    { label: "Quiet hours protected", status: "passed",                                  note: "9am–8pm local time" },
+    { label: "Opt-outs excluded",    status: "passed",                                  note: "8 contacts excluded" },
     {
       label: "Type confirmation",
       status: confirmText === expectedConfirm ? "passed" : "required",
@@ -617,30 +818,17 @@ function StepFinalApproval({
     },
   ];
 
-  const handleSchedule = () => {
-    if (!isReady) {
-      toast.error("Complete all checks first");
-      return;
-    }
-    toast.success("Campaign scheduled! (UI-only — logic not wired yet)");
-  };
-
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
         <Send className="w-4 h-4 text-gray-600" />
         Final Approval
       </h2>
-
       <table className="w-full border-collapse mb-4">
         <thead>
           <tr>
-            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">
-              Check
-            </th>
-            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">
-              Status
-            </th>
+            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Check</th>
+            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Status</th>
           </tr>
         </thead>
         <tbody>
@@ -658,8 +846,7 @@ function StepFinalApproval({
                   </span>
                 ) : (
                   <span className="text-sm font-semibold text-gray-500">
-                    Required:{" "}
-                    <strong className="text-gray-900">{c.note}</strong>
+                    Required: <strong className="text-gray-900">{c.note}</strong>
                   </span>
                 )}
               </td>
@@ -667,13 +854,9 @@ function StepFinalApproval({
           ))}
         </tbody>
       </table>
-
-      {/* Type confirmation */}
       <div className="mb-5">
         <div className="text-xs font-bold text-gray-500 mb-1.5">
-          Type{" "}
-          <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock
-          sending
+          Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending
         </div>
         <Input
           value={confirmText}
@@ -687,7 +870,6 @@ function StepFinalApproval({
           ].join(" ")}
         />
       </div>
-
       <div className="flex justify-between items-center gap-3">
         <Button
           variant="outline"
@@ -697,7 +879,10 @@ function StepFinalApproval({
           Save Draft
         </Button>
         <Button
-          onClick={handleSchedule}
+          onClick={() => {
+            if (!isReady) { toast.error("Complete all checks first"); return; }
+            toast.success("Campaign scheduled! (UI-only — logic not wired yet)");
+          }}
           disabled={!isReady}
           className={[
             "rounded-xl font-bold px-6",
@@ -718,28 +903,32 @@ function StepFinalApproval({
 
 function SmsCampaignsContent() {
   const [step, setStep] = useState<Step>(1);
-  const [recipientCount, setRecipientCount] = useState(184);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [testSent, setTestSent] = useState(false);
-  const [audience, setAudience] = useState<AudienceState>({
-    lastBooking: "90d",
-    frequencies: new Set<FrequencyFilter>(["one-time", "former-recurring"]),
-    radius: "5mi",
+  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<AdvancedFilters>({
+    radiusEnabled: false,
     location: "Arlington, VA 22201",
+    radius: "5mi",
+    minSpend: "",
+    minRating: "",
+    notContactedDays: "",
+    lastBookingDays: "",
   });
 
-  const goNext = () => setStep((s) => (Math.min(s + 1, 5) as Step));
-  const goPrev = () => setStep((s) => (Math.max(s - 1, 1) as Step));
+  const recipientCount = computeRecipientCount(selectedPresets, filters);
+  const excluded = selectedPresets.size > 0 ? Math.round(recipientCount * 0.18) : 0;
+  const expectedReplies = Math.round(recipientCount * 0.13);
+
+  const goNext = () => setStep((s) => Math.min(s + 1, 5) as Step);
+  const goPrev = () => setStep((s) => Math.max(s - 1, 1) as Step);
 
   return (
     <>
       {/* Page header */}
       <div className="flex items-start justify-between mb-1 gap-4">
         <div>
-          <h1
-            className="text-2xl font-black text-gray-900"
-            style={{ letterSpacing: "-0.03em" }}
-          >
+          <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>
             SMS Campaign Command Center
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -756,21 +945,27 @@ function SmsCampaignsContent() {
       <WorkflowBar step={step} onStep={setStep} />
 
       {/* 2-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[390px_1fr] gap-4 mt-2">
-        {/* LEFT: Hero + Audience */}
+      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4 mt-2">
+        {/* LEFT: Hero + Audience Builder */}
         <div>
-          <HeroCard count={recipientCount} excluded={41} expectedReplies={24} />
-          <StepAudience
-            audience={audience}
-            setAudience={setAudience}
-            setRecipientCount={setRecipientCount}
+          <HeroCard
+            count={recipientCount}
+            selectedCount={selectedPresets.size}
+            excluded={excluded}
+            expectedReplies={expectedReplies}
+          />
+          <AudienceBuilder
+            selectedPresets={selectedPresets}
+            setSelectedPresets={setSelectedPresets}
+            filters={filters}
+            setFilters={setFilters}
           />
         </div>
 
         {/* RIGHT: All other panels */}
         <div>
           <SafetySummary />
-          <LiveAudiencePreview />
+          <LiveAudiencePreview selectedCount={selectedPresets.size} />
           <MessageEditor message={message} setMessage={setMessage} />
           <PersonalizedPreviews message={message} />
           <StepTest message={message} onTestSent={() => setTestSent(true)} />
@@ -811,7 +1006,6 @@ function SmsCampaignsContent() {
 
 export default function SmsCampaigns() {
   const { isAdmin } = useAgentPermissions();
-
   return (
     <AdminPageGuard pageId="sms-campaigns">
       <AdminHeader activeTab="sms-campaigns" isAdmin={isAdmin} />
