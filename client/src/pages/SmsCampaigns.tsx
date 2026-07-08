@@ -1129,6 +1129,7 @@ function ReviewAudienceModal({
   frozenCount,
   onApprove,
   isApproving,
+  onCountChange,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -1137,6 +1138,7 @@ function ReviewAudienceModal({
   frozenCount: number;
   onApprove: () => void;
   isApproving: boolean;
+  onCountChange: (newCount: number) => void;
 }) {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
@@ -1150,6 +1152,7 @@ function ReviewAudienceModal({
   const removeRecipient = trpc.smsCampaign.removeRecipient.useMutation({
     onSuccess: (result) => {
       toast.success(`Recipient removed. ${result.remainingCount} remaining.`);
+      onCountChange(result.remainingCount);
       utils.smsCampaign.listRecipients.invalidate({ campaignId: campaignId! });
       utils.smsCampaign.getCampaign.invalidate({ campaignId: campaignId! });
     },
@@ -1729,6 +1732,7 @@ function SmsCampaignsContent() {
         frozenCount={frozenCount}
         onApprove={() => approveCampaignMutation.mutate({ campaignId: campaignId! })}
         isApproving={approveCampaignMutation.isPending}
+        onCountChange={setFrozenCount}
       />
 
       {/* Send Confirmation dialog — Stage 5 */}
