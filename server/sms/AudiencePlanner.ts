@@ -607,7 +607,13 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
             THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
           ELSE cj.phone
         END AS phoneNormalized,
-        cj.firstName, cj.name, cj.jobDate AS lastJobDate, cj.phoneInvalid, cj.status AS jobStatus,
+        cj.firstName, cj.name, cj.serviceType, cj.frequency,
+        cj.lastBookingPrice, cj.jobDate AS lastJobDate, cj.phoneInvalid, cj.status AS jobStatus,
+        cj.bedrooms, cj.bathrooms,
+        COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
+        SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
+        AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
+        MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
