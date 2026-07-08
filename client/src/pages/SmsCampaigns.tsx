@@ -441,12 +441,18 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
 function HeroCard({
   plannerResult,
   isFetching,
+  isLoading,
+  isError,
+  errorMessage,
   ruleCount,
   plannerVersion,
   updatedSecondsAgo,
 }: {
   plannerResult: { summary: { matchedCustomers: number; excludedCustomers: number; estimatedReplies: number; qualityScore: number; qualityGrade: string } } | null;
   isFetching: boolean;
+  isLoading: boolean;
+  isError: boolean;
+  errorMessage: string | null;
   ruleCount: number;
   plannerVersion: string | null;
   updatedSecondsAgo: number | null;
@@ -463,11 +469,21 @@ function HeroCard({
     <div className="rounded-3xl p-7 text-center text-white mb-4" style={{ background: "linear-gradient(180deg,#111827 0%,#1f2937 100%)" }}>
       <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Recipients</div>
 
+      {/* Error state — visible diagnostic */}
+      {isError && (
+        <div className="mb-2 px-3 py-2 rounded-xl bg-red-900/60 border border-red-500/40 text-left">
+          <div className="text-xs font-black text-red-400 uppercase tracking-wider mb-0.5">Planner error</div>
+          <div className="text-xs text-red-300 font-mono break-all">{errorMessage ?? "Unknown error"}</div>
+        </div>
+      )}
+
       {/* Count */}
-      {isFetching && !plannerResult ? (
+      {isLoading ? (
         <div className="h-[72px] flex items-center justify-center mb-1">
           <div className="w-12 h-12 rounded-full border-4 border-gray-600 border-t-white animate-spin" />
         </div>
+      ) : isError ? (
+        <div className="font-black text-red-400 leading-none mb-1" style={{ fontSize: 48 }}>—</div>
       ) : (
         <div className="font-black text-white leading-none mb-1 tabular-nums transition-all duration-300 relative" style={{ fontSize: 72 }}>
           {count}
@@ -483,6 +499,8 @@ function HeroCard({
       <div className="text-xs text-gray-500 mb-2">
         {ruleCount === 0
           ? "Select an audience or add rules"
+          : isError
+          ? "Query failed — see error above"
           : isFetching
           ? "Updating…"
           : `${ruleCount} filter${ruleCount > 1 ? "s" : ""} active`}
@@ -1519,21 +1537,38 @@ function SmsCampaignsContent() {
 
   const hasAudience = selectedPresets.size > 0 || rules.length > 0;
 
-  const { data: plannerResult, isFetching } = trpc.smsCampaign.planAudience.useQuery(
+  const plannerQuery = trpc.smsCampaign.planAudience.useQuery(
     debouncedDef as Parameters<typeof trpc.smsCampaign.planAudience.useQuery>[0],
     {
-      enabled: hasAudience,
-      keepPreviousData: true,
+      enabled: hasAudience && !!debouncedDef,
+      placeholderData: (prev) => prev,  // RQ v5 replacement for keepPreviousData
       refetchOnWindowFocus: false,
-      onSuccess: (data) => {
-        // Update supported fields from server response
-        if (data?.supportedRuleFields) {
-          setSupportedFields(new Set(data.supportedRuleFields as RuleField[]));
-        }
-        setUpdatedAt(Date.now());
-      },
+      staleTime: 30_000,
     }
   );
+  const plannerResult = plannerQuery.data ?? null;
+
+  // Log request payload + response for diagnostics
+  useEffect(() => {
+    if (!hasAudience) return;
+    console.log('[planAudience] request payload:', JSON.stringify(debouncedDef, null, 2));
+  }, [debouncedDef, hasAudience]);
+
+  useEffect(() => {
+    if (plannerQuery.data) {
+      console.log('[planAudience] response:', plannerQuery.data);
+      if (plannerQuery.data.supportedRuleFields) {
+        setSupportedFields(new Set(plannerQuery.data.supportedRuleFields as RuleField[]));
+      }
+      setUpdatedAt(Date.now());
+    }
+  }, [plannerQuery.data]);
+
+  useEffect(() => {
+    if (plannerQuery.isError) {
+      console.error('[planAudience] error:', plannerQuery.error);
+    }
+  }, [plannerQuery.isError, plannerQuery.error]);
 
   // "Updated N seconds ago" timer
   useEffect(() => {
@@ -1586,8 +1621,11 @@ function SmsCampaignsContent() {
         {/* LEFT */}
         <div>
           <HeroCard
-            plannerResult={plannerResult ?? null}
-            isFetching={isFetching}
+            plannerResult={plannerResult}
+            isFetching={plannerQuery.isFetching}
+            isLoading={plannerQuery.isLoading}
+            isError={plannerQuery.isError}
+            errorMessage={plannerQuery.error ? String((plannerQuery.error as any)?.message ?? plannerQuery.error) : null}
             ruleCount={ruleCount}
             plannerVersion={plannerVersion}
             updatedSecondsAgo={secondsAgo}
