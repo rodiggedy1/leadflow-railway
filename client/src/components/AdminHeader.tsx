@@ -286,7 +286,8 @@ export type AdminTab =
   | "confirmation-calls"
   | "missed-calls"
   | "cleaner-calls"
-  | "payments";
+  | "payments"
+  | "sms-campaigns";
 
 // ── Dropdown nav item ─────────────────────────────────────────────────────
 interface DropdownItem {
@@ -360,6 +361,7 @@ const NAV_ENTRIES: NavEntry[] = [
       { id: "always-on", label: "Always-On", href: "/admin/always-on", icon: <Zap className="w-3.5 h-3.5" /> },
       { id: "campaign-approval", label: "Approvals", href: "/admin/campaign-approval", icon: <ClipboardCheck className="w-3.5 h-3.5" /> },
       { id: "reactivation", label: "Reactivation Engine", href: "/admin/reactivation", icon: <Sparkles className="w-3.5 h-3.5" /> },
+      { id: "sms-campaigns", label: "SMS Campaigns", href: "/admin/sms-campaigns", icon: <Send className="w-3.5 h-3.5" /> },
     ],
   },
   // Happiness nav item hidden — to be redesigned later
