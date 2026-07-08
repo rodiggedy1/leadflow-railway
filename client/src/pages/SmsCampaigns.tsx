@@ -1547,6 +1547,7 @@ function SmsCampaignsContent() {
   const [frozenCount, setFrozenCount] = useState(0);
   const [nameLocked, setNameLocked] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'editor'>('campaigns');
 
   // Build the AudienceDefinition for the planner query
   // We use a stable supported set — starts empty, gets populated from first planner response
@@ -1751,7 +1752,8 @@ function SmsCampaignsContent() {
     if (c.status === "FROZEN" || c.status === "APPROVED") {
       setReviewOpen(true);
     }
-    // Scroll to top
+    // Switch to editor tab and scroll to top
+    setActiveTab('editor');
     window.scrollTo({ top: 0, behavior: "smooth" });
     toast.success(`Loaded "${c.name}"`);
     setResumingId(null);
@@ -1759,29 +1761,183 @@ function SmsCampaignsContent() {
 
   return (
     <>
-      <div className="flex items-start justify-between mb-1 gap-4 flex-wrap">
+      {/* Page header */}
+      <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>SMS Campaign Command Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Build the safest possible audience before anyone can send anything.</p>
         </div>
-        {/* Status badge */}
-        <span className={[
-          "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black flex-shrink-0 mt-1",
-          campaignStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-          campaignStatus === 'FROZEN'   ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-          campaignId                    ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                          'bg-gray-100 text-gray-500 border border-gray-200'
-        ].join(' ')}>
-          <ShieldCheck className="w-3.5 h-3.5" />
-          {campaignStatus === 'APPROVED' ? 'Approved · Ready to send' :
-           campaignStatus === 'FROZEN'   ? 'Frozen · Pending review' :
-           campaignId                    ? 'Draft saved' :
-                                           'Draft · Send locked'}
-        </span>
       </div>
 
-      {/* Campaign name + action bar — always visible */}
-      <div className="flex items-center gap-3 mt-3 mb-1 flex-wrap">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b border-gray-200 mb-4">
+        <button
+          onClick={() => setActiveTab('campaigns')}
+          className={[
+            "flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-colors -mb-px",
+            activeTab === 'campaigns'
+              ? "border-indigo-600 text-indigo-700"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          ].join(" ")}
+        >
+          <History className="w-4 h-4" />
+          Campaigns
+          {campaignsQuery.data && campaignsQuery.data.length > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-500">
+              {campaignsQuery.data.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab('editor')}
+          className={[
+            "flex items-center gap-2 px-4 py-2.5 text-sm font-bold border-b-2 transition-colors -mb-px",
+            activeTab === 'editor'
+              ? "border-indigo-600 text-indigo-700"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          ].join(" ")}
+        >
+          <Megaphone className="w-4 h-4" />
+          {campaignId ? campaignName || "Editing Campaign" : "New Campaign"}
+          {campaignId && (
+            <span className={[
+              "ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-black border",
+              campaignStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+              campaignStatus === 'FROZEN'   ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                              'bg-amber-50 text-amber-700 border-amber-200'
+            ].join(" ")}>
+              {campaignStatus === 'APPROVED' ? 'APPROVED' :
+               campaignStatus === 'FROZEN'   ? 'FROZEN' : 'DRAFT'}
+            </span>
+          )}
+        </button>
+        {/* New campaign button */}
+        {activeTab === 'campaigns' && (
+          <button
+            onClick={() => {
+              setCampaignId(null);
+              setCampaignName("");
+              setCampaignStatus(null);
+              setFrozenCount(0);
+              setNameLocked(false);
+              setMessage(DEFAULT_MESSAGE);
+              setRules([]);
+              setSelectedPresets(new Set());
+              setActiveTab('editor');
+            }}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> New Campaign
+          </button>
+        )}
+      </div>
+
+      {/* ── CAMPAIGNS TAB ─────────────────────────────────────────────── */}
+      {activeTab === 'campaigns' && (
+        <div>
+          {campaignsQuery.isLoading && (
+            <div className="flex items-center justify-center py-12 text-sm text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading campaigns…
+            </div>
+          )}
+          {campaignsQuery.data && campaignsQuery.data.length === 0 && (
+            <div className="py-16 text-center">
+              <Megaphone className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-500">No campaigns yet</p>
+              <p className="text-xs text-gray-400 mt-1">Click "New Campaign" to get started</p>
+            </div>
+          )}
+          {campaignsQuery.data && campaignsQuery.data.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {campaignsQuery.data.map((c) => {
+                const sent = c.sentCount ?? 0;
+                const replied = c.repliedCount ?? 0;
+                const booked = c.bookedCount ?? 0;
+                const convRate = sent > 0 ? ((booked / sent) * 100).toFixed(1) : null;
+                const isCompleted = c.status === 'COMPLETED';
+                const isSending = c.status === 'SENDING';
+                const isFrozenOrApproved = c.status === 'FROZEN' || c.status === 'APPROVED';
+                const statusColor = isCompleted ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                  : isSending ? 'bg-amber-100 text-amber-700 border-amber-200'
+                  : isFrozenOrApproved ? 'bg-blue-100 text-blue-700 border-blue-200'
+                  : 'bg-gray-100 text-gray-500 border-gray-200';
+                return (
+                  <div key={c.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:border-gray-300 hover:shadow-sm transition-all">
+                    {/* Card header */}
+                    <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-gray-900 truncate">{c.name}</p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            {c.createdByName} · {new Date(c.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black border ${statusColor}`}>
+                          {c.status}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Card action button */}
+                    <div className="px-4 pt-2 pb-3">
+                      <button
+                        onClick={() => setResumingId(c.id)}
+                        disabled={resumingId === c.id && getCampaignQuery.isFetching}
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-bold transition-colors border
+                          bg-gray-50 text-gray-600 border-gray-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200
+                          disabled:opacity-50 disabled:cursor-wait"
+                      >
+                        {resumingId === c.id && getCampaignQuery.isFetching ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" /> Loading…</>
+                        ) : isCompleted ? (
+                          <><RotateCcw className="w-3 h-3" /> View Results</>
+                        ) : isFrozenOrApproved ? (
+                          <><ShieldCheck className="w-3 h-3" /> Review Audience</>
+                        ) : (
+                          <><Pencil className="w-3 h-3" /> Resume Editing</>
+                        )}
+                      </button>
+                    </div>
+                    {/* Funnel cascade */}
+                    <div className="px-4 pb-3 space-y-0">
+                      <FunnelStep
+                        label={isCompleted || isSending ? `${sent.toLocaleString()} sent` : `${(c.frozenRecipientCount ?? 0).toLocaleString()} frozen`}
+                        sublabel={isCompleted || isSending ? "Delivered" : "Recipients"}
+                        color="indigo"
+                        isFirst
+                      />
+                      {isCompleted && (
+                        <>
+                          <FunnelArrow />
+                          <FunnelStep label={`${replied.toLocaleString()} replied`} sublabel={sent > 0 ? `${((replied/sent)*100).toFixed(1)}% reply rate` : ""} color="blue" />
+                          <FunnelArrow />
+                          <FunnelStep label={`${booked.toLocaleString()} booked`} sublabel={convRate ? `${convRate}% conversion` : ""} color="emerald" />
+                          {(c.estimatedRevenue ?? 0) > 0 && (
+                            <><FunnelArrow /><FunnelStep label={`$${(c.estimatedRevenue ?? 0).toLocaleString()} revenue`} sublabel="Estimated" color="green" /></>
+                          )}
+                        </>
+                      )}
+                      {!isCompleted && isFrozenOrApproved && (
+                        <>
+                          <FunnelArrow faded />
+                          <FunnelStep label={`~${(c.estimatedReplies ?? 0).toLocaleString()} replies`} sublabel="Estimated" color="gray" faded />
+                          <FunnelArrow faded />
+                          <FunnelStep label={`~${(c.estimatedBookings ?? 0).toLocaleString()} bookings`} sublabel="Estimated" color="gray" faded />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── EDITOR TAB ───────────────────────────────────────────────────── */}
+      {activeTab === 'editor' && (
+      <div>
+      {/* Campaign name + action bar */}
+      <div className="flex items-center gap-3 mt-0 mb-1 flex-wrap">
         {nameLocked ? (
           /* Locked: looks like a saved chip — no input affordance */
           <div className="flex items-center gap-2">
@@ -1865,149 +2021,6 @@ function SmsCampaignsContent() {
         </div>
       </div>
 
-      {/* Campaign History Panel */}
-      <div className="mt-3 mb-1 border border-gray-200 rounded-2xl overflow-hidden">
-        <button
-          className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
-          onClick={() => setHistoryOpen((v) => !v)}
-        >
-          <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-            <History className="w-4 h-4 text-gray-500" />
-            Campaign History
-            {campaignsQuery.data && (
-              <span className="text-xs font-normal text-gray-400">({campaignsQuery.data.length} campaigns)</span>
-            )}
-          </span>
-          {historyOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-        </button>
-        {historyOpen && (
-          <div className="p-4">
-            {campaignsQuery.isLoading && (
-              <div className="flex items-center justify-center py-6 text-sm text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading campaigns…
-              </div>
-            )}
-            {campaignsQuery.data && campaignsQuery.data.length === 0 && (
-              <div className="py-6 text-center text-sm text-gray-400">No campaigns yet.</div>
-            )}
-            {campaignsQuery.data && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {campaignsQuery.data.map((c) => {
-                  const sent = c.sentCount ?? 0;
-                  const replied = c.repliedCount ?? 0;
-                  const booked = c.bookedCount ?? 0;
-                  const revenue = c.estimatedRevenue ?? 0;
-                  const convRate = sent > 0 ? ((booked / sent) * 100).toFixed(1) : null;
-                  const replyRate = sent > 0 ? ((replied / sent) * 100).toFixed(1) : null;
-                  const isCompleted = c.status === 'COMPLETED';
-                  const isSending = c.status === 'SENDING';
-                  const isFrozenOrApproved = c.status === 'FROZEN' || c.status === 'APPROVED';
-
-                  const statusColor = isCompleted ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
-                    : isSending ? 'bg-amber-100 text-amber-700 border-amber-200'
-                    : isFrozenOrApproved ? 'bg-blue-100 text-blue-700 border-blue-200'
-                    : 'bg-gray-100 text-gray-500 border-gray-200';
-
-                  return (
-                    <div key={c.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:border-gray-300 hover:shadow-sm transition-all">
-                      {/* Card header */}
-                      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="text-sm font-black text-gray-900 truncate">{c.name}</p>
-                            <p className="text-[11px] text-gray-400 mt-0.5">
-                              {c.createdByName} · {new Date(c.createdAt).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black border ${statusColor}`}>
-                            {c.status}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Card action button */}
-                      <div className="px-4 pt-2 pb-3">
-                        <button
-                          onClick={() => setResumingId(c.id)}
-                          disabled={resumingId === c.id && getCampaignQuery.isFetching}
-                          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-bold transition-colors border
-                            bg-gray-50 text-gray-600 border-gray-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200
-                            disabled:opacity-50 disabled:cursor-wait"
-                        >
-                          {resumingId === c.id && getCampaignQuery.isFetching ? (
-                            <><Loader2 className="w-3 h-3 animate-spin" /> Loading…</>
-                          ) : isCompleted ? (
-                            <><RotateCcw className="w-3 h-3" /> View Results</>
-                          ) : isFrozenOrApproved ? (
-                            <><ShieldCheck className="w-3 h-3" /> Review Audience</>
-                          ) : (
-                            <><Pencil className="w-3 h-3" /> Resume Editing</>
-                          )}
-                        </button>
-                      </div>
-
-                      {/* Funnel cascade */}
-                      <div className="px-4 pb-3 space-y-0">
-                        <FunnelStep
-                          label={isCompleted || isSending ? `${sent.toLocaleString()} sent` : `${(c.frozenRecipientCount ?? 0).toLocaleString()} frozen`}
-                          sublabel={isCompleted || isSending ? "Delivered" : "Recipients"}
-                          color="indigo"
-                          isFirst
-                        />
-                        {isCompleted && (
-                          <>
-                            <FunnelArrow />
-                            <FunnelStep
-                              label={`${replied.toLocaleString()} replied`}
-                              sublabel={replyRate ? `${replyRate}% reply rate` : undefined}
-                              color="blue"
-                            />
-                            <FunnelArrow />
-                            <FunnelStep
-                              label={`${booked.toLocaleString()} booked`}
-                              sublabel={convRate ? `${convRate}% conversion` : undefined}
-                              color="emerald"
-                            />
-                            {revenue > 0 && (
-                              <>
-                                <FunnelArrow />
-                                <FunnelStep
-                                  label={`$${revenue.toLocaleString()} revenue`}
-                                  sublabel="Estimated"
-                                  color="green"
-                                />
-                              </>
-                            )}
-                          </>
-                        )}
-                        {!isCompleted && isFrozenOrApproved && (
-                          <>
-                            <FunnelArrow faded />
-                            <FunnelStep
-                              label={`~${(c.estimatedReplies ?? 0).toLocaleString()} replies`}
-                              sublabel="Estimated"
-                              color="gray"
-                              faded
-                            />
-                            <FunnelArrow faded />
-                            <FunnelStep
-                              label={`~${(c.estimatedBookings ?? 0).toLocaleString()} bookings`}
-                              sublabel="Estimated"
-                              color="gray"
-                              faded
-                            />
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       <WorkflowBar step={step} onStep={setStep} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-4 mt-2">
@@ -2066,6 +2079,8 @@ function SmsCampaignsContent() {
           Next<ChevronRight className="w-4 h-4" />
         </Button>
       </div>
+      </div>
+      )}
 
       {/* CampaignReviewScreen — full-screen Stage 5.5 review experience */}
       <CampaignReviewScreen

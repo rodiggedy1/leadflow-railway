@@ -832,7 +832,7 @@ export const smsCampaignRouter = router({
    */
   listCampaigns: adminAgentProcedure
     .query(async () => {
-      const db = getDb();
+      const db = await getDb();
       const rows = await db
         .select({
           id: smsCampaigns.id,
