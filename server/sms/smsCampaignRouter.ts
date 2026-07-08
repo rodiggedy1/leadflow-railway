@@ -17,7 +17,7 @@
  */
 
 import { z } from "zod";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { adminAgentProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
@@ -529,6 +529,33 @@ export const smsCampaignRouter = router({
       );
 
       return result;
+    }),
+
+  /**
+   * listCampaigns — returns the 50 most recent campaigns for the history panel.
+   * Read-only summary: no recipient rows, no audienceDefinition blob.
+   */
+  listCampaigns: adminAgentProcedure
+    .query(async () => {
+      const db = getDb();
+      const rows = await db
+        .select({
+          id: smsCampaigns.id,
+          name: smsCampaigns.name,
+          status: smsCampaigns.status,
+          frozenRecipientCount: smsCampaigns.frozenRecipientCount,
+          sentCount: smsCampaigns.sentCount,
+          failedCount: smsCampaigns.failedCount,
+          createdByName: smsCampaigns.createdByName,
+          createdAt: smsCampaigns.createdAt,
+          frozenAt: smsCampaigns.frozenAt,
+          approvedAt: smsCampaigns.approvedAt,
+          sendCompletedAt: smsCampaigns.sendCompletedAt,
+        })
+        .from(smsCampaigns)
+        .orderBy(desc(smsCampaigns.createdAt))
+        .limit(50);
+      return rows;
     }),
 });
 export type SmsCampaignRouter = typeof smsCampaignRouter;

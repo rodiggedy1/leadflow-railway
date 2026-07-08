@@ -69,6 +69,8 @@ import {
   ChevronDown,
   Trash2,
   Save,
+  Pencil,
+  History,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1430,6 +1432,8 @@ function SmsCampaignsContent() {
   const [campaignId, setCampaignId] = useState<number | null>(null);
   const [campaignStatus, setCampaignStatus] = useState<string | null>(null);
   const [frozenCount, setFrozenCount] = useState(0);
+  const [nameLocked, setNameLocked] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Build the AudienceDefinition for the planner query
   // We use a stable supported set — starts empty, gets populated from first planner response
@@ -1473,6 +1477,7 @@ function SmsCampaignsContent() {
   const saveDraftMutation = trpc.smsCampaign.saveDraft.useMutation({
     onSuccess: (data) => {
       setCampaignId(data.campaignId);
+      setNameLocked(true);
       toast.success("Draft saved");
     },
     onError: (err) => toast.error(err.message),
@@ -1581,6 +1586,12 @@ function SmsCampaignsContent() {
   const ruleCount = rules.length + selectedPresets.size;
   const sampleNames = plannerResult?.sampleIncluded?.map((s) => s.displayName) ?? [];
 
+  // Campaign history
+  const campaignsQuery = trpc.smsCampaign.listCampaigns.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+    staleTime: 30_000,
+  });
+
   return (
     <>
       <div className="flex items-start justify-between mb-1 gap-4 flex-wrap">
@@ -1606,14 +1617,31 @@ function SmsCampaignsContent() {
 
       {/* Campaign name + action bar — always visible */}
       <div className="flex items-center gap-2 mt-2 mb-1 flex-wrap">
-        <Input
-          value={campaignName}
-          onChange={(e) => setCampaignName(e.target.value)}
-          placeholder="Campaign name (e.g. July Win-Back)"
-          className="rounded-xl border-gray-200 text-sm font-semibold w-56 h-9"
-        />
-        {campaignId && (
-          <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>
+        {nameLocked ? (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl h-9">
+            <span className="text-sm font-semibold text-gray-800 truncate max-w-[180px]">{campaignName}</span>
+            {campaignId && <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>}
+            <button
+              onClick={() => setNameLocked(false)}
+              className="ml-1 text-gray-400 hover:text-gray-700 transition-colors"
+              title="Edit campaign name"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <>
+            <Input
+              value={campaignName}
+              onChange={(e) => setCampaignName(e.target.value)}
+              placeholder="Campaign name (e.g. July Win-Back)"
+              className="rounded-xl border-gray-200 text-sm font-semibold w-56 h-9"
+              onBlur={() => { if (nameLocked) setNameLocked(true); }}
+            />
+            {campaignId && (
+              <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>
+            )}
+          </>
         )}
         <div className="flex items-center gap-2 ml-auto">
           {/* Save Draft */}
@@ -1662,6 +1690,60 @@ function SmsCampaignsContent() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Campaign History Panel */}
+      <div className="mt-3 mb-1 border border-gray-200 rounded-2xl overflow-hidden">
+        <button
+          className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+          onClick={() => setHistoryOpen((v) => !v)}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <History className="w-4 h-4 text-gray-500" />
+            Campaign History
+            {campaignsQuery.data && (
+              <span className="text-xs font-normal text-gray-400">({campaignsQuery.data.length} campaigns)</span>
+            )}
+          </span>
+          {historyOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        </button>
+        {historyOpen && (
+          <div className="divide-y divide-gray-100">
+            {campaignsQuery.isLoading && (
+              <div className="flex items-center justify-center py-6 text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading campaigns…
+              </div>
+            )}
+            {campaignsQuery.data && campaignsQuery.data.length === 0 && (
+              <div className="py-6 text-center text-sm text-gray-400">No campaigns yet.</div>
+            )}
+            {campaignsQuery.data && campaignsQuery.data.map((c) => (
+              <div key={c.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-gray-800 truncate">{c.name}</span>
+                    <span className="text-xs font-mono text-gray-400">#{c.id}</span>
+                  </div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {c.createdByName} · {new Date(c.createdAt).toLocaleDateString()}
+                    {c.frozenRecipientCount != null && ` · ${c.frozenRecipientCount} recipients`}
+                    {c.sentCount > 0 && ` · ${c.sentCount} sent`}
+                  </div>
+                </div>
+                <span className={[
+                  "flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-bold",
+                  c.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                  c.status === 'APPROVED'  ? 'bg-emerald-50 text-emerald-600' :
+                  c.status === 'FROZEN'    ? 'bg-blue-50 text-blue-700' :
+                  c.status === 'SENDING'   ? 'bg-amber-50 text-amber-700' :
+                                            'bg-gray-100 text-gray-500'
+                ].join(' ')}>
+                  {c.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <WorkflowBar step={step} onStep={setStep} />
