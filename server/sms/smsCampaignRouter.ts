@@ -855,6 +855,50 @@ export const smsCampaignRouter = router({
     }),
 
   /**
+   * updateMessageTemplate — update the message template on a DRAFT, FROZEN, or APPROVED campaign.
+   *
+   * saveDraft only allows edits on DRAFT campaigns. This procedure allows message-only edits
+   * on FROZEN/APPROVED campaigns so the reviewer can refine the message in the Review screen
+   * before approving. Does NOT change status or audience definition.
+   *
+   * Returns: { campaignId }
+   */
+  updateMessageTemplate: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      messageTemplate: z.string().min(1).max(1600),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const rows = await db
+        .select({ id: smsCampaigns.id, status: smsCampaigns.status })
+        .from(smsCampaigns)
+        .where(eq(smsCampaigns.id, input.campaignId))
+        .limit(1);
+
+      if (rows.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Campaign ${input.campaignId} not found` });
+      }
+
+      const allowedStatuses = ["DRAFT", "FROZEN", "APPROVED"];
+      if (!allowedStatuses.includes(rows[0].status)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Cannot edit message on a campaign in status "${rows[0].status}"`,
+        });
+      }
+
+      await db
+        .update(smsCampaigns)
+        .set({ messageTemplate: input.messageTemplate, updatedAt: new Date() })
+        .where(eq(smsCampaigns.id, input.campaignId));
+
+      return { campaignId: input.campaignId };
+    }),
+
+  /**
    * listCampaigns — returns the 50 most recent campaigns for the history panel.
    * Read-only summary: no recipient rows, no audienceDefinition blob.
    */

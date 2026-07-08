@@ -1043,7 +1043,7 @@ const MSG_TOKENS = [
   { token: "{{preferred_team}}",           label: "preferred team",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
 ] as const;
 
-function MessageEditor({ message, setMessage }: { message: string; setMessage: (m: string) => void }) {
+function MessageEditor({ message, setMessage, onSave, isSaving }: { message: string; setMessage: (m: string) => void; onSave?: () => void; isSaving?: boolean }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const charCount = message.length;
   const smsCount = Math.ceil(charCount / 160) || 1;
@@ -1090,8 +1090,17 @@ function MessageEditor({ message, setMessage }: { message: string; setMessage: (
         placeholder="Write your message…"
       />
       <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
-        <span>{charCount} chars</span>
-        <span>{smsCount} SMS segment{smsCount > 1 ? "s" : ""}</span>
+        <span>{charCount} chars · {smsCount} SMS segment{smsCount > 1 ? "s" : ""}</span>
+        {onSave && (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold disabled:opacity-60 transition-colors"
+          >
+            {isSaving ? "Saving…" : "💾 Save Message"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1626,6 +1635,10 @@ function SmsCampaignsContent() {
     onError: (err) => toast.error(err.message),
   });
 
+  const updateMessageMutation = trpc.smsCampaign.updateMessageTemplate.useMutation({
+    onError: (err) => toast.error(`Message save failed: ${err.message}`),
+  });
+
   const sendCampaignMutation = trpc.smsCampaign.sendCampaign.useMutation({
     onSuccess: (result) => {
       setCampaignStatus("COMPLETED");
@@ -1956,8 +1969,8 @@ function SmsCampaignsContent() {
           </div>
         )}
         <div className="flex items-center gap-2 ml-auto">
-          {/* Save Draft */}
-          {!campaignStatus && (
+          {/* Save Draft — visible when no status yet OR status is DRAFT */}
+          {(!campaignStatus || campaignStatus === 'DRAFT') && (
             <Button
               variant="outline"
               size="sm"
@@ -1968,6 +1981,20 @@ function SmsCampaignsContent() {
               {saveDraftMutation.isPending
                 ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</span>
                 : <span className="flex items-center gap-1.5"><Save className="w-3.5 h-3.5" />Save Draft</span>}
+            </Button>
+          )}
+          {/* Save Message — visible when FROZEN or APPROVED (saveDraft rejects non-DRAFT) */}
+          {(campaignStatus === 'FROZEN' || campaignStatus === 'APPROVED') && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { if (campaignId) updateMessageMutation.mutate({ campaignId, messageTemplate: message }); }}
+              disabled={updateMessageMutation.isPending}
+              className="rounded-xl font-bold h-9"
+            >
+              {updateMessageMutation.isPending
+                ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</span>
+                : <span className="flex items-center gap-1.5"><Save className="w-3.5 h-3.5" />Save Message</span>}
             </Button>
           )}
           {/* Freeze Audience */}
@@ -2036,7 +2063,23 @@ function SmsCampaignsContent() {
         <div>
           <SafetySummary breakdown={plannerResult?.exclusionBreakdown ?? null} />
           <LiveAudiencePreview sampleIncluded={plannerResult?.sampleIncluded ?? null} />
-          <MessageEditor message={message} setMessage={setMessage} />
+          <MessageEditor
+                  message={message}
+                  setMessage={setMessage}
+                  isSaving={saveDraftMutation.isPending || updateMessageMutation.isPending}
+                  onSave={() => {
+                    if (!campaignId || !campaignStatus || campaignStatus === 'DRAFT') {
+                      saveDraftMutation.mutate({
+                        ...(campaignId ? { campaignId } : {}),
+                        name: campaignName || 'Untitled Campaign',
+                        audienceDefinition: audienceDefinition as Parameters<typeof saveDraftMutation.mutate>[0]['audienceDefinition'],
+                        messageTemplate: message,
+                      });
+                    } else {
+                      updateMessageMutation.mutate({ campaignId, messageTemplate: message });
+                    }
+                  }}
+                />
           <PersonalizedPreviews message={message} sampleNames={sampleNames} />
           <StepTest message={message} onTestSent={() => setTestSent(true)} />
           <StepFinalApproval
@@ -2082,14 +2125,9 @@ function SmsCampaignsContent() {
         onCountChange={setFrozenCount}
         onMessageChange={(newMsg) => {
           setMessage(newMsg);
-          // Auto-save message back to draft if campaign exists
+          // Auto-save message — use updateMessageTemplate which works on DRAFT/FROZEN/APPROVED
           if (campaignId) {
-            saveDraftMutation.mutate({
-              campaignId,
-              name: campaignName || "Untitled Campaign",
-              audienceDefinition: audienceDefinition as Parameters<typeof saveDraftMutation.mutate>[0]["audienceDefinition"],
-              messageTemplate: newMsg,
-            });
+            updateMessageMutation.mutate({ campaignId, messageTemplate: newMsg });
           }
         }}
       />
