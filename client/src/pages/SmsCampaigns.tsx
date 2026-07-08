@@ -1122,6 +1122,50 @@ function StepTest({ message, onTestSent }: { message: string; onTestSent: () => 
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Campaign History funnel helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const funnelColorMap: Record<string, string> = {
+  indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  blue:   "bg-blue-50 text-blue-700 border-blue-200",
+  emerald:"bg-emerald-50 text-emerald-700 border-emerald-200",
+  green:  "bg-green-50 text-green-700 border-green-200",
+  gray:   "bg-gray-50 text-gray-400 border-gray-200",
+};
+
+function FunnelStep({
+  label,
+  sublabel,
+  color,
+  isFirst = false,
+  faded = false,
+}: {
+  label: string;
+  sublabel?: string;
+  color: string;
+  isFirst?: boolean;
+  faded?: boolean;
+}) {
+  const colorCls = funnelColorMap[color] ?? funnelColorMap.gray;
+  return (
+    <div className={`flex items-center justify-between px-3 py-2 rounded-xl border text-sm font-bold ${colorCls} ${faded ? "opacity-50" : ""}`}>
+      <span>{label}</span>
+      {sublabel && <span className="text-[11px] font-normal opacity-70">{sublabel}</span>}
+    </div>
+  );
+}
+
+function FunnelArrow({ faded = false }: { faded?: boolean }) {
+  return (
+    <div className={`flex justify-center py-0.5 ${faded ? "opacity-30" : "opacity-50"}`}>
+      <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
+        <path d="M6 10L0 0h12L6 10z" fill="#6b7280" />
+      </svg>
+    </div>
+  );
+}
+
 // ReviewAudienceModal — paginated frozen recipient list with manual removal
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1739,7 +1783,7 @@ function SmsCampaignsContent() {
           {historyOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
         </button>
         {historyOpen && (
-          <div className="divide-y divide-gray-100">
+          <div className="p-4">
             {campaignsQuery.isLoading && (
               <div className="flex items-center justify-center py-6 text-sm text-gray-400">
                 <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading campaigns…
@@ -1748,31 +1792,99 @@ function SmsCampaignsContent() {
             {campaignsQuery.data && campaignsQuery.data.length === 0 && (
               <div className="py-6 text-center text-sm text-gray-400">No campaigns yet.</div>
             )}
-            {campaignsQuery.data && campaignsQuery.data.map((c) => (
-              <div key={c.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-gray-800 truncate">{c.name}</span>
-                    <span className="text-xs font-mono text-gray-400">#{c.id}</span>
-                  </div>
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {c.createdByName} · {new Date(c.createdAt).toLocaleDateString()}
-                    {c.frozenRecipientCount != null && ` · ${c.frozenRecipientCount} recipients`}
-                    {c.sentCount > 0 && ` · ${c.sentCount} sent`}
-                  </div>
-                </div>
-                <span className={[
-                  "flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-bold",
-                  c.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                  c.status === 'APPROVED'  ? 'bg-emerald-50 text-emerald-600' :
-                  c.status === 'FROZEN'    ? 'bg-blue-50 text-blue-700' :
-                  c.status === 'SENDING'   ? 'bg-amber-50 text-amber-700' :
-                                            'bg-gray-100 text-gray-500'
-                ].join(' ')}>
-                  {c.status}
-                </span>
+            {campaignsQuery.data && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {campaignsQuery.data.map((c) => {
+                  const sent = c.sentCount ?? 0;
+                  const replied = c.repliedCount ?? 0;
+                  const booked = c.bookedCount ?? 0;
+                  const revenue = c.estimatedRevenue ?? 0;
+                  const convRate = sent > 0 ? ((booked / sent) * 100).toFixed(1) : null;
+                  const replyRate = sent > 0 ? ((replied / sent) * 100).toFixed(1) : null;
+                  const isCompleted = c.status === 'COMPLETED';
+                  const isSending = c.status === 'SENDING';
+                  const isFrozenOrApproved = c.status === 'FROZEN' || c.status === 'APPROVED';
+
+                  const statusColor = isCompleted ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                    : isSending ? 'bg-amber-100 text-amber-700 border-amber-200'
+                    : isFrozenOrApproved ? 'bg-blue-100 text-blue-700 border-blue-200'
+                    : 'bg-gray-100 text-gray-500 border-gray-200';
+
+                  return (
+                    <div key={c.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:border-gray-300 hover:shadow-sm transition-all">
+                      {/* Card header */}
+                      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-black text-gray-900 truncate">{c.name}</p>
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              {c.createdByName} · {new Date(c.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-black border ${statusColor}`}>
+                            {c.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Funnel cascade */}
+                      <div className="px-4 py-3 space-y-0">
+                        <FunnelStep
+                          label={isCompleted || isSending ? `${sent.toLocaleString()} sent` : `${(c.frozenRecipientCount ?? 0).toLocaleString()} frozen`}
+                          sublabel={isCompleted || isSending ? "Delivered" : "Recipients"}
+                          color="indigo"
+                          isFirst
+                        />
+                        {isCompleted && (
+                          <>
+                            <FunnelArrow />
+                            <FunnelStep
+                              label={`${replied.toLocaleString()} replied`}
+                              sublabel={replyRate ? `${replyRate}% reply rate` : undefined}
+                              color="blue"
+                            />
+                            <FunnelArrow />
+                            <FunnelStep
+                              label={`${booked.toLocaleString()} booked`}
+                              sublabel={convRate ? `${convRate}% conversion` : undefined}
+                              color="emerald"
+                            />
+                            {revenue > 0 && (
+                              <>
+                                <FunnelArrow />
+                                <FunnelStep
+                                  label={`$${revenue.toLocaleString()} revenue`}
+                                  sublabel="Estimated"
+                                  color="green"
+                                />
+                              </>
+                            )}
+                          </>
+                        )}
+                        {!isCompleted && isFrozenOrApproved && (
+                          <>
+                            <FunnelArrow faded />
+                            <FunnelStep
+                              label={`~${(c.estimatedReplies ?? 0).toLocaleString()} replies`}
+                              sublabel="Estimated"
+                              color="gray"
+                              faded
+                            />
+                            <FunnelArrow faded />
+                            <FunnelStep
+                              label={`~${(c.estimatedBookings ?? 0).toLocaleString()} bookings`}
+                              sublabel="Estimated"
+                              color="gray"
+                              faded
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
