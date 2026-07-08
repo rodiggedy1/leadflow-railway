@@ -532,6 +532,67 @@ export const smsCampaignRouter = router({
     }),
 
   /**
+   * unfreezeCampaign — revert a FROZEN campaign back to DRAFT.
+   *
+   * Deletes all rows from sms_campaign_recipients for this campaign,
+   * resets frozenRecipientCount to 0, clears frozenAt, and sets status back to DRAFT.
+   *
+   * Only allowed while status = FROZEN (not after APPROVED or later).
+   * Returns: { campaignId, status: "DRAFT" }
+   */
+  unfreezeCampaign: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      }
+
+      const agentName = ctx.agent.agentName;
+
+      // Validate campaign exists and is FROZEN
+      const rows = await db
+        .select({ id: smsCampaigns.id, status: smsCampaigns.status })
+        .from(smsCampaigns)
+        .where(eq(smsCampaigns.id, input.campaignId))
+        .limit(1);
+
+      if (rows.length === 0) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Campaign ${input.campaignId} not found` });
+      }
+      if (rows[0].status !== "FROZEN") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Campaign ${input.campaignId} is in status "${rows[0].status}" — only FROZEN campaigns can be unfrozen`,
+        });
+      }
+
+      // Delete all recipients for this campaign
+      await db
+        .delete(smsCampaignRecipients)
+        .where(eq(smsCampaignRecipients.campaignId, input.campaignId));
+
+      // Reset campaign back to DRAFT
+      await db
+        .update(smsCampaigns)
+        .set({
+          status: "DRAFT",
+          frozenRecipientCount: 0,
+          frozenAt: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(smsCampaigns.id, input.campaignId));
+
+      console.info(
+        `[smsCampaignRouter] Campaign ${input.campaignId} unfrozen by ${agentName} — recipients deleted, status reset to DRAFT`
+      );
+
+      return { campaignId: input.campaignId, status: "DRAFT" as const };
+    }),
+
+  /**
    * listCampaigns — returns the 50 most recent campaigns for the history panel.
    * Read-only summary: no recipient rows, no audienceDefinition blob.
    */

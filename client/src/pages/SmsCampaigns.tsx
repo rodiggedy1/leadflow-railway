@@ -71,6 +71,7 @@ import {
   Save,
   Pencil,
   History,
+  LockOpen,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1132,6 +1133,8 @@ function ReviewAudienceModal({
   onApprove,
   isApproving,
   onCountChange,
+  onUnfreeze,
+  isUnfreezing,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -1141,6 +1144,8 @@ function ReviewAudienceModal({
   onApprove: () => void;
   isApproving: boolean;
   onCountChange: (newCount: number) => void;
+  onUnfreeze: () => void;
+  isUnfreezing: boolean;
 }) {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
@@ -1260,8 +1265,22 @@ function ReviewAudienceModal({
           <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl font-bold">Close</Button>
           {isFrozen && (
             <Button
+              variant="outline"
+              onClick={onUnfreeze}
+              disabled={isUnfreezing || isApproving}
+              className="rounded-xl font-bold border-orange-300 text-orange-700 hover:bg-orange-50"
+            >
+              {isUnfreezing ? (
+                <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Unfreezing…</span>
+              ) : (
+                <span className="flex items-center gap-1.5"><LockOpen className="w-3.5 h-3.5" />Unfreeze (back to Draft)</span>
+              )}
+            </Button>
+          )}
+          {isFrozen && (
+            <Button
               onClick={onApprove}
-              disabled={isApproving || frozenCount === 0}
+              disabled={isApproving || isUnfreezing || frozenCount === 0}
               className="rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-6"
             >
               {isApproving ? (
@@ -1502,6 +1521,16 @@ function SmsCampaignsContent() {
     onError: (err) => toast.error(err.message),
   });
 
+  const unfreezeCampaignMutation = trpc.smsCampaign.unfreezeCampaign.useMutation({
+    onSuccess: () => {
+      setCampaignStatus("DRAFT");
+      setFrozenCount(0);
+      setReviewOpen(false);
+      toast.success("Campaign unfrozen — back to Draft. You can edit the audience and re-freeze.");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
   const sendCampaignMutation = trpc.smsCampaign.sendCampaign.useMutation({
     onSuccess: (result) => {
       setCampaignStatus("COMPLETED");
@@ -1551,15 +1580,8 @@ function SmsCampaignsContent() {
   );
   const plannerResult = plannerQuery.data ?? null;
 
-  // Log request payload + response for diagnostics
-  useEffect(() => {
-    if (!hasAudience) return;
-    console.log('[planAudience] request payload:', JSON.stringify(debouncedDef, null, 2));
-  }, [debouncedDef, hasAudience]);
-
   useEffect(() => {
     if (plannerQuery.data) {
-      console.log('[planAudience] response:', plannerQuery.data);
       if (plannerQuery.data.supportedRuleFields) {
         setSupportedFields(new Set(plannerQuery.data.supportedRuleFields as RuleField[]));
       }
@@ -1815,6 +1837,8 @@ function SmsCampaignsContent() {
         onApprove={() => approveCampaignMutation.mutate({ campaignId: campaignId! })}
         isApproving={approveCampaignMutation.isPending}
         onCountChange={setFrozenCount}
+        onUnfreeze={() => unfreezeCampaignMutation.mutate({ campaignId: campaignId! })}
+        isUnfreezing={unfreezeCampaignMutation.isPending}
       />
 
       {/* Send Confirmation dialog — Stage 5 */}
