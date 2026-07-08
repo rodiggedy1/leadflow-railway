@@ -1664,6 +1664,8 @@ function SmsCampaignsContent() {
               <input
                 value={campaignName}
                 onChange={(e) => setCampaignName(e.target.value)}
+                onBlur={() => { if (campaignName.trim()) setNameLocked(true); }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && campaignName.trim()) setNameLocked(true); }}
                 placeholder="e.g. July Win-Back"
                 className="text-sm font-black text-gray-900 bg-transparent border-none outline-none placeholder:text-gray-300 w-full leading-tight"
                 autoFocus
