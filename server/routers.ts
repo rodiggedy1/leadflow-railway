@@ -28,6 +28,7 @@ import { qualityRouter } from "./qualityRouter";
 import { cleanerRouter } from "./cleanerRouter";
 import { trackerRouter } from "./trackerRouter";
 import { settingsRouter } from "./settingsRouter";
+import { smsCampaignRouter } from "./sms/smsCampaignRouter";
 import { commandCenterRouter } from "./commandCenterRouter";
 import { metricsRouter } from "./metricsRouter";
 import { fieldMgmtRouter } from "./fieldMgmtRouter";
@@ -92,6 +93,7 @@ const quoteFormSchema = z.object({
 
 export const appRouter = router({
   system: systemRouter,
+  smsCampaign: smsCampaignRouter,
   gmail: gmailRouter,
   callMatrix: callMatrixRouter,
   stripe: stripeRouter,
