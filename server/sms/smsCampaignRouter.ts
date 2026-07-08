@@ -25,6 +25,8 @@ import { planAudience } from "./AudiencePlanner";
 import type { AudienceDefinition } from "./plannerTypes";
 import { freezeAudience as doFreezeAudience } from "./AudienceFreezer";
 import { sendCampaign as doSendCampaign } from "./CampaignSender";
+import { sendSms } from "../openphone";
+import { env } from "../_core/env";
 import {
   smsCampaigns,
   smsCampaignRecipients,
@@ -727,18 +729,44 @@ export const smsCampaignRouter = router({
         .replace(/\{\{first_name\}\}/gi, input.testFirstName)
         .replace(/\{\{name\}\}/gi, input.testFirstName);
 
-      // TODO (production): replace stub with real OpenPhone call
-      // For now: log the test and return the personalized message
+      const isPreview = env.isPreviewMode;
+
+      if (isPreview) {
+        console.info(
+          `[smsCampaignRouter] PREVIEW TEST SMS (not sent) for campaign ${input.campaignId} by ${ctx.agent.agentName}: ` +
+          `to=${input.testPhone}, name=${input.testFirstName}, msg="${personalizedMessage.slice(0, 80)}…"`
+        );
+        return {
+          sent: false as const,
+          preview: true as const,
+          testPhone: input.testPhone,
+          testFirstName: input.testFirstName,
+          personalizedMessage,
+        };
+      }
+
+      // Production: send real SMS via OpenPhone
       console.info(
         `[smsCampaignRouter] TEST SMS for campaign ${input.campaignId} by ${ctx.agent.agentName}: ` +
         `to=${input.testPhone}, name=${input.testFirstName}, msg="${personalizedMessage.slice(0, 80)}…"`
       );
 
+      const result = await sendSms({
+        to: input.testPhone,
+        content: personalizedMessage,
+      });
+
+      console.info(
+        `[smsCampaignRouter] TEST SMS sent OK: messageId=${result?.data?.id ?? "unknown"}`
+      );
+
       return {
         sent: true as const,
+        preview: false as const,
         testPhone: input.testPhone,
         testFirstName: input.testFirstName,
         personalizedMessage,
+        messageId: result?.data?.id,
       };
     }),
 
