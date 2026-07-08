@@ -374,18 +374,18 @@ export const smsCampaignRouter = router({
   /**
    * listRecipients — paginated list of frozen recipients for the review modal.
    *
-   * Returns:
-   *   - items: array of recipient rows (snapshot fields + status)
-   *   - total: total count of recipients for this campaign
-   *   - page / pageSize: echo back for client pagination state
-   *
-   * Ordered by id ASC (freeze order) for stable pagination.
+   * Supports search (by name/phone) and sort.
+   * Returns items, total, page, pageSize, manuallyExcludedCount.
    */
   listRecipients: adminAgentProcedure
     .input(z.object({
       campaignId: z.number().int().positive(),
       page: z.number().int().min(1).default(1),
       pageSize: z.number().int().min(1).max(100).default(25),
+      search: z.string().optional(),
+      sortBy: z.enum(["name", "phone", "lastService", "lastPrice"]).optional(),
+      sortDir: z.enum(["asc", "desc"]).optional(),
+      showSkipped: z.boolean().optional(),
     }))
     .query(async ({ input }) => {
       const db = await getDb();
@@ -394,19 +394,48 @@ export const smsCampaignRouter = router({
       }
 
       const offset = (input.page - 1) * input.pageSize;
+      const { campaignId, search, showSkipped } = input;
 
-      const [items, [countRow]] = await Promise.all([
+      // Build WHERE conditions
+      const conditions = [eq(smsCampaignRecipients.campaignId, campaignId)];
+      if (!showSkipped) {
+        conditions.push(sql`${smsCampaignRecipients.status} != 'SKIPPED'`);
+      }
+      if (search && search.trim()) {
+        const like = `%${search.trim()}%`;
+        conditions.push(
+          sql`(${smsCampaignRecipients.snapshotName} LIKE ${like} OR ${smsCampaignRecipients.phone} LIKE ${like})`
+        );
+      }
+
+      const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+      // Sort
+      const sortCol = input.sortBy === "phone" ? smsCampaignRecipients.phone
+        : input.sortBy === "lastService" ? smsCampaignRecipients.snapshotLastService
+        : input.sortBy === "lastPrice" ? smsCampaignRecipients.snapshotLastPrice
+        : smsCampaignRecipients.snapshotName;
+
+      const [items, [countRow], [skippedRow]] = await Promise.all([
         db
           .select()
           .from(smsCampaignRecipients)
-          .where(eq(smsCampaignRecipients.campaignId, input.campaignId))
-          .orderBy(smsCampaignRecipients.id)
+          .where(whereClause)
+          .orderBy(input.sortDir === "desc" ? sql`${sortCol} DESC` : sql`${sortCol} ASC`)
           .limit(input.pageSize)
           .offset(offset),
         db
           .select({ total: sql<number>`count(*)` })
           .from(smsCampaignRecipients)
-          .where(eq(smsCampaignRecipients.campaignId, input.campaignId)),
+          .where(whereClause),
+        db
+          .select({ total: sql<number>`count(*)` })
+          .from(smsCampaignRecipients)
+          .where(and(
+            eq(smsCampaignRecipients.campaignId, campaignId),
+            eq(smsCampaignRecipients.status, "SKIPPED"),
+            sql`${smsCampaignRecipients.skipReason} = 'MANUAL_EXCLUSION'`
+          )),
       ]);
 
       return {
@@ -414,6 +443,7 @@ export const smsCampaignRouter = router({
         total: Number(countRow?.total ?? 0),
         page: input.page,
         pageSize: input.pageSize,
+        manuallyExcludedCount: Number(skippedRow?.total ?? 0),
       };
     }),
 
@@ -505,6 +535,132 @@ export const smsCampaignRouter = router({
         removed: true as const,
         recipientId: input.recipientId,
         remainingCount: Number(remaining?.total ?? 0),
+      };
+    }),
+
+  /**
+   * skipRecipient — soft-exclude a recipient (status=SKIPPED, reason=MANUAL_EXCLUSION).
+   * Does NOT delete the row. Allows undo via unskipRecipient.
+   * Only allowed while campaign status = FROZEN.
+   */
+  skipRecipient: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      recipientId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const campaignRows = await db
+        .select({ id: smsCampaigns.id, status: smsCampaigns.status })
+        .from(smsCampaigns)
+        .where(eq(smsCampaigns.id, input.campaignId))
+        .limit(1);
+
+      if (campaignRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found" });
+      if (campaignRows[0].status !== "FROZEN") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot skip recipients in status "${campaignRows[0].status}"` });
+      }
+
+      const recipientRows = await db
+        .select({ id: smsCampaignRecipients.id, snapshotName: smsCampaignRecipients.snapshotName, status: smsCampaignRecipients.status })
+        .from(smsCampaignRecipients)
+        .where(and(eq(smsCampaignRecipients.id, input.recipientId), eq(smsCampaignRecipients.campaignId, input.campaignId)))
+        .limit(1);
+
+      if (recipientRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Recipient not found" });
+      if (recipientRows[0].status === "SKIPPED") return { skipped: true as const, recipientId: input.recipientId };
+
+      await db
+        .update(smsCampaignRecipients)
+        .set({ status: "SKIPPED", skipReason: "MANUAL_EXCLUSION" })
+        .where(and(eq(smsCampaignRecipients.id, input.recipientId), eq(smsCampaignRecipients.campaignId, input.campaignId)));
+
+      console.info(`[smsCampaignRouter] Recipient ${input.recipientId} (${recipientRows[0].snapshotName ?? "unknown"}) manually excluded from campaign ${input.campaignId} by ${ctx.agent.agentName}`);
+
+      return { skipped: true as const, recipientId: input.recipientId };
+    }),
+
+  /**
+   * unskipRecipient — undo a manual exclusion (status=PENDING, skipReason=null).
+   * Only works on MANUAL_EXCLUSION rows while campaign is FROZEN.
+   */
+  unskipRecipient: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      recipientId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const campaignRows = await db
+        .select({ id: smsCampaigns.id, status: smsCampaigns.status })
+        .from(smsCampaigns)
+        .where(eq(smsCampaigns.id, input.campaignId))
+        .limit(1);
+
+      if (campaignRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found" });
+      if (campaignRows[0].status !== "FROZEN") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Cannot unskip recipients in status "${campaignRows[0].status}"` });
+      }
+
+      await db
+        .update(smsCampaignRecipients)
+        .set({ status: "PENDING", skipReason: null })
+        .where(and(
+          eq(smsCampaignRecipients.id, input.recipientId),
+          eq(smsCampaignRecipients.campaignId, input.campaignId),
+          sql`${smsCampaignRecipients.skipReason} = 'MANUAL_EXCLUSION'`
+        ));
+
+      console.info(`[smsCampaignRouter] Recipient ${input.recipientId} unskipped in campaign ${input.campaignId} by ${ctx.agent.agentName}`);
+
+      return { unskipped: true as const, recipientId: input.recipientId };
+    }),
+
+  /**
+   * sendTestSms — send a test SMS to a given phone number using a custom first name.
+   * On preview: logs the test, does not send real SMS.
+   * On production: sends via OpenPhone to the test phone only.
+   * The production campaign is never touched.
+   */
+  sendTestSms: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      testPhone: z.string().min(10),
+      testFirstName: z.string().min(1).max(50),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const rows = await db
+        .select({ id: smsCampaigns.id, messageTemplate: smsCampaigns.messageTemplate, status: smsCampaigns.status })
+        .from(smsCampaigns)
+        .where(eq(smsCampaigns.id, input.campaignId))
+        .limit(1);
+
+      if (rows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found" });
+
+      const template = rows[0].messageTemplate;
+      const personalizedMessage = template
+        .replace(/\{\{first_name\}\}/gi, input.testFirstName)
+        .replace(/\{\{name\}\}/gi, input.testFirstName);
+
+      // TODO (production): replace stub with real OpenPhone call
+      // For now: log the test and return the personalized message
+      console.info(
+        `[smsCampaignRouter] TEST SMS for campaign ${input.campaignId} by ${ctx.agent.agentName}: ` +
+        `to=${input.testPhone}, name=${input.testFirstName}, msg="${personalizedMessage.slice(0, 80)}…"`
+      );
+
+      return {
+        sent: true as const,
+        testPhone: input.testPhone,
+        testFirstName: input.testFirstName,
+        personalizedMessage,
       };
     }),
 

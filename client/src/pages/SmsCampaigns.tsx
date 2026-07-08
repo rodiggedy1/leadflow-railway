@@ -11,6 +11,7 @@
  * - Previous planner result persists while re-fetching ("Updating…" not skeleton)
  */
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
+import CampaignReviewScreen from "@/components/CampaignReviewScreen";
 import {
   Timer,
   RefreshCw,
@@ -1835,18 +1836,33 @@ function SmsCampaignsContent() {
         </Button>
       </div>
 
-      {/* ReviewAudienceModal — owned by parent so it persists across step changes */}
-      <ReviewAudienceModal
+      {/* CampaignReviewScreen — full-screen Stage 5.5 review experience */}
+      <CampaignReviewScreen
         open={reviewOpen}
-        onOpenChange={setReviewOpen}
+        onClose={() => setReviewOpen(false)}
         campaignId={campaignId}
+        campaignName={campaignName || "Untitled Campaign"}
         campaignStatus={campaignStatus}
         frozenCount={frozenCount}
+        messageTemplate={message}
+        plannerResult={plannerResult as any}
         onApprove={() => approveCampaignMutation.mutate({ campaignId: campaignId! })}
         isApproving={approveCampaignMutation.isPending}
-        onCountChange={setFrozenCount}
         onUnfreeze={() => unfreezeCampaignMutation.mutate({ campaignId: campaignId! })}
         isUnfreezing={unfreezeCampaignMutation.isPending}
+        onCountChange={setFrozenCount}
+        onMessageChange={(newMsg) => {
+          setMessage(newMsg);
+          // Auto-save message back to draft if campaign exists
+          if (campaignId) {
+            saveDraftMutation.mutate({
+              campaignId,
+              name: campaignName || "Untitled Campaign",
+              audienceDefinition: audienceDefinition as Parameters<typeof saveDraftMutation.mutate>[0]["audienceDefinition"],
+              messageTemplate: newMsg,
+            });
+          }
+        }}
       />
 
       {/* Send Confirmation dialog — Stage 5 */}
