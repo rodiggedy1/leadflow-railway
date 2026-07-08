@@ -1547,7 +1547,7 @@ function SmsCampaignsContent() {
   const [frozenCount, setFrozenCount] = useState(0);
   const [nameLocked, setNameLocked] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'campaigns' | 'editor'>('campaigns');
+  const [activeTab, setActiveTab] = useState<'campaigns' | 'editor'>('editor');
 
   // Build the AudienceDefinition for the planner query
   // We use a stable supported set — starts empty, gets populated from first planner response
