@@ -186,7 +186,8 @@ export const smsCampaignRouter = router({
         return { campaignId: input.campaignId };
       } else {
         // Create new DRAFT
-        const result = await db.insert(smsCampaigns).values({
+        // Drizzle + MySQL2 returns [ResultSetHeader, FieldPacket[]] — destructure to get insertId
+        const [insertResult] = await db.insert(smsCampaigns).values({
           name: input.name,
           status: "DRAFT",
           audienceDefinition: audienceJson,
@@ -199,9 +200,7 @@ export const smsCampaignRouter = router({
           bookedCount: 0,
           isDryRun: 0,
         });
-
-        // Drizzle returns OkPacket with insertId for MySQL
-        const insertId = (result as unknown as { insertId: number }).insertId;
+        const insertId = (insertResult as any).insertId as number;
         return { campaignId: insertId };
       }
     }),
