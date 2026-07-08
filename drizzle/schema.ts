@@ -3522,6 +3522,16 @@ export const smsCampaignRecipients = mysqlTable("sms_campaign_recipients", {
   snapshotAddress: varchar("snapshotAddress", { length: 500 }),
   snapshotLastService: varchar("snapshotLastService", { length: 100 }),
   snapshotLastPrice: int("snapshotLastPrice"),
+  /** City extracted from address at freeze time */
+  snapshotCity: varchar("snapshotCity", { length: 100 }),
+  /** Booking frequency at freeze time (e.g. "Monthly") */
+  snapshotFrequency: varchar("snapshotFrequency", { length: 50 }),
+  /** Number of bedrooms at freeze time */
+  snapshotBedrooms: int("snapshotBedrooms"),
+  /** Days since last booking at freeze time */
+  snapshotDaysSinceBooking: int("snapshotDaysSinceBooking"),
+  /** Preferred team name at freeze time */
+  snapshotPreferredTeam: varchar("snapshotPreferredTeam", { length: 100 }),
 
   /** FK to completedJobs.id — the specific job row this recipient came from */
   completedJobId: int("completedJobId").notNull(),

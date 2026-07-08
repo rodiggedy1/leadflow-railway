@@ -195,7 +195,7 @@ export default function CampaignReviewScreen({
       showSkipped,
     },
     { enabled: open && campaignId !== null, keepPreviousData: true }
-  ) as { data: { items: Array<{ id: number; snapshotFirstName?: string | null; snapshotName?: string | null; phone: string; phoneNormalized: string; snapshotLastService?: string | null; snapshotLastPrice?: number | null; personalizedMessage: string; status: string; skipReason?: string | null; completedJobId: number }>, total: number, page: number, pageSize: number, manuallyExcludedCount: number }, isFetching: boolean };
+  ) as { data: { items: Array<{ id: number; snapshotFirstName?: string | null; snapshotName?: string | null; phone: string; phoneNormalized: string; snapshotLastService?: string | null; snapshotLastPrice?: number | null; snapshotCity?: string | null; snapshotFrequency?: string | null; snapshotBedrooms?: number | null; snapshotDaysSinceBooking?: number | null; snapshotPreferredTeam?: string | null; personalizedMessage: string; status: string; skipReason?: string | null; completedJobId: number }>, total: number, page: number, pageSize: number, manuallyExcludedCount: number }, isFetching: boolean };
 
   const totalPages = recipientData ? Math.ceil(recipientData.total / PAGE_SIZE) : 1;
   const manuallyExcluded = recipientData?.manuallyExcludedCount ?? 0;
@@ -250,9 +250,18 @@ export default function CampaignReviewScreen({
 
   // ── Personalized preview for selected recipient ────────────────────────────
   const previewName = (selectedRecipient?.snapshotFirstName ?? testFirstName) || "Customer";
+  const r = selectedRecipient;
   const previewMessage = localMessage
     .replace(/\{\{first_name\}\}/gi, previewName)
-    .replace(/\{\{name\}\}/gi, previewName);
+    .replace(/\{\{name\}\}/gi, previewName)
+    .replace(/\{\{last_service\}\}/gi, r?.snapshotLastService || "cleaning")
+    .replace(/\{\{last_price\}\}/gi, r?.snapshotLastPrice ? `$${r.snapshotLastPrice}` : "your last service")
+    .replace(/\{\{days_since_last_booking\}\}/gi, r?.snapshotDaysSinceBooking != null ? String(r.snapshotDaysSinceBooking) : "a while")
+    .replace(/\{\{city\}\}/gi, r?.snapshotCity || "your area")
+    .replace(/\{\{area\}\}/gi, r?.snapshotCity || "your area")
+    .replace(/\{\{frequency\}\}/gi, r?.snapshotFrequency || "regular")
+    .replace(/\{\{bedrooms\}\}/gi, r?.snapshotBedrooms != null ? String(r.snapshotBedrooms) : "your home")
+    .replace(/\{\{preferred_team\}\}/gi, r?.snapshotPreferredTeam || "your team");
 
   // ── Sort toggle ────────────────────────────────────────────────────────────
   const toggleSort = useCallback((col: typeof sortBy) => {

@@ -850,8 +850,11 @@ export async function planAudienceForFreeze(
         cj.frequency,
         cj.lastBookingPrice,
         cj.jobDate AS lastJobDate,
+        cj.bedrooms,
         cj.phoneInvalid,
         cj.status AS jobStatus,
+        DATEDIFF(NOW(), cj.jobDate) AS daysSinceBooking,
+        TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(cj.address, ',', -2), ',', 1)) AS city,
         COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
         SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
         AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
@@ -868,7 +871,11 @@ export async function planAudienceForFreeze(
           WHEN cs.smsOptOut = 1 THEN 1
           WHEN cj.status = 'OPTED_OUT' THEN 1
           ELSE 0
-        END) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut
+        END) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut,
+        FIRST_VALUE(clj.teamName) OVER (
+          PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')
+          ORDER BY cj.jobDate DESC
+        ) AS preferredTeam
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
       LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
@@ -885,6 +892,10 @@ export async function planAudienceForFreeze(
       frequency,
       lastBookingPrice,
       lastJobDate,
+      bedrooms,
+      daysSinceBooking,
+      city,
+      preferredTeam,
       isOptedOut,
       hasComplaint,
       lastSmsDaysAgo
@@ -908,6 +919,10 @@ export async function planAudienceForFreeze(
     lastBookingPrice: Number(row.lastBookingPrice ?? 0),
     lastJobDate: String(row.lastJobDate ?? ""),
     frequency: String(row.frequency ?? "Unknown"),
+    bedrooms: row.bedrooms != null ? Number(row.bedrooms) : null,
+    city: String(row.city ?? ""),
+    daysSinceBooking: row.daysSinceBooking != null ? Number(row.daysSinceBooking) : null,
+    preferredTeam: String(row.preferredTeam ?? ""),
   }));
 }
 

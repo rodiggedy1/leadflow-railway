@@ -33,6 +33,14 @@ export interface SafetyCandidate {
   lastBookingPrice: number;
   lastJobDate: string;
   frequency: string;
+  /** Number of bedrooms (e.g. 2) — from completedJobs.bedrooms */
+  bedrooms: number | null;
+  /** City extracted from address */
+  city: string;
+  /** Days since last booking — computed at freeze time */
+  daysSinceBooking: number | null;
+  /** Preferred team name — from cleanerJobs.teamName on the most recent job */
+  preferredTeam: string;
 }
 
 /** A candidate that passed all safety checks — ready to be frozen. */
@@ -256,13 +264,34 @@ export function applySafetyChecks(
 
 /**
  * Renders an SMS template for a specific recipient.
- * Supported placeholders: {{first_name}}, {{area}}
+ *
+ * Supported placeholders:
+ *   {{first_name}}              → recipient first name
+ *   {{area}}                    → city/neighborhood from address
+ *   {{last_service}}            → service type (e.g. "Deep Clean")
+ *   {{last_price}}              → last booking price (e.g. "$180")
+ *   {{days_since_last_booking}} → days since last job (e.g. "47")
+ *   {{city}}                    → city from address
+ *   {{frequency}}               → booking frequency (e.g. "Monthly")
+ *   {{bedrooms}}                → number of bedrooms (e.g. "2")
+ *   {{preferred_team}}          → team name (e.g. "Team Solange")
  */
 function renderTemplate(template: string, candidate: SafetyCandidate): string {
   const area = extractArea(candidate.address);
+  const city = candidate.city || area || "your area";
+  const lastPrice = candidate.lastBookingPrice > 0 ? `$${candidate.lastBookingPrice}` : "";
+  const daysSince = candidate.daysSinceBooking != null ? String(candidate.daysSinceBooking) : "";
+  const bedrooms = candidate.bedrooms != null ? String(candidate.bedrooms) : "";
   return template
     .replace(/\{\{first_name\}\}/gi, candidate.firstName || "there")
-    .replace(/\{\{area\}\}/gi, area || "your area");
+    .replace(/\{\{area\}\}/gi, area || "your area")
+    .replace(/\{\{last_service\}\}/gi, candidate.serviceType || "cleaning")
+    .replace(/\{\{last_price\}\}/gi, lastPrice || "your last service")
+    .replace(/\{\{days_since_last_booking\}\}/gi, daysSince || "a while")
+    .replace(/\{\{city\}\}/gi, city)
+    .replace(/\{\{frequency\}\}/gi, candidate.frequency || "regular")
+    .replace(/\{\{bedrooms\}\}/gi, bedrooms || "your home")
+    .replace(/\{\{preferred_team\}\}/gi, candidate.preferredTeam || "your team");
 }
 
 /**

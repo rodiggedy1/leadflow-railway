@@ -73,6 +73,13 @@ import {
   Pencil,
   History,
   LockOpen,
+  RotateCcw,
+  Loader2,
+  RefreshCw,
+  Timer,
+  ThumbsUp,
+  CalendarClock,
+  ChevronUp,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1025,21 +1032,63 @@ function LiveAudiencePreview({ sampleIncluded }: {
 // MessageEditor
 // ─────────────────────────────────────────────────────────────────────────────
 
+const MSG_TOKENS = [
+  { token: "{{first_name}}",              label: "first name",         color: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+  { token: "{{last_service}}",             label: "last service",        color: "bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100" },
+  { token: "{{last_price}}",               label: "last price",          color: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100" },
+  { token: "{{days_since_last_booking}}",  label: "days since booking",  color: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100" },
+  { token: "{{city}}",                     label: "city",                color: "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100" },
+  { token: "{{frequency}}",                label: "frequency",           color: "bg-pink-50 text-pink-700 border-pink-200 hover:bg-pink-100" },
+  { token: "{{bedrooms}}",                 label: "bedrooms",            color: "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100" },
+  { token: "{{preferred_team}}",           label: "preferred team",      color: "bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100" },
+] as const;
+
 function MessageEditor({ message, setMessage }: { message: string; setMessage: (m: string) => void }) {
-  const insertVar = (v: string) => setMessage(message + v);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const charCount = message.length;
   const smsCount = Math.ceil(charCount / 160) || 1;
+
+  const insertToken = (token: string) => {
+    const el = textareaRef.current;
+    if (!el) { setMessage(message + token); return; }
+    const start = el.selectionStart ?? message.length;
+    const end = el.selectionEnd ?? message.length;
+    const next = message.slice(0, start) + token + message.slice(end);
+    setMessage(next);
+    // Restore cursor after token
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + token.length, start + token.length);
+    });
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
         <MessageSquare className="w-4 h-4 text-gray-600" />
         Message
       </h2>
-      <div className="flex gap-2 mb-3">
-        <button onClick={() => insertVar("{{first_name}}")} className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors">+ first_name</button>
-        <button onClick={() => insertVar("{{area}}")} className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors">+ area</button>
+      {/* Token picker */}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {MSG_TOKENS.map(({ token, label, color }) => (
+          <button
+            key={token}
+            type="button"
+            onClick={() => insertToken(token)}
+            className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-colors ${color}`}
+            title={`Insert ${token}`}
+          >
+            + {label}
+          </button>
+        ))}
       </div>
-      <Textarea value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[110px] rounded-xl border-gray-300 text-sm leading-relaxed resize-none" placeholder="Write your message…" />
+      <Textarea
+        ref={textareaRef}
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        className="min-h-[110px] rounded-xl border-gray-300 text-sm leading-relaxed resize-none font-mono"
+        placeholder="Write your message…"
+      />
       <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
         <span>{charCount} chars</span>
         <span>{smsCount} SMS segment{smsCount > 1 ? "s" : ""}</span>
@@ -1659,6 +1708,55 @@ function SmsCampaignsContent() {
     staleTime: 30_000,
   });
 
+  // ── Resume a campaign from history ────────────────────────────────────────
+  const [resumingId, setResumingId] = useState<number | null>(null);
+  const getCampaignQuery = trpc.smsCampaign.getCampaign.useQuery(
+    { campaignId: resumingId! },
+    {
+      enabled: resumingId !== null,
+      staleTime: 0,
+    }
+  );
+
+  useEffect(() => {
+    if (!getCampaignQuery.data || resumingId === null) return;
+    const c = getCampaignQuery.data;
+    // Hydrate editor state from saved campaign
+    setCampaignId(c.id);
+    setCampaignName(c.name ?? "");
+    setNameLocked(true);
+    setCampaignStatus(c.status ?? null);
+    setFrozenCount(c.frozenRecipientCount ?? 0);
+    if (c.messageTemplate) setMessage(c.messageTemplate);
+    // Restore audience definition if available
+    if (c.audienceDefinition) {
+      try {
+        const def = typeof c.audienceDefinition === "string"
+          ? JSON.parse(c.audienceDefinition)
+          : c.audienceDefinition;
+        if (Array.isArray(def.presets)) {
+          setSelectedPresets(new Set(def.presets as AudiencePresetId[]));
+        }
+        if (Array.isArray(def.includeRules)) {
+          setRules(def.includeRules.map((r: { field: RuleField; op: string; value: unknown }) => ({
+            uid: crypto.randomUUID(),
+            field: r.field,
+            operator: r.op as RuleOperator,
+            value: String(r.value ?? ""),
+          })));
+        }
+      } catch { /* ignore parse errors */ }
+    }
+    // Open review screen if already frozen/approved
+    if (c.status === "FROZEN" || c.status === "APPROVED") {
+      setReviewOpen(true);
+    }
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    toast.success(`Loaded "${c.name}"`);
+    setResumingId(null);
+  }, [getCampaignQuery.data, resumingId]);
+
   return (
     <>
       <div className="flex items-start justify-between mb-1 gap-4 flex-wrap">
@@ -1827,8 +1925,29 @@ function SmsCampaignsContent() {
                         </div>
                       </div>
 
+                      {/* Card action button */}
+                      <div className="px-4 pt-2 pb-3">
+                        <button
+                          onClick={() => setResumingId(c.id)}
+                          disabled={resumingId === c.id && getCampaignQuery.isFetching}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-xs font-bold transition-colors border
+                            bg-gray-50 text-gray-600 border-gray-200 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200
+                            disabled:opacity-50 disabled:cursor-wait"
+                        >
+                          {resumingId === c.id && getCampaignQuery.isFetching ? (
+                            <><Loader2 className="w-3 h-3 animate-spin" /> Loading…</>
+                          ) : isCompleted ? (
+                            <><RotateCcw className="w-3 h-3" /> View Results</>
+                          ) : isFrozenOrApproved ? (
+                            <><ShieldCheck className="w-3 h-3" /> Review Audience</>
+                          ) : (
+                            <><Pencil className="w-3 h-3" /> Resume Editing</>
+                          )}
+                        </button>
+                      </div>
+
                       {/* Funnel cascade */}
-                      <div className="px-4 py-3 space-y-0">
+                      <div className="px-4 pb-3 space-y-0">
                         <FunnelStep
                           label={isCompleted || isSending ? `${sent.toLocaleString()} sent` : `${(c.frozenRecipientCount ?? 0).toLocaleString()} frozen`}
                           sublabel={isCompleted || isSending ? "Delivered" : "Recipients"}
