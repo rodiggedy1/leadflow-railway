@@ -1,17 +1,14 @@
 /**
  * CampaignSender.ts — Stage 5 Send Engine
  *
- * Orchestrates the send loop for a single APPROVED campaign.
- * Reads only PENDING recipients, writes one sms_campaign_send_log row per
- * attempt, updates recipient status, and finalizes the campaign counters.
+ * Single-worker sequential send loop with built-in rate limiting:
+ *   - Random 3–6 second delay between every message
+ *   - Every 25 messages, pause 45 seconds
+ *   - Skip anyone no longer PENDING (re-checked before each send)
+ *   - Log every send attempt
+ *   - If OpenPhone returns a 429 / rate-limit error, stop immediately
  *
- * Provider call is intentionally stubbed for preview:
- *   - Writes action = "TEST_SENT" to sms_campaign_send_log
- *   - Behaves as if every send succeeded
- *   - No OpenPhone API call is made
- *
- * When moving to production, replace the stub in sendOneMessage() with the
- * real OpenPhone call. Everything else remains identical.
+ * PREVIEW_MODE: no real API calls, 50ms stub delay.
  */
 
 import { and, eq, sql } from "drizzle-orm";
@@ -23,6 +20,13 @@ import {
   type SmsCampaignRecipient,
 } from "../../drizzle/schema";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DELAY_MIN_MS = 3_000;
+const DELAY_MAX_MS = 6_000;
+const BATCH_SIZE = 25;
+const BATCH_PAUSE_MS = 45_000;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface SendResult {
@@ -31,55 +35,59 @@ export interface SendResult {
   failedCount: number;
   skippedCount: number;
   durationMs: number;
-  /** COMPLETED = all processed; PARTIAL = some failures */
-  campaignStatus: "COMPLETED" | "PARTIAL";
+  /** COMPLETED = all processed; PARTIAL = some failures; RATE_LIMITED = stopped by 429 */
+  campaignStatus: "COMPLETED" | "PARTIAL" | "RATE_LIMITED";
   sentAt: number; // Unix ms
 }
 
 interface ProviderResult {
   success: boolean;
+  rateLimited: boolean;
   openPhoneMessageId?: string;
   errorMessage?: string;
   durationMs: number;
 }
 
-// ─── Provider stub ────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Sends one SMS via OpenPhone.
- *
- * In PREVIEW_MODE (Railway preview environment) the real API call is skipped
- * and a stub result is returned — so preview deployments never fire real SMS.
- * In production (PREVIEW_MODE unset / false) the real OpenPhone API is called.
- *
- * The PREVIEW_MODE guard lives here, NOT in openphone.ts — see the warning
- * comment in that file explaining why.
- */
+function randomDelay(): Promise<void> {
+  const ms = DELAY_MIN_MS + Math.floor(Math.random() * (DELAY_MAX_MS - DELAY_MIN_MS + 1));
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// ─── Provider call ────────────────────────────────────────────────────────────
+
 async function sendOneMessage(
   phone: string,
   message: string,
 ): Promise<ProviderResult> {
   const { ENV } = await import("../_core/env");
 
-  // ── Preview stub ────────────────────────────────────────────────────────
   if (ENV.isPreviewMode) {
-    await new Promise((r) => setTimeout(r, 50));
+    await sleep(50);
     console.log(`[CampaignSender] PREVIEW_MODE — skipping real send to ${phone}`);
-    return {
-      success: true,
-      openPhoneMessageId: `PREVIEW_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      durationMs: 50,
-    };
+    return { success: true, rateLimited: false, openPhoneMessageId: `PREVIEW_${Date.now()}`, durationMs: 50 };
   }
 
-  // ── Real OpenPhone send ─────────────────────────────────────────────────
   const { sendSms } = await import("../openphone");
   const start = Date.now();
 
   const result = await sendSms({ to: phone, content: message });
 
+  // Detect 429 / rate-limit in the error message
+  const isRateLimit =
+    !result.success &&
+    (result.error?.includes("429") ||
+      result.error?.toLowerCase().includes("rate") ||
+      result.error?.toLowerCase().includes("too many"));
+
   return {
     success: result.success,
+    rateLimited: isRateLimit,
     openPhoneMessageId: result.messageId,
     errorMessage: result.error,
     durationMs: Date.now() - start,
@@ -98,13 +106,9 @@ async function loadApprovedCampaign(
     .where(eq(smsCampaigns.id, campaignId))
     .limit(1);
 
-  if (!campaign) {
-    throw new Error(`Campaign ${campaignId} not found`);
-  }
+  if (!campaign) throw new Error(`Campaign ${campaignId} not found`);
   if (campaign.status !== "APPROVED") {
-    throw new Error(
-      `Campaign ${campaignId} is not APPROVED (current status: ${campaign.status})`,
-    );
+    throw new Error(`Campaign ${campaignId} is not APPROVED (current status: ${campaign.status})`);
   }
   return campaign;
 }
@@ -136,36 +140,68 @@ async function markSending(
 ) {
   await db
     .update(smsCampaigns)
-    .set({
-      status: "SENDING",
-      sendStartedAt: Date.now(),
-      sentByAgentId,
-      sentByName,
-    })
+    .set({ status: "SENDING", sendStartedAt: Date.now(), sentByAgentId, sentByName })
     .where(eq(smsCampaigns.id, campaignId));
 }
 
-// ─── Step 4: Process one recipient ───────────────────────────────────────────
+// ─── Step 4: Re-check recipient is still PENDING before sending ───────────────
+
+async function isStillPending(
+  db: MySql2Database<Record<string, never>>,
+  recipientId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ status: smsCampaignRecipients.status })
+    .from(smsCampaignRecipients)
+    .where(eq(smsCampaignRecipients.id, recipientId))
+    .limit(1);
+  return row?.status === "PENDING";
+}
+
+// ─── Step 5: Process one recipient ───────────────────────────────────────────
 
 async function processRecipient(
   db: MySql2Database<Record<string, never>>,
   campaignId: number,
   recipient: SmsCampaignRecipient,
   triggeredBy: string,
-): Promise<"SENT" | "FAILED"> {
+): Promise<{ outcome: "SENT" | "FAILED" | "SKIPPED"; rateLimited: boolean }> {
+  // Re-check status right before sending
+  const stillPending = await isStillPending(db, recipient.id);
+  if (!stillPending) {
+    console.log(`[CampaignSender] Skipping recipient ${recipient.id} — no longer PENDING`);
+    return { outcome: "SKIPPED", rateLimited: false };
+  }
+
   const providerResult = await sendOneMessage(
     recipient.phoneNormalized,
     recipient.personalizedMessage,
   );
 
+  if (providerResult.rateLimited) {
+    // Log the failed attempt then signal caller to stop
+    await db.insert(smsCampaignSendLog).values({
+      campaignId,
+      recipientId: recipient.id,
+      phoneNormalized: recipient.phoneNormalized,
+      action: "FAILED",
+      batchNumber: 1,
+      attempt: 1,
+      durationMs: providerResult.durationMs,
+      openPhoneMessageId: null,
+      errorMessage: `RATE_LIMITED: ${providerResult.errorMessage ?? "429"}`,
+      triggeredBy,
+    });
+    return { outcome: "FAILED", rateLimited: true };
+  }
+
   const outcome = providerResult.success ? "SENT" : "FAILED";
 
-  // Write immutable audit log row
   await db.insert(smsCampaignSendLog).values({
     campaignId,
     recipientId: recipient.id,
     phoneNormalized: recipient.phoneNormalized,
-    action: outcome === "SENT" ? "SENT" : "FAILED",
+    action: outcome,
     batchNumber: 1,
     attempt: 1,
     durationMs: providerResult.durationMs,
@@ -174,7 +210,6 @@ async function processRecipient(
     triggeredBy,
   });
 
-  // Update recipient status
   await db
     .update(smsCampaignRecipients)
     .set({
@@ -185,21 +220,19 @@ async function processRecipient(
     })
     .where(eq(smsCampaignRecipients.id, recipient.id));
 
-  return outcome;
+  return { outcome, rateLimited: false };
 }
 
-// ─── Step 5: Finalize campaign ────────────────────────────────────────────────
+// ─── Step 6: Finalize campaign ────────────────────────────────────────────────
 
 async function finalizeCampaign(
   db: MySql2Database<Record<string, never>>,
   campaignId: number,
   sentCount: number,
   failedCount: number,
+  rateLimited: boolean,
 ): Promise<void> {
-  const finalStatus = failedCount === 0 ? "COMPLETED" : "COMPLETED";
-  // Note: we always mark COMPLETED here. PARTIAL is returned in SendResult
-  // for the caller to surface in the UI, but the DB status is COMPLETED
-  // once all recipients have been processed (success or failure).
+  const finalStatus = rateLimited ? "PARTIAL" : "COMPLETED";
   await db
     .update(smsCampaigns)
     .set({
@@ -221,53 +254,70 @@ export async function sendCampaign(
 ): Promise<SendResult> {
   const startMs = Date.now();
 
-  // 1. Load and verify campaign
   await loadApprovedCampaign(db, campaignId);
 
-  // 2. Load PENDING recipients
   const recipients = await loadPendingRecipients(db, campaignId);
-
   if (recipients.length === 0) {
-    throw new Error(
-      `Campaign ${campaignId} has no PENDING recipients. Was it already sent?`,
-    );
+    throw new Error(`Campaign ${campaignId} has no PENDING recipients. Was it already sent?`);
   }
 
-  // 3. Mark SENDING
   await markSending(db, campaignId, sentByAgentId, sentByName);
 
-  // 4. Send loop
   let sentCount = 0;
   let failedCount = 0;
+  let skippedCount = 0;
+  let stoppedByRateLimit = false;
+  let messagesSentThisBatch = 0;
 
-  for (const recipient of recipients) {
-    const outcome = await processRecipient(
-      db,
-      campaignId,
-      recipient,
-      sentByName,
-    );
-    if (outcome === "SENT") sentCount++;
-    else failedCount++;
+  for (let i = 0; i < recipients.length; i++) {
+    const recipient = recipients[i];
+
+    const { outcome, rateLimited } = await processRecipient(db, campaignId, recipient, sentByName);
+
+    if (outcome === "SENT") {
+      sentCount++;
+      messagesSentThisBatch++;
+    } else if (outcome === "FAILED") {
+      failedCount++;
+    } else {
+      skippedCount++;
+    }
+
+    if (rateLimited) {
+      console.error(`[CampaignSender] 429 rate limit hit on recipient ${recipient.id} — stopping campaign ${campaignId}`);
+      stoppedByRateLimit = true;
+      break;
+    }
+
+    const isLast = i === recipients.length - 1;
+    if (!isLast) {
+      // Every 25 actual sends, pause 45 seconds
+      if (messagesSentThisBatch > 0 && messagesSentThisBatch % BATCH_SIZE === 0) {
+        console.log(`[CampaignSender] Batch pause — sent ${messagesSentThisBatch} messages, pausing ${BATCH_PAUSE_MS / 1000}s`);
+        await sleep(BATCH_PAUSE_MS);
+      } else {
+        // Random 3–6s delay between every message
+        await randomDelay();
+      }
+    }
   }
 
-  // 5. Finalize
-  await finalizeCampaign(db, campaignId, sentCount, failedCount);
+  await finalizeCampaign(db, campaignId, sentCount, failedCount, stoppedByRateLimit);
 
   const durationMs = Date.now() - startMs;
-
   console.log(
-    `[CampaignSender] Campaign ${campaignId} completed by ${sentByName}: ` +
-      `${sentCount} sent, ${failedCount} failed, ${durationMs}ms`,
+    `[CampaignSender] Campaign ${campaignId} finished by ${sentByName}: ` +
+      `${sentCount} sent, ${failedCount} failed, ${skippedCount} skipped, ${durationMs}ms` +
+      (stoppedByRateLimit ? " — STOPPED BY RATE LIMIT" : ""),
   );
 
   return {
     campaignId,
     sentCount,
     failedCount,
-    skippedCount: 0,
+    skippedCount,
     durationMs,
-    campaignStatus: failedCount === 0 ? "COMPLETED" : "PARTIAL",
+    campaignStatus: stoppedByRateLimit ? "RATE_LIMITED" : failedCount === 0 ? "COMPLETED" : "PARTIAL",
     sentAt: Date.now(),
   };
 }

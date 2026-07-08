@@ -1644,7 +1644,11 @@ function SmsCampaignsContent() {
       setCampaignStatus("COMPLETED");
       setSendConfirmOpen(false);
       setSendConfirmText("");
-      toast.success(`Campaign sent — ${result.sentCount} messages delivered${result.failedCount > 0 ? `, ${result.failedCount} failed` : ""}`);
+      if (result.campaignStatus === "RATE_LIMITED") {
+        toast.error(`Rate limit hit — stopped after ${result.sentCount} messages. ${result.failedCount} failed. Try again later.`);
+      } else {
+        toast.success(`Campaign sent — ${result.sentCount} messages delivered${result.failedCount > 0 ? `, ${result.failedCount} failed` : ""}`);
+      }
     },
     onError: (err) => toast.error(err.message),
   });
