@@ -55,12 +55,16 @@ const QUALITY_WEIGHTS = {
 // ─── Preset expansion ─────────────────────────────────────────────────────────
 
 const RECURRING_FREQUENCIES = [
+  // Core recurring frequencies (exact DB values — case-sensitive)
   "Weekly",
-  "Bi-Weekly",
-  "Every 2 Weeks",
+  "Bi-weekly",
   "Monthly",
-  "Every 4 Weeks",
-  "Every 3 Weeks",
+  "Tri-weekly",
+  // Discount variants stored by Launch27
+  "Weekly (20%OFF)",
+  "Bi-weekly (15%OFF)",
+  "Monthly (10%OFF)",
+  "Tri-weekly (10%OFF)",
 ];
 
 function expandPresets(def: AudienceDefinition): Rule[] {
@@ -118,23 +122,23 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
       case "lastBookingDays": {
         const days = Number(rule.value);
         if (rule.op === ">") {
-          conditions.push(`DATEDIFF(NOW(), cv.lastJobDate) > ${days}`);
+          conditions.push(`DATEDIFF(NOW(), lastJobDate) > ${days}`);
           labels.push(`Last booking ${days}+ days ago`);
         } else if (rule.op === ">=") {
-          conditions.push(`DATEDIFF(NOW(), cv.lastJobDate) >= ${days}`);
+          conditions.push(`DATEDIFF(NOW(), lastJobDate) >= ${days}`);
           labels.push(`Last booking ${days}+ days ago`);
         } else if (rule.op === "<") {
-          conditions.push(`DATEDIFF(NOW(), cv.lastJobDate) < ${days}`);
+          conditions.push(`DATEDIFF(NOW(), lastJobDate) < ${days}`);
           labels.push(`Last booking within ${days} days`);
         } else if (rule.op === "<=") {
-          conditions.push(`DATEDIFF(NOW(), cv.lastJobDate) <= ${days}`);
+          conditions.push(`DATEDIFF(NOW(), lastJobDate) <= ${days}`);
           labels.push(`Last booking within ${days} days`);
         }
         break;
       }
       case "bookingCount": {
         const count = Number(rule.value);
-        conditions.push(`cv.bookingCount ${rule.op} ${count}`);
+        conditions.push(`bookingCount ${rule.op} ${count}`);
         labels.push(`${count}${rule.op === ">=" ? "+" : ""} bookings`);
         break;
       }
@@ -142,17 +146,17 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
         const val = String(rule.value);
         if (val === "former-recurring") {
           conditions.push(
-            `(cv.frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), cv.lastJobDate) > 60)`
+            `(frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), lastJobDate) > 60)`
           );
           labels.push("Former recurring");
         } else if (val === "active-recurring") {
           conditions.push(
-            `(cv.frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), cv.lastJobDate) <= 60)`
+            `(frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), lastJobDate) <= 60)`
           );
           labels.push("Active recurring");
         } else if (val === "one-time") {
           conditions.push(
-            `(cv.frequency NOT IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) OR cv.frequency IS NULL)`
+            `(frequency NOT IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) OR frequency IS NULL)`
           );
           labels.push("One-time customer");
         }
@@ -160,50 +164,50 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
       }
       case "serviceType": {
         const val = String(rule.value);
-        conditions.push(`cv.serviceType = '${val.replace(/'/g, "''")}'`);
+        conditions.push(`serviceType = '${val.replace(/'/g, "''")}'`);
         labels.push(`Service: ${val}`);
         break;
       }
       case "bedrooms": {
-        conditions.push(`cv.bedrooms ${rule.op} ${Number(rule.value)}`);
+        conditions.push(`bedrooms ${rule.op} ${Number(rule.value)}`);
         labels.push(`${rule.value} bedroom${rule.op === ">=" ? "+" : ""}`);
         break;
       }
       case "bathrooms": {
-        conditions.push(`cv.bathrooms ${rule.op} ${Number(rule.value)}`);
+        conditions.push(`bathrooms ${rule.op} ${Number(rule.value)}`);
         labels.push(`${rule.value} bathroom${rule.op === ">=" ? "+" : ""}`);
         break;
       }
       case "lifetimeRevenue": {
         const amount = Number(rule.value);
-        conditions.push(`cv.lifetimeRevenue ${rule.op} ${amount}`);
+        conditions.push(`lifetimeRevenue ${rule.op} ${amount}`);
         labels.push(`Lifetime spend ${rule.op} $${amount}`);
         break;
       }
       case "avgTicket": {
         const amount = Number(rule.value);
-        conditions.push(`cv.avgTicket ${rule.op} ${amount}`);
+        conditions.push(`avgTicket ${rule.op} ${amount}`);
         labels.push(`Avg ticket ${rule.op} $${amount}`);
         break;
       }
       case "lastBookingPrice": {
         const amount = Number(rule.value);
-        conditions.push(`cv.lastBookingPrice ${rule.op} ${amount}`);
+        conditions.push(`lastBookingPrice ${rule.op} ${amount}`);
         labels.push(`Last booking price ${rule.op} $${amount}`);
         break;
       }
       case "reviewScore": {
         const score = Number(rule.value);
-        conditions.push(`cv.maxRating ${rule.op} ${score}`);
+        conditions.push(`maxRating ${rule.op} ${score}`);
         labels.push(`Rating ${rule.op} ${score}★`);
         break;
       }
       case "hasComplaint": {
         if (rule.op === "is_false") {
-          conditions.push(`cv.hasComplaint = 0`);
+          conditions.push(`hasComplaint = 0`);
           labels.push("No complaints");
         } else if (rule.op === "is_true") {
-          conditions.push(`cv.hasComplaint = 1`);
+          conditions.push(`hasComplaint = 1`);
           labels.push("Has complaint");
         }
         break;
@@ -211,17 +215,17 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
       case "lastSmsDays": {
         const days = Number(rule.value);
         if (rule.op === ">") {
-          conditions.push(`(cv.lastSmsDaysAgo IS NULL OR cv.lastSmsDaysAgo > ${days})`);
+          conditions.push(`(lastSmsDaysAgo IS NULL OR lastSmsDaysAgo > ${days})`);
           labels.push(`Not texted in ${days}+ days`);
         } else if (rule.op === "<") {
-          conditions.push(`cv.lastSmsDaysAgo < ${days}`);
+          conditions.push(`lastSmsDaysAgo < ${days}`);
           labels.push(`Texted within ${days} days`);
         }
         break;
       }
       case "stopStatus": {
         if (rule.op === "is_false") {
-          conditions.push(`cv.isOptedOut = 0`);
+          conditions.push(`isOptedOut = 0`);
           labels.push("Not on STOP list");
         }
         break;
