@@ -68,6 +68,7 @@ import {
   Heart,
   ChevronDown,
   Trash2,
+  Save,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1278,86 +1279,30 @@ function ReviewAudienceModal({
 function StepFinalApproval({
   recipientCount,
   testSent,
-  message,
   stopOptOut,
-  campaignName,
-  audienceDefinition,
   campaignId,
-  setCampaignId,
   campaignStatus,
-  setCampaignStatus,
   frozenCount,
-  setFrozenCount,
+  isApprovingCampaign,
+  onApprove,
+  onOpenReview,
 }: {
   recipientCount: number;
   testSent: boolean;
-  message: string;
   stopOptOut: number;
-  campaignName: string;
-  audienceDefinition: object;
   campaignId: number | null;
-  setCampaignId: (id: number) => void;
   campaignStatus: string | null;
-  setCampaignStatus: (s: string) => void;
   frozenCount: number;
-  setFrozenCount: (n: number) => void;
+  isApprovingCampaign: boolean;
+  onApprove: () => void;
+  onOpenReview: () => void;
 }) {
   const [confirmText, setConfirmText] = useState("");
-  const [reviewOpen, setReviewOpen] = useState(false);
 
   const isFrozen = campaignStatus === "FROZEN";
   const isApproved = campaignStatus === "APPROVED";
   const expectedConfirm = `SEND ${frozenCount || recipientCount}`;
   const isReady = isApproved && confirmText.trim() === expectedConfirm && (frozenCount || recipientCount) > 0;
-
-  const saveDraft = trpc.smsCampaign.saveDraft.useMutation({
-    onSuccess: (data) => {
-      setCampaignId(data.campaignId);
-      toast.success("Draft saved");
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const freezeAudience = trpc.smsCampaign.freezeAudience.useMutation({
-    onSuccess: (result) => {
-      setCampaignStatus("FROZEN");
-      setFrozenCount(result.frozenCount);
-      toast.success(`Audience frozen — ${result.frozenCount} recipients locked in`);
-      setReviewOpen(true);
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const approveCampaign = trpc.smsCampaign.approveCampaign.useMutation({
-    onSuccess: () => {
-      setCampaignStatus("APPROVED");
-      setReviewOpen(false);
-      toast.success("Campaign approved — ready to send");
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const handleSaveDraft = () => {
-    saveDraft.mutate({
-      ...(campaignId ? { campaignId } : {}),
-      name: campaignName || "Untitled Campaign",
-      audienceDefinition: audienceDefinition as Parameters<typeof saveDraft.mutate>[0]["audienceDefinition"],
-      messageTemplate: message,
-    });
-  };
-
-  const handleFreeze = async () => {
-    // Save draft first if no campaignId yet
-    if (!campaignId) {
-      toast.error("Save the draft first before freezing");
-      return;
-    }
-    if (recipientCount === 0) {
-      toast.error("Audience is empty — add rules or select a preset");
-      return;
-    }
-    freezeAudience.mutate({ campaignId });
-  };
 
   const statusBadge = () => {
     if (isApproved) return <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3 h-3" />Approved</span>;
@@ -1377,113 +1322,89 @@ function StepFinalApproval({
   ];
 
   return (
-    <>
-      <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
-            <Send className="w-4 h-4 text-gray-600" />
-            Final Approval
-          </h2>
-          {statusBadge()}
-        </div>
-
-        <table className="w-full border-collapse mb-4">
-          <thead>
-            <tr>
-              <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Check</th>
-              <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {checks.map((c) => (
-              <tr key={c.label} className="border-b border-gray-50">
-                <td className="py-2.5 text-sm text-gray-700">{c.label}</td>
-                <td className="py-2.5">
-                  {c.status === "passed" ? <span className="flex items-center gap-1 text-emerald-600 text-sm font-semibold"><CheckCircle2 className="w-3.5 h-3.5" />Passed</span>
-                    : c.status === "pending" ? <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold"><Clock className="w-3.5 h-3.5" />Pending</span>
-                    : <span className="text-sm font-semibold text-gray-500">Required: <strong className="text-gray-900">{c.note}</strong></span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {/* Freeze info */}
-        {!isFrozen && !isApproved && campaignId && (
-          <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">
-            <strong>Next:</strong> Click "Freeze Audience" to lock the recipient list. You can review and remove individuals before approving.
-          </div>
-        )}
-
-        {/* Confirm input — only shown after approval */}
-        {isApproved && (
-          <div className="mb-5">
-            <div className="text-xs font-bold text-gray-500 mb-1.5">Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending</div>
-            <Input
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder={`Type "${expectedConfirm}" here`}
-              className={["rounded-xl font-mono", confirmText === expectedConfirm ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300"].join(" ")}
-            />
-          </div>
-        )}
-
-        <div className="flex flex-wrap justify-between items-center gap-2">
-          {/* Save Draft */}
-          <Button
-            variant="outline"
-            onClick={handleSaveDraft}
-            disabled={saveDraft.isPending}
-            className="rounded-xl font-bold"
-          >
-            {saveDraft.isPending ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</span> : "Save Draft"}
-          </Button>
-
-          <div className="flex gap-2">
-            {/* Freeze / Review button */}
-            {!isApproved && (
-              <Button
-                variant="outline"
-                onClick={isFrozen ? () => setReviewOpen(true) : handleFreeze}
-                disabled={freezeAudience.isPending || (!campaignId && !isFrozen)}
-                className={["rounded-xl font-bold", isFrozen ? "border-blue-300 text-blue-700 hover:bg-blue-50" : "border-gray-300"].join(" ")}
-              >
-                {freezeAudience.isPending ? (
-                  <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Freezing…</span>
-                ) : isFrozen ? (
-                  <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />Review {frozenCount} Recipients</span>
-                ) : (
-                  <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />Freeze Audience</span>
-                )}
-              </Button>
-            )}
-
-            {/* Send button — only unlocked when APPROVED + typed confirmation */}
-            <Button
-              onClick={() => {
-                if (!isReady) { toast.error("Complete all checks first"); return; }
-                toast.success("Campaign send queued! (coming in Stage 5)");
-              }}
-              disabled={!isReady}
-              className={["rounded-xl font-bold px-6", isReady ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"].join(" ")}
-            >
-              <Zap className="w-4 h-4 mr-1.5" />
-              {isApproved ? "Send Campaign" : "Send locked"}
-            </Button>
-          </div>
-        </div>
+    <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
+          <Send className="w-4 h-4 text-gray-600" />
+          Final Approval
+        </h2>
+        {statusBadge()}
       </div>
 
-      <ReviewAudienceModal
-        open={reviewOpen}
-        onOpenChange={setReviewOpen}
-        campaignId={campaignId}
-        campaignStatus={campaignStatus}
-        frozenCount={frozenCount}
-        onApprove={() => approveCampaign.mutate({ campaignId: campaignId! })}
-        isApproving={approveCampaign.isPending}
-      />
-    </>
+      <table className="w-full border-collapse mb-4">
+        <thead>
+          <tr>
+            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Check</th>
+            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {checks.map((c) => (
+            <tr key={c.label} className="border-b border-gray-50">
+              <td className="py-2.5 text-sm text-gray-700">{c.label}</td>
+              <td className="py-2.5">
+                {c.status === "passed" ? <span className="flex items-center gap-1 text-emerald-600 text-sm font-semibold"><CheckCircle2 className="w-3.5 h-3.5" />Passed</span>
+                  : c.status === "pending" ? <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold"><Clock className="w-3.5 h-3.5" />Pending</span>
+                  : <span className="text-sm font-semibold text-gray-500">Required: <strong className="text-gray-900">{c.note}</strong></span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {/* Hint when draft saved but not yet frozen */}
+      {!isFrozen && !isApproved && campaignId && (
+        <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">
+          <strong>Next:</strong> Click “Freeze Audience” (top of page) to lock the recipient list.
+        </div>
+      )}
+
+      {/* Confirm input — only shown after approval */}
+      {isApproved && (
+        <div className="mb-5">
+          <div className="text-xs font-bold text-gray-500 mb-1.5">Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending</div>
+          <Input
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={`Type "${expectedConfirm}" here`}
+            className={["rounded-xl font-mono", confirmText === expectedConfirm ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300"].join(" ")}
+          />
+        </div>
+      )}
+
+      {/* Review button (visible in FROZEN state) + Send button */}
+      <div className="flex flex-wrap justify-end items-center gap-2">
+        {isFrozen && (
+          <Button
+            variant="outline"
+            onClick={onOpenReview}
+            className="rounded-xl font-bold border-blue-300 text-blue-700 hover:bg-blue-50"
+          >
+            <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />Review {frozenCount} Recipients</span>
+          </Button>
+        )}
+        {isApproved && (
+          <Button
+            variant="outline"
+            onClick={onOpenReview}
+            className="rounded-xl font-bold border-gray-300"
+          >
+            <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />View {frozenCount} Recipients</span>
+          </Button>
+        )}
+        <Button
+          onClick={() => {
+            if (!isReady) { toast.error("Complete all checks first"); return; }
+            toast.success("Campaign send queued! (coming in Stage 5)");
+          }}
+          disabled={!isReady}
+          className={["rounded-xl font-bold px-6", isReady ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"].join(" ")}
+        >
+          <Zap className="w-4 h-4 mr-1.5" />
+          {isApproved ? "Send Campaign" : "Send locked"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -1541,6 +1462,52 @@ function SmsCampaignsContent() {
   // Debounce the query input 800ms
   const debouncedDef = useDebounce(audienceDefinition, 800);
 
+  // ── Stage 4: campaign lifecycle mutations (lifted to top level so buttons are visible in header) ──
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const saveDraftMutation = trpc.smsCampaign.saveDraft.useMutation({
+    onSuccess: (data) => {
+      setCampaignId(data.campaignId);
+      toast.success("Draft saved");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const freezeAudienceMutation = trpc.smsCampaign.freezeAudience.useMutation({
+    onSuccess: (result) => {
+      setCampaignStatus("FROZEN");
+      setFrozenCount(result.frozenCount);
+      toast.success(`Audience frozen — ${result.frozenCount} recipients locked in`);
+      setReviewOpen(true);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const approveCampaignMutation = trpc.smsCampaign.approveCampaign.useMutation({
+    onSuccess: () => {
+      setCampaignStatus("APPROVED");
+      setReviewOpen(false);
+      toast.success("Campaign approved — ready to send");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSaveDraft = () => {
+    saveDraftMutation.mutate({
+      ...(campaignId ? { campaignId } : {}),
+      name: campaignName || "Untitled Campaign",
+      audienceDefinition: audienceDefinition as Parameters<typeof saveDraftMutation.mutate>[0]["audienceDefinition"],
+      messageTemplate: message,
+    });
+  };
+
+  const handleFreeze = () => {
+    if (!campaignId) { toast.error("Save the draft first before freezing"); return; }
+    const count = plannerResult?.summary.matchedCustomers ?? 0;
+    if (count === 0) { toast.error("Audience is empty — add rules or select a preset"); return; }
+    freezeAudienceMutation.mutate({ campaignId });
+  };
+
   const hasAudience = selectedPresets.size > 0 || rules.length > 0;
 
   const plannerQuery = trpc.smsCampaign.planAudience.useQuery(
@@ -1591,34 +1558,78 @@ function SmsCampaignsContent() {
 
   return (
     <>
-      <div className="flex items-start justify-between mb-1 gap-4">
+      <div className="flex items-start justify-between mb-1 gap-4 flex-wrap">
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>SMS Campaign Command Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Build the safest possible audience before anyone can send anything.</p>
-          {/* Campaign name input */}
-          <div className="mt-2 flex items-center gap-2">
-            <Input
-              value={campaignName}
-              onChange={(e) => setCampaignName(e.target.value)}
-              placeholder="Campaign name (e.g. July Win-Back)"
-              className="rounded-xl border-gray-200 text-sm font-semibold max-w-xs h-8"
-            />
-            {campaignId && (
-              <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>
-            )}
-          </div>
         </div>
-        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black flex-shrink-0 mt-1
-          {campaignStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-           campaignStatus === 'FROZEN'   ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-           campaignId                    ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                                           'bg-gray-100 text-gray-500 border border-gray-200'}">
+        {/* Status badge */}
+        <span className={[
+          "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black flex-shrink-0 mt-1",
+          campaignStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+          campaignStatus === 'FROZEN'   ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+          campaignId                    ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                          'bg-gray-100 text-gray-500 border border-gray-200'
+        ].join(' ')}>
           <ShieldCheck className="w-3.5 h-3.5" />
           {campaignStatus === 'APPROVED' ? 'Approved · Ready to send' :
            campaignStatus === 'FROZEN'   ? 'Frozen · Pending review' :
            campaignId                    ? 'Draft saved' :
                                            'Draft · Send locked'}
         </span>
+      </div>
+
+      {/* Campaign name + action bar — always visible */}
+      <div className="flex items-center gap-2 mt-2 mb-1 flex-wrap">
+        <Input
+          value={campaignName}
+          onChange={(e) => setCampaignName(e.target.value)}
+          placeholder="Campaign name (e.g. July Win-Back)"
+          className="rounded-xl border-gray-200 text-sm font-semibold w-56 h-9"
+        />
+        {campaignId && (
+          <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          {/* Save Draft */}
+          {!campaignStatus && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSaveDraft}
+              disabled={saveDraftMutation.isPending}
+              className="rounded-xl font-bold h-9"
+            >
+              {saveDraftMutation.isPending
+                ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</span>
+                : <span className="flex items-center gap-1.5"><Save className="w-3.5 h-3.5" />Save Draft</span>}
+            </Button>
+          )}
+          {/* Freeze Audience */}
+          {campaignId && campaignStatus !== 'APPROVED' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={campaignStatus === 'FROZEN' ? () => setReviewOpen(true) : handleFreeze}
+              disabled={freezeAudienceMutation.isPending}
+              className={["rounded-xl font-bold h-9",
+                campaignStatus === 'FROZEN' ? "border-blue-300 text-blue-700 hover:bg-blue-50" : "border-gray-300"
+              ].join(' ')}
+            >
+              {freezeAudienceMutation.isPending
+                ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Freezing…</span>
+                : campaignStatus === 'FROZEN'
+                ? <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />Review {frozenCount} Recipients</span>
+                : <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />Freeze Audience</span>}
+            </Button>
+          )}
+          {/* Approve — shown in FROZEN state */}
+          {campaignStatus === 'APPROVED' && (
+            <span className="flex items-center gap-1.5 text-sm font-bold text-emerald-700">
+              <CheckCircle2 className="w-4 h-4" />Ready to send
+            </span>
+          )}
+        </div>
       </div>
 
       <WorkflowBar step={step} onStep={setStep} />
@@ -1659,16 +1670,13 @@ function SmsCampaignsContent() {
           <StepFinalApproval
             recipientCount={plannerResult?.summary.matchedCustomers ?? 0}
             testSent={testSent}
-            message={message}
             stopOptOut={plannerResult?.exclusionBreakdown?.stopOptOut ?? 0}
-            campaignName={campaignName}
-            audienceDefinition={audienceDefinition}
             campaignId={campaignId}
-            setCampaignId={setCampaignId}
             campaignStatus={campaignStatus}
-            setCampaignStatus={setCampaignStatus}
             frozenCount={frozenCount}
-            setFrozenCount={setFrozenCount}
+            isApprovingCampaign={approveCampaignMutation.isPending}
+            onApprove={() => approveCampaignMutation.mutate({ campaignId: campaignId! })}
+            onOpenReview={() => setReviewOpen(true)}
           />
         </div>
       </div>
@@ -1682,6 +1690,17 @@ function SmsCampaignsContent() {
           Next<ChevronRight className="w-4 h-4" />
         </Button>
       </div>
+
+      {/* ReviewAudienceModal — owned by parent so it persists across step changes */}
+      <ReviewAudienceModal
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        campaignId={campaignId}
+        campaignStatus={campaignStatus}
+        frozenCount={frozenCount}
+        onApprove={() => approveCampaignMutation.mutate({ campaignId: campaignId! })}
+        isApproving={approveCampaignMutation.isPending}
+      />
     </>
   );
 }
