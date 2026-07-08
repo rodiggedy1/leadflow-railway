@@ -337,9 +337,13 @@ function AudienceSentence({
 function SavedAudiencePicker({
   selectedPresets,
   setSelectedPresets,
+  liveCount,
+  isFetching,
 }: {
   selectedPresets: Set<AudiencePresetId>;
   setSelectedPresets: React.Dispatch<React.SetStateAction<Set<AudiencePresetId>>>;
+  liveCount: number | null;   // live planner count when exactly 1 preset is selected
+  isFetching: boolean;
 }) {
   const toggle = (id: AudiencePresetId) =>
     setSelectedPresets((prev) => {
@@ -384,8 +388,10 @@ function SavedAudiencePicker({
                 <div className={["text-sm font-bold leading-tight", active ? "text-white" : "text-gray-900"].join(" ")}>{preset.label}</div>
                 <div className={["text-xs mt-0.5 truncate", active ? "text-gray-300" : "text-gray-400"].join(" ")}>{preset.description}</div>
               </div>
-              <div className={["text-xs font-black rounded-full px-2 py-0.5 flex-shrink-0", active ? "bg-white/20 text-white" : "bg-white text-gray-500 border border-gray-200"].join(" ")}>
-                ~{preset.estimatedCount}
+              <div className={["text-xs font-black rounded-full px-2 py-0.5 flex-shrink-0 min-w-[2.5rem] text-center", active ? "bg-white/20 text-white" : "bg-white text-gray-500 border border-gray-200"].join(" ")}>
+                {active && liveCount !== null
+                  ? isFetching ? "…" : liveCount.toLocaleString()
+                  : `~${preset.estimatedCount}`}
               </div>
               {active && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
             </button>
@@ -1634,7 +1640,12 @@ function SmsCampaignsContent() {
             <AudienceStatsRow stats={plannerResult.stats} />
           )}
           <AudienceSentence selectedPresets={selectedPresets} rules={rules} />
-          <SavedAudiencePicker selectedPresets={selectedPresets} setSelectedPresets={setSelectedPresets} />
+          <SavedAudiencePicker
+            selectedPresets={selectedPresets}
+            setSelectedPresets={setSelectedPresets}
+            liveCount={selectedPresets.size === 1 ? (plannerResult?.summary.matchedCustomers ?? null) : null}
+            isFetching={plannerQuery.isFetching}
+          />
           <AudienceRuleBuilder rules={rules} setRules={setRules} supportedFields={supportedFields} />
         </div>
 
