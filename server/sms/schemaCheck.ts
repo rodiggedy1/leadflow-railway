@@ -81,8 +81,8 @@ const REQUIRED_COLUMNS: Record<string, Array<{ column: string; migration: string
     // Core columns (sanity check — these should always exist)
     { column: "id",                      migration: MIGRATION_FILE },
     { column: "campaignId",              migration: MIGRATION_FILE },
-    { column: "customerId",              migration: MIGRATION_FILE },
     { column: "phone",                   migration: MIGRATION_FILE },
+    { column: "phoneNormalized",          migration: MIGRATION_FILE },
     { column: "status",                  migration: MIGRATION_FILE },
     // Snapshot columns added in migration 0083
     { column: "snapshotFirstName",       migration: MIGRATION_FILE },
@@ -138,7 +138,7 @@ const REQUIRED_INDEXES: Array<{
   {
     table: "sms_campaign_recipients",
     indexName: "uq_campaign_phone",
-    columns: ["campaignId", "phone"],
+    columns: ["campaignId", "phoneNormalized"],
     migration: MIGRATION_FILE,
   },
 ];
