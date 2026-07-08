@@ -38,6 +38,7 @@ const NON_LEAD_SOURCES = [
 import { invokeLLM } from "./_core/llm";
 import { sendSms } from "./openphone";
 import { normalizePhone } from "./routers";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -1553,17 +1554,10 @@ Respond in JSON with this exact schema:
       );
 
       // Helper: normalize phone to E.164 for comparison.
-      // Both completedJobs and reactivationContacts store phones as E.164 (+12025551234).
-      // Use the shared normalizePhone from routers.ts to ensure consistent format.
-      // The local strip-digits version was causing map lookup mismatches.
+      // Uses the shared normalizePhoneLegacy from server/utils/phone.ts.
       const normalizePhoneLocal = (p: string | null): string => {
         if (!p) return "";
-        // Already E.164
-        if (p.startsWith("+")) return p.replace(/[^\d+]/g, "");
-        const digits = p.replace(/\D/g, "");
-        if (digits.length === 10) return `+1${digits}`;
-        if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
-        return `+${digits}`;
+        return normalizePhoneLegacy(p);
       };
 
       // Build a map of phone → last campaign SMS date.

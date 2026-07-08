@@ -7389,48 +7389,17 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Returns the 10-digit US local number from a raw phone string, or null if it
- * cannot be resolved to a valid US number.
- *
- * Valid US numbers:
- *   - Area code (NPA): 200-999 (first digit 2-9)
- *   - Exchange  (NXX): 200-999 (first digit 2-9)
- *
- * Rejects:
- *   - Non-US country codes (e.g. +44, +256)
- *   - 11-digit strings starting with anything other than 1
- *   - Numbers where NPA or NXX start with 0 or 1
- */
-export function extractUSDigits(phone: string): string | null {
-  const digits = phone.replace(/[^\d]/g, "");
-  let local: string;
-  if (digits.length === 11 && digits.startsWith("1")) {
-    local = digits.slice(1);
-  } else if (digits.length === 10) {
-    local = digits;
-  } else {
-    return null; // wrong length or non-US country code
-  }
-  const npa = local[0]; // area code first digit
-  const nxx = local[3]; // exchange first digit
-  if (!npa || !nxx) return null;
-  if (npa < "2" || nxx < "2") return null; // 0xx or 1xx are invalid
-  return local;
-}
+// ─── Phone normalization ─────────────────────────────────────────────────────
+// Canonical implementations live in server/utils/phone.ts.
+// Re-exported here for backward compatibility with all existing importers.
+//
+// IMPORTANT: normalizePhone() in utils/phone returns null | string.
+// All existing callers in this file expect a non-null string (legacy behavior).
+// We re-export normalizePhoneLegacy as normalizePhone to preserve that contract.
+// New code (SMS campaign planner) should import directly from ./utils/phone.
+export { extractUSDigits, isValidUSPhone } from "./utils/phone";
+export { normalizePhoneLegacy as normalizePhone } from "./utils/phone";
 
-/**
- * Returns true if the raw phone string resolves to a valid 10-digit US number.
- */
-export function isValidUSPhone(phone: string): boolean {
-  return extractUSDigits(phone) !== null;
-}
-
-/**
- * Normalizes a phone number to E.164 format (+1XXXXXXXXXX).
- * Handles inputs like: "7259009272", "725-900-9272", "(725) 900-9272", "+17259009272"
- * Returns null for non-US or invalid numbers.
- */
 /** Normalize name casing: "ROHAN" → "Rohan", "rohan smith" → "Rohan Smith" */
 export function toTitleCase(str: string): string {
   return str
@@ -7438,15 +7407,6 @@ export function toTitleCase(str: string): string {
     .split(/\s+/)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
     .join(" ");
-}
-
-export function normalizePhone(phone: string): string {
-  const local = extractUSDigits(phone);
-  if (local) return `+1${local}`;
-  // Fallback for legacy callers — pass through as-is (will be caught by server validation)
-  const digits = phone.replace(/[^\d]/g, "");
-  if (phone.startsWith("+")) return phone.replace(/[^\d+]/g, "");
-  return `+${digits}`;
 }
 
 /**

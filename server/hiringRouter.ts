@@ -3,6 +3,7 @@
  * Extracted to a separate file to keep TypeScript inference tractable.
  */
 import { TRPCError } from "@trpc/server";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { and, count, desc, eq, gte, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { conversationSessions } from "../drizzle/schema";
@@ -132,8 +133,7 @@ export const hiringRouter = router({
         setImmediate(async () => {
           try {
             const { conversationSessions } = await import("../drizzle/schema");
-            const rawPhone = input.phone.replace(/[^\d]/g, "");
-            const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+            const e164Phone = normalizePhoneLegacy(input.phone);
             const firstName = input.firstName || "there";
             const interviewLink = `https://quote.maidinblack.com/interview/${candidateId}`;
             const smsText = `Hey ${firstName} — got your application 👋\n\nNext step is a quick 5-min interview:\n${interviewLink}`;
@@ -210,8 +210,7 @@ export const hiringRouter = router({
           try {
             const { opsChatMessages } = await import("../drizzle/schema");
             const applicantName = `${input.firstName} ${input.lastName}`.trim();
-            const rawPhone = input.phone.replace(/[^\d]/g, "");
-            const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+            const e164Phone = normalizePhoneLegacy(input.phone);
             const cardMeta = JSON.stringify({
               applicantName,
               applicantPhone: e164Phone,
@@ -261,8 +260,7 @@ export const hiringRouter = router({
         // entry in messageHistory is role:"user" (inbound from candidate).
         const phones = Array.from(new Set(
           rows.map(r => {
-            const raw = r.phone.replace(/[^\d]/g, "");
-            return raw.length === 10 ? `+1${raw}` : `+${raw}`;
+            return normalizePhoneLegacy(r.phone);
           })
         ));
         const unreadPhones = new Set<string>();
@@ -290,8 +288,7 @@ export const hiringRouter = router({
         }
 
         return rows.map(r => {
-          const raw = r.phone.replace(/[^\d]/g, "");
-          const e164 = raw.length === 10 ? `+1${raw}` : `+${raw}`;
+          const e164 = normalizePhoneLegacy(r.phone);
           return {
             id: r.id,
             firstName: r.firstName,
@@ -332,8 +329,7 @@ export const hiringRouter = router({
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) return { sessionId: null, messages: [] };
-        const rawPhone = input.phone.replace(/[^\d]/g, "");
-        const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+        const e164Phone = normalizePhoneLegacy(input.phone);
         // Prefer hiring_interview or hiring sessions — these are the canonical threads for candidates.
         // Falling back to the most recent session could pick up a cs-inbound thread created when
         // the applicant replied to the CS number, causing the hiring drawer to show the wrong session.
@@ -442,8 +438,7 @@ export const hiringRouter = router({
         await db.update(candidates).set({ stage: input.stage }).where(eq(candidates.id, input.id));
         // Optionally send stage-change SMSS
         if (input.sendSmsNotification && candidate?.phone) {
-          const rawPhone = candidate.phone.replace(/[^\d]/g, "");
-          const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+          const e164Phone = normalizePhoneLegacy(candidate.phone);
           const firstName = candidate.firstName || "there";
 
           const stageMessages: Record<string, string> = {
@@ -600,8 +595,7 @@ export const hiringRouter = router({
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-        const rawPhone = input.phone.replace(/[^\d]/g, "");
-        const e164Phone = rawPhone.length === 10 ? `+1${rawPhone}` : `+${rawPhone}`;
+        const e164Phone = normalizePhoneLegacy(input.phone);
         // Find existing session or create one
         const existing = await db
           .select({ id: conversationSessions.id, messageHistory: conversationSessions.messageHistory })

@@ -13,6 +13,7 @@
  */
 
 import { z } from "zod";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { eq, and, sql, inArray, desc, like, or } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -335,9 +336,7 @@ export const callMatrixRouter = router({
       const callerName = (ctx as any).agent?.name ?? (ctx as any).user?.name ?? "Dispatcher";
 
       // ── Normalize phone ────────────────────────────────────────────────────
-      const normalizedPhone = input.phone.startsWith("+")
-        ? input.phone
-        : `+1${input.phone.replace(/\D/g, "")}`;
+      const normalizedPhone = normalizePhoneLegacy(input.phone);
 
       if (normalizedPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Self-call protection: cannot call the VAPI outbound number" });

@@ -12,6 +12,7 @@
  */
 
 import { and, eq, inArray, or } from "drizzle-orm";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { getDb } from "./db";
 import {
   cleanerJobs,
@@ -165,9 +166,7 @@ async function placeEscalationCall(
     return { success: false, reason: "VAPI_PRIVATE_KEY not configured" };
   }
 
-  const normalizedPhone = cleaner.phone.startsWith("+")
-    ? cleaner.phone
-    : `+1${cleaner.phone.replace(/\D/g, "")}`;
+  const normalizedPhone = normalizePhoneLegacy(cleaner.phone);
 
   // Self-call protection
   if (normalizedPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
@@ -359,9 +358,7 @@ export async function runEscalationCalls(
             cleanerJobId: cleaner.jobIds[0], // primary job
             step: "schedule_escalation",
             vapiCallId: result.vapiCallId,
-            calledPhone: cleaner.phone.startsWith("+")
-              ? cleaner.phone
-              : `+1${cleaner.phone.replace(/\D/g, "")}`,
+            calledPhone: normalizePhoneLegacy(cleaner.phone),
             outcome: "no_answer", // will be updated by end-of-call webhook
             durationSeconds: 0,
             transcript: null,

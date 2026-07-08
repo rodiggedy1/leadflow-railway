@@ -15,6 +15,7 @@ import { reactivationCampaigns, reactivationContacts, conversationSessions, comp
 import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { getTemplate } from "./messageTemplateRouter";
+import { normalizePhoneLegacy as normalizePhone } from "./utils/phone";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -30,15 +31,6 @@ const RECURRING_FREQUENCIES = new Set([
 /** Default reactivation message template */
 export const DEFAULT_REACTIVATION_TEMPLATE =
   "Hi [Name]! 👋 It's been a while since your last home cleaning with Maids in Black. We miss you! As a returning customer, we'd love to offer you 10% off your next clean. Reply YES to book and we'll take care of everything on our end.";
-
-// ─── Phone normalization ──────────────────────────────────────────────────────
-
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return "+1" + digits;
-  if (digits.length === 11 && digits.startsWith("1")) return "+" + digits;
-  return "+" + digits;
-}
 
 // ─── CSV parsing & eligibility ────────────────────────────────────────────────
 

@@ -12,6 +12,7 @@
  */
 
 import { z } from "zod";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import {
@@ -172,8 +173,7 @@ export const alwaysOnRouter = router({
       });
 
       // Normalize phone number to E.164
-      const digits = input.testPhone.replace(/\D/g, "");
-      const e164 = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
+      const e164 = normalizePhoneLegacy(input.testPhone);
 
       // Send via OpenPhone
       const result = await sendSms({ to: e164, content: renderedMessage });

@@ -16,6 +16,7 @@
  */
 
 import { and, eq, gte, lt, sql } from "drizzle-orm";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { getDb } from "./db";
 import {
   cleanerJobs,
@@ -131,8 +132,7 @@ export async function findTodaysJobForClient(fromPhoneDigits: string): Promise<T
       .limit(1);
     if (profile?.phone) {
       // cleanerProfiles.phone is stored as 10 digits — convert to E.164
-      const digits = profile.phone.replace(/[^\d]/g, "").slice(-10);
-      cleanerPhone = digits.length === 10 ? `+1${digits}` : null;
+      cleanerPhone = normalizePhone(profile.phone);
     }
   }
 

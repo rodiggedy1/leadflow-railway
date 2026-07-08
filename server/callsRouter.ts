@@ -10,6 +10,7 @@
  */
 
 import { z } from "zod";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { router, agentProcedure, opsChatProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -282,9 +283,7 @@ export const callsRouter = router({
       const callerName = (ctx as any).opsCaller?.name ?? "Dispatcher";
 
       // ── Validate phone ────────────────────────────────────────────────────
-      const normalizedPhone = input.calledPhone.startsWith("+")
-        ? input.calledPhone
-        : `+1${input.calledPhone.replace(/\D/g, "")}`;
+      const normalizedPhone = normalizePhoneLegacy(input.calledPhone);
 
       if (normalizedPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
         throw new TRPCError({

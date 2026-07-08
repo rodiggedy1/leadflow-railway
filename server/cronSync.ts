@@ -16,7 +16,7 @@ import { getCompletedBookingsForDate } from "./launch27";
 import { getDb } from "./db";
 import { completedJobs, completedJobBatches, syncRuns } from "../drizzle/schema";
 import { eq, and, sql, ne } from "drizzle-orm";
-import { extractUSDigits, isValidUSPhone } from "./routers";
+import { extractUSDigits, isValidUSPhone } from "./utils/phone";
 import { notifyOwner } from "./_core/notification";
 import { enrollNewlyEligible } from "./alwaysOnEngine";
 import { sendAlwaysOnBatch } from "./alwaysOnSend";

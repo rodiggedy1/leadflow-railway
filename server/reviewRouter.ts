@@ -7,6 +7,7 @@
  *  - Auto-create reactivation contact when customer confirms they left a review
  */
 import { z } from "zod";
+import { normalizePhoneLegacy as normalizePhone } from "./utils/phone";
 import { and, desc, eq, gte, isNull, lt, ne, sql, count } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
@@ -42,14 +43,6 @@ export const REVIEW_NEGATIVE_RESPONSE = (firstName: string) =>
 /** Sent after customer confirms they left a review */
 export const REVIEW_CONFIRMED_RESPONSE = (firstName: string) =>
   `Thank you so much, ${firstName}! 🌟 Your 10% discount is saved for your next booking — just mention it when you're ready to schedule and we'll take care of you. See you next time!`;
-
-// ─── Phone normalization ──────────────────────────────────────────────────────
-function normalizePhone(raw: string): string {
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length === 10) return "+1" + digits;
-  if (digits.length === 11 && digits.startsWith("1")) return "+" + digits;
-  return "+" + digits;
-}
 
 // ─── CSV parsing ──────────────────────────────────────────────────────────────
 export interface ParsedCompletedJob {

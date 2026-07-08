@@ -10,6 +10,7 @@
  *   3. Update confirmationCalls row with SMS result
  */
 import { z } from "zod";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { router, opsChatProcedure, publicProcedure, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -138,9 +139,7 @@ export const confirmationCallsRouter = router({
       const callerName = (ctx as any).opsCaller?.name ?? "Dispatcher";
 
       // ── Normalize phone ─────────────────────────────────────────────────────
-      const normalizedPhone = input.calledPhone.startsWith("+")
-        ? input.calledPhone
-        : `+1${input.calledPhone.replace(/\D/g, "")}`;
+      const normalizedPhone = normalizePhoneLegacy(input.calledPhone);
 
       const now = Date.now();
 

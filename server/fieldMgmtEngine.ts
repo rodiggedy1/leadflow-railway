@@ -19,6 +19,7 @@
  */
 
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { getDb, getOrCreateCleanerMagicLink } from "./db";
 import {
   cleanerJobs,
@@ -158,7 +159,7 @@ export async function placeNoCheckinEscalationCallWithReason(params: {
 
   // ── Self-call protection ──────────────────────────────────────────────────
   // Never call the Vapi outbound number — it would create an infinite loop.
-  const normalizedTarget = callTarget.startsWith("+") ? callTarget : `+1${callTarget.replace(/\D/g, "")}`;
+  const normalizedTarget = normalizePhoneLegacy(callTarget);
   if (normalizedTarget === VAPI_OUTBOUND_PHONE_NUMBER) {
     console.error(`[FieldMgmt] Self-call protection triggered — refusing to call Vapi outbound number ${normalizedTarget}`);
     return { success: false, reason: "Self-call protection: cannot call the VAPI outbound number" };
@@ -1683,7 +1684,7 @@ export async function callClientRunningLate(cleanerJobId: number, opts?: { testM
     `We sincerely apologize for the inconvenience and really appreciate your patience. ` +
     `If you have any questions, please don't hesitate to call us back. Thank you and have a wonderful day.`;
 
-  const normalizedClientPhone = clientPhone.startsWith("+") ? clientPhone : `+1${clientPhone.replace(/\D/g, "")}`;
+  const normalizedClientPhone = normalizePhoneLegacy(clientPhone);
 
   // Self-call protection
   if (normalizedClientPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
@@ -2081,7 +2082,7 @@ async function placeCheckinCall(
     console.warn("[FieldMgmt] VAPI_PRIVATE_KEY not set — skipping check-in call");
     return;
   }
-  const normalizedPhone = cleanerPhone.startsWith("+") ? cleanerPhone : `+1${cleanerPhone.replace(/\D/g, "")}`;
+  const normalizedPhone = normalizePhoneLegacy(cleanerPhone);
   if (normalizedPhone === VAPI_OUTBOUND_PHONE_NUMBER) {
     console.error("[FieldMgmt] Self-call protection — refusing to call VAPI outbound number");
     return;
