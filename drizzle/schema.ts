@@ -3352,3 +3352,245 @@ export const issueEngineTimeline = mysqlTable("issue_engine_timeline", {
 }));
 export type IssueEngineTimeline = typeof issueEngineTimeline.$inferSelect;
 export type InsertIssueEngineTimeline = typeof issueEngineTimeline.$inferInsert;
+
+// ── SMS Campaign Control Center ───────────────────────────────────────────────
+//
+// INVARIANT: THE AUDIENCE QUERY IS NEVER RE-RUN AFTER FREEZE.
+// Once a campaign moves to FROZEN, the recipient list in sms_campaign_recipients
+// is the single source of truth for all sends. No live queries. No re-evaluation.
+//
+// Architecture: AudiencePlanner → AudienceValidator → FreezeAudience
+//   Planner   — "Who matches?" — returns count + stats, never IDs
+//   Validator — "Is this a good idea?" — returns warnings + estimates
+//   Freeze    — "Lock it forever." — writes sms_campaign_recipients, sets definitionHash
+//
+// Note on definitionHash: computed from canonically sorted JSON (keys sorted
+// alphabetically at every level) — NOT raw JSON.stringify — so key insertion
+// order differences in the AudienceDefinition object do not produce different hashes.
+
+export const smsCampaignStatuses = [
+  "DRAFT",      // Being built — audience definition editable
+  "FROZEN",     // Recipient list frozen — awaiting admin review
+  "APPROVED",   // Admin explicitly reviewed and approved the frozen list
+  "SENDING",    // Batch send in progress
+  "PAUSED",     // Mid-send pause (manual or rate-limit)
+  "COMPLETED",  // All recipients processed
+  "CANCELLED",  // Discarded before send
+] as const;
+
+export type SmsCampaignStatus = (typeof smsCampaignStatuses)[number];
+
+/**
+ * smsCampaigns — one row per SMS campaign.
+ *
+ * The audienceDefinition JSON is editable only while status = DRAFT.
+ * Once frozen, definitionHash permanently links the frozen recipient list
+ * to the exact audience version that produced it.
+ */
+export const smsCampaigns = mysqlTable("sms_campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+
+  /** Human-readable campaign name (e.g. "Win Back — June 2026") */
+  name: varchar("name", { length: 255 }).notNull(),
+
+  status: mysqlEnum("status", smsCampaignStatuses as unknown as [string, ...string[]]).default("DRAFT").notNull(),
+
+  /**
+   * Full AudienceDefinition JSON — the object the UI edits.
+   * Contains: presets[], includeRules[], excludeRules[], geography, metadata.
+   * Editable only while status = DRAFT.
+   */
+  audienceDefinition: longtext("audienceDefinition").notNull(),
+
+  /** SMS message template — supports {{first_name}}, {{area}} placeholders */
+  messageTemplate: text("messageTemplate").notNull(),
+
+  /**
+   * Lightweight planner output: { recipientCount, stats, ruleHash, generatedAt }.
+   * Does NOT store sample blobs. Samples are returned by a separate preview
+   * endpoint and are never persisted here.
+   * Updated on every planner run while status = DRAFT.
+   */
+  plannerResult: longtext("plannerResult"),
+
+  // ── Freeze ────────────────────────────────────────────────────────────────
+  /** UTC ms when the recipient list was frozen */
+  frozenAt: bigint("frozenAt", { mode: "number" }),
+  /** Exact count of rows written to sms_campaign_recipients at freeze time */
+  frozenRecipientCount: int("frozenRecipientCount"),
+  /**
+   * SHA-256 of the canonically sorted audienceDefinition JSON at freeze time.
+   * Proves exactly which audience version produced the frozen recipient list.
+   * Computed with keys sorted alphabetically at every nesting level to ensure
+   * hash stability regardless of object key insertion order.
+   *
+   * THE AUDIENCE QUERY IS NEVER RE-RUN AFTER THIS IS SET.
+   */
+  definitionHash: varchar("definitionHash", { length: 64 }),
+
+  // ── Approval ──────────────────────────────────────────────────────────────
+  /** UTC ms when admin explicitly approved the frozen list */
+  approvedAt: bigint("approvedAt", { mode: "number" }),
+  /** FK to agents.id — stored as int so it survives name changes */
+  approvedByAgentId: int("approvedByAgentId"),
+  /** Denormalized name snapshot at approval time — for display only */
+  approvedByName: varchar("approvedByName", { length: 255 }),
+
+  // ── Send ──────────────────────────────────────────────────────────────────
+  sentCount: int("sentCount").default(0).notNull(),
+  failedCount: int("failedCount").default(0).notNull(),
+  repliedCount: int("repliedCount").default(0).notNull(),
+  bookedCount: int("bookedCount").default(0).notNull(),
+  /** UTC ms when the first batch was sent */
+  sendStartedAt: bigint("sendStartedAt", { mode: "number" }),
+  /** UTC ms when the last batch completed */
+  sendCompletedAt: bigint("sendCompletedAt", { mode: "number" }),
+
+  // ── Estimated metrics (set by AudienceValidator) ──────────────────────────
+  /** Estimated revenue from this campaign (dollars) */
+  estimatedRevenue: int("estimatedRevenue"),
+  /** Estimated number of bookings this campaign will generate */
+  estimatedBookings: int("estimatedBookings"),
+  /** Estimated number of replies this campaign will receive */
+  estimatedReplies: int("estimatedReplies"),
+
+  // ── Test / dry run ────────────────────────────────────────────────────────
+  /**
+   * When 1: sends only to testPhones[], never writes to conversationSessions,
+   * does not count toward opt-out suppression windows.
+   */
+  isDryRun: tinyint("isDryRun").default(0).notNull(),
+  /** JSON array of phone numbers for test/dry-run sends */
+  testPhones: text("testPhones"),
+
+  // ── Audit ─────────────────────────────────────────────────────────────────
+  /** FK to agents.id who created this campaign */
+  createdByAgentId: int("createdByAgentId"),
+  /** Denormalized name snapshot at creation time */
+  createdByName: varchar("createdByName", { length: 255 }).notNull(),
+  /** FK to agents.id who initiated the send */
+  sentByAgentId: int("sentByAgentId"),
+  /** Denormalized name snapshot at send time */
+  sentByName: varchar("sentByName", { length: 255 }),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => [
+  index("idx_sms_campaigns_status").on(t.status),
+  index("idx_sms_campaigns_created_at").on(t.createdAt),
+]);
+
+export type SmsCampaign = typeof smsCampaigns.$inferSelect;
+export type InsertSmsCampaign = typeof smsCampaigns.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const smsCampaignRecipientStatuses = [
+  "PENDING",   // Frozen, not yet sent
+  "SENT",      // OpenPhone accepted the message
+  "FAILED",    // OpenPhone returned an error
+  "SKIPPED",   // Opted out between freeze and send time (last-moment safety check)
+] as const;
+
+export type SmsCampaignRecipientStatus = (typeof smsCampaignRecipientStatuses)[number];
+
+/**
+ * smsCampaignRecipients — one row per frozen recipient per campaign.
+ *
+ * ONLY included recipients appear here. Excluded people are never written.
+ * Exclusion samples and breakdown live in smsCampaigns.plannerResult only.
+ *
+ * All snapshot fields are frozen at freeze time and never updated afterward.
+ * This ensures historical reports remain accurate even after customer data changes.
+ */
+export const smsCampaignRecipients = mysqlTable("sms_campaign_recipients", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+
+  /** Raw phone as it came from completedJobs */
+  phone: varchar("phone", { length: 30 }).notNull(),
+  /**
+   * E.164-normalized phone — used for deduplication, opt-out checks,
+   * and the unique constraint. Always starts with +1 for US numbers.
+   */
+  phoneNormalized: varchar("phoneNormalized", { length: 20 }).notNull(),
+
+  // ── Recipient snapshot (frozen at freeze time — never updated after) ───────
+  snapshotFirstName: varchar("snapshotFirstName", { length: 100 }),
+  snapshotName: varchar("snapshotName", { length: 255 }),
+  snapshotAddress: varchar("snapshotAddress", { length: 500 }),
+  snapshotLastService: varchar("snapshotLastService", { length: 100 }),
+  snapshotLastPrice: int("snapshotLastPrice"),
+
+  /** FK to completedJobs.id — the specific job row this recipient came from */
+  completedJobId: int("completedJobId").notNull(),
+
+  /**
+   * Fully personalized message rendered at freeze time.
+   * Stored so sends never re-render from a live template.
+   */
+  personalizedMessage: text("personalizedMessage").notNull(),
+
+  status: mysqlEnum("status", smsCampaignRecipientStatuses as unknown as [string, ...string[]]).default("PENDING").notNull(),
+
+  /** UTC ms when the SMS was sent */
+  sentAt: bigint("sentAt", { mode: "number" }),
+  /** OpenPhone message ID returned on success — idempotency key */
+  openPhoneMessageId: varchar("openPhoneMessageId", { length: 128 }),
+  /** Link to the conversationSession created when they reply */
+  sessionId: int("sessionId"),
+  /** Error message if status = FAILED */
+  errorMessage: varchar("errorMessage", { length: 500 }),
+  /** If SKIPPED: reason (e.g. "opted out after freeze") */
+  skipReason: varchar("skipReason", { length: 255 }),
+
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  /**
+   * PRIMARY SAFETY CONSTRAINT: prevents duplicate sends to the same
+   * normalized phone within a campaign. This is the hard guard against
+   * the 5,000 SMS incident pattern.
+   */
+  uniqueIndex("uq_campaign_phone").on(t.campaignId, t.phoneNormalized),
+  index("idx_campaign_recipients_campaign_id").on(t.campaignId),
+  index("idx_campaign_recipients_status").on(t.campaignId, t.status),
+]);
+
+export type SmsCampaignRecipient = typeof smsCampaignRecipients.$inferSelect;
+export type InsertSmsCampaignRecipient = typeof smsCampaignRecipients.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * smsCampaignSendLog — immutable audit trail.
+ * Rows are NEVER updated or deleted.
+ * Every send attempt (success or failure) produces exactly one row.
+ */
+export const smsCampaignSendLog = mysqlTable("sms_campaign_send_log", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+  recipientId: int("recipientId").notNull(),
+  phoneNormalized: varchar("phoneNormalized", { length: 20 }).notNull(),
+
+  action: mysqlEnum("action", ["SENT", "FAILED", "SKIPPED", "TEST_SENT"]).notNull(),
+
+  /** Which batch this send was part of (1-indexed) */
+  batchNumber: int("batchNumber").default(1).notNull(),
+  /** Attempt number for this recipient (1 = first try, 2+ = retry) */
+  attempt: int("attempt").default(1).notNull(),
+  /** How long the OpenPhone API call took in ms */
+  durationMs: int("durationMs"),
+
+  openPhoneMessageId: varchar("openPhoneMessageId", { length: 128 }),
+  errorMessage: varchar("errorMessage", { length: 500 }),
+  /** Agent name or system process that triggered this action */
+  triggeredBy: varchar("triggeredBy", { length: 255 }),
+
+  attemptedAt: timestamp("attemptedAt").defaultNow().notNull(),
+}, (t) => [
+  index("idx_send_log_campaign").on(t.campaignId),
+  index("idx_send_log_phone").on(t.phoneNormalized),
+]);
+
+export type SmsCampaignSendLog = typeof smsCampaignSendLog.$inferSelect;
+export type InsertSmsCampaignSendLog = typeof smsCampaignSendLog.$inferInsert;
