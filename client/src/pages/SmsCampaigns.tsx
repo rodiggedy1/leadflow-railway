@@ -5,6 +5,13 @@
  * UI-only — logic wired in a subsequent phase.
  */
 import { useState, useRef } from "react";
+import {
+  Timer,
+  RefreshCw,
+  CalendarClock,
+  ThumbsUp,
+  Layers,
+} from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
@@ -71,6 +78,32 @@ interface ActiveRule {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Saved Audience Presets
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface AudiencePreset {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  estimatedCount: number;
+  color: string;
+  iconColor: string;
+}
+
+const AUDIENCE_PRESETS: AudiencePreset[] = [
+  { id: "last-minute",    label: "Last-minute openings",    description: "Customers likely to book on short notice",            icon: <Timer className="w-4 h-4" />,       estimatedCount: 94,  color: "bg-orange-50",  iconColor: "text-orange-500" },
+  { id: "win-back",       label: "Win back inactive",       description: "Haven't booked in 90+ days",                         icon: <RefreshCw className="w-4 h-4" />,    estimatedCount: 211, color: "bg-blue-50",    iconColor: "text-blue-500" },
+  { id: "former-recur",   label: "Former recurring",        description: "Used to have a recurring plan, now lapsed",           icon: <CalendarClock className="w-4 h-4" />, estimatedCount: 138, color: "bg-purple-50",  iconColor: "text-purple-500" },
+  { id: "nearby",         label: "Customers within X miles", description: "Based on service address proximity",                 icon: <MapPin className="w-4 h-4" />,       estimatedCount: 184, color: "bg-emerald-50", iconColor: "text-emerald-500" },
+  { id: "due-recurring",  label: "Due for recurring clean", description: "Recurring customers whose next clean is overdue",     icon: <CalendarClock className="w-4 h-4" />, estimatedCount: 47,  color: "bg-amber-50",   iconColor: "text-amber-500" },
+  { id: "five-star",      label: "5★ reviewers",            description: "Customers who left a 5-star review",                  icon: <Star className="w-4 h-4" />,         estimatedCount: 73,  color: "bg-yellow-50",  iconColor: "text-yellow-500" },
+  { id: "no-complaints",  label: "No complaints",           description: "Zero open issues or complaint history",               icon: <ThumbsUp className="w-4 h-4" />,     estimatedCount: 302, color: "bg-teal-50",    iconColor: "text-teal-500" },
+  { id: "high-spend",     label: "Spent over $500",         description: "High-value customers by lifetime spend",              icon: <DollarSign className="w-4 h-4" />,   estimatedCount: 89,  color: "bg-green-50",   iconColor: "text-green-600" },
+  { id: "not-contacted",  label: "Not contacted in 30 days", description: "No outbound SMS in the past month",                  icon: <MessageSquare className="w-4 h-4" />, estimatedCount: 256, color: "bg-slate-50",   iconColor: "text-slate-500" },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Rule Catalog
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -118,12 +151,91 @@ const CATEGORIES = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SavedAudiencePicker
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SavedAudiencePicker({
+  selectedPresets,
+  setSelectedPresets,
+}: {
+  selectedPresets: Set<string>;
+  setSelectedPresets: React.Dispatch<React.SetStateAction<Set<string>>>;
+}) {
+  const toggle = (id: string) =>
+    setSelectedPresets((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mb-4">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
+          <Layers className="w-4 h-4 text-gray-500" />
+          Saved Audiences
+        </h2>
+        {selectedPresets.size > 0 && (
+          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+            {selectedPresets.size} selected
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-gray-400 mb-4">
+        Pick one or more audiences. Combine with rules below for extra precision.
+      </p>
+      <div className="flex flex-col gap-2">
+        {AUDIENCE_PRESETS.map((preset) => {
+          const active = selectedPresets.has(preset.id);
+          return (
+            <button
+              key={preset.id}
+              onClick={() => toggle(preset.id)}
+              className={[
+                "flex items-center gap-3 p-3 rounded-2xl border text-left transition-all",
+                active
+                  ? "border-gray-900 bg-gray-900 shadow-sm"
+                  : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white",
+              ].join(" ")}
+            >
+              <div className={["w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0", active ? "bg-white/15" : preset.color].join(" ")}>
+                <span className={active ? "text-white" : preset.iconColor}>{preset.icon}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className={["text-sm font-bold leading-tight", active ? "text-white" : "text-gray-900"].join(" ")}>{preset.label}</div>
+                <div className={["text-xs mt-0.5 truncate", active ? "text-gray-300" : "text-gray-400"].join(" ")}>{preset.description}</div>
+              </div>
+              <div className={["text-xs font-black rounded-full px-2 py-0.5 flex-shrink-0", active ? "bg-white/20 text-white" : "bg-white text-gray-500 border border-gray-200"].join(" ")}>
+                ~{preset.estimatedCount}
+              </div>
+              {active && <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Simulated recipient count
 // ─────────────────────────────────────────────────────────────────────────────
 
-function computeCount(rules: ActiveRule[]): number {
-  if (rules.length === 0) return 0;
-  let base = 480;
+function computeCount(rules: ActiveRule[], selectedPresets: Set<string>): number {
+  // Base from presets
+  let base = 0;
+  if (selectedPresets.size > 0) {
+    for (const id of selectedPresets) {
+      const p = AUDIENCE_PRESETS.find((x) => x.id === id);
+      if (p) base += p.estimatedCount;
+    }
+    if (selectedPresets.size > 1) base = Math.round(base * 0.72);
+  } else {
+    // No presets — start from full list and let rules narrow
+    if (rules.length === 0) return 0;
+    base = 480;
+  }
   for (const r of rules) {
     const def = RULE_CATALOG.find((d) => d.id === r.defId);
     if (!def) continue;
@@ -204,7 +316,7 @@ function HeroCard({ count, ruleCount, excluded, expectedReplies }: {
       </div>
       <div className="text-sm text-gray-300 mb-1">eligible customers</div>
       <div className="text-xs text-gray-500 mb-4">
-        {ruleCount === 0 ? "Add rules to filter your audience" : `${ruleCount} rule${ruleCount > 1 ? "s" : ""} active`}
+        {ruleCount === 0 ? "Select an audience or add rules" : `${ruleCount} filter${ruleCount > 1 ? "s" : ""} active`}
       </div>
       <div className="grid grid-cols-2 gap-3">
         {[
@@ -809,9 +921,10 @@ function SmsCampaignsContent() {
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [testSent, setTestSent] = useState(false);
   const [rules, setRules] = useState<ActiveRule[]>([]);
+  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
 
-  const recipientCount = computeCount(rules);
-  const excluded = rules.length > 0 ? Math.round(recipientCount * 0.18) : 0;
+  const recipientCount = computeCount(rules, selectedPresets);
+  const excluded = (rules.length > 0 || selectedPresets.size > 0) ? Math.round(recipientCount * 0.18) : 0;
   const expectedReplies = Math.round(recipientCount * 0.13);
 
   return (
@@ -831,7 +944,8 @@ function SmsCampaignsContent() {
       <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-4 mt-2">
         {/* LEFT */}
         <div>
-          <HeroCard count={recipientCount} ruleCount={rules.length} excluded={excluded} expectedReplies={expectedReplies} />
+          <HeroCard count={recipientCount} ruleCount={rules.length + selectedPresets.size} excluded={excluded} expectedReplies={expectedReplies} />
+          <SavedAudiencePicker selectedPresets={selectedPresets} setSelectedPresets={setSelectedPresets} />
           <AudienceRuleBuilder rules={rules} setRules={setRules} />
         </div>
         {/* RIGHT */}
