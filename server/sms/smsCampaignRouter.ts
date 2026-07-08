@@ -26,7 +26,7 @@ import type { AudienceDefinition } from "./plannerTypes";
 import { freezeAudience as doFreezeAudience } from "./AudienceFreezer";
 import { sendCampaign as doSendCampaign } from "./CampaignSender";
 import { sendSms } from "../openphone";
-import { env } from "../_core/env";
+import { ENV } from "../_core/env";
 import {
   smsCampaigns,
   smsCampaignRecipients,
@@ -729,7 +729,7 @@ export const smsCampaignRouter = router({
         .replace(/\{\{first_name\}\}/gi, input.testFirstName)
         .replace(/\{\{name\}\}/gi, input.testFirstName);
 
-      const isPreview = env.isPreviewMode;
+      const isPreview = ENV.isPreviewMode;
 
       if (isPreview) {
         console.info(
