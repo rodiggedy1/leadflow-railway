@@ -135,6 +135,7 @@ export default function CampaignReviewScreen({
 }: Props) {
   const utils = trpc.useUtils();
   const isFrozen = campaignStatus === "FROZEN";
+  const isCompleted = campaignStatus === "COMPLETED";
 
   // ── Recipient table state ──────────────────────────────────────────────────
   const [page, setPage] = useState(1);
@@ -216,6 +217,24 @@ export default function CampaignReviewScreen({
       setUndoQueue((q) => { const n = new Set(q); n.delete(vars.recipientId); return n; });
       utils.smsCampaign.listRecipients.invalidate({ campaignId: campaignId! });
       onCountChange(frozenCount + 1);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const markBookedMutation = trpc.smsCampaign.markBooked.useMutation({
+    onSuccess: () => {
+      utils.smsCampaign.listRecipients.invalidate({ campaignId: campaignId! });
+      utils.smsCampaign.listCampaigns.invalidate();
+      toast.success("Marked as booked ✓");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const unmarkBookedMutation = trpc.smsCampaign.unmarkBooked.useMutation({
+    onSuccess: () => {
+      utils.smsCampaign.listRecipients.invalidate({ campaignId: campaignId! });
+      utils.smsCampaign.listCampaigns.invalidate();
+      toast.success("Booking mark removed");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -439,7 +458,7 @@ export default function CampaignReviewScreen({
                   <SortableHeader label="Last Service" col="lastService" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                   <SortableHeader label="Ticket" col="lastPrice" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                   <th className="text-left py-2.5 px-3 text-xs font-black uppercase tracking-widest text-gray-400">Status</th>
-                  {isFrozen && <th className="py-2.5 px-3 w-16" />}
+                  {(isFrozen || isCompleted) && <th className="py-2.5 px-3 w-16" />}
                 </tr>
               </thead>
               <tbody>
@@ -449,6 +468,8 @@ export default function CampaignReviewScreen({
                   <tr><td colSpan={7} className="py-16 text-center text-gray-400 text-sm">No recipients found</td></tr>
                 ) : recipientData?.items.map((r, idx) => {
                   const isSkipped = r.status === "SKIPPED";
+                  const isBooked = r.status === "BOOKED";
+                  const isSent = r.status === "SENT";
                   const justSkipped = undoQueue.has(r.id);
                   return (
                     <tr
@@ -456,7 +477,9 @@ export default function CampaignReviewScreen({
                       onClick={() => setSelectedRecipient(r)}
                       className={[
                         "border-b border-gray-50 cursor-pointer transition-colors",
-                        isSkipped ? "opacity-40 bg-orange-50 hover:bg-orange-100" : "hover:bg-indigo-50",
+                        isSkipped ? "opacity-40 bg-orange-50 hover:bg-orange-100" :
+                        isBooked ? "bg-emerald-50 hover:bg-emerald-100" :
+                        "hover:bg-indigo-50",
                         selectedRecipient?.id === r.id ? "bg-indigo-50 border-l-2 border-l-indigo-400" : "",
                       ].join(" ")}
                     >
@@ -470,8 +493,12 @@ export default function CampaignReviewScreen({
                       <td className="py-2 px-3">
                         {isSkipped ? (
                           <span className="text-[10px] font-bold text-orange-500 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded-full">Excluded</span>
+                        ) : isBooked ? (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-1.5 py-0.5 rounded-full">✓ Booked</span>
+                        ) : isSent ? (
+                          <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">Sent</span>
                         ) : (
-                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">Pending</span>
+                          <span className="text-[10px] font-bold text-gray-500 bg-gray-50 border border-gray-200 px-1.5 py-0.5 rounded-full">Pending</span>
                         )}
                       </td>
                       {isFrozen && (
@@ -495,6 +522,29 @@ export default function CampaignReviewScreen({
                               <UserX className="w-3.5 h-3.5" />
                             </button>
                           )}
+                        </td>
+                      )}
+                      {isCompleted && (
+                        <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                          {isBooked ? (
+                            <button
+                              onClick={() => unmarkBookedMutation.mutate({ campaignId: campaignId!, recipientId: r.id })}
+                              disabled={unmarkBookedMutation.isPending}
+                              className="p-1 rounded-lg text-emerald-500 hover:text-gray-500 hover:bg-gray-50 transition-colors"
+                              title="Undo booking mark"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          ) : isSent ? (
+                            <button
+                              onClick={() => markBookedMutation.mutate({ campaignId: campaignId!, recipientId: r.id })}
+                              disabled={markBookedMutation.isPending}
+                              className="p-1 rounded-lg text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                              title="Mark as booked"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : null}
                         </td>
                       )}
                     </tr>

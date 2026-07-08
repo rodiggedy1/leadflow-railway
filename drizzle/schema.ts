@@ -3490,6 +3490,7 @@ export const smsCampaignRecipientStatuses = [
   "SENT",      // OpenPhone accepted the message
   "FAILED",    // OpenPhone returned an error
   "SKIPPED",   // Opted out between freeze and send time (last-moment safety check)
+  "BOOKED",    // Manually marked as converted to a booking
 ] as const;
 
 export type SmsCampaignRecipientStatus = (typeof smsCampaignRecipientStatuses)[number];

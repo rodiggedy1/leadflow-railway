@@ -621,6 +621,84 @@ export const smsCampaignRouter = router({
     }),
 
   /**
+   * markBooked — manually mark a SENT recipient as converted to a booking.
+   * Increments campaign.bookedCount by 1.
+   * Only allowed on SENT recipients in COMPLETED campaigns.
+   */
+  markBooked: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      recipientId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const recipientRows = await db
+        .select({ id: smsCampaignRecipients.id, snapshotName: smsCampaignRecipients.snapshotName, status: smsCampaignRecipients.status })
+        .from(smsCampaignRecipients)
+        .where(and(eq(smsCampaignRecipients.id, input.recipientId), eq(smsCampaignRecipients.campaignId, input.campaignId)))
+        .limit(1);
+
+      if (recipientRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Recipient not found" });
+      if (recipientRows[0].status === "BOOKED") return { booked: true as const, recipientId: input.recipientId };
+      if (recipientRows[0].status !== "SENT") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `Can only mark SENT recipients as booked (current: ${recipientRows[0].status})` });
+      }
+
+      await db
+        .update(smsCampaignRecipients)
+        .set({ status: "BOOKED" })
+        .where(and(eq(smsCampaignRecipients.id, input.recipientId), eq(smsCampaignRecipients.campaignId, input.campaignId)));
+
+      await db
+        .update(smsCampaigns)
+        .set({ bookedCount: sql`${smsCampaigns.bookedCount} + 1` })
+        .where(eq(smsCampaigns.id, input.campaignId));
+
+      console.info(`[smsCampaignRouter] Recipient ${input.recipientId} (${recipientRows[0].snapshotName ?? "unknown"}) marked BOOKED in campaign ${input.campaignId} by ${ctx.agent.agentName}`);
+
+      return { booked: true as const, recipientId: input.recipientId };
+    }),
+
+  /**
+   * unmarkBooked — undo a manual booking mark (BOOKED → SENT).
+   * Decrements campaign.bookedCount by 1 (floor 0).
+   */
+  unmarkBooked: adminAgentProcedure
+    .input(z.object({
+      campaignId: z.number().int().positive(),
+      recipientId: z.number().int().positive(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const recipientRows = await db
+        .select({ id: smsCampaignRecipients.id, snapshotName: smsCampaignRecipients.snapshotName, status: smsCampaignRecipients.status })
+        .from(smsCampaignRecipients)
+        .where(and(eq(smsCampaignRecipients.id, input.recipientId), eq(smsCampaignRecipients.campaignId, input.campaignId)))
+        .limit(1);
+
+      if (recipientRows.length === 0) throw new TRPCError({ code: "NOT_FOUND", message: "Recipient not found" });
+      if (recipientRows[0].status !== "BOOKED") return { unbooked: true as const, recipientId: input.recipientId };
+
+      await db
+        .update(smsCampaignRecipients)
+        .set({ status: "SENT" })
+        .where(and(eq(smsCampaignRecipients.id, input.recipientId), eq(smsCampaignRecipients.campaignId, input.campaignId)));
+
+      await db
+        .update(smsCampaigns)
+        .set({ bookedCount: sql`GREATEST(${smsCampaigns.bookedCount} - 1, 0)` })
+        .where(eq(smsCampaigns.id, input.campaignId));
+
+      console.info(`[smsCampaignRouter] Recipient ${input.recipientId} (${recipientRows[0].snapshotName ?? "unknown"}) unmarked BOOKED in campaign ${input.campaignId} by ${ctx.agent.agentName}`);
+
+      return { unbooked: true as const, recipientId: input.recipientId };
+    }),
+
+  /**
    * sendTestSms — send a test SMS to a given phone number using a custom first name.
    * On preview: logs the test, does not send real SMS.
    * On production: sends via OpenPhone to the test phone only.
