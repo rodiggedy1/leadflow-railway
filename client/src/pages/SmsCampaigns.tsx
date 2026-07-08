@@ -1,12 +1,10 @@
 /**
  * SmsCampaigns — /admin/sms-campaigns
  *
- * SMS Campaign Command Center: 5-step wizard for building a safe audience,
- * composing a personalized message, and sending a bulk SMS campaign.
- *
- * UI-only for now — logic will be wired in a subsequent phase.
+ * SMS Campaign Command Center with a visual rule builder for audience targeting.
+ * UI-only — logic wired in a subsequent phase.
  */
-import { useState } from "react";
+import { useState, useRef } from "react";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
@@ -20,7 +18,6 @@ import {
   MessageSquare,
   FlaskConical,
   Send,
-  MapPin,
   Sparkles,
   CheckCircle2,
   Clock,
@@ -31,165 +28,125 @@ import {
   ChevronLeft,
   Zap,
   Phone,
-  Star,
+  Plus,
+  X,
+  GripVertical,
+  MapPin,
+  CalendarDays,
   DollarSign,
-  RefreshCw,
-  CalendarClock,
-  ThumbsUp,
-  Timer,
+  Star,
+  Megaphone,
+  Brain,
+  Heart,
   ChevronDown,
-  ChevronUp,
-  Layers,
+  Trash2,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 type Step = 1 | 2 | 3 | 4 | 5;
+type RuleOperator = ">" | "<" | ">=" | "<=" | "=" | "!=" | "is" | "is not" | "contains";
+type RuleValueType = "number" | "text" | "select" | "boolean" | "days";
 
-interface AudiencePreset {
+interface RuleDefinition {
   id: string;
   label: string;
-  description: string;
+  category: string;
+  operator: RuleOperator[];
+  valueType: RuleValueType;
+  unit?: string;
+  selectOptions?: string[];
   icon: React.ReactNode;
-  estimatedCount: number;
-  color: string; // tailwind bg class for icon bg
-  iconColor: string; // tailwind text class
+  color: string; // tailwind text color
+  bgColor: string; // tailwind bg color
 }
 
-interface AdvancedFilters {
-  radiusEnabled: boolean;
-  location: string;
-  radius: "3mi" | "5mi" | "10mi" | "15mi";
-  minSpend: string;
-  minRating: string;
-  notContactedDays: string;
-  lastBookingDays: string;
+interface ActiveRule {
+  uid: string;
+  defId: string;
+  operator: RuleOperator;
+  value: string;
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Rule Catalog
+// ─────────────────────────────────────────────────────────────────────────────
 
-const AUDIENCE_PRESETS: AudiencePreset[] = [
-  {
-    id: "last-minute",
-    label: "Last-minute openings",
-    description: "Customers likely to book on short notice",
-    icon: <Timer className="w-4 h-4" />,
-    estimatedCount: 94,
-    color: "bg-orange-50",
-    iconColor: "text-orange-500",
-  },
-  {
-    id: "win-back",
-    label: "Win back inactive",
-    description: "Haven't booked in 90+ days",
-    icon: <RefreshCw className="w-4 h-4" />,
-    estimatedCount: 211,
-    color: "bg-blue-50",
-    iconColor: "text-blue-500",
-  },
-  {
-    id: "former-recurring",
-    label: "Former recurring",
-    description: "Used to have a recurring plan, now lapsed",
-    icon: <CalendarClock className="w-4 h-4" />,
-    estimatedCount: 138,
-    color: "bg-purple-50",
-    iconColor: "text-purple-500",
-  },
-  {
-    id: "nearby",
-    label: "Customers within X miles",
-    description: "Based on service address proximity",
-    icon: <MapPin className="w-4 h-4" />,
-    estimatedCount: 184,
-    color: "bg-emerald-50",
-    iconColor: "text-emerald-500",
-  },
-  {
-    id: "due-recurring",
-    label: "Due for recurring clean",
-    description: "Recurring customers whose next clean is overdue",
-    icon: <CalendarClock className="w-4 h-4" />,
-    estimatedCount: 47,
-    color: "bg-amber-50",
-    iconColor: "text-amber-500",
-  },
-  {
-    id: "five-star",
-    label: "5★ reviewers",
-    description: "Customers who left a 5-star review",
-    icon: <Star className="w-4 h-4" />,
-    estimatedCount: 73,
-    color: "bg-yellow-50",
-    iconColor: "text-yellow-500",
-  },
-  {
-    id: "no-complaints",
-    label: "No complaints",
-    description: "Zero open issues or complaint history",
-    icon: <ThumbsUp className="w-4 h-4" />,
-    estimatedCount: 302,
-    color: "bg-teal-50",
-    iconColor: "text-teal-500",
-  },
-  {
-    id: "high-spend",
-    label: "Spent over $500",
-    description: "High-value customers by lifetime spend",
-    icon: <DollarSign className="w-4 h-4" />,
-    estimatedCount: 89,
-    color: "bg-green-50",
-    iconColor: "text-green-600",
-  },
-  {
-    id: "not-contacted",
-    label: "Not contacted in 30 days",
-    description: "No outbound SMS in the past month",
-    icon: <MessageSquare className="w-4 h-4" />,
-    estimatedCount: 256,
-    color: "bg-slate-50",
-    iconColor: "text-slate-500",
-  },
+const RULE_CATALOG: RuleDefinition[] = [
+  // Geography
+  { id: "radius",       label: "Radius",           category: "Geography",       operator: ["<", "<="],          valueType: "number",  unit: "miles",    icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  { id: "city",         label: "City",             category: "Geography",       operator: ["is", "is not"],     valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  { id: "zip",          label: "ZIP Code",         category: "Geography",       operator: ["is", "is not"],     valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  { id: "neighborhood", label: "Neighborhood",     category: "Geography",       operator: ["is", "is not"],     valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  // Booking History
+  { id: "last-booking", label: "Last Booking",     category: "Booking History", operator: [">", "<", ">=", "<="], valueType: "days", unit: "days ago", icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "num-bookings", label: "# of Bookings",   category: "Booking History", operator: [">", "<", ">=", "<=", "="], valueType: "number",             icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "recurring",    label: "Recurring Status", category: "Booking History", operator: ["is"],               valueType: "select",  selectOptions: ["Active", "Former", "Never"], icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600", bgColor: "bg-blue-50" },
+  { id: "service-type", label: "Service Type",     category: "Booking History", operator: ["is", "is not"],     valueType: "select",  selectOptions: ["Standard", "Deep Clean", "Move-out", "Recurring"], icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600", bgColor: "bg-blue-50" },
+  { id: "bedrooms",     label: "Bedrooms",         category: "Booking History", operator: ["=", ">", "<"],      valueType: "number",                    icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "bathrooms",    label: "Bathrooms",        category: "Booking History", operator: ["=", ">", "<"],      valueType: "number",                    icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  // Customer Value
+  { id: "ltv",          label: "Lifetime Revenue", category: "Customer Value",  operator: [">", "<", ">=", "<="], valueType: "number", unit: "$",       icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
+  { id: "avg-ticket",   label: "Avg Ticket",       category: "Customer Value",  operator: [">", "<", ">=", "<="], valueType: "number", unit: "$",       icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
+  { id: "tips",         label: "Tips",             category: "Customer Value",  operator: [">", ">=", "="],     valueType: "number",  unit: "$",        icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
+  // Customer Health
+  { id: "review-score", label: "Review Score",     category: "Customer Health", operator: [">=", ">", "="],     valueType: "select",  selectOptions: ["5", "4", "3", "2", "1"], icon: <Star className="w-3.5 h-3.5" />, color: "text-amber-600", bgColor: "bg-amber-50" },
+  { id: "complaints",   label: "Complaints",       category: "Customer Health", operator: ["=", "<"],           valueType: "number",                    icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
+  { id: "refunds",      label: "Refunds",          category: "Customer Health", operator: ["=", "<"],           valueType: "number",                    icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
+  { id: "chargebacks",  label: "Chargebacks",      category: "Customer Health", operator: ["="],                valueType: "number",                    icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
+  // Marketing
+  { id: "last-sms",     label: "Last SMS",         category: "Marketing",       operator: [">", "<"],           valueType: "days",    unit: "days ago", icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "last-email",   label: "Last Email",       category: "Marketing",       operator: [">", "<"],           valueType: "days",    unit: "days ago", icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "prev-campaign",label: "Previous Campaign",category: "Marketing",       operator: ["is", "is not"],     valueType: "text",                      icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "stop-status",  label: "STOP Status",      category: "Marketing",       operator: ["is"],               valueType: "select",  selectOptions: ["Opted in", "Opted out"], icon: <Ban className="w-3.5 h-3.5" />, color: "text-pink-600", bgColor: "bg-pink-50" },
+  { id: "open-rate",    label: "Open Rate",        category: "Marketing",       operator: [">", "<"],           valueType: "number",  unit: "%",        icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "reply-rate",   label: "Reply Rate",       category: "Marketing",       operator: [">", "<"],           valueType: "number",  unit: "%",        icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  // AI
+  { id: "ai-book",      label: "Likelihood to Book",    category: "AI",        operator: [">", ">="],           valueType: "number",  unit: "%",        icon: <Brain className="w-3.5 h-3.5" />,         color: "text-indigo-600",  bgColor: "bg-indigo-50" },
+  { id: "ai-respond",   label: "Likelihood to Respond", category: "AI",        operator: [">", ">="],           valueType: "number",  unit: "%",        icon: <Brain className="w-3.5 h-3.5" />,         color: "text-indigo-600",  bgColor: "bg-indigo-50" },
 ];
 
-const DEFAULT_MESSAGE =
-  "Hi {{first_name}}, this is Madison from Maid in Black 😊 We have a few openings near {{area}} this week and wanted to see if you'd like help with a cleaning. Want me to send available times?";
+const CATEGORIES = [
+  { name: "Geography",       icon: <MapPin className="w-3.5 h-3.5" />,       color: "text-emerald-600", bg: "bg-emerald-50",  border: "border-emerald-200" },
+  { name: "Booking History", icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600",    bg: "bg-blue-50",     border: "border-blue-200" },
+  { name: "Customer Value",  icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bg: "bg-violet-50",   border: "border-violet-200" },
+  { name: "Customer Health", icon: <Heart className="w-3.5 h-3.5" />,        color: "text-amber-600",   bg: "bg-amber-50",    border: "border-amber-200" },
+  { name: "Marketing",       icon: <Megaphone className="w-3.5 h-3.5" />,    color: "text-pink-600",    bg: "bg-pink-50",     border: "border-pink-200" },
+  { name: "AI",              icon: <Brain className="w-3.5 h-3.5" />,        color: "text-indigo-600",  bg: "bg-indigo-50",   border: "border-indigo-200" },
+];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Simulated recipient count
+// ─────────────────────────────────────────────────────────────────────────────
 
-function StarRating({ rating }: { rating: number }) {
-  return (
-    <div className="flex gap-0.5 text-amber-400 text-sm">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} style={{ opacity: i <= rating ? 1 : 0.25 }}>★</span>
-      ))}
-    </div>
-  );
-}
-
-function computeRecipientCount(
-  selectedPresets: Set<string>,
-  filters: AdvancedFilters
-): number {
-  if (selectedPresets.size === 0) return 0;
-  // Simulated: sum preset counts with overlap reduction
-  let total = 0;
-  for (const id of selectedPresets) {
-    const p = AUDIENCE_PRESETS.find((x) => x.id === id);
-    if (p) total += p.estimatedCount;
+function computeCount(rules: ActiveRule[]): number {
+  if (rules.length === 0) return 0;
+  let base = 480;
+  for (const r of rules) {
+    const def = RULE_CATALOG.find((d) => d.id === r.defId);
+    if (!def) continue;
+    const v = parseFloat(r.value) || 0;
+    switch (r.defId) {
+      case "radius":       base = Math.round(base * Math.min(1, (v || 5) / 15)); break;
+      case "last-booking": base = Math.round(base * (v > 60 ? 0.55 : 0.8)); break;
+      case "ltv":          base = Math.round(base * (v > 300 ? 0.45 : 0.7)); break;
+      case "review-score": base = Math.round(base * (r.value === "5" ? 0.35 : 0.6)); break;
+      case "complaints":   base = Math.round(base * 0.82); break;
+      case "last-sms":     base = Math.round(base * 0.65); break;
+      case "stop-status":  base = Math.round(base * (r.value === "Opted in" ? 0.9 : 0.05)); break;
+      case "ai-book":      base = Math.round(base * 0.4); break;
+      case "ai-respond":   base = Math.round(base * 0.45); break;
+      default:             base = Math.round(base * 0.78);
+    }
   }
-  // Simulate overlap reduction for multiple selections
-  if (selectedPresets.size > 1) total = Math.round(total * 0.72);
-  // Simulate filter narrowing
-  if (filters.radiusEnabled) total = Math.round(total * 0.65);
-  if (filters.minSpend) total = Math.round(total * 0.6);
-  if (filters.minRating) total = Math.round(total * 0.7);
-  if (filters.notContactedDays) total = Math.round(total * 0.8);
-  if (filters.lastBookingDays) total = Math.round(total * 0.75);
-  return Math.max(total, 0);
+  return Math.max(base, 0);
 }
 
-// ── WorkflowBar ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// WorkflowBar
+// ─────────────────────────────────────────────────────────────────────────────
 
 function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }) {
   const steps: { id: Step; label: string; icon: React.ReactNode }[] = [
@@ -210,11 +167,9 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
               onClick={() => onStep(s.id)}
               className={[
                 "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all w-full justify-center truncate",
-                active
-                  ? "bg-gray-900 text-white shadow-md"
-                  : done
-                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                  : "bg-gray-100 text-gray-400",
+                active  ? "bg-gray-900 text-white shadow-md"
+                : done  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        : "bg-gray-100 text-gray-400",
               ].join(" ")}
             >
               {done ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : s.icon}
@@ -231,356 +186,402 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
   );
 }
 
-// ── HeroCard ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// HeroCard
+// ─────────────────────────────────────────────────────────────────────────────
 
-function HeroCard({
-  count,
-  selectedCount,
-  excluded,
-  expectedReplies,
-}: {
-  count: number;
-  selectedCount: number;
-  excluded: number;
-  expectedReplies: number;
+function HeroCard({ count, ruleCount, excluded, expectedReplies }: {
+  count: number; ruleCount: number; excluded: number; expectedReplies: number;
 }) {
   return (
     <div
       className="rounded-3xl p-7 text-center text-white mb-4"
       style={{ background: "linear-gradient(180deg,#111827 0%,#1f2937 100%)" }}
     >
-      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">
-        Recipients
-      </div>
-      <div
-        className="font-black text-white leading-none mb-1 tabular-nums transition-all duration-300"
-        style={{ fontSize: 72 }}
-      >
+      <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Recipients</div>
+      <div className="font-black text-white leading-none mb-1 tabular-nums transition-all duration-300" style={{ fontSize: 72 }}>
         {count}
       </div>
       <div className="text-sm text-gray-300 mb-1">eligible customers</div>
-      {selectedCount > 0 && (
-        <div className="text-xs text-gray-500 mb-4">
-          across {selectedCount} audience{selectedCount > 1 ? "s" : ""}
-        </div>
-      )}
-      {selectedCount === 0 && (
-        <div className="text-xs text-gray-500 mb-4">
-          Select an audience to get started
-        </div>
-      )}
+      <div className="text-xs text-gray-500 mb-4">
+        {ruleCount === 0 ? "Add rules to filter your audience" : `${ruleCount} rule${ruleCount > 1 ? "s" : ""} active`}
+      </div>
       <div className="grid grid-cols-2 gap-3">
-        <div
-          className="rounded-2xl p-3"
-          style={{
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.12)",
-          }}
+        {[
+          { label: "excluded",        value: excluded },
+          { label: "expected replies", value: expectedReplies },
+        ].map((s) => (
+          <div key={s.label} className="rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
+            <div className="text-xl font-black">{s.value}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RuleBlock — a single active rule row
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RuleBlock({
+  rule,
+  onUpdate,
+  onRemove,
+  dragHandleProps,
+}: {
+  rule: ActiveRule;
+  onUpdate: (uid: string, patch: Partial<ActiveRule>) => void;
+  onRemove: (uid: string) => void;
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+}) {
+  const def = RULE_CATALOG.find((d) => d.id === rule.defId)!;
+  const [editingValue, setEditingValue] = useState(false);
+
+  return (
+    <div
+      className="flex items-center gap-2 p-3 rounded-2xl border border-gray-200 bg-white shadow-sm group"
+      style={{ userSelect: "none" }}
+    >
+      {/* Drag handle */}
+      <div
+        {...dragHandleProps}
+        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0"
+      >
+        <GripVertical className="w-4 h-4" />
+      </div>
+
+      {/* Category icon */}
+      <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${def.bgColor}`}>
+        <span className={def.color}>{def.icon}</span>
+      </div>
+
+      {/* Label */}
+      <span className="text-sm font-bold text-gray-800 flex-shrink-0 min-w-[90px]">
+        {def.label}
+      </span>
+
+      {/* Operator selector */}
+      <div className="relative flex-shrink-0">
+        <select
+          value={rule.operator}
+          onChange={(e) => onUpdate(rule.uid, { operator: e.target.value as RuleOperator })}
+          className="appearance-none bg-gray-100 border-0 rounded-lg px-2 py-1.5 pr-6 text-xs font-bold text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-gray-300"
         >
-          <div className="text-xl font-black">{excluded}</div>
-          <div className="text-xs text-gray-400 mt-0.5">excluded</div>
+          {def.operator.map((op) => (
+            <option key={op} value={op}>{op}</option>
+          ))}
+        </select>
+        <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+      </div>
+
+      {/* Value input */}
+      <div className="flex-1 min-w-0">
+        {def.valueType === "select" ? (
+          <div className="relative">
+            <select
+              value={rule.value}
+              onChange={(e) => onUpdate(rule.uid, { value: e.target.value })}
+              className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 pr-7 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            >
+              <option value="">Select…</option>
+              {def.selectOptions?.map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+          </div>
+        ) : def.valueType === "boolean" ? (
+          <span className="text-sm font-semibold text-gray-700 px-2">true</span>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <input
+              type={def.valueType === "number" || def.valueType === "days" ? "number" : "text"}
+              value={rule.value}
+              onChange={(e) => onUpdate(rule.uid, { value: e.target.value })}
+              placeholder="value"
+              min="0"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+            />
+            {def.unit && (
+              <span className="text-xs text-gray-400 font-medium flex-shrink-0">{def.unit}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Remove */}
+      <button
+        onClick={() => onRemove(rule.uid)}
+        className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RulePicker — the "+ Add Rule" dropdown panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RulePicker({ onAdd, onClose }: { onAdd: (defId: string) => void; onClose: () => void }) {
+  const [activeCategory, setActiveCategory] = useState("Geography");
+  const ref = useRef<HTMLDivElement>(null);
+
+  const rulesInCategory = RULE_CATALOG.filter((r) => r.category === activeCategory);
+  const cat = CATEGORIES.find((c) => c.name === activeCategory)!;
+
+  return (
+    <div
+      ref={ref}
+      className="absolute z-50 top-full left-0 mt-2 w-[480px] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-3xl shadow-2xl overflow-hidden"
+      style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <span className="font-black text-gray-900 text-sm">Add a Rule</span>
+        <button onClick={onClose} className="w-7 h-7 rounded-xl bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
+          <X className="w-3.5 h-3.5 text-gray-500" />
+        </button>
+      </div>
+
+      <div className="flex" style={{ height: 340 }}>
+        {/* Category sidebar */}
+        <div className="w-40 border-r border-gray-100 flex flex-col py-2 flex-shrink-0 overflow-y-auto">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.name}
+              onClick={() => setActiveCategory(c.name)}
+              className={[
+                "flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors",
+                activeCategory === c.name
+                  ? `${c.bg} ${c.color}`
+                  : "text-gray-500 hover:bg-gray-50",
+              ].join(" ")}
+            >
+              <span className={activeCategory === c.name ? c.color : "text-gray-400"}>{c.icon}</span>
+              {c.name}
+            </button>
+          ))}
         </div>
-        <div
-          className="rounded-2xl p-3"
-          style={{
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.12)",
-          }}
-        >
-          <div className="text-xl font-black">{expectedReplies}</div>
-          <div className="text-xs text-gray-400 mt-0.5">expected replies</div>
+
+        {/* Rule list */}
+        <div className="flex-1 overflow-y-auto py-2 px-3">
+          <div className={`text-xs font-black uppercase tracking-widest mb-3 px-1 ${cat.color}`}>
+            {activeCategory}
+          </div>
+          <div className="flex flex-col gap-1">
+            {rulesInCategory.map((rule) => (
+              <button
+                key={rule.id}
+                onClick={() => { onAdd(rule.id); onClose(); }}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-left group transition-colors"
+              >
+                <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${rule.bgColor}`}>
+                  <span className={rule.color}>{rule.icon}</span>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-gray-800 group-hover:text-gray-900">{rule.label}</div>
+                  <div className="text-xs text-gray-400">
+                    {rule.operator.slice(0, 3).join(" · ")}
+                    {rule.unit ? ` · ${rule.unit}` : ""}
+                  </div>
+                </div>
+                <ChevronRight className="w-3.5 h-3.5 text-gray-300 ml-auto group-hover:text-gray-500" />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ── AudienceBuilder ───────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// AudienceRuleBuilder
+// ─────────────────────────────────────────────────────────────────────────────
 
-function AudienceBuilder({
-  selectedPresets,
-  setSelectedPresets,
-  filters,
-  setFilters,
+let uidCounter = 0;
+function makeUid() { return `rule-${++uidCounter}`; }
+
+function AudienceRuleBuilder({
+  rules,
+  setRules,
 }: {
-  selectedPresets: Set<string>;
-  setSelectedPresets: React.Dispatch<React.SetStateAction<Set<string>>>;
-  filters: AdvancedFilters;
-  setFilters: React.Dispatch<React.SetStateAction<AdvancedFilters>>;
+  rules: ActiveRule[];
+  setRules: React.Dispatch<React.SetStateAction<ActiveRule[]>>;
 }) {
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
 
-  const togglePreset = (id: string) => {
-    setSelectedPresets((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const addRule = (defId: string) => {
+    const def = RULE_CATALOG.find((d) => d.id === defId)!;
+    setRules((prev) => [
+      ...prev,
+      {
+        uid: makeUid(),
+        defId,
+        operator: def.operator[0],
+        value: def.selectOptions ? def.selectOptions[0] : "",
+      },
+    ]);
   };
 
-  const radiusOptions: { value: AdvancedFilters["radius"]; label: string }[] = [
-    { value: "3mi",  label: "3 mi" },
-    { value: "5mi",  label: "5 mi" },
-    { value: "10mi", label: "10 mi" },
-    { value: "15mi", label: "15 mi" },
+  const updateRule = (uid: string, patch: Partial<ActiveRule>) => {
+    setRules((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
+  };
+
+  const removeRule = (uid: string) => {
+    setRules((prev) => prev.filter((r) => r.uid !== uid));
+  };
+
+  // Simple drag-to-reorder
+  const handleDragEnd = () => {
+    if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
+      setRules((prev) => {
+        const next = [...prev];
+        const [moved] = next.splice(dragIdx, 1);
+        next.splice(overIdx, 0, moved);
+        return next;
+      });
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+  };
+
+  // Preset quick-adds
+  const QUICK_PRESETS = [
+    { label: "Win Back",        rules: [{ defId: "last-booking", op: ">", val: "90" }] },
+    { label: "High Value",      rules: [{ defId: "ltv",          op: ">", val: "500" }] },
+    { label: "5★ No Issues",    rules: [{ defId: "review-score", op: ">=", val: "5" }, { defId: "complaints", op: "=", val: "0" }] },
+    { label: "AI Ready",        rules: [{ defId: "ai-respond",   op: ">", val: "60" }] },
+    { label: "Not Texted 30d",  rules: [{ defId: "last-sms",     op: ">", val: "30" }] },
   ];
+
+  const applyPreset = (preset: typeof QUICK_PRESETS[0]) => {
+    const newRules: ActiveRule[] = preset.rules.map((r) => {
+      const def = RULE_CATALOG.find((d) => d.id === r.defId)!;
+      return { uid: makeUid(), defId: r.defId, operator: r.op as RuleOperator, value: r.val };
+    });
+    setRules((prev) => {
+      // avoid duplicates
+      const existingIds = new Set(prev.map((r) => r.defId));
+      return [...prev, ...newRules.filter((r) => !existingIds.has(r.defId))];
+    });
+  };
 
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
-          <Layers className="w-4 h-4 text-gray-500" />
-          Saved Audiences
+          <Sparkles className="w-4 h-4 text-gray-500" />
+          Audience Rules
         </h2>
-        {selectedPresets.size > 0 && (
-          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-            {selectedPresets.size} selected
-          </span>
+        {rules.length > 0 && (
+          <button
+            onClick={() => setRules([])}
+            className="text-xs text-red-400 font-bold hover:text-red-600 transition-colors flex items-center gap-1"
+          >
+            <X className="w-3 h-3" /> Clear all
+          </button>
         )}
       </div>
       <p className="text-xs text-gray-400 mb-4">
-        Select one or more audiences to combine. Overlap is automatically deduplicated.
+        Every rule narrows the audience. All rules are combined with AND logic.
       </p>
 
-      {/* Preset cards */}
-      <div className="flex flex-col gap-2">
-        {AUDIENCE_PRESETS.map((preset) => {
-          const active = selectedPresets.has(preset.id);
-          return (
-            <button
-              key={preset.id}
-              onClick={() => togglePreset(preset.id)}
-              className={[
-                "flex items-center gap-3 p-3 rounded-2xl border text-left transition-all",
-                active
-                  ? "border-gray-900 bg-gray-900 shadow-sm"
-                  : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white",
-              ].join(" ")}
-            >
-              {/* Icon */}
-              <div
-                className={[
-                  "w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0",
-                  active ? "bg-white/15" : preset.color,
-                ].join(" ")}
-              >
-                <span className={active ? "text-white" : preset.iconColor}>
-                  {preset.icon}
-                </span>
-              </div>
-
-              {/* Text */}
-              <div className="flex-1 min-w-0">
-                <div
-                  className={[
-                    "text-sm font-bold leading-tight",
-                    active ? "text-white" : "text-gray-900",
-                  ].join(" ")}
-                >
-                  {preset.label}
-                </div>
-                <div
-                  className={[
-                    "text-xs mt-0.5 truncate",
-                    active ? "text-gray-300" : "text-gray-400",
-                  ].join(" ")}
-                >
-                  {preset.description}
-                </div>
-              </div>
-
-              {/* Count badge */}
-              <div
-                className={[
-                  "text-xs font-black rounded-full px-2 py-0.5 flex-shrink-0",
-                  active
-                    ? "bg-white/20 text-white"
-                    : "bg-white text-gray-500 border border-gray-200",
-                ].join(" ")}
-              >
-                ~{preset.estimatedCount}
-              </div>
-
-              {/* Checkmark */}
-              {active && (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              )}
-            </button>
-          );
-        })}
+      {/* Quick preset chips */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {QUICK_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            onClick={() => applyPreset(p)}
+            className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-all"
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
-      {/* Advanced Filters toggle */}
-      <button
-        onClick={() => setShowAdvanced((v) => !v)}
-        className="mt-5 w-full flex items-center justify-between px-4 py-3 rounded-2xl border border-dashed border-gray-300 text-sm font-bold text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
-      >
-        <span className="flex items-center gap-2">
-          <Sparkles className="w-3.5 h-3.5" />
-          Advanced Filters
-        </span>
-        {showAdvanced ? (
-          <ChevronUp className="w-4 h-4" />
-        ) : (
-          <ChevronDown className="w-4 h-4" />
-        )}
-      </button>
-
-      {/* Advanced Filters panel */}
-      {showAdvanced && (
-        <div className="mt-3 space-y-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-
-          {/* Radius */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-black uppercase tracking-widest text-gray-400">
-                Target radius
-              </label>
-              <button
-                onClick={() => setFilters((f) => ({ ...f, radiusEnabled: !f.radiusEnabled }))}
-                className={[
-                  "text-xs font-bold px-2 py-0.5 rounded-full border transition-colors",
-                  filters.radiusEnabled
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-400 border-gray-200",
-                ].join(" ")}
-              >
-                {filters.radiusEnabled ? "On" : "Off"}
-              </button>
-            </div>
-            {filters.radiusEnabled && (
-              <>
-                <Input
-                  value={filters.location}
-                  onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
-                  placeholder="e.g. Arlington, VA 22201"
-                  className="mb-2 rounded-xl border-gray-300 text-sm"
-                />
-                <div className="flex gap-1.5 flex-wrap">
-                  {radiusOptions.map((o) => (
-                    <button
-                      key={o.value}
-                      onClick={() => setFilters((f) => ({ ...f, radius: o.value }))}
-                      className={[
-                        "px-3 py-1.5 rounded-full text-xs font-bold border transition-all",
-                        filters.radius === o.value
-                          ? "bg-gray-900 text-white border-gray-900"
-                          : "bg-white text-gray-600 border-gray-300 hover:border-gray-500",
-                      ].join(" ")}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+      {/* Active rules */}
+      {rules.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10 rounded-2xl border-2 border-dashed border-gray-200 text-center mb-4">
+          <div className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center mb-3">
+            <Users className="w-5 h-5 text-gray-400" />
           </div>
-
-          {/* Min spend */}
-          <div>
-            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
-              Minimum lifetime spend
-            </label>
-            <div className="relative">
-              <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-              <Input
-                value={filters.minSpend}
-                onChange={(e) => setFilters((f) => ({ ...f, minSpend: e.target.value }))}
-                placeholder="e.g. 500"
-                className="pl-8 rounded-xl border-gray-300 text-sm"
-                type="number"
-                min="0"
+          <div className="text-sm font-bold text-gray-400 mb-1">No rules yet</div>
+          <div className="text-xs text-gray-300">Click "+ Add Rule" or pick a quick preset above</div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2 mb-4">
+          {rules.map((rule, idx) => (
+            <div
+              key={rule.uid}
+              draggable
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={(e) => { e.preventDefault(); setOverIdx(idx); }}
+              onDragEnd={handleDragEnd}
+              className={[
+                "transition-all",
+                overIdx === idx && dragIdx !== idx ? "opacity-50 scale-95" : "",
+              ].join(" ")}
+            >
+              {/* AND connector */}
+              {idx > 0 && (
+                <div className="flex items-center gap-2 py-1 px-3">
+                  <div className="flex-1 h-px bg-gray-100" />
+                  <span className="text-xs font-black text-gray-300 uppercase tracking-widest">AND</span>
+                  <div className="flex-1 h-px bg-gray-100" />
+                </div>
+              )}
+              <RuleBlock
+                rule={rule}
+                onUpdate={updateRule}
+                onRemove={removeRule}
+                dragHandleProps={{}}
               />
             </div>
-          </div>
+          ))}
+        </div>
+      )}
 
-          {/* Min rating */}
-          <div>
-            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
-              Minimum star rating
-            </label>
-            <div className="flex gap-1.5">
-              {[3, 4, 5].map((r) => (
-                <button
-                  key={r}
-                  onClick={() =>
-                    setFilters((f) => ({
-                      ...f,
-                      minRating: f.minRating === String(r) ? "" : String(r),
-                    }))
-                  }
-                  className={[
-                    "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold border transition-all",
-                    filters.minRating === String(r)
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-600 border-gray-300 hover:border-gray-500",
-                  ].join(" ")}
-                >
-                  <Star className="w-3 h-3" />
-                  {r}+
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* Add Rule button */}
+      <div className="relative">
+        <button
+          onClick={() => setShowPicker((v) => !v)}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dashed border-gray-300 text-sm font-bold text-gray-500 hover:border-gray-900 hover:text-gray-900 hover:bg-gray-50 transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Add Rule
+        </button>
+        {showPicker && (
+          <RulePicker onAdd={addRule} onClose={() => setShowPicker(false)} />
+        )}
+      </div>
 
-          {/* Not contacted in N days */}
-          <div>
-            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
-              Not texted in (days)
-            </label>
-            <Input
-              value={filters.notContactedDays}
-              onChange={(e) => setFilters((f) => ({ ...f, notContactedDays: e.target.value }))}
-              placeholder="e.g. 30"
-              className="rounded-xl border-gray-300 text-sm"
-              type="number"
-              min="0"
-            />
-          </div>
-
-          {/* Last booking within N days */}
-          <div>
-            <label className="text-xs font-black uppercase tracking-widest text-gray-400 block mb-2">
-              Last booking within (days)
-            </label>
-            <Input
-              value={filters.lastBookingDays}
-              onChange={(e) => setFilters((f) => ({ ...f, lastBookingDays: e.target.value }))}
-              placeholder="e.g. 180"
-              className="rounded-xl border-gray-300 text-sm"
-              type="number"
-              min="0"
-            />
-          </div>
-
-          {/* Clear filters */}
-          {(filters.radiusEnabled || filters.minSpend || filters.minRating || filters.notContactedDays || filters.lastBookingDays) && (
-            <button
-              onClick={() =>
-                setFilters({
-                  radiusEnabled: false,
-                  location: "Arlington, VA 22201",
-                  radius: "5mi",
-                  minSpend: "",
-                  minRating: "",
-                  notContactedDays: "",
-                  lastBookingDays: "",
-                })
-              }
-              className="text-xs text-red-500 font-bold hover:text-red-700 transition-colors"
-            >
-              Clear all filters
-            </button>
-          )}
+      {/* Category legend */}
+      {rules.length > 0 && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => {
+            const count = rules.filter((r) => RULE_CATALOG.find((d) => d.id === r.defId)?.category === c.name).length;
+            if (!count) return null;
+            return (
+              <span key={c.name} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${c.bg} ${c.color} border ${c.border}`}>
+                {c.icon} {c.name} · {count}
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ── SafetySummary ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SafetySummary
+// ─────────────────────────────────────────────────────────────────────────────
 
 function SafetySummary() {
   const stats = [
@@ -608,7 +609,9 @@ function SafetySummary() {
   );
 }
 
-// ── LiveAudiencePreview ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// LiveAudiencePreview
+// ─────────────────────────────────────────────────────────────────────────────
 
 const PREVIEW_PEOPLE = [
   { name: "Jennifer Smith", rating: 5, lastClean: "42 days ago",  distance: "3.1 miles", type: "Former recurring" },
@@ -616,8 +619,16 @@ const PREVIEW_PEOPLE = [
   { name: "Nina Lee",       rating: 4, lastClean: "92 days ago",  distance: "4.4 miles", type: "Former recurring" },
 ];
 
-function LiveAudiencePreview({ selectedCount }: { selectedCount: number }) {
-  if (selectedCount === 0) return null;
+function StarRating({ rating }: { rating: number }) {
+  return (
+    <div className="flex gap-0.5 text-amber-400 text-sm">
+      {[1,2,3,4,5].map((i) => <span key={i} style={{ opacity: i <= rating ? 1 : 0.25 }}>★</span>)}
+    </div>
+  );
+}
+
+function LiveAudiencePreview({ ruleCount }: { ruleCount: number }) {
+  if (ruleCount === 0) return null;
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
@@ -630,8 +641,7 @@ function LiveAudiencePreview({ selectedCount }: { selectedCount: number }) {
             <div className="font-bold text-gray-900 text-sm mb-1">{p.name}</div>
             <StarRating rating={p.rating} />
             <div className="text-xs text-gray-500 mt-2 leading-relaxed">
-              Last clean: {p.lastClean}
-              <br />
+              Last clean: {p.lastClean}<br />
               {p.distance} · {p.type}
             </div>
           </div>
@@ -641,19 +651,14 @@ function LiveAudiencePreview({ selectedCount }: { selectedCount: number }) {
   );
 }
 
-// ── MessageEditor ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// MessageEditor
+// ─────────────────────────────────────────────────────────────────────────────
 
-function MessageEditor({
-  message,
-  setMessage,
-}: {
-  message: string;
-  setMessage: (m: string) => void;
-}) {
+function MessageEditor({ message, setMessage }: { message: string; setMessage: (m: string) => void }) {
   const insertVar = (v: string) => setMessage(message + v);
   const charCount = message.length;
   const smsCount = Math.ceil(charCount / 160) || 1;
-
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
@@ -661,25 +666,10 @@ function MessageEditor({
         Message
       </h2>
       <div className="flex gap-2 mb-3">
-        <button
-          onClick={() => insertVar("{{first_name}}")}
-          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors"
-        >
-          + first_name
-        </button>
-        <button
-          onClick={() => insertVar("{{area}}")}
-          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors"
-        >
-          + area
-        </button>
+        <button onClick={() => insertVar("{{first_name}}")} className="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors">+ first_name</button>
+        <button onClick={() => insertVar("{{area}}")} className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition-colors">+ area</button>
       </div>
-      <Textarea
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        className="min-h-[110px] rounded-xl border-gray-300 text-sm leading-relaxed resize-none"
-        placeholder="Write your message…"
-      />
+      <Textarea value={message} onChange={(e) => setMessage(e.target.value)} className="min-h-[110px] rounded-xl border-gray-300 text-sm leading-relaxed resize-none" placeholder="Write your message…" />
       <div className="flex justify-between items-center mt-2 text-xs text-gray-400">
         <span>{charCount} chars</span>
         <span>{smsCount} SMS segment{smsCount > 1 ? "s" : ""}</span>
@@ -688,7 +678,9 @@ function MessageEditor({
   );
 }
 
-// ── PersonalizedPreviews ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// PersonalizedPreviews
+// ─────────────────────────────────────────────────────────────────────────────
 
 function PersonalizedPreviews({ message }: { message: string }) {
   const previews = [
@@ -696,9 +688,8 @@ function PersonalizedPreviews({ message }: { message: string }) {
     { name: "Alex",     firstName: "Alex",     area: "Arlington" },
     { name: "Nina",     firstName: "Nina",     area: "Arlington" },
   ];
-  const personalize = (tpl: string, firstName: string, area: string) =>
-    tpl.replace(/\{\{first_name\}\}/g, firstName).replace(/\{\{area\}\}/g, area);
-
+  const personalize = (tpl: string, fn: string, area: string) =>
+    tpl.replace(/\{\{first_name\}\}/g, fn).replace(/\{\{area\}\}/g, area);
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
@@ -707,16 +698,9 @@ function PersonalizedPreviews({ message }: { message: string }) {
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {previews.map((p) => (
-          <div
-            key={p.name}
-            className="rounded-3xl p-4 min-h-[200px]"
-            style={{ background: "#101828" }}
-          >
+          <div key={p.name} className="rounded-3xl p-4 min-h-[200px]" style={{ background: "#101828" }}>
             <div className="text-white font-bold text-sm mb-1">{p.name}</div>
-            <div
-              className="text-white text-xs leading-relaxed mt-3 p-3"
-              style={{ background: "#2563eb", borderRadius: "18px 18px 4px 18px" }}
-            >
+            <div className="text-white text-xs leading-relaxed mt-3 p-3" style={{ background: "#2563eb", borderRadius: "18px 18px 4px 18px" }}>
               {personalize(message, p.firstName, p.area)}
             </div>
           </div>
@@ -726,98 +710,54 @@ function PersonalizedPreviews({ message }: { message: string }) {
   );
 }
 
-// ── StepTest ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// StepTest
+// ─────────────────────────────────────────────────────────────────────────────
 
 function StepTest({ message, onTestSent }: { message: string; onTestSent: () => void }) {
   const [phone, setPhone] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
-
   const handleSend = () => {
     if (!phone.trim()) { toast.error("Enter a phone number"); return; }
     setSending(true);
-    setTimeout(() => {
-      setSending(false);
-      setSent(true);
-      onTestSent();
-      toast.success("Test SMS sent! (UI-only — logic not wired yet)");
-    }, 1200);
+    setTimeout(() => { setSending(false); setSent(true); onTestSent(); toast.success("Test SMS sent! (UI-only)"); }, 1200);
   };
-
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-3 flex items-center gap-2">
         <FlaskConical className="w-4 h-4 text-gray-600" />
         Send Test SMS
       </h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Send yourself a preview before the real campaign goes out.
-      </p>
+      <p className="text-sm text-gray-500 mb-4">Send yourself a preview before the real campaign goes out.</p>
       <div className="flex gap-2">
-        <Input
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="+1 (555) 000-0000"
-          className="rounded-xl border-gray-300"
-        />
-        <Button
-          onClick={handleSend}
-          disabled={sending || sent}
-          className={[
-            "rounded-xl font-bold px-5 flex-shrink-0",
-            sent ? "bg-emerald-600 hover:bg-emerald-600" : "bg-gray-900 hover:bg-gray-800",
-          ].join(" ")}
-        >
-          {sending ? (
-            <span className="flex items-center gap-1.5">
-              <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Sending…
-            </span>
-          ) : sent ? (
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Sent!
-            </span>
-          ) : (
-            "Send Test"
-          )}
+        <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 (555) 000-0000" className="rounded-xl border-gray-300" />
+        <Button onClick={handleSend} disabled={sending || sent} className={["rounded-xl font-bold px-5 flex-shrink-0", sent ? "bg-emerald-600 hover:bg-emerald-600" : "bg-gray-900 hover:bg-gray-800"].join(" ")}>
+          {sending ? <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />Sending…</span>
+            : sent ? <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" />Sent!</span>
+            : "Send Test"}
         </Button>
       </div>
-      {sent && (
-        <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-          <CheckCircle2 className="w-4 h-4" />
-          Test SMS sent — check your phone and verify the message looks right.
-        </div>
-      )}
+      {sent && <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2"><CheckCircle2 className="w-4 h-4" />Test SMS sent — check your phone.</div>}
     </div>
   );
 }
 
-// ── StepFinalApproval ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// StepFinalApproval
+// ─────────────────────────────────────────────────────────────────────────────
 
-function StepFinalApproval({
-  recipientCount,
-  testSent,
-}: {
-  recipientCount: number;
-  testSent: boolean;
-  message: string;
-}) {
+function StepFinalApproval({ recipientCount, testSent, message }: { recipientCount: number; testSent: boolean; message: string }) {
   const [confirmText, setConfirmText] = useState("");
   const expectedConfirm = `SEND ${recipientCount}`;
-  const isReady = testSent && confirmText.trim() === expectedConfirm;
-
+  const isReady = testSent && confirmText.trim() === expectedConfirm && recipientCount > 0;
   const checks = [
-    { label: "Audience selected",   status: recipientCount > 0 ? "passed" : "pending", note: "" },
-    { label: "Test SMS sent",        status: testSent ? "passed" : "pending",           note: "" },
-    { label: "Quiet hours protected", status: "passed",                                  note: "9am–8pm local time" },
-    { label: "Opt-outs excluded",    status: "passed",                                  note: "8 contacts excluded" },
-    {
-      label: "Type confirmation",
-      status: confirmText === expectedConfirm ? "passed" : "required",
-      note: `Type: ${expectedConfirm}`,
-    },
+    { label: "Audience built",       status: recipientCount > 0 ? "passed" : "pending" },
+    { label: "Test SMS sent",        status: testSent ? "passed" : "pending" },
+    { label: "Quiet hours protected", status: "passed", note: "9am–8pm local" },
+    { label: "Opt-outs excluded",    status: "passed", note: "8 excluded" },
+    { label: "Type confirmation",    status: confirmText === expectedConfirm ? "passed" : "required", note: `Type: ${expectedConfirm}` },
   ];
-
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
@@ -836,173 +776,91 @@ function StepFinalApproval({
             <tr key={c.label} className="border-b border-gray-50">
               <td className="py-3 text-sm text-gray-700">{c.label}</td>
               <td className="py-3">
-                {c.status === "passed" ? (
-                  <span className="flex items-center gap-1 text-emerald-600 text-sm font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Passed
-                  </span>
-                ) : c.status === "pending" ? (
-                  <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold">
-                    <Clock className="w-3.5 h-3.5" /> Pending
-                  </span>
-                ) : (
-                  <span className="text-sm font-semibold text-gray-500">
-                    Required: <strong className="text-gray-900">{c.note}</strong>
-                  </span>
-                )}
+                {c.status === "passed" ? <span className="flex items-center gap-1 text-emerald-600 text-sm font-semibold"><CheckCircle2 className="w-3.5 h-3.5" />Passed</span>
+                  : c.status === "pending" ? <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold"><Clock className="w-3.5 h-3.5" />Pending</span>
+                  : <span className="text-sm font-semibold text-gray-500">Required: <strong className="text-gray-900">{c.note}</strong></span>}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
       <div className="mb-5">
-        <div className="text-xs font-bold text-gray-500 mb-1.5">
-          Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending
-        </div>
-        <Input
-          value={confirmText}
-          onChange={(e) => setConfirmText(e.target.value)}
-          placeholder={`Type "${expectedConfirm}" here`}
-          className={[
-            "rounded-xl font-mono",
-            confirmText === expectedConfirm
-              ? "border-emerald-400 bg-emerald-50 text-emerald-800"
-              : "border-gray-300",
-          ].join(" ")}
-        />
+        <div className="text-xs font-bold text-gray-500 mb-1.5">Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending</div>
+        <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={`Type "${expectedConfirm}" here`} className={["rounded-xl font-mono", confirmText === expectedConfirm ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300"].join(" ")} />
       </div>
       <div className="flex justify-between items-center gap-3">
-        <Button
-          variant="outline"
-          className="rounded-xl font-bold border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-          onClick={() => toast.info("Draft saved (UI-only)")}
-        >
-          Save Draft
-        </Button>
-        <Button
-          onClick={() => {
-            if (!isReady) { toast.error("Complete all checks first"); return; }
-            toast.success("Campaign scheduled! (UI-only — logic not wired yet)");
-          }}
-          disabled={!isReady}
-          className={[
-            "rounded-xl font-bold px-6",
-            isReady
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-              : "bg-gray-100 text-gray-400 cursor-not-allowed",
-          ].join(" ")}
-        >
-          <Zap className="w-4 h-4 mr-1.5" />
-          Schedule Campaign
+        <Button variant="outline" className="rounded-xl font-bold border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => toast.info("Draft saved (UI-only)")}>Save Draft</Button>
+        <Button onClick={() => { if (!isReady) { toast.error("Complete all checks first"); return; } toast.success("Campaign scheduled! (UI-only)"); }} disabled={!isReady} className={["rounded-xl font-bold px-6", isReady ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"].join(" ")}>
+          <Zap className="w-4 h-4 mr-1.5" />Schedule Campaign
         </Button>
       </div>
     </div>
   );
 }
 
-// ── Main content ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Main content
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_MESSAGE = "Hi {{first_name}}, this is Madison from Maid in Black 😊 We have a few openings near {{area}} this week and wanted to see if you'd like help with a cleaning. Want me to send available times?";
 
 function SmsCampaignsContent() {
   const [step, setStep] = useState<Step>(1);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [testSent, setTestSent] = useState(false);
-  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
-  const [filters, setFilters] = useState<AdvancedFilters>({
-    radiusEnabled: false,
-    location: "Arlington, VA 22201",
-    radius: "5mi",
-    minSpend: "",
-    minRating: "",
-    notContactedDays: "",
-    lastBookingDays: "",
-  });
+  const [rules, setRules] = useState<ActiveRule[]>([]);
 
-  const recipientCount = computeRecipientCount(selectedPresets, filters);
-  const excluded = selectedPresets.size > 0 ? Math.round(recipientCount * 0.18) : 0;
+  const recipientCount = computeCount(rules);
+  const excluded = rules.length > 0 ? Math.round(recipientCount * 0.18) : 0;
   const expectedReplies = Math.round(recipientCount * 0.13);
-
-  const goNext = () => setStep((s) => Math.min(s + 1, 5) as Step);
-  const goPrev = () => setStep((s) => Math.max(s - 1, 1) as Step);
 
   return (
     <>
-      {/* Page header */}
       <div className="flex items-start justify-between mb-1 gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>
-            SMS Campaign Command Center
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Build the safest possible audience before anyone can send anything.
-          </p>
+          <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>SMS Campaign Command Center</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Build the safest possible audience before anyone can send anything.</p>
         </div>
         <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0 mt-1">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          Draft · Send locked
+          <ShieldCheck className="w-3.5 h-3.5" />Draft · Send locked
         </span>
       </div>
 
-      {/* Workflow progress bar */}
       <WorkflowBar step={step} onStep={setStep} />
 
-      {/* 2-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-4 mt-2">
-        {/* LEFT: Hero + Audience Builder */}
+      <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-4 mt-2">
+        {/* LEFT */}
         <div>
-          <HeroCard
-            count={recipientCount}
-            selectedCount={selectedPresets.size}
-            excluded={excluded}
-            expectedReplies={expectedReplies}
-          />
-          <AudienceBuilder
-            selectedPresets={selectedPresets}
-            setSelectedPresets={setSelectedPresets}
-            filters={filters}
-            setFilters={setFilters}
-          />
+          <HeroCard count={recipientCount} ruleCount={rules.length} excluded={excluded} expectedReplies={expectedReplies} />
+          <AudienceRuleBuilder rules={rules} setRules={setRules} />
         </div>
-
-        {/* RIGHT: All other panels */}
+        {/* RIGHT */}
         <div>
           <SafetySummary />
-          <LiveAudiencePreview selectedCount={selectedPresets.size} />
+          <LiveAudiencePreview ruleCount={rules.length} />
           <MessageEditor message={message} setMessage={setMessage} />
           <PersonalizedPreviews message={message} />
           <StepTest message={message} onTestSent={() => setTestSent(true)} />
-          <StepFinalApproval
-            recipientCount={recipientCount}
-            testSent={testSent}
-            message={message}
-          />
+          <StepFinalApproval recipientCount={recipientCount} testSent={testSent} message={message} />
         </div>
       </div>
 
-      {/* Bottom step navigation */}
       <div className="flex justify-between items-center mt-6 pb-8">
-        <Button
-          variant="outline"
-          onClick={goPrev}
-          disabled={step === 1}
-          className="rounded-xl font-bold gap-1.5"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Previous
+        <Button variant="outline" onClick={() => setStep((s) => Math.max(s - 1, 1) as Step)} disabled={step === 1} className="rounded-xl font-bold gap-1.5">
+          <ChevronLeft className="w-4 h-4" />Previous
         </Button>
         <span className="text-xs text-gray-400 font-medium">Step {step} of 5</span>
-        <Button
-          onClick={goNext}
-          disabled={step === 5}
-          className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold gap-1.5"
-        >
-          Next
-          <ChevronRight className="w-4 h-4" />
+        <Button onClick={() => setStep((s) => Math.min(s + 1, 5) as Step)} disabled={step === 5} className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold gap-1.5">
+          Next<ChevronRight className="w-4 h-4" />
         </Button>
       </div>
     </>
   );
 }
 
-// ── Page export ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Page export
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function SmsCampaigns() {
   const { isAdmin } = useAgentPermissions();
