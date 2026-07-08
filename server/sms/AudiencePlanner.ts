@@ -315,6 +315,42 @@ function qualityGrade(score: number): "A" | "B" | "C" | "D" | "F" {
   return "F";
 }
 
+// ─── Supported rule fields (server-owned contract) ──────────────────────────
+
+/**
+ * The canonical list of rule fields that actually affect the live audience count.
+ * Exported so the router can include it in PlannerResult.
+ * The UI reads this to mark unsupported rules as "Not included in live count".
+ */
+export const SUPPORTED_RULE_FIELDS: import("./plannerTypes").RuleField[] = [
+  "lastBookingDays",
+  "bookingCount",
+  "recurringStatus",
+  "serviceType",
+  "bedrooms",
+  "bathrooms",
+  "lifetimeRevenue",
+  "avgTicket",
+  "lastBookingPrice",
+  "reviewScore",
+  "hasComplaint",
+  "lastSmsDays",
+  "stopStatus",
+];
+
+// ─── Confidence score per sample customer ─────────────────────────────────────
+
+function computeConfidence(matchedBecause: string[], frequency: string, hasComplaint: boolean): number {
+  let score = 60; // baseline
+  // +10 for each matched reason beyond the first
+  score += Math.max(0, matchedBecause.length - 1) * 10;
+  // +15 for former recurring
+  if (RECURRING_FREQUENCIES.includes(frequency)) score += 15;
+  // -20 for any complaint
+  if (hasComplaint) score -= 20;
+  return Math.max(0, Math.min(98, score));
+}
+
 // ─── Main planner function ────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -537,6 +573,9 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
       if (idx !== -1) matchedBecause[idx] = `Last booking ${daysSince} days ago`;
     }
 
+    const frequency = String(row.frequency ?? "Unknown");
+    const confidence = computeConfidence(matchedBecause, frequency, false);
+
     return {
       displayName,
       phoneNormalized: String(row.phoneNormalized ?? ""),
@@ -544,10 +583,11 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
       daysSinceLastBooking: daysSince,
       lastBookingPrice: Number(row.lastBookingPrice ?? 0),
       bookingCount: Number(row.bookingCount ?? 0),
-      frequency: String(row.frequency ?? "Unknown"),
+      frequency,
       serviceType: String(row.serviceType ?? "Unknown"),
       reviewScore: row.maxRating != null ? Number(row.maxRating) : null,
       matchedBecause,
+      confidence,
     };
   });
 
@@ -756,5 +796,6 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
     sampleExcluded,
     ruleHash: canonicalHash(def),
     generatedAt: Date.now(),
+    supportedRuleFields: SUPPORTED_RULE_FIELDS,
   };
 }

@@ -1,16 +1,23 @@
 /**
  * SmsCampaigns — /admin/sms-campaigns
  *
- * SMS Campaign Command Center with a visual rule builder for audience targeting.
- * UI-only — logic wired in a subsequent phase.
+ * SMS Campaign Command Center — Stage 3: wired to real AudiencePlanner data.
+ *
+ * Architecture:
+ * - UI builds an AudienceDefinition object (presets + rules)
+ * - trpc.smsCampaign.planAudience.useQuery() is debounced 800ms
+ * - All counts, safety stats, and audience preview come from real DB queries
+ * - Unsupported rules show a yellow badge (server owns the supported list)
+ * - Previous planner result persists while re-fetching ("Updating…" not skeleton)
  */
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import {
   Timer,
   RefreshCw,
   CalendarClock,
   ThumbsUp,
   Layers,
+  Info,
 } from "lucide-react";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
@@ -19,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
 import {
   Users,
   ShieldCheck,
@@ -54,11 +62,26 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Step = 1 | 2 | 3 | 4 | 5;
-type RuleOperator = ">" | "<" | ">=" | "<=" | "=" | "!=" | "is" | "is not" | "contains";
+
+// Server-canonical operator types (subset accepted by the tRPC endpoint)
+type ServerOperator = ">" | ">=" | "<" | "<=" | "=" | "!=" | "is_true" | "is_false";
+
+// UI-facing operators (superset — some are display-only for unsupported rules)
+type RuleOperator = ServerOperator | "is" | "is not" | "contains";
+
 type RuleValueType = "number" | "text" | "select" | "boolean" | "days";
 
+// Server-canonical field names (must match plannerTypes.ts RuleField)
+type RuleField =
+  | "lastBookingDays" | "bookingCount" | "recurringStatus" | "serviceType"
+  | "bedrooms" | "bathrooms" | "lifetimeRevenue" | "avgTicket" | "lastBookingPrice"
+  | "reviewScore" | "hasComplaint" | "hasRefund" | "hasChargeback"
+  | "lastSmsDays" | "lastEmailDays" | "stopStatus" | "openRate" | "replyRate"
+  | "aiLikelihoodToBook" | "aiLikelihoodToRespond"
+  | "radiusMiles" | "city" | "zip";
+
 interface RuleDefinition {
-  id: string;
+  id: RuleField;
   label: string;
   category: string;
   operator: RuleOperator[];
@@ -66,13 +89,13 @@ interface RuleDefinition {
   unit?: string;
   selectOptions?: string[];
   icon: React.ReactNode;
-  color: string; // tailwind text color
-  bgColor: string; // tailwind bg color
+  color: string;
+  bgColor: string;
 }
 
 interface ActiveRule {
   uid: string;
-  defId: string;
+  field: RuleField;        // server-canonical field name
   operator: RuleOperator;
   value: string;
 }
@@ -81,8 +104,12 @@ interface ActiveRule {
 // Saved Audience Presets
 // ─────────────────────────────────────────────────────────────────────────────
 
+type AudiencePresetId =
+  | "win-back" | "former-recurring" | "last-minute-openings" | "five-star-no-issues"
+  | "high-value" | "not-contacted-30d" | "due-for-recurring" | "spent-over-500" | "within-x-miles";
+
 interface AudiencePreset {
-  id: string;
+  id: AudiencePresetId;
   label: string;
   description: string;
   icon: React.ReactNode;
@@ -92,53 +119,51 @@ interface AudiencePreset {
 }
 
 const AUDIENCE_PRESETS: AudiencePreset[] = [
-  { id: "last-minute",    label: "Last-minute openings",    description: "Customers likely to book on short notice",            icon: <Timer className="w-4 h-4" />,       estimatedCount: 94,  color: "bg-orange-50",  iconColor: "text-orange-500" },
-  { id: "win-back",       label: "Win back inactive",       description: "Haven't booked in 90+ days",                         icon: <RefreshCw className="w-4 h-4" />,    estimatedCount: 211, color: "bg-blue-50",    iconColor: "text-blue-500" },
-  { id: "former-recur",   label: "Former recurring",        description: "Used to have a recurring plan, now lapsed",           icon: <CalendarClock className="w-4 h-4" />, estimatedCount: 138, color: "bg-purple-50",  iconColor: "text-purple-500" },
-  { id: "nearby",         label: "Customers within X miles", description: "Based on service address proximity",                 icon: <MapPin className="w-4 h-4" />,       estimatedCount: 184, color: "bg-emerald-50", iconColor: "text-emerald-500" },
-  { id: "due-recurring",  label: "Due for recurring clean", description: "Recurring customers whose next clean is overdue",     icon: <CalendarClock className="w-4 h-4" />, estimatedCount: 47,  color: "bg-amber-50",   iconColor: "text-amber-500" },
-  { id: "five-star",      label: "5★ reviewers",            description: "Customers who left a 5-star review",                  icon: <Star className="w-4 h-4" />,         estimatedCount: 73,  color: "bg-yellow-50",  iconColor: "text-yellow-500" },
-  { id: "no-complaints",  label: "No complaints",           description: "Zero open issues or complaint history",               icon: <ThumbsUp className="w-4 h-4" />,     estimatedCount: 302, color: "bg-teal-50",    iconColor: "text-teal-500" },
-  { id: "high-spend",     label: "Spent over $500",         description: "High-value customers by lifetime spend",              icon: <DollarSign className="w-4 h-4" />,   estimatedCount: 89,  color: "bg-green-50",   iconColor: "text-green-600" },
-  { id: "not-contacted",  label: "Not contacted in 30 days", description: "No outbound SMS in the past month",                  icon: <MessageSquare className="w-4 h-4" />, estimatedCount: 256, color: "bg-slate-50",   iconColor: "text-slate-500" },
+  { id: "last-minute-openings", label: "Last-minute openings",    description: "Customers likely to book on short notice",            icon: <Timer className="w-4 h-4" />,        estimatedCount: 94,  color: "bg-orange-50",  iconColor: "text-orange-500" },
+  { id: "win-back",             label: "Win back inactive",       description: "Haven't booked in 90+ days",                         icon: <RefreshCw className="w-4 h-4" />,     estimatedCount: 211, color: "bg-blue-50",    iconColor: "text-blue-500" },
+  { id: "former-recurring",     label: "Former recurring",        description: "Used to have a recurring plan, now lapsed",           icon: <CalendarClock className="w-4 h-4" />, estimatedCount: 138, color: "bg-purple-50",  iconColor: "text-purple-500" },
+  { id: "within-x-miles",       label: "Customers within X miles", description: "Based on service address proximity",                 icon: <MapPin className="w-4 h-4" />,        estimatedCount: 184, color: "bg-emerald-50", iconColor: "text-emerald-500" },
+  { id: "due-for-recurring",    label: "Due for recurring clean", description: "Recurring customers whose next clean is overdue",     icon: <CalendarClock className="w-4 h-4" />, estimatedCount: 47,  color: "bg-amber-50",   iconColor: "text-amber-500" },
+  { id: "five-star-no-issues",  label: "5★ reviewers",            description: "Customers who left a 5-star review",                  icon: <Star className="w-4 h-4" />,          estimatedCount: 73,  color: "bg-yellow-50",  iconColor: "text-yellow-500" },
+  { id: "high-value",           label: "No complaints",           description: "Zero open issues or complaint history",               icon: <ThumbsUp className="w-4 h-4" />,      estimatedCount: 302, color: "bg-teal-50",    iconColor: "text-teal-500" },
+  { id: "spent-over-500",       label: "Spent over $500",         description: "High-value customers by lifetime spend",              icon: <DollarSign className="w-4 h-4" />,    estimatedCount: 89,  color: "bg-green-50",   iconColor: "text-green-600" },
+  { id: "not-contacted-30d",    label: "Not contacted in 30 days", description: "No outbound SMS in the past month",                  icon: <MessageSquare className="w-4 h-4" />, estimatedCount: 256, color: "bg-slate-50",   iconColor: "text-slate-500" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Rule Catalog
+// Rule Catalog — IDs are server-canonical RuleField names
 // ─────────────────────────────────────────────────────────────────────────────
 
 const RULE_CATALOG: RuleDefinition[] = [
   // Geography
-  { id: "radius",       label: "Radius",           category: "Geography",       operator: ["<", "<="],          valueType: "number",  unit: "miles",    icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
-  { id: "city",         label: "City",             category: "Geography",       operator: ["is", "is not"],     valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
-  { id: "zip",          label: "ZIP Code",         category: "Geography",       operator: ["is", "is not"],     valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
-  { id: "neighborhood", label: "Neighborhood",     category: "Geography",       operator: ["is", "is not"],     valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  { id: "radiusMiles",            label: "Radius",            category: "Geography",       operator: ["<", "<="],              valueType: "number",  unit: "miles",    icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  { id: "city",                   label: "City",              category: "Geography",       operator: ["is", "is not"],         valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
+  { id: "zip",                    label: "ZIP Code",          category: "Geography",       operator: ["is", "is not"],         valueType: "text",                      icon: <MapPin className="w-3.5 h-3.5" />,        color: "text-emerald-600", bgColor: "bg-emerald-50" },
   // Booking History
-  { id: "last-booking", label: "Last Booking",     category: "Booking History", operator: [">", "<", ">=", "<="], valueType: "days", unit: "days ago", icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
-  { id: "num-bookings", label: "# of Bookings",   category: "Booking History", operator: [">", "<", ">=", "<=", "="], valueType: "number",             icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
-  { id: "recurring",    label: "Recurring Status", category: "Booking History", operator: ["is"],               valueType: "select",  selectOptions: ["Active", "Former", "Never"], icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600", bgColor: "bg-blue-50" },
-  { id: "service-type", label: "Service Type",     category: "Booking History", operator: ["is", "is not"],     valueType: "select",  selectOptions: ["Standard", "Deep Clean", "Move-out", "Recurring"], icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600", bgColor: "bg-blue-50" },
-  { id: "bedrooms",     label: "Bedrooms",         category: "Booking History", operator: ["=", ">", "<"],      valueType: "number",                    icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
-  { id: "bathrooms",    label: "Bathrooms",        category: "Booking History", operator: ["=", ">", "<"],      valueType: "number",                    icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "lastBookingDays",        label: "Last Booking",      category: "Booking History", operator: [">", "<", ">=", "<="],   valueType: "days",    unit: "days ago", icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "bookingCount",           label: "# of Bookings",    category: "Booking History", operator: [">", "<", ">=", "<=", "="], valueType: "number",                icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "recurringStatus",        label: "Recurring Status",  category: "Booking History", operator: ["="],                    valueType: "select",  selectOptions: ["active-recurring", "former-recurring", "one-time"], icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600", bgColor: "bg-blue-50" },
+  { id: "serviceType",            label: "Service Type",      category: "Booking History", operator: ["=", "!="],              valueType: "select",  selectOptions: ["Standard Cleaning", "Deep Clean", "Move-out Cleaning", "Recurring"], icon: <CalendarDays className="w-3.5 h-3.5" />, color: "text-blue-600", bgColor: "bg-blue-50" },
+  { id: "bedrooms",               label: "Bedrooms",          category: "Booking History", operator: ["=", ">", "<"],          valueType: "number",                    icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
+  { id: "bathrooms",              label: "Bathrooms",         category: "Booking History", operator: ["=", ">", "<"],          valueType: "number",                    icon: <CalendarDays className="w-3.5 h-3.5" />,  color: "text-blue-600",    bgColor: "bg-blue-50" },
   // Customer Value
-  { id: "ltv",          label: "Lifetime Revenue", category: "Customer Value",  operator: [">", "<", ">=", "<="], valueType: "number", unit: "$",       icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
-  { id: "avg-ticket",   label: "Avg Ticket",       category: "Customer Value",  operator: [">", "<", ">=", "<="], valueType: "number", unit: "$",       icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
-  { id: "tips",         label: "Tips",             category: "Customer Value",  operator: [">", ">=", "="],     valueType: "number",  unit: "$",        icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
+  { id: "lifetimeRevenue",        label: "Lifetime Revenue",  category: "Customer Value",  operator: [">", "<", ">=", "<="],   valueType: "number",  unit: "$",        icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
+  { id: "avgTicket",              label: "Avg Ticket",        category: "Customer Value",  operator: [">", "<", ">=", "<="],   valueType: "number",  unit: "$",        icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
+  { id: "lastBookingPrice",       label: "Last Booking Price",category: "Customer Value",  operator: [">", "<", ">=", "<="],   valueType: "number",  unit: "$",        icon: <DollarSign className="w-3.5 h-3.5" />,   color: "text-violet-600",  bgColor: "bg-violet-50" },
   // Customer Health
-  { id: "review-score", label: "Review Score",     category: "Customer Health", operator: [">=", ">", "="],     valueType: "select",  selectOptions: ["5", "4", "3", "2", "1"], icon: <Star className="w-3.5 h-3.5" />, color: "text-amber-600", bgColor: "bg-amber-50" },
-  { id: "complaints",   label: "Complaints",       category: "Customer Health", operator: ["=", "<"],           valueType: "number",                    icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
-  { id: "refunds",      label: "Refunds",          category: "Customer Health", operator: ["=", "<"],           valueType: "number",                    icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
-  { id: "chargebacks",  label: "Chargebacks",      category: "Customer Health", operator: ["="],                valueType: "number",                    icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
+  { id: "reviewScore",            label: "Review Score",      category: "Customer Health", operator: [">=", ">", "="],         valueType: "select",  selectOptions: ["5", "4", "3", "2", "1"], icon: <Star className="w-3.5 h-3.5" />, color: "text-amber-600", bgColor: "bg-amber-50" },
+  { id: "hasComplaint",           label: "Complaints",        category: "Customer Health", operator: ["is_true", "is_false"],  valueType: "boolean",                   icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
+  { id: "hasRefund",              label: "Refunds",           category: "Customer Health", operator: ["is_true", "is_false"],  valueType: "boolean",                   icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
+  { id: "hasChargeback",          label: "Chargebacks",       category: "Customer Health", operator: ["is_true", "is_false"],  valueType: "boolean",                   icon: <Heart className="w-3.5 h-3.5" />,         color: "text-amber-600",   bgColor: "bg-amber-50" },
   // Marketing
-  { id: "last-sms",     label: "Last SMS",         category: "Marketing",       operator: [">", "<"],           valueType: "days",    unit: "days ago", icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
-  { id: "last-email",   label: "Last Email",       category: "Marketing",       operator: [">", "<"],           valueType: "days",    unit: "days ago", icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
-  { id: "prev-campaign",label: "Previous Campaign",category: "Marketing",       operator: ["is", "is not"],     valueType: "text",                      icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
-  { id: "stop-status",  label: "STOP Status",      category: "Marketing",       operator: ["is"],               valueType: "select",  selectOptions: ["Opted in", "Opted out"], icon: <Ban className="w-3.5 h-3.5" />, color: "text-pink-600", bgColor: "bg-pink-50" },
-  { id: "open-rate",    label: "Open Rate",        category: "Marketing",       operator: [">", "<"],           valueType: "number",  unit: "%",        icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
-  { id: "reply-rate",   label: "Reply Rate",       category: "Marketing",       operator: [">", "<"],           valueType: "number",  unit: "%",        icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "lastSmsDays",            label: "Last SMS",          category: "Marketing",       operator: [">", "<"],               valueType: "days",    unit: "days ago", icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "lastEmailDays",          label: "Last Email",        category: "Marketing",       operator: [">", "<"],               valueType: "days",    unit: "days ago", icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "stopStatus",             label: "STOP Status",       category: "Marketing",       operator: ["is_true", "is_false"],  valueType: "boolean",                   icon: <Ban className="w-3.5 h-3.5" />,           color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "openRate",               label: "Open Rate",         category: "Marketing",       operator: [">", "<"],               valueType: "number",  unit: "%",        icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
+  { id: "replyRate",              label: "Reply Rate",        category: "Marketing",       operator: [">", "<"],               valueType: "number",  unit: "%",        icon: <Megaphone className="w-3.5 h-3.5" />,     color: "text-pink-600",    bgColor: "bg-pink-50" },
   // AI
-  { id: "ai-book",      label: "Likelihood to Book",    category: "AI",        operator: [">", ">="],           valueType: "number",  unit: "%",        icon: <Brain className="w-3.5 h-3.5" />,         color: "text-indigo-600",  bgColor: "bg-indigo-50" },
-  { id: "ai-respond",   label: "Likelihood to Respond", category: "AI",        operator: [">", ">="],           valueType: "number",  unit: "%",        icon: <Brain className="w-3.5 h-3.5" />,         color: "text-indigo-600",  bgColor: "bg-indigo-50" },
+  { id: "aiLikelihoodToBook",     label: "Likelihood to Book",    category: "AI",          operator: [">", ">="],              valueType: "number",  unit: "%",        icon: <Brain className="w-3.5 h-3.5" />,         color: "text-indigo-600",  bgColor: "bg-indigo-50" },
+  { id: "aiLikelihoodToRespond",  label: "Likelihood to Respond", category: "AI",          operator: [">", ">="],              valueType: "number",  unit: "%",        icon: <Brain className="w-3.5 h-3.5" />,         color: "text-indigo-600",  bgColor: "bg-indigo-50" },
 ];
 
 const CATEGORIES = [
@@ -151,20 +176,54 @@ const CATEGORIES = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Translate UI rules → server AudienceDefinition
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SERVER_OPERATORS = new Set([">" , ">=" , "<" , "<=" , "=" , "!=" , "is_true" , "is_false"]);
+
+function translateRulesToServer(rules: ActiveRule[], supportedFields: RuleField[]): {
+  field: RuleField; op: string; value: string | number | boolean;
+}[] {
+  const supported = new Set(supportedFields);
+  return rules
+    .filter((r) => supported.has(r.field) && SERVER_OPERATORS.has(r.operator) && r.value !== "")
+    .map((r) => ({
+      field: r.field,
+      op: r.operator as string,
+      value: r.valueType === "number" || r.valueType === "days"
+        ? Number(r.value)
+        : r.operator === "is_true" ? true
+        : r.operator === "is_false" ? false
+        : r.value,
+    }));
+}
+
+// Add valueType to ActiveRule for translation — derive from catalog
+function getRuleDef(field: RuleField): RuleDefinition | undefined {
+  return RULE_CATALOG.find((d) => d.id === field);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Debounce hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Live Audience Sentence
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Converts selected presets + active rules into a single plain-English sentence.
- * Highlighted keywords are wrapped in <strong> spans for visual emphasis.
- */
 function buildAudienceSentence(
-  selectedPresets: Set<string>,
+  selectedPresets: Set<AudiencePresetId>,
   rules: ActiveRule[]
 ): React.ReactNode {
-  const parts: React.ReactNode[] = [];
-
-  // ── Subject from presets ──────────────────────────────────────────────────
   const presetLabels = [...selectedPresets].map(
     (id) => AUDIENCE_PRESETS.find((p) => p.id === id)?.label ?? id
   );
@@ -175,147 +234,67 @@ function buildAudienceSentence(
   } else if (presetLabels.length === 1) {
     subject = <><strong>{presetLabels[0].toLowerCase()}</strong></>;
   } else {
-    const joined = presetLabels
-      .map((l, i) => (
-        <span key={i}>
-          {i > 0 && (i === presetLabels.length - 1 ? " and " : ", ")}
-          <strong>{l.toLowerCase()}</strong>
-        </span>
-      ));
+    const joined = presetLabels.map((l, i) => (
+      <span key={i}>
+        {i > 0 && (i === presetLabels.length - 1 ? " and " : ", ")}
+        <strong>{l.toLowerCase()}</strong>
+      </span>
+    ));
     subject = <>{joined}</>;
   }
 
-  // ── Rule clauses ──────────────────────────────────────────────────────────
   const clauses: React.ReactNode[] = [];
-
   for (const rule of rules) {
-    const def = RULE_CATALOG.find((d) => d.id === rule.defId);
-    if (!def || !rule.value) continue;
+    if (!rule.value) continue;
     const v = rule.value;
     const op = rule.operator;
-
-    switch (rule.defId) {
-      case "radius":
-        clauses.push(<>within <strong>{v} miles</strong></>);
-        break;
-      case "city":
-        clauses.push(<>in <strong>{v}</strong></>);
-        break;
-      case "zip":
-        clauses.push(<>in ZIP <strong>{v}</strong></>);
-        break;
-      case "neighborhood":
-        clauses.push(<>in the <strong>{v}</strong> neighborhood</>);
-        break;
-      case "last-booking":
-        clauses.push(<>who {op === ">" || op === ">=" ? "have not booked in" : "booked within"} <strong>{v} days</strong></>);
-        break;
-      case "num-bookings":
-        clauses.push(<>with <strong>{op} {v} booking{Number(v) !== 1 ? "s" : ""}</strong></>);
-        break;
-      case "recurring":
-        clauses.push(<>with <strong>{v.toLowerCase()}</strong> recurring status</>);
-        break;
-      case "service-type":
-        clauses.push(<>who booked a <strong>{v.toLowerCase()}</strong></>);
-        break;
-      case "bedrooms":
-        clauses.push(<>with <strong>{op} {v} bedroom{Number(v) !== 1 ? "s" : ""}</strong></>);
-        break;
-      case "bathrooms":
-        clauses.push(<>with <strong>{op} {v} bathroom{Number(v) !== 1 ? "s" : ""}</strong></>);
-        break;
-      case "ltv":
-        clauses.push(<>who spent <strong>{op} ${v}</strong> lifetime</>);
-        break;
-      case "avg-ticket":
-        clauses.push(<>with an average ticket <strong>{op} ${v}</strong></>);
-        break;
-      case "tips":
-        clauses.push(<>who tipped <strong>{op} ${v}</strong></>);
-        break;
-      case "review-score":
-        clauses.push(<>with a <strong>{v}★ or higher</strong> review</>);
-        break;
-      case "complaints":
-        clauses.push(
-          Number(v) === 0
-            ? <>with <strong>no complaints</strong></>
-            : <>with <strong>{op} {v} complaint{Number(v) !== 1 ? "s" : ""}</strong></>
-        );
-        break;
-      case "refunds":
-        clauses.push(
-          Number(v) === 0
-            ? <>with <strong>no refunds</strong></>
-            : <>with <strong>{op} {v} refund{Number(v) !== 1 ? "s" : ""}</strong></>
-        );
-        break;
-      case "chargebacks":
-        clauses.push(
-          Number(v) === 0
-            ? <>with <strong>no chargebacks</strong></>
-            : <>with <strong>{op} {v} chargeback{Number(v) !== 1 ? "s" : ""}</strong></>
-        );
-        break;
-      case "last-sms":
-        clauses.push(<>not texted in <strong>{v} days</strong></>);
-        break;
-      case "last-email":
-        clauses.push(<>not emailed in <strong>{v} days</strong></>);
-        break;
-      case "prev-campaign":
-        clauses.push(<>who were {op === "is not" ? "not" : ""} in the <strong>{v}</strong> campaign</>);
-        break;
-      case "stop-status":
-        clauses.push(<>who have <strong>{v.toLowerCase()}</strong></>);
-        break;
-      case "open-rate":
-        clauses.push(<>with an open rate <strong>{op} {v}%</strong></>);
-        break;
-      case "reply-rate":
-        clauses.push(<>with a reply rate <strong>{op} {v}%</strong></>);
-        break;
-      case "ai-book":
-        clauses.push(<>with a <strong>{op} {v}% likelihood</strong> to book</>);
-        break;
-      case "ai-respond":
-        clauses.push(<>with a <strong>{op} {v}% likelihood</strong> to respond</>);
-        break;
-      default:
-        clauses.push(<><strong>{def.label}</strong> {op} {v}</>);
+    switch (rule.field) {
+      case "radiusMiles":           clauses.push(<>within <strong>{v} miles</strong></>); break;
+      case "city":                  clauses.push(<>in <strong>{v}</strong></>); break;
+      case "zip":                   clauses.push(<>in ZIP <strong>{v}</strong></>); break;
+      case "lastBookingDays":       clauses.push(<>who {op === ">" || op === ">=" ? "have not booked in" : "booked within"} <strong>{v} days</strong></>); break;
+      case "bookingCount":          clauses.push(<>with <strong>{op} {v} booking{Number(v) !== 1 ? "s" : ""}</strong></>); break;
+      case "recurringStatus":       clauses.push(<>with <strong>{v.replace(/-/g, " ")}</strong> status</>); break;
+      case "serviceType":           clauses.push(<>who booked a <strong>{v.toLowerCase()}</strong></>); break;
+      case "bedrooms":              clauses.push(<>with <strong>{op} {v} bedroom{Number(v) !== 1 ? "s" : ""}</strong></>); break;
+      case "bathrooms":             clauses.push(<>with <strong>{op} {v} bathroom{Number(v) !== 1 ? "s" : ""}</strong></>); break;
+      case "lifetimeRevenue":       clauses.push(<>who spent <strong>{op} ${v}</strong> lifetime</>); break;
+      case "avgTicket":             clauses.push(<>with an average ticket <strong>{op} ${v}</strong></>); break;
+      case "lastBookingPrice":      clauses.push(<>whose last booking was <strong>{op} ${v}</strong></>); break;
+      case "reviewScore":           clauses.push(<>with a <strong>{v}★ or higher</strong> review</>); break;
+      case "hasComplaint":          clauses.push(op === "is_false" ? <>with <strong>no complaints</strong></> : <>with <strong>open complaints</strong></>); break;
+      case "hasRefund":             clauses.push(op === "is_false" ? <>with <strong>no refunds</strong></> : <>with <strong>refunds on file</strong></>); break;
+      case "hasChargeback":         clauses.push(op === "is_false" ? <>with <strong>no chargebacks</strong></> : <>with <strong>chargebacks on file</strong></>); break;
+      case "lastSmsDays":           clauses.push(<>not texted in <strong>{v} days</strong></>); break;
+      case "lastEmailDays":         clauses.push(<>not emailed in <strong>{v} days</strong></>); break;
+      case "stopStatus":            clauses.push(op === "is_false" ? <>who have <strong>opted in</strong></> : <>who have <strong>opted out</strong></>); break;
+      case "openRate":              clauses.push(<>with an open rate <strong>{op} {v}%</strong></>); break;
+      case "replyRate":             clauses.push(<>with a reply rate <strong>{op} {v}%</strong></>); break;
+      case "aiLikelihoodToBook":    clauses.push(<>with a <strong>{op} {v}% likelihood</strong> to book</>); break;
+      case "aiLikelihoodToRespond": clauses.push(<>with a <strong>{op} {v}% likelihood</strong> to respond</>); break;
     }
   }
 
-  // ── Assemble ──────────────────────────────────────────────────────────────
-  if (selectedPresets.size === 0 && rules.length === 0) {
-    return null;
-  }
+  if (selectedPresets.size === 0 && rules.length === 0) return null;
 
   const clauseNodes = clauses.map((c, i) => (
     <span key={i}>
-      {i === 0 && clauses.length > 0 ? " " : ""}
-      {i > 0 ? (i === clauses.length - 1 && clauses.length > 1 ? " and " : ", ") : ""}
+      {i === 0 ? " " : i === clauses.length - 1 && clauses.length > 1 ? " and " : ", "}
       {c}
     </span>
   ));
 
-  return (
-    <>
-      You are messaging {subject}{clauseNodes.length > 0 ? <>{clauseNodes}</> : ""}.
-    </>
-  );
+  return <>You are messaging {subject}{clauseNodes}.</>;
 }
 
 function AudienceSentence({
   selectedPresets,
   rules,
 }: {
-  selectedPresets: Set<string>;
+  selectedPresets: Set<AudiencePresetId>;
   rules: ActiveRule[];
 }) {
   const sentence = buildAudienceSentence(selectedPresets, rules);
-
   if (!sentence) {
     return (
       <div className="rounded-2xl border border-dashed border-gray-200 px-5 py-4 mb-4 text-sm text-gray-300 italic">
@@ -323,25 +302,16 @@ function AudienceSentence({
       </div>
     );
   }
-
   return (
     <div
       className="rounded-2xl px-5 py-4 mb-4 text-sm leading-relaxed"
-      style={{
-        background: "linear-gradient(135deg, #f0f9ff 0%, #fafafa 100%)",
-        border: "1px solid #bae6fd",
-      }}
+      style={{ background: "linear-gradient(135deg, #f0f9ff 0%, #fafafa 100%)", border: "1px solid #bae6fd" }}
     >
       <div className="flex items-start gap-2.5">
-        <div
-          className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-          style={{ background: "#0ea5e9", boxShadow: "0 0 0 4px rgba(14,165,233,0.12)" }}
-        >
+        <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5" style={{ background: "#0ea5e9", boxShadow: "0 0 0 4px rgba(14,165,233,0.12)" }}>
           <MessageSquare className="w-3 h-3 text-white" />
         </div>
-        <p className="text-gray-700 leading-relaxed" style={{ fontStyle: "normal" }}>
-          {sentence}
-        </p>
+        <p className="text-gray-700 leading-relaxed">{sentence}</p>
       </div>
     </div>
   );
@@ -355,10 +325,10 @@ function SavedAudiencePicker({
   selectedPresets,
   setSelectedPresets,
 }: {
-  selectedPresets: Set<string>;
-  setSelectedPresets: React.Dispatch<React.SetStateAction<Set<string>>>;
+  selectedPresets: Set<AudiencePresetId>;
+  setSelectedPresets: React.Dispatch<React.SetStateAction<Set<AudiencePresetId>>>;
 }) {
-  const toggle = (id: string) =>
+  const toggle = (id: AudiencePresetId) =>
     setSelectedPresets((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -391,9 +361,7 @@ function SavedAudiencePicker({
               onClick={() => toggle(preset.id)}
               className={[
                 "flex items-center gap-3 p-3 rounded-2xl border text-left transition-all",
-                active
-                  ? "border-gray-900 bg-gray-900 shadow-sm"
-                  : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white",
+                active ? "border-gray-900 bg-gray-900 shadow-sm" : "border-gray-100 bg-gray-50 hover:border-gray-300 hover:bg-white",
               ].join(" ")}
             >
               <div className={["w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0", active ? "bg-white/15" : preset.color].join(" ")}>
@@ -413,44 +381,6 @@ function SavedAudiencePicker({
       </div>
     </div>
   );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Simulated recipient count
-// ─────────────────────────────────────────────────────────────────────────────
-
-function computeCount(rules: ActiveRule[], selectedPresets: Set<string>): number {
-  // Base from presets
-  let base = 0;
-  if (selectedPresets.size > 0) {
-    for (const id of selectedPresets) {
-      const p = AUDIENCE_PRESETS.find((x) => x.id === id);
-      if (p) base += p.estimatedCount;
-    }
-    if (selectedPresets.size > 1) base = Math.round(base * 0.72);
-  } else {
-    // No presets — start from full list and let rules narrow
-    if (rules.length === 0) return 0;
-    base = 480;
-  }
-  for (const r of rules) {
-    const def = RULE_CATALOG.find((d) => d.id === r.defId);
-    if (!def) continue;
-    const v = parseFloat(r.value) || 0;
-    switch (r.defId) {
-      case "radius":       base = Math.round(base * Math.min(1, (v || 5) / 15)); break;
-      case "last-booking": base = Math.round(base * (v > 60 ? 0.55 : 0.8)); break;
-      case "ltv":          base = Math.round(base * (v > 300 ? 0.45 : 0.7)); break;
-      case "review-score": base = Math.round(base * (r.value === "5" ? 0.35 : 0.6)); break;
-      case "complaints":   base = Math.round(base * 0.82); break;
-      case "last-sms":     base = Math.round(base * 0.65); break;
-      case "stop-status":  base = Math.round(base * (r.value === "Opted in" ? 0.9 : 0.05)); break;
-      case "ai-book":      base = Math.round(base * 0.4); break;
-      case "ai-respond":   base = Math.round(base * 0.45); break;
-      default:             base = Math.round(base * 0.78);
-    }
-  }
-  return Math.max(base, 0);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -476,18 +406,14 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
               onClick={() => onStep(s.id)}
               className={[
                 "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all w-full justify-center truncate",
-                active  ? "bg-gray-900 text-white shadow-md"
-                : done  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                        : "bg-gray-100 text-gray-400",
+                active ? "bg-gray-900 text-white shadow-md" : done ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-gray-100 text-gray-400",
               ].join(" ")}
             >
               {done ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" /> : s.icon}
               <span className="hidden sm:inline truncate">{s.label}</span>
               <span className="sm:hidden">{s.id}</span>
             </button>
-            {idx < steps.length - 1 && (
-              <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />
-            )}
+            {idx < steps.length - 1 && <ChevronRight className="w-3 h-3 text-gray-300 flex-shrink-0" />}
           </div>
         );
       })}
@@ -496,29 +422,71 @@ function WorkflowBar({ step, onStep }: { step: Step; onStep: (s: Step) => void }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HeroCard
+// HeroCard — wired to real planner data
 // ─────────────────────────────────────────────────────────────────────────────
 
-function HeroCard({ count, ruleCount, excluded, expectedReplies }: {
-  count: number; ruleCount: number; excluded: number; expectedReplies: number;
+function HeroCard({
+  plannerResult,
+  isFetching,
+  ruleCount,
+  plannerVersion,
+  updatedSecondsAgo,
+}: {
+  plannerResult: { summary: { matchedCustomers: number; excludedCustomers: number; estimatedReplies: number; qualityScore: number; qualityGrade: string } } | null;
+  isFetching: boolean;
+  ruleCount: number;
+  plannerVersion: string | null;
+  updatedSecondsAgo: number | null;
 }) {
+  const count = plannerResult?.summary.matchedCustomers ?? 0;
+  const excluded = plannerResult?.summary.excludedCustomers ?? 0;
+  const expectedReplies = plannerResult?.summary.estimatedReplies ?? 0;
+  const qualityScore = plannerResult?.summary.qualityScore ?? 0;
+  const qualityGrade = plannerResult?.summary.qualityGrade ?? null;
+
+  const gradeColor = qualityGrade === "A" ? "text-emerald-400" : qualityGrade === "B" ? "text-blue-400" : qualityGrade === "C" ? "text-amber-400" : qualityGrade === "D" ? "text-orange-400" : "text-red-400";
+
   return (
-    <div
-      className="rounded-3xl p-7 text-center text-white mb-4"
-      style={{ background: "linear-gradient(180deg,#111827 0%,#1f2937 100%)" }}
-    >
+    <div className="rounded-3xl p-7 text-center text-white mb-4" style={{ background: "linear-gradient(180deg,#111827 0%,#1f2937 100%)" }}>
       <div className="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">Recipients</div>
-      <div className="font-black text-white leading-none mb-1 tabular-nums transition-all duration-300" style={{ fontSize: 72 }}>
-        {count}
-      </div>
+
+      {/* Count */}
+      {isFetching && !plannerResult ? (
+        <div className="h-[72px] flex items-center justify-center mb-1">
+          <div className="w-12 h-12 rounded-full border-4 border-gray-600 border-t-white animate-spin" />
+        </div>
+      ) : (
+        <div className="font-black text-white leading-none mb-1 tabular-nums transition-all duration-300 relative" style={{ fontSize: 72 }}>
+          {count}
+          {isFetching && (
+            <span className="absolute -top-1 -right-4 w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+          )}
+        </div>
+      )}
+
       <div className="text-sm text-gray-300 mb-1">eligible customers</div>
-      <div className="text-xs text-gray-500 mb-4">
-        {ruleCount === 0 ? "Select an audience or add rules" : `${ruleCount} filter${ruleCount > 1 ? "s" : ""} active`}
+
+      {/* Status line */}
+      <div className="text-xs text-gray-500 mb-2">
+        {ruleCount === 0
+          ? "Select an audience or add rules"
+          : isFetching
+          ? "Updating…"
+          : `${ruleCount} filter${ruleCount > 1 ? "s" : ""} active`}
       </div>
+
+      {/* Quality score */}
+      {qualityGrade && (
+        <div className="flex items-center justify-center gap-2 mb-4">
+          <span className={`text-sm font-black ${gradeColor}`}>Quality {qualityScore} · {qualityGrade}</span>
+        </div>
+      )}
+
+      {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: "excluded",        value: excluded },
-          { label: "expected replies", value: expectedReplies },
+          { label: "excluded",         value: excluded },
+          { label: "expected replies",  value: expectedReplies },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl p-3" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.12)" }}>
             <div className="text-xl font-black">{s.value}</div>
@@ -526,6 +494,35 @@ function HeroCard({ count, ruleCount, excluded, expectedReplies }: {
           </div>
         ))}
       </div>
+
+      {/* Planner version + timestamp */}
+      {plannerVersion && (
+        <div className="mt-3 text-xs text-gray-600 font-mono">
+          Planner v{plannerVersion}
+          {updatedSecondsAgo !== null && ` · Updated ${updatedSecondsAgo}s ago`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AudienceStats row
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AudienceStatsRow({ stats }: { stats: { avgDaysSinceLastBooking: number; avgLastBookingPrice: number; recurringPercent: number } | null }) {
+  if (!stats) return null;
+  return (
+    <div className="flex flex-wrap gap-2 mb-4">
+      {[
+        { label: `Avg ticket: $${stats.avgLastBookingPrice}` },
+        { label: `Avg ${stats.avgDaysSinceLastBooking}d since booking` },
+        { label: `${stats.recurringPercent}% former recurring` },
+      ].map((s) => (
+        <span key={s.label} className="px-3 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-200">
+          {s.label}
+        </span>
+      ))}
     </div>
   );
 }
@@ -538,26 +535,28 @@ function RuleBlock({
   rule,
   onUpdate,
   onRemove,
+  isUnsupported,
   dragHandleProps,
 }: {
   rule: ActiveRule;
   onUpdate: (uid: string, patch: Partial<ActiveRule>) => void;
   onRemove: (uid: string) => void;
+  isUnsupported: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }) {
-  const def = RULE_CATALOG.find((d) => d.id === rule.defId)!;
-  const [editingValue, setEditingValue] = useState(false);
+  const def = RULE_CATALOG.find((d) => d.id === rule.field)!;
+  if (!def) return null;
 
   return (
     <div
-      className="flex items-center gap-2 p-3 rounded-2xl border border-gray-200 bg-white shadow-sm group"
+      className={[
+        "flex items-center gap-2 p-3 rounded-2xl border bg-white shadow-sm group",
+        isUnsupported ? "border-amber-200 bg-amber-50/30" : "border-gray-200",
+      ].join(" ")}
       style={{ userSelect: "none" }}
     >
       {/* Drag handle */}
-      <div
-        {...dragHandleProps}
-        className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0"
-      >
+      <div {...dragHandleProps} className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0">
         <GripVertical className="w-4 h-4" />
       </div>
 
@@ -566,10 +565,16 @@ function RuleBlock({
         <span className={def.color}>{def.icon}</span>
       </div>
 
-      {/* Label */}
-      <span className="text-sm font-bold text-gray-800 flex-shrink-0 min-w-[90px]">
-        {def.label}
-      </span>
+      {/* Label + unsupported badge */}
+      <div className="flex flex-col flex-shrink-0 min-w-[90px]">
+        <span className="text-sm font-bold text-gray-800 leading-tight">{def.label}</span>
+        {isUnsupported && (
+          <span className="flex items-center gap-0.5 text-[10px] font-bold text-amber-600 mt-0.5">
+            <Info className="w-2.5 h-2.5" />
+            Not in live count
+          </span>
+        )}
+      </div>
 
       {/* Operator selector */}
       <div className="relative flex-shrink-0">
@@ -600,7 +605,9 @@ function RuleBlock({
             <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           </div>
         ) : def.valueType === "boolean" ? (
-          <span className="text-sm font-semibold text-gray-700 px-2">true</span>
+          <span className="text-sm font-semibold text-gray-500 px-2 italic">
+            {rule.operator === "is_true" ? "Yes" : "No"}
+          </span>
         ) : (
           <div className="flex items-center gap-1.5">
             <input
@@ -611,9 +618,7 @@ function RuleBlock({
               min="0"
               className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
             />
-            {def.unit && (
-              <span className="text-xs text-gray-400 font-medium flex-shrink-0">{def.unit}</span>
-            )}
+            {def.unit && <span className="text-xs text-gray-400 font-medium flex-shrink-0">{def.unit}</span>}
           </div>
         )}
       </div>
@@ -630,75 +635,70 @@ function RuleBlock({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RulePicker — the "+ Add Rule" dropdown panel
+// RulePicker
 // ─────────────────────────────────────────────────────────────────────────────
 
-function RulePicker({ onAdd, onClose }: { onAdd: (defId: string) => void; onClose: () => void }) {
+function RulePicker({ onAdd, onClose, supportedFields }: {
+  onAdd: (field: RuleField) => void;
+  onClose: () => void;
+  supportedFields: Set<RuleField>;
+}) {
   const [activeCategory, setActiveCategory] = useState("Geography");
-  const ref = useRef<HTMLDivElement>(null);
-
   const rulesInCategory = RULE_CATALOG.filter((r) => r.category === activeCategory);
   const cat = CATEGORIES.find((c) => c.name === activeCategory)!;
 
   return (
     <div
-      ref={ref}
       className="absolute z-50 top-full left-0 mt-2 w-[480px] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-3xl shadow-2xl overflow-hidden"
       style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}
     >
-      {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
         <span className="font-black text-gray-900 text-sm">Add a Rule</span>
         <button onClick={onClose} className="w-7 h-7 rounded-xl bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
           <X className="w-3.5 h-3.5 text-gray-500" />
         </button>
       </div>
-
       <div className="flex" style={{ height: 340 }}>
-        {/* Category sidebar */}
         <div className="w-40 border-r border-gray-100 flex flex-col py-2 flex-shrink-0 overflow-y-auto">
           {CATEGORIES.map((c) => (
             <button
               key={c.name}
               onClick={() => setActiveCategory(c.name)}
-              className={[
-                "flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors",
-                activeCategory === c.name
-                  ? `${c.bg} ${c.color}`
-                  : "text-gray-500 hover:bg-gray-50",
-              ].join(" ")}
+              className={["flex items-center gap-2 px-3 py-2.5 text-left text-xs font-bold transition-colors", activeCategory === c.name ? `${c.bg} ${c.color}` : "text-gray-500 hover:bg-gray-50"].join(" ")}
             >
               <span className={activeCategory === c.name ? c.color : "text-gray-400"}>{c.icon}</span>
               {c.name}
             </button>
           ))}
         </div>
-
-        {/* Rule list */}
         <div className="flex-1 overflow-y-auto py-2 px-3">
-          <div className={`text-xs font-black uppercase tracking-widest mb-3 px-1 ${cat.color}`}>
-            {activeCategory}
-          </div>
+          <div className={`text-xs font-black uppercase tracking-widest mb-3 px-1 ${cat.color}`}>{activeCategory}</div>
           <div className="flex flex-col gap-1">
-            {rulesInCategory.map((rule) => (
-              <button
-                key={rule.id}
-                onClick={() => { onAdd(rule.id); onClose(); }}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-left group transition-colors"
-              >
-                <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${rule.bgColor}`}>
-                  <span className={rule.color}>{rule.icon}</span>
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-gray-800 group-hover:text-gray-900">{rule.label}</div>
-                  <div className="text-xs text-gray-400">
-                    {rule.operator.slice(0, 3).join(" · ")}
-                    {rule.unit ? ` · ${rule.unit}` : ""}
+            {rulesInCategory.map((rule) => {
+              const supported = supportedFields.has(rule.id);
+              return (
+                <button
+                  key={rule.id}
+                  onClick={() => { onAdd(rule.id); onClose(); }}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 text-left group transition-colors"
+                >
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center flex-shrink-0 ${rule.bgColor}`}>
+                    <span className={rule.color}>{rule.icon}</span>
                   </div>
-                </div>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-300 ml-auto group-hover:text-gray-500" />
-              </button>
-            ))}
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-gray-800 group-hover:text-gray-900">{rule.label}</div>
+                    <div className="text-xs text-gray-400">
+                      {rule.operator.slice(0, 3).join(" · ")}
+                      {rule.unit ? ` · ${rule.unit}` : ""}
+                    </div>
+                  </div>
+                  {!supported && (
+                    <span className="text-[10px] font-bold text-amber-500 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full flex-shrink-0">Preview only</span>
+                  )}
+                  <ChevronRight className="w-3.5 h-3.5 text-gray-300 ml-auto group-hover:text-gray-500" />
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -716,22 +716,24 @@ function makeUid() { return `rule-${++uidCounter}`; }
 function AudienceRuleBuilder({
   rules,
   setRules,
+  supportedFields,
 }: {
   rules: ActiveRule[];
   setRules: React.Dispatch<React.SetStateAction<ActiveRule[]>>;
+  supportedFields: Set<RuleField>;
 }) {
   const [showPicker, setShowPicker] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [overIdx, setOverIdx] = useState<number | null>(null);
 
-  const addRule = (defId: string) => {
-    const def = RULE_CATALOG.find((d) => d.id === defId)!;
+  const addRule = (field: RuleField) => {
+    const def = RULE_CATALOG.find((d) => d.id === field)!;
     setRules((prev) => [
       ...prev,
       {
         uid: makeUid(),
-        defId,
-        operator: def.operator[0],
+        field,
+        operator: def.operator[0] as RuleOperator,
         value: def.selectOptions ? def.selectOptions[0] : "",
       },
     ]);
@@ -745,7 +747,6 @@ function AudienceRuleBuilder({
     setRules((prev) => prev.filter((r) => r.uid !== uid));
   };
 
-  // Simple drag-to-reorder
   const handleDragEnd = () => {
     if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
       setRules((prev) => {
@@ -759,47 +760,48 @@ function AudienceRuleBuilder({
     setOverIdx(null);
   };
 
-  // Preset quick-adds
   const QUICK_PRESETS = [
-    { label: "Win Back",        rules: [{ defId: "last-booking", op: ">", val: "90" }] },
-    { label: "High Value",      rules: [{ defId: "ltv",          op: ">", val: "500" }] },
-    { label: "5★ No Issues",    rules: [{ defId: "review-score", op: ">=", val: "5" }, { defId: "complaints", op: "=", val: "0" }] },
-    { label: "AI Ready",        rules: [{ defId: "ai-respond",   op: ">", val: "60" }] },
-    { label: "Not Texted 30d",  rules: [{ defId: "last-sms",     op: ">", val: "30" }] },
+    { label: "Win Back",       rules: [{ field: "lastBookingDays" as RuleField, op: ">",       val: "90" }] },
+    { label: "High Value",     rules: [{ field: "lifetimeRevenue" as RuleField, op: ">",       val: "500" }] },
+    { label: "5★ No Issues",   rules: [{ field: "reviewScore" as RuleField,    op: ">=",      val: "5" }, { field: "hasComplaint" as RuleField, op: "is_false", val: "false" }] },
+    { label: "AI Ready",       rules: [{ field: "aiLikelihoodToRespond" as RuleField, op: ">", val: "60" }] },
+    { label: "Not Texted 30d", rules: [{ field: "lastSmsDays" as RuleField,    op: ">",       val: "30" }] },
   ];
 
   const applyPreset = (preset: typeof QUICK_PRESETS[0]) => {
-    const newRules: ActiveRule[] = preset.rules.map((r) => {
-      const def = RULE_CATALOG.find((d) => d.id === r.defId)!;
-      return { uid: makeUid(), defId: r.defId, operator: r.op as RuleOperator, value: r.val };
-    });
+    const newRules: ActiveRule[] = preset.rules.map((r) => ({
+      uid: makeUid(),
+      field: r.field,
+      operator: r.op as RuleOperator,
+      value: r.val,
+    }));
     setRules((prev) => {
-      // avoid duplicates
-      const existingIds = new Set(prev.map((r) => r.defId));
-      return [...prev, ...newRules.filter((r) => !existingIds.has(r.defId))];
+      const existingFields = new Set(prev.map((r) => r.field));
+      return [...prev, ...newRules.filter((r) => !existingFields.has(r.field))];
     });
   };
 
+  const unsupportedCount = rules.filter((r) => !supportedFields.has(r.field)).length;
+
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
-      {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-gray-500" />
           Audience Rules
+          {unsupportedCount > 0 && (
+            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+              {unsupportedCount} preview-only
+            </span>
+          )}
         </h2>
         {rules.length > 0 && (
-          <button
-            onClick={() => setRules([])}
-            className="text-xs text-red-400 font-bold hover:text-red-600 transition-colors flex items-center gap-1"
-          >
+          <button onClick={() => setRules([])} className="text-xs text-red-400 font-bold hover:text-red-600 transition-colors flex items-center gap-1">
             <X className="w-3 h-3" /> Clear all
           </button>
         )}
       </div>
-      <p className="text-xs text-gray-400 mb-4">
-        Every rule narrows the audience. All rules are combined with AND logic.
-      </p>
+      <p className="text-xs text-gray-400 mb-4">Every rule narrows the audience. All rules are combined with AND logic.</p>
 
       {/* Quick preset chips */}
       <div className="flex flex-wrap gap-1.5 mb-4">
@@ -832,12 +834,8 @@ function AudienceRuleBuilder({
               onDragStart={() => setDragIdx(idx)}
               onDragOver={(e) => { e.preventDefault(); setOverIdx(idx); }}
               onDragEnd={handleDragEnd}
-              className={[
-                "transition-all",
-                overIdx === idx && dragIdx !== idx ? "opacity-50 scale-95" : "",
-              ].join(" ")}
+              className={["transition-all", overIdx === idx && dragIdx !== idx ? "opacity-50 scale-95" : ""].join(" ")}
             >
-              {/* AND connector */}
               {idx > 0 && (
                 <div className="flex items-center gap-2 py-1 px-3">
                   <div className="flex-1 h-px bg-gray-100" />
@@ -849,6 +847,7 @@ function AudienceRuleBuilder({
                 rule={rule}
                 onUpdate={updateRule}
                 onRemove={removeRule}
+                isUnsupported={!supportedFields.has(rule.field)}
                 dragHandleProps={{}}
               />
             </div>
@@ -866,7 +865,7 @@ function AudienceRuleBuilder({
           Add Rule
         </button>
         {showPicker && (
-          <RulePicker onAdd={addRule} onClose={() => setShowPicker(false)} />
+          <RulePicker onAdd={addRule} onClose={() => setShowPicker(false)} supportedFields={supportedFields} />
         )}
       </div>
 
@@ -874,7 +873,7 @@ function AudienceRuleBuilder({
       {rules.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => {
-            const count = rules.filter((r) => RULE_CATALOG.find((d) => d.id === r.defId)?.category === c.name).length;
+            const count = rules.filter((r) => RULE_CATALOG.find((d) => d.id === r.field)?.category === c.name).length;
             if (!count) return null;
             return (
               <span key={c.name} className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${c.bg} ${c.color} border ${c.border}`}>
@@ -889,15 +888,17 @@ function AudienceRuleBuilder({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SafetySummary
+// SafetySummary — wired to real exclusion breakdown
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SafetySummary() {
+function SafetySummary({ breakdown }: {
+  breakdown: { stopOptOut: number; openComplaint: number; recentlyTexted: number; duplicate: number } | null;
+}) {
   const stats = [
-    { icon: <Ban className="w-4 h-4 text-red-500" />,            label: "STOP / opt-out",  value: 8,  color: "text-red-600" },
-    { icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, label: "Open issues",     value: 11, color: "text-amber-600" },
-    { icon: <Clock className="w-4 h-4 text-blue-500" />,          label: "Recently texted", value: 22, color: "text-blue-600" },
-    { icon: <Copy className="w-4 h-4 text-gray-400" />,           label: "Duplicates",      value: 0,  color: "text-gray-500" },
+    { icon: <Ban className="w-4 h-4 text-red-500" />,            label: "STOP / opt-out",  value: breakdown?.stopOptOut ?? 0,    color: "text-red-600" },
+    { icon: <AlertTriangle className="w-4 h-4 text-amber-500" />, label: "Open issues",     value: breakdown?.openComplaint ?? 0, color: "text-amber-600" },
+    { icon: <Clock className="w-4 h-4 text-blue-500" />,          label: "Recently texted", value: breakdown?.recentlyTexted ?? 0, color: "text-blue-600" },
+    { icon: <Copy className="w-4 h-4 text-gray-400" />,           label: "Duplicates",      value: breakdown?.duplicate ?? 0,     color: "text-gray-500" },
   ];
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
@@ -919,14 +920,8 @@ function SafetySummary() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LiveAudiencePreview
+// LiveAudiencePreview — wired to real sample customers
 // ─────────────────────────────────────────────────────────────────────────────
-
-const PREVIEW_PEOPLE = [
-  { name: "Jennifer Smith", rating: 5, lastClean: "42 days ago",  distance: "3.1 miles", type: "Former recurring" },
-  { name: "Alex Grant",     rating: 5, lastClean: "8 months ago", distance: "2.4 miles", type: "One-time" },
-  { name: "Nina Lee",       rating: 4, lastClean: "92 days ago",  distance: "4.4 miles", type: "Former recurring" },
-];
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -936,23 +931,47 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-function LiveAudiencePreview({ ruleCount }: { ruleCount: number }) {
-  if (ruleCount === 0) return null;
+function LiveAudiencePreview({ sampleIncluded }: {
+  sampleIncluded: Array<{
+    displayName: string;
+    daysSinceLastBooking: number;
+    reviewScore: number | null;
+    frequency: string;
+    matchedBecause: string[];
+    confidence: number;
+  }> | null;
+}) {
+  if (!sampleIncluded || sampleIncluded.length === 0) return null;
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
         <Users className="w-4 h-4 text-gray-600" />
         Live Audience Preview
+        <span className="text-xs font-normal text-gray-400 ml-1">({sampleIncluded.length} sample)</span>
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {PREVIEW_PEOPLE.map((p) => (
-          <div key={p.name} className="border border-gray-100 rounded-2xl p-3 bg-white">
-            <div className="font-bold text-gray-900 text-sm mb-1">{p.name}</div>
-            <StarRating rating={p.rating} />
-            <div className="text-xs text-gray-500 mt-2 leading-relaxed">
-              Last clean: {p.lastClean}<br />
-              {p.distance} · {p.type}
+        {sampleIncluded.slice(0, 3).map((p, i) => (
+          <div key={i} className="border border-gray-100 rounded-2xl p-3 bg-white">
+            <div className="flex items-start justify-between mb-1">
+              <div className="font-bold text-gray-900 text-sm">{p.displayName}</div>
+              <span className="text-[10px] font-black text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0 ml-1">
+                {p.confidence}%
+              </span>
             </div>
+            {p.reviewScore !== null && <StarRating rating={p.reviewScore} />}
+            <div className="text-xs text-gray-500 mt-2 leading-relaxed">
+              Last booking: {p.daysSinceLastBooking}d ago<br />
+              {p.frequency}
+            </div>
+            {p.matchedBecause.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {p.matchedBecause.slice(0, 3).map((tag, j) => (
+                  <span key={j} className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -988,17 +1007,21 @@ function MessageEditor({ message, setMessage }: { message: string; setMessage: (
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PersonalizedPreviews
+// PersonalizedPreviews — uses real sample names
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PersonalizedPreviews({ message }: { message: string }) {
-  const previews = [
-    { name: "Jennifer", firstName: "Jennifer", area: "Arlington" },
-    { name: "Alex",     firstName: "Alex",     area: "Arlington" },
-    { name: "Nina",     firstName: "Nina",     area: "Arlington" },
-  ];
+function PersonalizedPreviews({ message, sampleNames }: { message: string; sampleNames: string[] }) {
+  const previews = sampleNames.length > 0
+    ? sampleNames.slice(0, 3).map((n) => ({ displayName: n, firstName: n.split(" ")[0], area: "Arlington" }))
+    : [
+        { displayName: "Jennifer S.", firstName: "Jennifer", area: "Arlington" },
+        { displayName: "Alex G.",     firstName: "Alex",     area: "Arlington" },
+        { displayName: "Nina L.",     firstName: "Nina",     area: "Arlington" },
+      ];
+
   const personalize = (tpl: string, fn: string, area: string) =>
     tpl.replace(/\{\{first_name\}\}/g, fn).replace(/\{\{area\}\}/g, area);
+
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
       <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
@@ -1007,8 +1030,8 @@ function PersonalizedPreviews({ message }: { message: string }) {
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {previews.map((p) => (
-          <div key={p.name} className="rounded-3xl p-4 min-h-[200px]" style={{ background: "#101828" }}>
-            <div className="text-white font-bold text-sm mb-1">{p.name}</div>
+          <div key={p.displayName} className="rounded-3xl p-4 min-h-[200px]" style={{ background: "#101828" }}>
+            <div className="text-white font-bold text-sm mb-1">{p.displayName}</div>
             <div className="text-white text-xs leading-relaxed mt-3 p-3" style={{ background: "#2563eb", borderRadius: "18px 18px 4px 18px" }}>
               {personalize(message, p.firstName, p.area)}
             </div>
@@ -1053,19 +1076,29 @@ function StepTest({ message, onTestSent }: { message: string; onTestSent: () => 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// StepFinalApproval
+// StepFinalApproval — uses real recipient count
 // ─────────────────────────────────────────────────────────────────────────────
 
-function StepFinalApproval({ recipientCount, testSent, message }: { recipientCount: number; testSent: boolean; message: string }) {
+function StepFinalApproval({
+  recipientCount,
+  testSent,
+  message,
+  stopOptOut,
+}: {
+  recipientCount: number;
+  testSent: boolean;
+  message: string;
+  stopOptOut: number;
+}) {
   const [confirmText, setConfirmText] = useState("");
   const expectedConfirm = `SEND ${recipientCount}`;
   const isReady = testSent && confirmText.trim() === expectedConfirm && recipientCount > 0;
   const checks = [
-    { label: "Audience built",       status: recipientCount > 0 ? "passed" : "pending" },
-    { label: "Test SMS sent",        status: testSent ? "passed" : "pending" },
-    { label: "Quiet hours protected", status: "passed", note: "9am–8pm local" },
-    { label: "Opt-outs excluded",    status: "passed", note: "8 excluded" },
-    { label: "Type confirmation",    status: confirmText === expectedConfirm ? "passed" : "required", note: `Type: ${expectedConfirm}` },
+    { label: "Audience built",        status: recipientCount > 0 ? "passed" : "pending" },
+    { label: "Test SMS sent",         status: testSent ? "passed" : "pending" },
+    { label: "Quiet hours protected",  status: "passed", note: "9am–8pm local" },
+    { label: "Opt-outs excluded",     status: "passed", note: `${stopOptOut} excluded` },
+    { label: "Type confirmation",     status: confirmText === expectedConfirm ? "passed" : "required", note: `Type: ${expectedConfirm}` },
   ];
   return (
     <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
@@ -1118,11 +1151,74 @@ function SmsCampaignsContent() {
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
   const [testSent, setTestSent] = useState(false);
   const [rules, setRules] = useState<ActiveRule[]>([]);
-  const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
+  const [selectedPresets, setSelectedPresets] = useState<Set<AudiencePresetId>>(new Set());
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [secondsAgo, setSecondsAgo] = useState<number | null>(null);
 
-  const recipientCount = computeCount(rules, selectedPresets);
-  const excluded = (rules.length > 0 || selectedPresets.size > 0) ? Math.round(recipientCount * 0.18) : 0;
-  const expectedReplies = Math.round(recipientCount * 0.13);
+  // Build the AudienceDefinition for the planner query
+  // We use a stable supported set — starts empty, gets populated from first planner response
+  const [supportedFields, setSupportedFields] = useState<Set<RuleField>>(new Set([
+    // Optimistic defaults so rules show correct badges before first query
+    "lastBookingDays", "bookingCount", "recurringStatus", "serviceType",
+    "bedrooms", "bathrooms", "lifetimeRevenue", "avgTicket", "lastBookingPrice",
+    "reviewScore", "hasComplaint", "lastSmsDays", "stopStatus",
+  ] as RuleField[]));
+
+  // Translate rules to server format for the query input
+  const serverRules = useMemo(() => {
+    return rules
+      .filter((r) => supportedFields.has(r.field) && SERVER_OPERATORS.has(r.operator) && r.value !== "")
+      .map((r) => {
+        const def = getRuleDef(r.field);
+        const isNumeric = def?.valueType === "number" || def?.valueType === "days";
+        return {
+          field: r.field,
+          op: r.operator as string,
+          value: isNumeric ? Number(r.value) : r.operator === "is_true" ? true : r.operator === "is_false" ? false : r.value,
+        };
+      });
+  }, [rules, supportedFields]);
+
+  const audienceDefinition = useMemo(() => ({
+    presets: [...selectedPresets] as string[],
+    includeRules: serverRules,
+    excludeRules: [],
+    geography: null,
+  }), [selectedPresets, serverRules]);
+
+  // Debounce the query input 800ms
+  const debouncedDef = useDebounce(audienceDefinition, 800);
+
+  const hasAudience = selectedPresets.size > 0 || rules.length > 0;
+
+  const { data: plannerResult, isFetching } = trpc.smsCampaign.planAudience.useQuery(
+    debouncedDef as Parameters<typeof trpc.smsCampaign.planAudience.useQuery>[0],
+    {
+      enabled: hasAudience,
+      keepPreviousData: true,
+      refetchOnWindowFocus: false,
+      onSuccess: (data) => {
+        // Update supported fields from server response
+        if (data?.supportedRuleFields) {
+          setSupportedFields(new Set(data.supportedRuleFields as RuleField[]));
+        }
+        setUpdatedAt(Date.now());
+      },
+    }
+  );
+
+  // "Updated N seconds ago" timer
+  useEffect(() => {
+    if (!updatedAt) return;
+    const interval = setInterval(() => {
+      setSecondsAgo(Math.floor((Date.now() - updatedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [updatedAt]);
+
+  const plannerVersion = plannerResult?.ruleHash ? plannerResult.ruleHash.slice(0, 4) : null;
+  const ruleCount = rules.length + selectedPresets.size;
+  const sampleNames = plannerResult?.sampleIncluded?.map((s) => s.displayName) ?? [];
 
   return (
     <>
@@ -1141,19 +1237,34 @@ function SmsCampaignsContent() {
       <div className="grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-4 mt-2">
         {/* LEFT */}
         <div>
-          <HeroCard count={recipientCount} ruleCount={rules.length + selectedPresets.size} excluded={excluded} expectedReplies={expectedReplies} />
+          <HeroCard
+            plannerResult={plannerResult ?? null}
+            isFetching={isFetching}
+            ruleCount={ruleCount}
+            plannerVersion={plannerVersion}
+            updatedSecondsAgo={secondsAgo}
+          />
+          {plannerResult?.stats && (
+            <AudienceStatsRow stats={plannerResult.stats} />
+          )}
           <AudienceSentence selectedPresets={selectedPresets} rules={rules} />
           <SavedAudiencePicker selectedPresets={selectedPresets} setSelectedPresets={setSelectedPresets} />
-          <AudienceRuleBuilder rules={rules} setRules={setRules} />
+          <AudienceRuleBuilder rules={rules} setRules={setRules} supportedFields={supportedFields} />
         </div>
+
         {/* RIGHT */}
         <div>
-          <SafetySummary />
-          <LiveAudiencePreview ruleCount={rules.length} />
+          <SafetySummary breakdown={plannerResult?.exclusionBreakdown ?? null} />
+          <LiveAudiencePreview sampleIncluded={plannerResult?.sampleIncluded ?? null} />
           <MessageEditor message={message} setMessage={setMessage} />
-          <PersonalizedPreviews message={message} />
+          <PersonalizedPreviews message={message} sampleNames={sampleNames} />
           <StepTest message={message} onTestSent={() => setTestSent(true)} />
-          <StepFinalApproval recipientCount={recipientCount} testSent={testSent} message={message} />
+          <StepFinalApproval
+            recipientCount={plannerResult?.summary.matchedCustomers ?? 0}
+            testSent={testSent}
+            message={message}
+            stopOptOut={plannerResult?.exclusionBreakdown?.stopOptOut ?? 0}
+          />
         </div>
       </div>
 

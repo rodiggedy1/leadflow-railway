@@ -137,6 +137,11 @@ export interface SampleCustomer {
   reviewScore: number | null;
   /** Why this customer was matched — shown in audience preview */
   matchedBecause: string[];
+  /**
+   * Confidence score 0–100 for this customer match.
+   * Heuristic: base 60, +10 per extra matched rule, +15 former recurring, -20 any complaint, capped 98.
+   */
+  confidence: number;
 }
 
 export interface ExcludedCustomer {
@@ -199,4 +204,10 @@ export interface PlannerResult {
    */
   ruleHash: string;
   generatedAt: number;               // Unix ms
+  /**
+   * Rule fields that are currently supported by the planner (affect live count).
+   * The UI uses this to mark unsupported rules as "Not included in live count".
+   * The server owns this contract — the client never hardcodes it.
+   */
+  supportedRuleFields: RuleField[];
 }
