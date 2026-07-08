@@ -779,7 +779,8 @@ export const smsCampaignRouter = router({
   sendCampaign: adminAgentProcedure
     .input(z.object({ campaignId: z.number().int().positive() }))
     .mutation(async ({ input, ctx }) => {
-      const db = getDb();
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
       const agentId = ctx.agent.agentId;
       const agentName = ctx.agent.agentName;
 
