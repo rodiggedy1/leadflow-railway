@@ -18,7 +18,20 @@ import {
   ThumbsUp,
   Layers,
   Info,
+  Lock,
+  Unlock,
+  UserX,
+  ChevronUp,
+  Loader2,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import AdminHeader from "@/components/AdminHeader";
 import AdminPageGuard from "@/components/AdminPageGuard";
 import { useAgentPermissions } from "@/hooks/useAgentPermissions";
@@ -1079,64 +1092,374 @@ function StepTest({ message, onTestSent }: { message: string; onTestSent: () => 
 // StepFinalApproval — uses real recipient count
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ReviewAudienceModal — paginated frozen recipient list with manual removal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ReviewAudienceModal({
+  open,
+  onOpenChange,
+  campaignId,
+  campaignStatus,
+  frozenCount,
+  onApprove,
+  isApproving,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  campaignId: number | null;
+  campaignStatus: string | null;
+  frozenCount: number;
+  onApprove: () => void;
+  isApproving: boolean;
+}) {
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
+  const utils = trpc.useUtils();
+
+  const { data, isFetching } = trpc.smsCampaign.listRecipients.useQuery(
+    { campaignId: campaignId!, page, pageSize: PAGE_SIZE },
+    { enabled: open && campaignId !== null }
+  );
+
+  const removeRecipient = trpc.smsCampaign.removeRecipient.useMutation({
+    onSuccess: (result) => {
+      toast.success(`Recipient removed. ${result.remainingCount} remaining.`);
+      utils.smsCampaign.listRecipients.invalidate({ campaignId: campaignId! });
+      utils.smsCampaign.getCampaign.invalidate({ campaignId: campaignId! });
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 1;
+  const isFrozen = campaignStatus === "FROZEN";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            Review Frozen Audience
+            {frozenCount > 0 && (
+              <Badge variant="secondary" className="ml-1 font-black">{frozenCount} recipients</Badge>
+            )}
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Status banner */}
+        {!isFrozen && campaignStatus && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700 font-semibold">
+            <CheckCircle2 className="w-4 h-4" />
+            Campaign is {campaignStatus} — recipient list is locked.
+          </div>
+        )}
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
+          {isFetching && !data ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+          ) : data?.items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <Users className="w-10 h-10 mb-3" />
+              <p className="text-sm font-semibold">No recipients found</p>
+            </div>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0 bg-white">
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-3 text-xs font-black uppercase tracking-widest text-gray-400">#</th>
+                  <th className="text-left py-2 px-3 text-xs font-black uppercase tracking-widest text-gray-400">Name</th>
+                  <th className="text-left py-2 px-3 text-xs font-black uppercase tracking-widest text-gray-400">Phone</th>
+                  <th className="text-left py-2 px-3 text-xs font-black uppercase tracking-widest text-gray-400">Last Booking</th>
+                  <th className="text-left py-2 px-3 text-xs font-black uppercase tracking-widest text-gray-400">Ticket</th>
+                  {isFrozen && <th className="py-2 px-3" />}
+                </tr>
+              </thead>
+              <tbody>
+                {data?.items.map((r, idx) => (
+                  <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="py-2 px-3 text-gray-400 font-mono text-xs">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+                    <td className="py-2 px-3 font-semibold text-gray-900">{r.snapshotName ?? "—"}</td>
+                    <td className="py-2 px-3 text-gray-500 font-mono text-xs">{r.phone}</td>
+                    <td className="py-2 px-3 text-gray-500 text-xs">
+                      {r.snapshotLastService ?? "—"}
+                    </td>
+                    <td className="py-2 px-3 text-gray-500 text-xs">
+                      {r.snapshotLastPrice !== null ? `$${r.snapshotLastPrice}` : "—"}
+                    </td>
+                    {isFrozen && (
+                      <td className="py-2 px-3">
+                        <button
+                          onClick={() => removeRecipient.mutate({ campaignId: campaignId!, recipientId: r.id })}
+                          disabled={removeRecipient.isPending}
+                          className="p-1 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          title="Remove from campaign"
+                        >
+                          <UserX className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            <span className="text-xs text-gray-400">
+              Page {page} of {totalPages} · {data?.total ?? 0} total
+            </span>
+            <div className="flex gap-1.5">
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg h-7 px-2">
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded-lg h-7 px-2">
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="rounded-xl font-bold">Close</Button>
+          {isFrozen && (
+            <Button
+              onClick={onApprove}
+              disabled={isApproving || frozenCount === 0}
+              className="rounded-xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-6"
+            >
+              {isApproving ? (
+                <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Approving…</span>
+              ) : (
+                <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" />Approve {frozenCount} Recipients</span>
+              )}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StepFinalApproval — Stage 4: real Save Draft + Freeze + Approve flow
+// ─────────────────────────────────────────────────────────────────────────────
+
 function StepFinalApproval({
   recipientCount,
   testSent,
   message,
   stopOptOut,
+  campaignName,
+  audienceDefinition,
+  campaignId,
+  setCampaignId,
+  campaignStatus,
+  setCampaignStatus,
+  frozenCount,
+  setFrozenCount,
 }: {
   recipientCount: number;
   testSent: boolean;
   message: string;
   stopOptOut: number;
+  campaignName: string;
+  audienceDefinition: object;
+  campaignId: number | null;
+  setCampaignId: (id: number) => void;
+  campaignStatus: string | null;
+  setCampaignStatus: (s: string) => void;
+  frozenCount: number;
+  setFrozenCount: (n: number) => void;
 }) {
   const [confirmText, setConfirmText] = useState("");
-  const expectedConfirm = `SEND ${recipientCount}`;
-  const isReady = testSent && confirmText.trim() === expectedConfirm && recipientCount > 0;
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const isFrozen = campaignStatus === "FROZEN";
+  const isApproved = campaignStatus === "APPROVED";
+  const expectedConfirm = `SEND ${frozenCount || recipientCount}`;
+  const isReady = isApproved && confirmText.trim() === expectedConfirm && (frozenCount || recipientCount) > 0;
+
+  const saveDraft = trpc.smsCampaign.saveDraft.useMutation({
+    onSuccess: (data) => {
+      setCampaignId(data.campaignId);
+      toast.success("Draft saved");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const freezeAudience = trpc.smsCampaign.freezeAudience.useMutation({
+    onSuccess: (result) => {
+      setCampaignStatus("FROZEN");
+      setFrozenCount(result.frozenCount);
+      toast.success(`Audience frozen — ${result.frozenCount} recipients locked in`);
+      setReviewOpen(true);
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const approveCampaign = trpc.smsCampaign.approveCampaign.useMutation({
+    onSuccess: () => {
+      setCampaignStatus("APPROVED");
+      setReviewOpen(false);
+      toast.success("Campaign approved — ready to send");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const handleSaveDraft = () => {
+    saveDraft.mutate({
+      ...(campaignId ? { campaignId } : {}),
+      name: campaignName || "Untitled Campaign",
+      audienceDefinition: audienceDefinition as Parameters<typeof saveDraft.mutate>[0]["audienceDefinition"],
+      messageTemplate: message,
+    });
+  };
+
+  const handleFreeze = async () => {
+    // Save draft first if no campaignId yet
+    if (!campaignId) {
+      toast.error("Save the draft first before freezing");
+      return;
+    }
+    if (recipientCount === 0) {
+      toast.error("Audience is empty — add rules or select a preset");
+      return;
+    }
+    freezeAudience.mutate({ campaignId });
+  };
+
+  const statusBadge = () => {
+    if (isApproved) return <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle2 className="w-3 h-3" />Approved</span>;
+    if (isFrozen)   return <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-200"><Lock className="w-3 h-3" />Frozen</span>;
+    if (campaignId) return <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-50 text-amber-700 border border-amber-200"><Clock className="w-3 h-3" />Draft saved</span>;
+    return <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-gray-100 text-gray-500 border border-gray-200"><Unlock className="w-3 h-3" />Not saved</span>;
+  };
+
   const checks = [
     { label: "Audience built",        status: recipientCount > 0 ? "passed" : "pending" },
     { label: "Test SMS sent",         status: testSent ? "passed" : "pending" },
     { label: "Quiet hours protected",  status: "passed", note: "9am–8pm local" },
     { label: "Opt-outs excluded",     status: "passed", note: `${stopOptOut} excluded` },
+    { label: "Audience frozen",       status: isFrozen || isApproved ? "passed" : "pending", note: isFrozen || isApproved ? `${frozenCount} locked` : "Freeze required" },
+    { label: "Admin approved",        status: isApproved ? "passed" : "pending" },
     { label: "Type confirmation",     status: confirmText === expectedConfirm ? "passed" : "required", note: `Type: ${expectedConfirm}` },
   ];
+
   return (
-    <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
-      <h2 className="font-bold text-gray-900 text-base mb-4 flex items-center gap-2">
-        <Send className="w-4 h-4 text-gray-600" />
-        Final Approval
-      </h2>
-      <table className="w-full border-collapse mb-4">
-        <thead>
-          <tr>
-            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Check</th>
-            <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {checks.map((c) => (
-            <tr key={c.label} className="border-b border-gray-50">
-              <td className="py-3 text-sm text-gray-700">{c.label}</td>
-              <td className="py-3">
-                {c.status === "passed" ? <span className="flex items-center gap-1 text-emerald-600 text-sm font-semibold"><CheckCircle2 className="w-3.5 h-3.5" />Passed</span>
-                  : c.status === "pending" ? <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold"><Clock className="w-3.5 h-3.5" />Pending</span>
-                  : <span className="text-sm font-semibold text-gray-500">Required: <strong className="text-gray-900">{c.note}</strong></span>}
-              </td>
+    <>
+      <div className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm mt-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-gray-900 text-base flex items-center gap-2">
+            <Send className="w-4 h-4 text-gray-600" />
+            Final Approval
+          </h2>
+          {statusBadge()}
+        </div>
+
+        <table className="w-full border-collapse mb-4">
+          <thead>
+            <tr>
+              <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Check</th>
+              <th className="text-left text-xs font-black uppercase tracking-widest text-gray-400 pb-2 border-b border-gray-100">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mb-5">
-        <div className="text-xs font-bold text-gray-500 mb-1.5">Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending</div>
-        <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={`Type "${expectedConfirm}" here`} className={["rounded-xl font-mono", confirmText === expectedConfirm ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300"].join(" ")} />
+          </thead>
+          <tbody>
+            {checks.map((c) => (
+              <tr key={c.label} className="border-b border-gray-50">
+                <td className="py-2.5 text-sm text-gray-700">{c.label}</td>
+                <td className="py-2.5">
+                  {c.status === "passed" ? <span className="flex items-center gap-1 text-emerald-600 text-sm font-semibold"><CheckCircle2 className="w-3.5 h-3.5" />Passed</span>
+                    : c.status === "pending" ? <span className="flex items-center gap-1 text-amber-500 text-sm font-semibold"><Clock className="w-3.5 h-3.5" />Pending</span>
+                    : <span className="text-sm font-semibold text-gray-500">Required: <strong className="text-gray-900">{c.note}</strong></span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Freeze info */}
+        {!isFrozen && !isApproved && campaignId && (
+          <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">
+            <strong>Next:</strong> Click "Freeze Audience" to lock the recipient list. You can review and remove individuals before approving.
+          </div>
+        )}
+
+        {/* Confirm input — only shown after approval */}
+        {isApproved && (
+          <div className="mb-5">
+            <div className="text-xs font-bold text-gray-500 mb-1.5">Type <span className="font-black text-gray-900">{expectedConfirm}</span> to unlock sending</div>
+            <Input
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.target.value)}
+              placeholder={`Type "${expectedConfirm}" here`}
+              className={["rounded-xl font-mono", confirmText === expectedConfirm ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-gray-300"].join(" ")}
+            />
+          </div>
+        )}
+
+        <div className="flex flex-wrap justify-between items-center gap-2">
+          {/* Save Draft */}
+          <Button
+            variant="outline"
+            onClick={handleSaveDraft}
+            disabled={saveDraft.isPending}
+            className="rounded-xl font-bold"
+          >
+            {saveDraft.isPending ? <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Saving…</span> : "Save Draft"}
+          </Button>
+
+          <div className="flex gap-2">
+            {/* Freeze / Review button */}
+            {!isApproved && (
+              <Button
+                variant="outline"
+                onClick={isFrozen ? () => setReviewOpen(true) : handleFreeze}
+                disabled={freezeAudience.isPending || (!campaignId && !isFrozen)}
+                className={["rounded-xl font-bold", isFrozen ? "border-blue-300 text-blue-700 hover:bg-blue-50" : "border-gray-300"].join(" ")}
+              >
+                {freezeAudience.isPending ? (
+                  <span className="flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Freezing…</span>
+                ) : isFrozen ? (
+                  <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />Review {frozenCount} Recipients</span>
+                ) : (
+                  <span className="flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />Freeze Audience</span>
+                )}
+              </Button>
+            )}
+
+            {/* Send button — only unlocked when APPROVED + typed confirmation */}
+            <Button
+              onClick={() => {
+                if (!isReady) { toast.error("Complete all checks first"); return; }
+                toast.success("Campaign send queued! (coming in Stage 5)");
+              }}
+              disabled={!isReady}
+              className={["rounded-xl font-bold px-6", isReady ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"].join(" ")}
+            >
+              <Zap className="w-4 h-4 mr-1.5" />
+              {isApproved ? "Send Campaign" : "Send locked"}
+            </Button>
+          </div>
+        </div>
       </div>
-      <div className="flex justify-between items-center gap-3">
-        <Button variant="outline" className="rounded-xl font-bold border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => toast.info("Draft saved (UI-only)")}>Save Draft</Button>
-        <Button onClick={() => { if (!isReady) { toast.error("Complete all checks first"); return; } toast.success("Campaign scheduled! (UI-only)"); }} disabled={!isReady} className={["rounded-xl font-bold px-6", isReady ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-gray-100 text-gray-400 cursor-not-allowed"].join(" ")}>
-          <Zap className="w-4 h-4 mr-1.5" />Schedule Campaign
-        </Button>
-      </div>
-    </div>
+
+      <ReviewAudienceModal
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        campaignId={campaignId}
+        campaignStatus={campaignStatus}
+        frozenCount={frozenCount}
+        onApprove={() => approveCampaign.mutate({ campaignId: campaignId! })}
+        isApproving={approveCampaign.isPending}
+      />
+    </>
   );
 }
 
@@ -1149,11 +1472,16 @@ const DEFAULT_MESSAGE = "Hi {{first_name}}, this is Madison from Maid in Black �
 function SmsCampaignsContent() {
   const [step, setStep] = useState<Step>(1);
   const [message, setMessage] = useState(DEFAULT_MESSAGE);
+  const [campaignName, setCampaignName] = useState("");
   const [testSent, setTestSent] = useState(false);
   const [rules, setRules] = useState<ActiveRule[]>([]);
   const [selectedPresets, setSelectedPresets] = useState<Set<AudiencePresetId>>(new Set());
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const [secondsAgo, setSecondsAgo] = useState<number | null>(null);
+  // Stage 4: campaign lifecycle state
+  const [campaignId, setCampaignId] = useState<number | null>(null);
+  const [campaignStatus, setCampaignStatus] = useState<string | null>(null);
+  const [frozenCount, setFrozenCount] = useState(0);
 
   // Build the AudienceDefinition for the planner query
   // We use a stable supported set — starts empty, gets populated from first planner response
@@ -1223,12 +1551,32 @@ function SmsCampaignsContent() {
   return (
     <>
       <div className="flex items-start justify-between mb-1 gap-4">
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-black text-gray-900" style={{ letterSpacing: "-0.03em" }}>SMS Campaign Command Center</h1>
           <p className="text-sm text-gray-500 mt-0.5">Build the safest possible audience before anyone can send anything.</p>
+          {/* Campaign name input */}
+          <div className="mt-2 flex items-center gap-2">
+            <Input
+              value={campaignName}
+              onChange={(e) => setCampaignName(e.target.value)}
+              placeholder="Campaign name (e.g. July Win-Back)"
+              className="rounded-xl border-gray-200 text-sm font-semibold max-w-xs h-8"
+            />
+            {campaignId && (
+              <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>
+            )}
+          </div>
         </div>
-        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200 flex-shrink-0 mt-1">
-          <ShieldCheck className="w-3.5 h-3.5" />Draft · Send locked
+        <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-black flex-shrink-0 mt-1
+          {campaignStatus === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+           campaignStatus === 'FROZEN'   ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+           campaignId                    ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                                           'bg-gray-100 text-gray-500 border border-gray-200'}">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          {campaignStatus === 'APPROVED' ? 'Approved · Ready to send' :
+           campaignStatus === 'FROZEN'   ? 'Frozen · Pending review' :
+           campaignId                    ? 'Draft saved' :
+                                           'Draft · Send locked'}
         </span>
       </div>
 
@@ -1264,6 +1612,14 @@ function SmsCampaignsContent() {
             testSent={testSent}
             message={message}
             stopOptOut={plannerResult?.exclusionBreakdown?.stopOptOut ?? 0}
+            campaignName={campaignName}
+            audienceDefinition={audienceDefinition}
+            campaignId={campaignId}
+            setCampaignId={setCampaignId}
+            campaignStatus={campaignStatus}
+            setCampaignStatus={setCampaignStatus}
+            frozenCount={frozenCount}
+            setFrozenCount={setFrozenCount}
           />
         </div>
       </div>

@@ -252,7 +252,7 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
 
 // ─── Canonical JSON hash ──────────────────────────────────────────────────────
 
-function canonicalHash(def: AudienceDefinition): string {
+export function canonicalHash(def: AudienceDefinition): string {
   // Sort keys recursively to ensure stable JSON regardless of object key insertion order
   const canonical = JSON.stringify(def, (_, val) => {
     if (val && typeof val === "object" && !Array.isArray(val)) {
@@ -799,3 +799,106 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
     supportedRuleFields: SUPPORTED_RULE_FIELDS,
   };
 }
+
+// ─── Freeze-time full candidate query ────────────────────────────────────────
+
+/**
+ * Returns the FULL matched candidate set for freeze-time use.
+ *
+ * Unlike planAudience() which returns only samples and aggregates,
+ * this function returns every customer who matches the audience definition
+ * as SafetyCandidate rows — no LIMIT, no RAND().
+ *
+ * Called exclusively by AudienceFreezer. Never called by the UI.
+ * The SafetyFilter then applies the final safety pass on top of this result.
+ */
+export async function planAudienceForFreeze(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: MySql2Database<any>,
+  def: AudienceDefinition
+): Promise<import("./SafetyFilter").SafetyCandidate[]> {
+  const allIncludeRules = [...expandPresets(def), ...def.includeRules];
+  const includeWhere = buildIncludeWhere(allIncludeRules);
+
+  const candidateQuery = `
+    WITH customer_view AS (
+      SELECT
+        cj.id AS completedJobId,
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END AS phoneNormalized,
+        cj.phone,
+        cj.firstName,
+        cj.name,
+        cj.address,
+        cj.serviceType,
+        cj.frequency,
+        cj.lastBookingPrice,
+        cj.jobDate AS lastJobDate,
+        cj.phoneInvalid,
+        cj.status AS jobStatus,
+        COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
+        SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
+        AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
+        ROW_NUMBER() OVER (
+          PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')
+          ORDER BY cj.jobDate DESC
+        ) AS rn,
+        MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating,
+        MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
+          OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
+        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
+        MAX(CASE
+          WHEN aoe.status = 'OPTED_OUT' THEN 1
+          WHEN cs.smsOptOut = 1 THEN 1
+          WHEN cj.status = 'OPTED_OUT' THEN 1
+          ELSE 0
+        END) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut
+      FROM completed_jobs cj
+      LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
+      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+    )
+    SELECT
+      completedJobId,
+      phoneNormalized,
+      phone,
+      firstName,
+      name,
+      address,
+      serviceType,
+      frequency,
+      lastBookingPrice,
+      lastJobDate,
+      isOptedOut,
+      hasComplaint,
+      lastSmsDaysAgo
+    FROM customer_view
+    WHERE rn = 1
+      AND phoneInvalid = 0
+      AND ${includeWhere.sql}
+    ORDER BY lastJobDate DESC
+  `;
+
+  const [rows] = await db.execute(sql.raw(candidateQuery));
+
+  return (rows as Record<string, unknown>[]).map((row) => ({
+    completedJobId: Number(row.completedJobId ?? 0),
+    phone: String(row.phone ?? ""),
+    phoneNormalized: String(row.phoneNormalized ?? ""),
+    firstName: String(row.firstName ?? ""),
+    name: String(row.name ?? ""),
+    address: String(row.address ?? ""),
+    serviceType: String(row.serviceType ?? "Unknown"),
+    lastBookingPrice: Number(row.lastBookingPrice ?? 0),
+    lastJobDate: String(row.lastJobDate ?? ""),
+    frequency: String(row.frequency ?? "Unknown"),
+  }));
+}
+
+
