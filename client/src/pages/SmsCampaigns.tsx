@@ -1467,10 +1467,15 @@ function SmsCampaignsContent() {
 
   const saveDraftMutation = trpc.smsCampaign.saveDraft.useMutation({
     onSuccess: (data) => {
+      console.log("SAVE SUCCESS", data);
+      console.log("campaignId should become", data.campaignId);
       setCampaignId(data.campaignId);
       toast.success("Draft saved");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => {
+      console.error("SAVE ERROR", err);
+      toast.error(err.message);
+    },
   });
 
   const freezeAudienceMutation = trpc.smsCampaign.freezeAudience.useMutation({
@@ -1493,6 +1498,7 @@ function SmsCampaignsContent() {
   });
 
   const handleSaveDraft = () => {
+    console.log("save clicked", { campaignName, campaignId });
     saveDraftMutation.mutate({
       ...(campaignId ? { campaignId } : {}),
       name: campaignName || "Untitled Campaign",
@@ -1507,6 +1513,9 @@ function SmsCampaignsContent() {
     if (count === 0) { toast.error("Audience is empty — add rules or select a preset"); return; }
     freezeAudienceMutation.mutate({ campaignId });
   };
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { console.log("campaignId state", campaignId); }, [campaignId]);
 
   const hasAudience = selectedPresets.size > 0 || rules.length > 0;
 
@@ -1577,6 +1586,11 @@ function SmsCampaignsContent() {
            campaignId                    ? 'Draft saved' :
                                            'Draft · Send locked'}
         </span>
+      </div>
+
+      {/* DEBUG OVERLAY — remove after confirming save flow */}
+      <div style={{ position: "fixed", top: 0, right: 0, zIndex: 999999, background: "red", color: "white", padding: "4px 8px", fontSize: 12, fontFamily: "monospace" }}>
+        campaignId:{String(campaignId)} status:{String(campaignStatus)}
       </div>
 
       {/* Campaign name + action bar — always visible */}
