@@ -119,10 +119,12 @@ export const smsCampaignRouter = router({
         const result = await planAudience(db, input as unknown as AudienceDefinition);
         return result;
       } catch (err) {
-        console.error("[smsCampaignRouter] planAudience error:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[smsCampaignRouter] planAudience error:", msg, err);
+        // Surface the real error message so the UI can display it for debugging
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Audience planning failed. Please try again.",
+          message: `Audience planning failed: ${msg}`,
         });
       }
     }),
