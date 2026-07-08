@@ -46,30 +46,43 @@ interface ProviderResult {
 // ─── Provider stub ────────────────────────────────────────────────────────────
 
 /**
- * STUB: simulates a successful OpenPhone send without making any API call.
+ * Sends one SMS via OpenPhone.
  *
- * Replace this function body with the real OpenPhone call when moving to
- * production. The function signature must remain identical.
+ * In PREVIEW_MODE (Railway preview environment) the real API call is skipped
+ * and a stub result is returned — so preview deployments never fire real SMS.
+ * In production (PREVIEW_MODE unset / false) the real OpenPhone API is called.
  *
- * Production replacement:
- *   const start = Date.now();
- *   const res = await openPhoneClient.messages.create({
- *     from: OPENPHONE_FROM_NUMBER,
- *     to: phone,
- *     content: message,
- *   });
- *   return { success: true, openPhoneMessageId: res.id, durationMs: Date.now() - start };
+ * The PREVIEW_MODE guard lives here, NOT in openphone.ts — see the warning
+ * comment in that file explaining why.
  */
 async function sendOneMessage(
-  _phone: string,
-  _message: string,
+  phone: string,
+  message: string,
 ): Promise<ProviderResult> {
-  // Simulate a ~50ms network call so timing data is realistic
-  await new Promise((r) => setTimeout(r, 50));
+  const { ENV } = await import("../_core/env");
+
+  // ── Preview stub ────────────────────────────────────────────────────────
+  if (ENV.isPreviewMode) {
+    await new Promise((r) => setTimeout(r, 50));
+    console.log(`[CampaignSender] PREVIEW_MODE — skipping real send to ${phone}`);
+    return {
+      success: true,
+      openPhoneMessageId: `PREVIEW_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      durationMs: 50,
+    };
+  }
+
+  // ── Real OpenPhone send ─────────────────────────────────────────────────
+  const { sendSms } = await import("../openphone");
+  const start = Date.now();
+
+  const result = await sendSms({ to: phone, content: message });
+
   return {
-    success: true,
-    openPhoneMessageId: `TEST_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    durationMs: 50,
+    success: result.success,
+    openPhoneMessageId: result.messageId,
+    errorMessage: result.error,
+    durationMs: Date.now() - start,
   };
 }
 
@@ -152,8 +165,7 @@ async function processRecipient(
     campaignId,
     recipientId: recipient.id,
     phoneNormalized: recipient.phoneNormalized,
-    // TEST_SENT while stub is active; swap to "SENT" when provider is real
-    action: "TEST_SENT",
+    action: outcome === "SENT" ? "SENT" : "FAILED",
     batchNumber: 1,
     attempt: 1,
     durationMs: providerResult.durationMs,
