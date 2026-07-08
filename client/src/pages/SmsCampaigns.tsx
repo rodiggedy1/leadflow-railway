@@ -1638,32 +1638,38 @@ function SmsCampaignsContent() {
       </div>
 
       {/* Campaign name + action bar — always visible */}
-      <div className="flex items-center gap-2 mt-2 mb-1 flex-wrap">
+      <div className="flex items-center gap-3 mt-3 mb-1 flex-wrap">
         {nameLocked ? (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-xl h-9">
-            <span className="text-sm font-semibold text-gray-800 truncate max-w-[180px]">{campaignName}</span>
-            {campaignId && <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>}
+          <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-indigo-200 rounded-2xl shadow-sm min-w-[200px]">
+            <Megaphone className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 leading-none mb-0.5">Campaign</span>
+              <span className="text-sm font-black text-gray-900 truncate max-w-[180px] leading-tight">{campaignName}</span>
+            </div>
+            {campaignId && <span className="text-xs text-gray-400 font-mono ml-1 flex-shrink-0">#{campaignId}</span>}
             <button
               onClick={() => setNameLocked(false)}
-              className="ml-1 text-gray-400 hover:text-gray-700 transition-colors"
+              className="ml-1 p-1 rounded-lg text-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex-shrink-0"
               title="Edit campaign name"
             >
               <Pencil className="w-3 h-3" />
             </button>
           </div>
         ) : (
-          <>
-            <Input
-              value={campaignName}
-              onChange={(e) => setCampaignName(e.target.value)}
-              placeholder="Campaign name (e.g. July Win-Back)"
-              className="rounded-xl border-gray-200 text-sm font-semibold w-56 h-9"
-              onBlur={() => { if (nameLocked) setNameLocked(true); }}
-            />
-            {campaignId && (
-              <span className="text-xs text-gray-400 font-mono">#{campaignId}</span>
-            )}
-          </>
+          <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-indigo-300 rounded-2xl shadow-sm ring-2 ring-indigo-100 min-w-[240px]">
+            <Megaphone className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 leading-none mb-0.5">Campaign Name</span>
+              <input
+                value={campaignName}
+                onChange={(e) => setCampaignName(e.target.value)}
+                placeholder="e.g. July Win-Back"
+                className="text-sm font-black text-gray-900 bg-transparent border-none outline-none placeholder:text-gray-300 w-full leading-tight"
+                autoFocus
+              />
+            </div>
+            {campaignId && <span className="text-xs text-gray-400 font-mono flex-shrink-0">#{campaignId}</span>}
+          </div>
         )}
         <div className="flex items-center gap-2 ml-auto">
           {/* Save Draft */}
