@@ -1640,23 +1640,24 @@ function SmsCampaignsContent() {
       {/* Campaign name + action bar — always visible */}
       <div className="flex items-center gap-3 mt-3 mb-1 flex-wrap">
         {nameLocked ? (
-          <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-indigo-200 rounded-2xl shadow-sm min-w-[200px]">
-            <Megaphone className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-            <div className="flex flex-col min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 leading-none mb-0.5">Campaign</span>
-              <span className="text-sm font-black text-gray-900 truncate max-w-[180px] leading-tight">{campaignName}</span>
+          /* Locked: looks like a saved chip — no input affordance */
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-600 rounded-xl">
+              <Megaphone className="w-3.5 h-3.5 text-indigo-200 flex-shrink-0" />
+              <span className="text-sm font-black text-white truncate max-w-[200px]">{campaignName}</span>
+              {campaignId && <span className="text-xs text-indigo-300 font-mono">#{campaignId}</span>}
             </div>
-            {campaignId && <span className="text-xs text-gray-400 font-mono ml-1 flex-shrink-0">#{campaignId}</span>}
             <button
               onClick={() => setNameLocked(false)}
-              className="ml-1 p-1 rounded-lg text-indigo-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors flex-shrink-0"
-              title="Edit campaign name"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              title="Rename campaign"
             >
-              <Pencil className="w-3 h-3" />
+              <Pencil className="w-3.5 h-3.5" />
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-indigo-300 rounded-2xl shadow-sm ring-2 ring-indigo-100 min-w-[240px]">
+          /* Editing: clear input card with focus ring */
+          <div className="flex items-center gap-2 px-3 py-2 bg-white border-2 border-indigo-400 rounded-xl shadow-sm ring-2 ring-indigo-100 min-w-[240px]">
             <Megaphone className="w-4 h-4 text-indigo-400 flex-shrink-0" />
             <div className="flex flex-col flex-1 min-w-0">
               <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-400 leading-none mb-0.5">Campaign Name</span>
@@ -1668,7 +1669,6 @@ function SmsCampaignsContent() {
                 autoFocus
               />
             </div>
-            {campaignId && <span className="text-xs text-gray-400 font-mono flex-shrink-0">#{campaignId}</span>}
           </div>
         )}
         <div className="flex items-center gap-2 ml-auto">
