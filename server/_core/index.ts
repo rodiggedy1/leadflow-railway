@@ -308,6 +308,10 @@ async function startServer() {
   // Run startup migrations before anything else touches the DB
   await runStartupMigrations();
 
+  // Verify SMS campaign schema is up to date — exits with a clear error if not
+  const { checkSmsCampaignSchema } = await import("../sms/schemaCheck");
+  await checkSmsCampaignSchema();
+
   const app = express();
   const server = createServer(app);
 
