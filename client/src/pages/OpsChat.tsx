@@ -1293,6 +1293,16 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // -- Notification sound + OS notification --
   const { playSound: playNotification, muted: notifMuted, toggleMute } = useNotificationSound();
+  // Distinct ascending-arpeggio sound for new lead arrivals
+  const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";
+  const playLeadSound = () => {
+    if (notifMuted) return;
+    try {
+      const audio = new Audio(LEAD_ALERT_URL);
+      audio.volume = 0.75;
+      audio.play().catch(() => {});
+    } catch {}
+  };
   const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
   // Only the leader tab fires notifications — prevents duplicates when multiple tabs are open.
   const { isLeader: isNotifLeader } = useTabLeader();
@@ -1877,12 +1887,18 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         (m) => m.id > prevMax && !myNames.has(m.from)
       );
       if (newInbound.length > 0 && isNotifLeader) {
-        playNotification();
+        // New leads get a distinct sound; regular messages get the standard chime
+        const hasNewLead = newInbound.some((m) => m.quickAction === "new_lead");
+        if (hasNewLead) {
+          playLeadSound();
+        } else {
+          playNotification();
+        }
         const newest = newInbound[newInbound.length - 1];
         osNotify({
-          title: `#${activeChannel} — ${newest.from}`,
+          title: hasNewLead ? `🔔 New Lead — ${newest.from}` : `#${activeChannel} — ${newest.from}`,
           body: newest.body?.slice(0, 100) ?? "New message",
-          tag: `leadflow-channel-${activeChannel}`,
+          tag: hasNewLead ? `leadflow-new-lead` : `leadflow-channel-${activeChannel}`,
         });
       }
       map.set(activeChannel, currMax);
