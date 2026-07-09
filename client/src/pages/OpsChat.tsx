@@ -1301,6 +1301,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const prevJobMsgCountRef = useRef(-1);
   const prevChannelMsgCountRef = useRef(-1);
   const prevChannelRef = useRef("");
+  // Message-ID-based channel sound deduplication.
+  // Initialized to the max ID on first load so we never fire sounds for
+  // historical messages. Only IDs strictly greater than this trigger a sound.
+  // Map<channel, maxSeenId>
+  const lastSeenChannelMsgIdRef = useRef<Map<string, number>>(new Map());
   // Refs used to suppress the SSE echo after a local send.
   // Temporary workaround: SSE events don't carry a messageId, so we track
   // the timestamp + channel of the last self-send and skip the immediate
@@ -1413,7 +1418,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         // Temporary workaround — see selfSentAtRef comment for details.
         const isSelfEcho =
           channel === selfSentChannelRef.current &&
-          Date.now() - selfSentAtRef.current < 2_000;
+          Date.now() - selfSentAtRef.current < 500;
         if (!isSelfEcho) {
           utils.opsChat.listChannelMessages.invalidate({ channel });
         }
@@ -1618,6 +1623,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       // NOTE: intentionally NOT calling listChannelMessages.invalidate here.
       // The optimistic message is already in cache; SSE will invalidate for
       // messages from other senders. This avoids an unnecessary full reload.
+      // Fallback: if SSE lags or drops, force a refresh after 600ms so the
+      // cache never stays stale indefinitely.
+      if (variables.channel) {
+        const ch = variables.channel;
+        setTimeout(() => {
+          utils.opsChat.listChannelMessages.invalidate({ channel: ch });
+        }, 600);
+      }
       // Super-alert: server tells us exactly who was targeted.
       // Update badge cache instantly and show a confirmation toast to the sender.
       if (data.messageId && data.superAlertTargets && data.superAlertTargets.length > 0) {
@@ -1841,31 +1854,41 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobThreadLength, selectedJobId]);
 
-  // Play notification sound when new command/channel messages arrive from others.
-  const channelMsgLength = channelMsgs.length;
+  // Play notification sound when new channel messages arrive from others.
+  // Uses message IDs (not count) for deduplication — one sound per real inbound
+  // message, never duplicates even with optimistic updates or cache invalidations.
   useEffect(() => {
-    const curr = channelMsgLength;
-    const prev = prevChannelMsgCountRef.current;
-    // Reset counter when user switches channels (or on first load)
-    if (prevChannelRef.current !== activeChannel || prev === -1) {
-      prevChannelRef.current = activeChannel;
-      prevChannelMsgCountRef.current = curr;
+    if (!channelMsgs.length) return;
+    const map = lastSeenChannelMsgIdRef.current;
+    const prevMax = map.get(activeChannel);
+    // Compute the max real ID in the current message list.
+    // Negative IDs are optimistic (temp) messages — ignore them.
+    const realMsgs = channelMsgs.filter((m) => m.id > 0);
+    if (!realMsgs.length) return;
+    const currMax = Math.max(...realMsgs.map((m) => m.id));
+    if (prevMax === undefined) {
+      // First load for this channel — initialize silently, no sound.
+      map.set(activeChannel, currMax);
       return;
     }
-    if (curr > prev) {
-      const newest = channelMsgs[channelMsgs.length - 1];
-      if (newest && !myNames.has(newest.from) && isNotifLeader) {
+    if (currMax > prevMax) {
+      // Find all new messages (ID > prevMax) not sent by the current user.
+      const newInbound = realMsgs.filter(
+        (m) => m.id > prevMax && !myNames.has(m.from)
+      );
+      if (newInbound.length > 0 && isNotifLeader) {
         playNotification();
+        const newest = newInbound[newInbound.length - 1];
         osNotify({
           title: `#${activeChannel} — ${newest.from}`,
           body: newest.body?.slice(0, 100) ?? "New message",
           tag: `leadflow-channel-${activeChannel}`,
         });
       }
+      map.set(activeChannel, currMax);
     }
-    prevChannelMsgCountRef.current = curr;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channelMsgLength, activeChannel]);
+  }, [channelMsgs, activeChannel]);
   // Listen for PLAY_SOUND messages from the Service Worker.
   // The SW broadcasts PLAY_SOUND to all tabs when it shows an OS notification.
   // We only play the sound in the leader tab to prevent multi-tab duplication.
