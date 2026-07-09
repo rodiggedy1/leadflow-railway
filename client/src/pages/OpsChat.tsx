@@ -1403,6 +1403,34 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     { enabled: isAuthenticated, refetchInterval: 60_000 }
   );
 
+  // Always-on command channel query — used exclusively for new lead sound detection.
+  // Runs regardless of activeChannel so lead alerts fire even when viewing another channel.
+  const { data: commandMsgsForSound = [] } = trpc.opsChat.listChannelMessages.useQuery(
+    { channel: "command" },
+    { enabled: isAuthenticated, refetchInterval: 15_000 }
+  );
+  // Dedicated lead sound watcher — fires on command channel messages regardless of activeChannel.
+  const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const realMsgs = commandMsgsForSound.filter((m) => m.id > 0);
+    if (!realMsgs.length) return;
+    const currMax = Math.max(...realMsgs.map((m) => m.id));
+    if (lastSeenCommandMsgIdRef.current === undefined) {
+      // First load — initialize silently.
+      lastSeenCommandMsgIdRef.current = currMax;
+      return;
+    }
+    if (currMax > lastSeenCommandMsgIdRef.current) {
+      const newLeads = realMsgs.filter(
+        (m) => m.id > lastSeenCommandMsgIdRef.current! && m.quickAction === "new_lead"
+      );
+      if (newLeads.length > 0 && isNotifLeader && !notifMuted) {
+        playLeadSound();
+      }
+      lastSeenCommandMsgIdRef.current = currMax;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commandMsgsForSound]);
   const { data: channelCounts } = trpc.opsChat.getChannelCounts.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchInterval: 60_000,
