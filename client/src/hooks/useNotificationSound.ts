@@ -18,8 +18,7 @@
  */
 import { useCallback, useState } from "react";
 
-const CHIME_URL =
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/notification_94d8b39a.mp3";
+const CHIME_URL = "/sound_chime_snap.wav";
 
 const MUTE_KEY = "ops_notification_muted";
 

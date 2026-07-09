@@ -73,9 +73,19 @@ export default function SuperAlertWatcher() {
     { enabled: isEligible }
   );
 
-  // Sound: play chime when a new super alert appears
-  const { playSound } = useNotificationSound();
+  // Sound: play the super alert alarm when a new super alert appears
+  const { muted } = useNotificationSound();
   const prevAlertId = useRef<number | null>(null);
+  const playSuperAlertSound = () => {
+    if (muted) return;
+    try {
+      const audio = new Audio("/sound_super_alert.wav");
+      audio.volume = 0.85;
+      audio.play().catch((e) => console.warn("[SuperAlert Sound] play() blocked:", e));
+    } catch (e) {
+      console.warn("[SuperAlert Sound] error:", e);
+    }
+  };
   useEffect(() => {
     if (!activeSuperAlert) {
       prevAlertId.current = null;
@@ -83,9 +93,10 @@ export default function SuperAlertWatcher() {
     }
     if (activeSuperAlert.id !== prevAlertId.current) {
       prevAlertId.current = activeSuperAlert.id;
-      playSound();
+      playSuperAlertSound();
     }
-  }, [activeSuperAlert?.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSuperAlert?.id, muted]);
 
   // Acknowledge mutation
   const acknowledgeMutation = trpc.opsChat.acknowledgeSuperAlert.useMutation({
