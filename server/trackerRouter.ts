@@ -172,48 +172,7 @@ export const trackerRouter = router({
         }
       }
 
-      // ── Post-review follow-up SMS (4-5 stars) ──────────────────────────────
-      if (input.rating >= 4 && job.customerPhone) {
-        try {
-          const isRecurring = isRecurringServiceType(job.serviceType);
-          let followUpMsg: string;
-
-          if (isRecurring) {
-            // Recurring customer — warm thank-you, see you soon
-            followUpMsg =
-              `Hey ${firstName} 🌟 — really appreciate the review. 🙏\n\n` +
-              `We'll see you at the next one!`;
-          } else {
-            // One-time customer — rebooking pitch
-            followUpMsg =
-              `Hey ${firstName} 🌟 — really appreciate the review. 🙏\n\n` +
-              `Most of our clients lock in a regular spot so they never have to think about cleaning again.\n\n` +
-              `Want me to grab you a spot in ~2 weeks?`;
-          }
-
-          await sendSms({ to: job.customerPhone, content: followUpMsg });
-
-          // Create a conversation session so inbound replies are routed correctly
-          // Use REVIEW_REBOOKING_REQUESTED for one-time (rebooking pitch) or REVIEW_DONE for recurring (thanks)
-          const sessionStage = isRecurring ? "REVIEW_DONE" : "REVIEW_REBOOKING_REQUESTED";
-          try {
-            await db.insert(conversationSessions).values({
-              leadPhone: job.customerPhone,
-              leadName: job.customerName ?? undefined,
-              stage: sessionStage as typeof conversationSessions.$inferInsert["stage"],
-              serviceType: job.serviceType ?? undefined,
-              leadSource: "review_rebooking",
-              messageHistory: JSON.stringify([
-                { role: "assistant", content: followUpMsg },
-              ]),
-            });
-          } catch (sessionErr) {
-            console.error("[Tracker] Failed to create review rebooking session:", sessionErr);
-          }
-        } catch (err) {
-          console.error("[Tracker] Failed to send post-review follow-up SMS:", err);
-        }
-      }
+      // Post-review follow-up SMS removed per user request — no auto-reply after 4-5 star reviews
 
       // ── SMS to assigned cleaner ─────────────────────────────────────────────
       try {

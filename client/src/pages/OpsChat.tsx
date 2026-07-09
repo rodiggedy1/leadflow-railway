@@ -1420,28 +1420,19 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     const realMsgs = commandMsgsForSound.filter((m) => m.id > 0);
-    console.log(`[LeadAlert] Cache Updated commandMsgsForSound length=${commandMsgsForSound.length} realMsgs=${realMsgs.length}`);
     if (!realMsgs.length) return;
     const currMax = Math.max(...realMsgs.map((m) => m.id));
     if (lastSeenCommandMsgIdRef.current === undefined) {
       // First load — initialize silently.
       lastSeenCommandMsgIdRef.current = currMax;
-      console.log(`[LeadAlert] Detection INIT lastSeenId=${currMax}`);
       return;
     }
-    console.log(`[LeadAlert] Detection lastSeenId=${lastSeenCommandMsgIdRef.current} highestId=${currMax} leader=${isNotifLeader} muted=${notifMuted}`);
     if (currMax > lastSeenCommandMsgIdRef.current) {
       const newLeads = realMsgs.filter(
         (m) => m.id > lastSeenCommandMsgIdRef.current! && m.quickAction === "new_lead"
       );
-      console.log(`[LeadAlert] Detection newLeads=${newLeads.length} ids=${newLeads.map(m=>m.id).join(',')} quickActions=${newLeads.map(m=>m.quickAction).join(',')}`);
       if (newLeads.length > 0) {
-        if (!isNotifLeader) {
-          console.log("[LeadAlert] Detection willPlay=false reason=not_leader");
-        } else if (notifMuted) {
-          console.log("[LeadAlert] Detection willPlay=false reason=muted");
-        } else {
-          console.log("[LeadAlert] Detection willPlay=true — calling playLeadSound()");
+        if (isNotifLeader && !notifMuted) {
           playLeadSound();
         }
       }
@@ -1465,7 +1456,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // We immediately invalidate the relevant queries so React Query refetches.
   useOpsStream({
     onNewMessage: (channel, jobId) => {
-      if (channel === "command") console.log("[LeadAlert] SSE RECEIVED type=new_message channel=command");
+
       if (jobId) {
         utils.opsChat.getJobDetail.invalidate({ jobId });
       }
@@ -1490,7 +1481,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       utils.opsChat.getCommandChatData.invalidate();
     },
     onLeadUpdate: () => {
-      console.log("[LeadAlert] SSE RECEIVED type=lead_update — invalidating command channel cache");
+
       utils.opsChat.getCommandChatData.invalidate();
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
     },

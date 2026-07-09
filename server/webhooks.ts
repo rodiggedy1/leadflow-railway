@@ -23,7 +23,7 @@
 import type { Express } from "express";
 import { and, desc, eq, gte, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "./db";
-import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls } from "../drizzle/schema";
+import { conversationSessions, alwaysOnEnrollments, smsOptOuts, jobSmsReplies, cleanerJobs, cleanerProfiles, cleanerRatingSmsLog, openphoneCallRecordings, opsChatMessages, completedJobs, quoteLeads, agents, candidates, nurtureEnrollments, missedCalls, confirmationCalls, smsCampaignRecipients } from "../drizzle/schema";
 import { sendSms, fetchCallRecordings } from "./openphone";
 import { createQuoteLink, updateQuoteAddress } from "./quoteLink";
 import { transcribeAudio } from "./_core/voiceTranscription";
@@ -817,6 +817,22 @@ export function registerWebhookRoutes(app: Express) {
         const { broadcastOpsUpdate: bcastManual } = await import("./sseBroadcast");
         bcastManual("lead_update");
         return;
+      }
+
+      // If this phone is a recipient of an SMS campaign (status=SENT), skip AI auto-reply.
+      // Campaign replies should be handled manually by the agent, not by the AI.
+      {
+        const campaignRecipientRow = await db
+          .select({ id: smsCampaignRecipients.id })
+          .from(smsCampaignRecipients)
+          .where(and(eq(smsCampaignRecipients.phone, fromPhone), eq(smsCampaignRecipients.status, "SENT")))
+          .limit(1);
+        if (campaignRecipientRow.length > 0) {
+          console.log(`[Webhook] ${fromPhone} is a campaign recipient — storing inbound, skipping AI reply.`);
+          const { broadcastOpsUpdate: bcastCampaign } = await import("./sseBroadcast");
+          bcastCampaign("lead_update");
+          return;
+        }
       }
 
       // If the lead was booked within the last 30 days, do NOT send an AI auto-reply.
