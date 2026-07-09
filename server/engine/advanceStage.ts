@@ -62,12 +62,12 @@ export function advanceStage(
 
   // ── Opt-out always wins ────────────────────────────────────────────────────
   if (signals.optOut) {
-    return { nextStage: "DONE", persistedData: persisted, replyContext: replyCtx };
+    return { nextStage: "RESOLVED", persistedData: persisted, replyContext: replyCtx };
   }
 
   // ── Existing customer → support ────────────────────────────────────────────
   if (signals.isExistingCustomer) {
-    return { nextStage: "DONE", persistedData: persisted, replyContext: replyCtx };
+    return { nextStage: "RESOLVED", persistedData: persisted, replyContext: replyCtx };
   }
 
   // ── Future booking ─────────────────────────────────────────────────────────
@@ -230,7 +230,7 @@ export function advanceStage(
     case "REACTIVATION_TIME": {
       // Any positive/flexible/day/time reply → done
       if (signals.dayPreference || signals.timeSlot || signals.isFlexible || signals.isPositiveReply || signals.isUrgent) {
-        return { nextStage: "DONE", persistedData: persisted, replyContext: replyCtx };
+        return { nextStage: "RESOLVED", persistedData: persisted, replyContext: replyCtx };
       }
       return { nextStage: "REACTIVATION_TIME", persistedData: persisted, replyContext: replyCtx };
     }
@@ -243,7 +243,7 @@ export function advanceStage(
     }
 
     case "CALL_SCHEDULED":
-    case "DONE":
+    case "RESOLVED":
     default:
       return { nextStage: stage as ConversationStage, persistedData: persisted, replyContext: replyCtx };
   }

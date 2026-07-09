@@ -174,7 +174,7 @@ function buildNextAskInstruction(
     case "FUTURE_BOOKING":
       return "Acknowledge that they want to book in the future. Keep it warm and let them know to reach out when ready.";
 
-    case "DONE":
+    case "RESOLVED":
       return "Wrap up the conversation warmly.";
 
     default:

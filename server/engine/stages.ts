@@ -26,74 +26,74 @@ export const STAGE_CONTRACTS: Partial<Record<ConversationStage, StageContract>> 
   WIDGET_SIZING: {
     description: "Bot asked for number of bedrooms and bathrooms. Waiting for both.",
     requiredToAdvance: ["bedrooms", "bathrooms"],
-    validNextStages: ["AVAILABILITY", "WIDGET_SIZING", "DONE"],
+    validNextStages: ["AVAILABILITY", "WIDGET_SIZING", "RESOLVED"],
     stayStage: "WIDGET_SIZING",
   },
   QUOTE_SENT: {
     description: "Quote and price sent. Any reply triggers availability question.",
     requiredToAdvance: [],
-    validNextStages: ["AVAILABILITY", "FUTURE_BOOKING", "DONE"],
+    validNextStages: ["AVAILABILITY", "FUTURE_BOOKING", "RESOLVED"],
     stayStage: "AVAILABILITY",
   },
   AVAILABILITY: {
     description: "Bot offered 2 available days. Waiting for the lead to pick one or express interest.",
     requiredToAdvance: ["selectedSlot"],
-    validNextStages: ["SLOT_CHOICE", "ADDRESS", "FUTURE_BOOKING", "DONE", "AVAILABILITY"],
+    validNextStages: ["SLOT_CHOICE", "ADDRESS", "FUTURE_BOOKING", "RESOLVED", "AVAILABILITY"],
     stayStage: "AVAILABILITY",
   },
   SLOT_CHOICE: {
     description: "Bot offered specific slot options. Waiting for the lead to pick one.",
     requiredToAdvance: ["selectedSlot"],
-    validNextStages: ["ADDRESS", "TIME_PREF", "SLOT_CHOICE", "DONE"],
+    validNextStages: ["ADDRESS", "TIME_PREF", "SLOT_CHOICE", "RESOLVED"],
     stayStage: "SLOT_CHOICE",
   },
   TIME_PREF: {
     description: "Bot asked for morning or afternoon preference. Waiting for time preference.",
     requiredToAdvance: ["selectedSlot"],
-    validNextStages: ["ADDRESS", "TIME_PREF", "DONE"],
+    validNextStages: ["ADDRESS", "TIME_PREF", "RESOLVED"],
     stayStage: "TIME_PREF",
   },
   ADDRESS: {
     description: "Slot confirmed. Bot asked for the home address. Waiting for a street address.",
     requiredToAdvance: ["address"],
-    validNextStages: ["CONFIRMATION", "ADDRESS", "DONE"],
+    validNextStages: ["CONFIRMATION", "ADDRESS", "RESOLVED"],
     stayStage: "ADDRESS",
   },
   CONFIRMATION: {
     description: "Address captured. Bot asked if lead wants a call now or in a few minutes.",
     requiredToAdvance: ["callPreference"],
-    validNextStages: ["CALL_SCHEDULED", "CONFIRMATION", "DONE"],
+    validNextStages: ["CALL_SCHEDULED", "CONFIRMATION", "RESOLVED"],
     stayStage: "CONFIRMATION",
   },
   REACTIVATION: {
     description: "Reactivation offer sent to a past customer. Waiting for yes/no.",
     requiredToAdvance: [],
-    validNextStages: ["REACTIVATION_TIME", "AVAILABILITY", "FUTURE_BOOKING", "DONE", "REACTIVATION"],
+    validNextStages: ["REACTIVATION_TIME", "AVAILABILITY", "FUTURE_BOOKING", "RESOLVED", "REACTIVATION"],
     stayStage: "REACTIVATION",
   },
   REACTIVATION_TIME: {
     description: "Customer said yes to reactivation. Waiting for their preferred time window.",
     requiredToAdvance: [],
-    validNextStages: ["DONE", "REACTIVATION_TIME"],
+    validNextStages: ["RESOLVED", "REACTIVATION_TIME"],
     stayStage: "REACTIVATION_TIME",
   },
   FUTURE_BOOKING: {
     description: "Lead expressed interest but not ready yet. Staying warm.",
     requiredToAdvance: [],
-    validNextStages: ["AVAILABILITY", "FUTURE_BOOKING", "DONE"],
+    validNextStages: ["AVAILABILITY", "FUTURE_BOOKING", "RESOLVED"],
     stayStage: "FUTURE_BOOKING",
   },
   CALL_SCHEDULED: {
     description: "Call scheduled. Post-booking conversation.",
     requiredToAdvance: [],
-    validNextStages: ["CALL_SCHEDULED", "DONE"],
+    validNextStages: ["CALL_SCHEDULED", "RESOLVED"],
     stayStage: "CALL_SCHEDULED",
   },
-  DONE: {
-    description: "Conversation complete. Post-booking or closed conversation.",
+  RESOLVED: {
+    description: "Conversation complete. Unlike DONE, never blocks inbound messages.",
     requiredToAdvance: [],
-    validNextStages: ["DONE"],
-    stayStage: "DONE",
+    validNextStages: ["RESOLVED", "UNHANDLED"],
+    stayStage: "RESOLVED",
   },
 };
 
@@ -104,7 +104,7 @@ export function getStageContract(stage: ConversationStage): StageContract {
   return STAGE_CONTRACTS[stage] ?? {
     description: "General conversation.",
     requiredToAdvance: [],
-    validNextStages: ["DONE", "UNHANDLED"],
+    validNextStages: ["RESOLVED", "UNHANDLED"],
     stayStage: stage,
   };
 }

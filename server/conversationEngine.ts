@@ -511,7 +511,7 @@ async function handleReactivationReply(
   // STOP / opt-out
   if (/^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(lower)) {
     const reply = await getTemplate("reactivation_opt_out");
-    return { reply, nextStage: "DONE" };
+    return { reply, nextStage: "RESOLVED" };
   }
 
   // Price question — give discounted price then ask for time window
@@ -634,7 +634,7 @@ async function handleReactivationTimeReply(
   // STOP / opt-out
   if (/^\s*(stop|unsubscribe|cancel|quit|end|remove me|opt.?out)\s*$/i.test(lower)) {
     const reply = await getTemplate("reactivation_opt_out");
-    return { reply, nextStage: "DONE" };
+    return { reply, nextStage: "RESOLVED" };
   }
 
   // Time window detection — LLM determines if lead gave a scheduling preference
@@ -665,14 +665,14 @@ Respond ONLY with JSON: { "intent": "time_given" | "other" }`,
     const timeParsed = JSON.parse(timeIntentResp.choices[0].message.content as string);
     if (timeParsed.intent === "time_given") {
       const closingReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
-      return { reply: closingReply, nextStage: "DONE" };
+      return { reply: closingReply, nextStage: "RESOLVED" };
     }
   } catch {
     // LLM failed — fall back to keyword regex
     const hasTimeWindow = /(monday|tuesday|wednesday|thursday|friday|saturday|morning|afternoon|evening|weekend|weekday|anytime|flexible|any day|any time|\d{1,2}(am|pm)|next week|this week|tomorrow)/i.test(lower);
     if (hasTimeWindow) {
       const closingReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
-      return { reply: closingReply, nextStage: "DONE" };
+      return { reply: closingReply, nextStage: "RESOLVED" };
     }
   }
 
@@ -858,7 +858,7 @@ Respond ONLY with JSON: { "intent": "confirm" | "new_size" | "question" | "other
   });
   return {
     reply: offScript.reply,
-    nextStage: offScript.isWrongPath ? "DONE" : "WIDGET_SIZING",
+    nextStage: offScript.isWrongPath ? "RESOLVED" : "WIDGET_SIZING",
   };
 }
 
@@ -997,7 +997,7 @@ async function _processLeadReplyCore(
   const currentLanguage = context.language || "en";
   const shouldDetectLanguage =
     currentLanguage === "en" &&
-    stage !== "DONE" &&
+    stage !== "RESOLVED" &&
     stage !== "BOOKED" &&
     stage !== "NOT_INTERESTED" &&
     stage !== "FUTURE_BOOKING" &&
@@ -1026,7 +1026,7 @@ async function _processLeadReplyCore(
     }
   }
   // ── Terminal / human-handled stages — no AI auto-reply ──────────────────────────────────────────────────────────
-  const SILENT_STAGES = new Set(["DONE", "CALL_SCHEDULED", "UNHANDLED", "BOOKED", "FUTURE_BOOKING", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED"]);
+  const SILENT_STAGES = new Set(["RESOLVED", "CALL_SCHEDULED", "UNHANDLED", "BOOKED", "FUTURE_BOOKING", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED"]);
   if (SILENT_STAGES.has(stage)) {
     return null;
   }
@@ -1255,7 +1255,7 @@ Respond ONLY with JSON: { "intent": "wants_to_book" | "other" }`,
       leadReply,
       extrasContext: null,
     });
-    return { reply: offScript.reply, nextStage: offScript.isWrongPath ? "DONE" : "FLOWC_QUOTE_SENT" };
+    return { reply: offScript.reply, nextStage: offScript.isWrongPath ? "RESOLVED" : "FLOWC_QUOTE_SENT" };
   }
 
   // ── QUOTE_SENT: Route to Flow A (Madison) or Flow B (Jade) based on smsFlow ──
@@ -1406,7 +1406,7 @@ Respond ONLY with JSON: { "intent": "ready_now" | "other" }`,
         nextStage: "AVAILABILITY",
       };
     }
-    return { reply: reply.reply, nextStage: reply.isWrongPath ? "DONE" : "FUTURE_BOOKING" };
+    return { reply: reply.reply, nextStage: reply.isWrongPath ? "RESOLVED" : "FUTURE_BOOKING" };
   }
 
   // ── For all other stages: check for objections first ──────────────────────
@@ -1536,7 +1536,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
       if (parsed.intent === "no" && parsed.confidence === "high") {
         return {
           reply: `No worries at all! If you ever need a cleaning in the future, we're here. Have a great day! 🏠`,
-          nextStage: "DONE",
+          nextStage: "RESOLVED",
         };
       }
 
@@ -1641,7 +1641,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
 
       return {
         reply: offScript.reply,
-        nextStage: offScript.isWrongPath ? "DONE" : "SLOT_CHOICE",
+        nextStage: offScript.isWrongPath ? "RESOLVED" : "SLOT_CHOICE",
       };
     }
 
@@ -1672,7 +1672,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
         });
         return {
           reply: offScript.reply,
-          nextStage: offScript.isWrongPath ? "DONE" : "TIME_PREF",
+          nextStage: offScript.isWrongPath ? "RESOLVED" : "TIME_PREF",
         };
       }
 
@@ -1722,7 +1722,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
 
         return {
           reply: offScript.reply,
-          nextStage: offScript.isWrongPath ? "DONE" : "ADDRESS",
+          nextStage: offScript.isWrongPath ? "RESOLVED" : "ADDRESS",
         };
       }
       // Jade flow (B): after address, send lock-in + notes + call question
@@ -1784,7 +1784,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
       if (parsed.intent === "no" && parsed.confidence === "high") {
         return {
           reply: `No worries at all! If you ever need a cleaning in the future, we're here. Have a great day! 🏠`,
-          nextStage: "DONE",
+          nextStage: "RESOLVED",
         };
       }
 
@@ -1810,7 +1810,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
         if (offScript.isWrongPath) {
           return {
             reply: offScript.reply,
-            nextStage: "DONE",
+            nextStage: "RESOLVED",
           };
         }
         return {
@@ -1845,7 +1845,7 @@ Respond ONLY with JSON: { "intent": "future_date" | "other" }`,
 
         return {
           reply: offScript.reply,
-          nextStage: offScript.isWrongPath ? "DONE" : "UNHANDLED",
+          nextStage: offScript.isWrongPath ? "RESOLVED" : "UNHANDLED",
         };
       } catch {
         return {
@@ -1970,7 +1970,7 @@ async function resumeStageAfterLanguageConfirm(
       englishMsg = await getTemplate("reactivation_closing", {
         "[Name]": context.leadName?.split(" ")[0] ?? context.leadName ?? "there",
       });
-      nextStage = "DONE";
+      nextStage = "RESOLVED";
       break;
     case "QUOTE_SENT":
     case "AVAILABILITY":

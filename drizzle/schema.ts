@@ -52,7 +52,9 @@ export type InsertQuoteLead = typeof quoteLeads.$inferInsert;
  * ADDRESS        → Slot confirmed, waiting for address
  * CONFIRMATION   → Address captured, confirmation + call question sent
  * CALL_SCHEDULED → Lead said call now / in a few minutes
- * DONE           → Conversation complete
+ * DONE           → Legacy terminal stage (replaced by RESOLVED — kept in enum for DB compatibility)
+ * RESOLVED       → Conversation complete. Unlike DONE, never blocks inbound messages — a customer
+ *                   texting back on a RESOLVED session is always picked up and re-engaged.
  * UNHANDLED      → AI couldn't parse the reply, needs human review
  * BOOKED         → Lead has been booked (admin/agent confirmed)
  * NOT_INTERESTED → Lead declined or is not a fit
@@ -69,6 +71,7 @@ export const conversationStages = [
   "CONFIRMATION",
   "CALL_SCHEDULED",
   "DONE",
+  "RESOLVED",
   "UNHANDLED",
   "BOOKED",
   "NOT_INTERESTED",

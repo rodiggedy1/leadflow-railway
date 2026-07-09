@@ -268,7 +268,7 @@ export async function handleReviewReplyForJob(
     }
     return {
       responseText: `You've been unsubscribed and won't receive further messages from us. Have a great day! 🏠`,
-      newStage: "DONE",
+      newStage: "RESOLVED",
       switchToManual: false,
     };
   }

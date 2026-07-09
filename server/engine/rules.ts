@@ -64,7 +64,7 @@ export function enforceRules(
 
   // ── Rule 4: Cannot advance stage without required data ───────────────────────
   // Skip this check for always-allowed escape hatches (DONE, UNHANDLED, LANGUAGE_CONFIRM)
-  const alwaysAllowedEarly: ConversationStage[] = ["DONE", "UNHANDLED", "LANGUAGE_CONFIRM"];
+  const alwaysAllowedEarly: ConversationStage[] = ["RESOLVED", "UNHANDLED", "LANGUAGE_CONFIRM"];
   const isAdvancing = corrected.nextStage !== context.stage && !alwaysAllowedEarly.includes(corrected.nextStage);
   if (isAdvancing) {
     for (const field of contract.requiredToAdvance) {
@@ -82,7 +82,7 @@ export function enforceRules(
 
   // ── Rule 5: nextStage must be a valid transition ─────────────────────────────
   // (Allow DONE and UNHANDLED from any stage as escape hatches)
-  const alwaysAllowed: ConversationStage[] = ["DONE", "UNHANDLED", "LANGUAGE_CONFIRM"];
+  const alwaysAllowed: ConversationStage[] = ["RESOLVED", "UNHANDLED", "LANGUAGE_CONFIRM"];
   const isValidTransition =
     alwaysAllowed.includes(corrected.nextStage) ||
     contract.validNextStages.includes(corrected.nextStage);

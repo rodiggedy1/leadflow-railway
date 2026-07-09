@@ -49,7 +49,7 @@ const FALLBACK_REPLIES: Partial<Record<string, string>> = {
   REACTIVATION:       "We'd love to have you back! Would you like to schedule a cleaning?",
   REACTIVATION_TIME:  "Great! Can you give me a time window that works best for you?",
   FUTURE_BOOKING:     "Sounds good! Just reach out when you're ready and we'll take care of everything.",
-  DONE:               "Thanks for reaching out to Maids in Black! Have a great day. 😊",
+  RESOLVED:           "Thanks for reaching out to Maids in Black! Have a great day. 😊",
 };
 
 // ─── Main Entry Point ─────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ export async function processLeadReplyV2(
   context: ConversationContext
 ): Promise<StageResult | null> {
   // ── Terminal / human-handled stages — no AI auto-reply ─────────────────────
-  const SILENT_STAGES = new Set(["DONE", "CALL_SCHEDULED", "UNHANDLED", "BOOKED", "FUTURE_BOOKING", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED"]);
+  const SILENT_STAGES = new Set(["RESOLVED", "CALL_SCHEDULED", "UNHANDLED", "BOOKED", "FUTURE_BOOKING", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED"]);
   if (SILENT_STAGES.has(context.stage)) {
     console.log(`[Engine] Skipping AI reply for terminal/human stage=${context.stage}`);
     return null;
@@ -138,7 +138,7 @@ export async function processLeadReplyV2(
     // If still stuck (e.g. ADDRESS with no address), skip to DONE and flag ops
     if (advance.nextStage === context.stage) {
       console.warn(`[Engine] Loop guard: could not force-advance from ${context.stage} — routing to DONE`);
-      advance = { nextStage: "DONE", persistedData: {}, replyContext: { answeredQuestions: [], usedDefault: true } };
+      advance = { nextStage: "RESOLVED", persistedData: {}, replyContext: { answeredQuestions: [], usedDefault: true } };
     }
   }
 
@@ -148,7 +148,7 @@ export async function processLeadReplyV2(
   if (context.stage === "REACTIVATION_TIME") {
     const firstName = context.leadName?.split(" ")[0] ?? context.leadName ?? "there";
     const finalReply = await getTemplate("reactivation_closing", { "[Name]": firstName });
-    return { reply: finalReply, nextStage: "DONE" };
+    return { reply: finalReply, nextStage: "RESOLVED" };
   }
 
   // ── Step 3: REPLY (LLM writes the message) ────────────────────────────────

@@ -1280,7 +1280,7 @@ export async function handleCallNotificationEmail(
     .where(
       and(
         eq(conversationSessions.leadPhone, normalizedPhone),
-        ne(conversationSessions.stage, "DONE" as any)
+        ne(conversationSessions.stage, "RESOLVED" as any)
       )
     )
     .limit(1);

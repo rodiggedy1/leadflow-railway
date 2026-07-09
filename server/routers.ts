@@ -903,7 +903,7 @@ export const appRouter = router({
           "ADDRESS",
           "CONFIRMATION",
           "CALL_SCHEDULED",
-          "DONE",
+          "RESOLVED",
           "UNHANDLED",
           "BOOKED",
           "FOLLOW_UP_SCHEDULED",
@@ -3010,7 +3010,7 @@ When the customer gives you their address, ALWAYS confirm it back verbatim befor
         const sess = rows[0];
         await db
           .update(conversationSessions)
-          .set({ stage: "DONE" as any, aiMode: 0 })
+          .set({ stage: "RESOLVED" as any, aiMode: 0 })
           .where(eq(conversationSessions.id, input.sessionId));
         logActivity({
           eventType: "new_lead",
@@ -6741,7 +6741,7 @@ Your job: fill in the following message template using the booking details provi
           bedrooms: z.string().default("2"),
           bathrooms: z.string().default("1"),
           extras: z.array(z.string()).default([]),
-          stage: z.enum(["WIDGET_SIZING", "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "CONFIRMATION", "ADDRESS", "DONE", "CALL_SCHEDULED"]).default("AVAILABILITY"),
+          stage: z.enum(["WIDGET_SIZING", "QUOTE_SENT", "AVAILABILITY", "SLOT_CHOICE", "CONFIRMATION", "ADDRESS", "RESOLVED", "CALL_SCHEDULED"]).default("AVAILABILITY"),
           selectedSlot: z.string().nullable().default(null),
         })
       )
@@ -6751,7 +6751,7 @@ Your job: fill in the following message template using the booking details provi
 
         let reply: string;
 
-        if (stage === "DONE" || stage === "CALL_SCHEDULED") {
+        if (stage === "RESOLVED" || stage === "CALL_SCHEDULED") {
           reply = await handlePostBookingReply({
             stage,
             leadName,
@@ -7019,7 +7019,7 @@ async function processWidgetLeadInBackground(input: {
   try {
     const supersededCount = await db
       .update(conversationSessions)
-      .set({ stage: "DONE" as any, autoFollowUpSent: 1 })
+      .set({ stage: "RESOLVED" as any, autoFollowUpSent: 1 })
       .where(
         and(
           eq(conversationSessions.leadPhone, normalizedPhone),
@@ -7274,7 +7274,7 @@ async function processQuoteInBackground(
   try {
     const supersededCount = await db
       .update(conversationSessions)
-      .set({ stage: "DONE" as any, autoFollowUpSent: 1 })
+      .set({ stage: "RESOLVED" as any, autoFollowUpSent: 1 })
       .where(
         and(
           eq(conversationSessions.leadPhone, normalizedPhone),

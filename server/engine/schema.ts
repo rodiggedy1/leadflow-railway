@@ -52,7 +52,7 @@ export const LLM_DECISION_JSON_SCHEMA = {
           "ADDRESS",
           "CONFIRMATION",
           "CALL_SCHEDULED",
-          "DONE",
+          "RESOLVED",
           "UNHANDLED",
           "BOOKED",
           "FUTURE_BOOKING",

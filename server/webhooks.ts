@@ -569,13 +569,14 @@ export function registerWebhookRoutes(app: Express) {
          reviewSession.stage === "REACTIVATION_TIME");
       const newerLeadSession = isSpecialSession
         ? reversedSessions.find(
-            s => s.stage !== "DONE" &&
-              s.id !== reviewSession!.id &&
+            s => s.id !== reviewSession!.id &&
               new Date(s.createdAt) > new Date(reviewSession!.createdAt)
           )
         : undefined;
+      // RESOLVED sessions are NOT excluded — a customer texting back on a resolved
+      // session must always be picked up. The most recent session wins.
       const activeSession = (newerLeadSession ?? reviewSession) ??
-        reversedSessions.find(s => s.stage !== "DONE");
+        reversedSessions[0]; // most recent session (reversedSessions is newest-first)
 
       const session = activeSession ?? sessions[sessions.length - 1]; // fallback to most recent
 
@@ -713,14 +714,14 @@ export function registerWebhookRoutes(app: Express) {
       // sessions as DONE immediately. This prevents the same inbound reply from being
       // processed twice — once per active session — which causes duplicate AI responses.
       const otherActiveSessions = sessions.filter(
-        s => s.id !== session.id && s.stage !== "DONE"
+        s => s.id !== session.id && s.stage !== "RESOLVED"
       );
       if (otherActiveSessions.length > 0) {
         const otherIds = otherActiveSessions.map(s => s.id);
         for (const otherId of otherIds) {
           await db
             .update(conversationSessions)
-            .set({ stage: "DONE" as any, autoFollowUpSent: 1 })
+            .set({ stage: "RESOLVED" as any, autoFollowUpSent: 1 })
             .where(eq(conversationSessions.id, otherId));
         }
         console.log(`[Webhook] Superseded ${otherActiveSessions.length} duplicate active session(s) for ${fromPhone} — keeping session ${session.id}.`);
@@ -786,10 +787,10 @@ export function registerWebhookRoutes(app: Express) {
           lastCustomerReplyAt: now,
           ...inboundSummary,
           // Reopen DONE sessions: a customer texting back is no longer done
-          ...(session.stage === "DONE" ? { stage: "UNHANDLED" } : {}),
+          ...(session.stage === "RESOLVED" ? { stage: "UNHANDLED" } : {}),
         } as any)
         .where(eq(conversationSessions.id, session.id));
-      if (session.stage === "DONE") {
+      if (session.stage === "RESOLVED") {
         console.log(`[Webhook] Reopened DONE session ${session.id} \u2192 UNHANDLED for inbound reply from ${fromPhone}`);
       }
       // Broadcast lead_update immediately so CommandChat notification fires while last message is still 'user'.
@@ -1101,7 +1102,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
         // Mark the conversation session as opted out
         await db
           .update(conversationSessions)
-          .set({ smsOptOut: 1, stage: "DONE", messageHistory: JSON.stringify(history) })
+          .set({ smsOptOut: 1, stage: "RESOLVED", messageHistory: JSON.stringify(history) })
           .where(eq(conversationSessions.id, session.id));
         // Mark ALL always-on enrollments for this phone as OPTED_OUT (global opt-out).
         // This ensures the phone is excluded from all future campaign batches across all groups.
@@ -1161,7 +1162,7 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
       // Update the session in DB
       // Track lastAiMessageAt so the silence-follow-up cron can detect 5-min inactivity.
       // Reset autoFollowUpSent so a new nudge can fire if the conversation restarts.
-      const isTerminalStage = ["DONE", "BOOKED", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"].includes(result.nextStage);
+      const isTerminalStage = ["RESOLVED", "BOOKED", "NOT_INTERESTED", "FOLLOW_UP_SCHEDULED", "FUTURE_BOOKING"].includes(result.nextStage);
 
       // Extract language metadata from the result (set by language detection / confirmation)
       const extResult = result as typeof result & {
@@ -1798,9 +1799,7 @@ async function handleCallRecordingCompleted(event: any): Promise<void> {
       .orderBy(conversationSessions.createdAt)
       .limit(50);
 
-    const session =
-      sessions.slice().reverse().find(s => s.stage !== "DONE") ??
-      sessions[sessions.length - 1];
+    const session = sessions[sessions.length - 1]; // most recent session
 
     if (!session) {
       console.warn(`[CallRecording] No session found for leadPhone=${leadPhone} — storing with sessionId=0`);
