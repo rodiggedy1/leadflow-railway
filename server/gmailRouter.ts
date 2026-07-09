@@ -77,11 +77,17 @@ export const gmailRouter = router({
       // Cursor-based pagination: pageToken encodes lastMessageAt of the last row
       const cursorAt = input.pageToken ? parseInt(input.pageToken, 10) : null;
 
-      // Build WHERE clause: inbox only + only rows the worker has processed (senderName IS NOT NULL)
-      const conditions = [eq(gmailThreadMeta.isInInbox, 1), isNotNull(gmailThreadMeta.senderName)];
-      // When showIgnored=false (default), only show actionable threads
-      if (!input.showIgnored) {
-        conditions.push(eq(gmailThreadMeta.isActionable, 1));
+      // Build WHERE clause.
+      // When searching, skip inbox/actionable filters — search all threads regardless of state.
+      const isSearch = !!input.query;
+      const conditions = [isNotNull(gmailThreadMeta.senderName)];
+      if (!isSearch) {
+        // Normal (non-search) view: inbox only
+        conditions.push(eq(gmailThreadMeta.isInInbox, 1));
+        // When showIgnored=false (default), only show actionable threads
+        if (!input.showIgnored) {
+          conditions.push(eq(gmailThreadMeta.isActionable, 1));
+        }
       }
       // When unreadOnly=true, only return unread threads (used by the right-panel quick-view)
       if (input.unreadOnly) {
