@@ -1928,9 +1928,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       if (newInbound.length > 0 && isNotifLeader) {
         // New leads get a distinct sound; regular messages get the standard chime
         const hasNewLead = newInbound.some((m) => m.quickAction === "new_lead");
+        // Only chime for human messages (quickAction === null).
+        // System/automated messages (cleaner_status, cron_error, noshow_alert, etc.) are silent.
+        const hasHumanMessage = newInbound.some((m) => m.quickAction == null);
         if (hasNewLead) {
           playLeadSound();
-        } else {
+        } else if (hasHumanMessage) {
           playNotification();
         }
         const newest = newInbound[newInbound.length - 1];
