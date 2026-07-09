@@ -105,6 +105,7 @@ export function useOpsStream(
               cbRef.current.onJobUpdate?.(event.jobId);
               break;
             case "lead_update":
+              console.log("[LeadAlert] useOpsStream received lead_update — calling onLeadUpdate");
               cbRef.current.onLeadUpdate?.();
               break;
             case "reaction_update":

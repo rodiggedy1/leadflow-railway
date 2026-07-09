@@ -418,7 +418,8 @@ export async function handleBarkLead(body: BarkZapierPayload): Promise<void> {
       quickAction: "new_lead",
       metadata,
     });
-    console.log(`[BarkWebhook] Posted new_lead card with sessionId=${barkSessionId}`);
+    const [barkInserted] = await db.select({ id: opsChatMessages.id }).from(opsChatMessages).orderBy(sql`id DESC`).limit(1);
+    console.log(`[LeadAlert] INSERTED (bark) messageId=${barkInserted?.id} channel=command quickAction=new_lead`);
   } catch (err) {
     console.error("[BarkWebhook] Failed to post lead card to command channel:", err);
   }

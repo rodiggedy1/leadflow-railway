@@ -81,6 +81,7 @@ export function broadcastOpsUpdate(
   if (clients.size === 0) return; // no-op when nobody is connected
 
   const event: OpsEvent = { type, ts: Date.now(), ...extra };
+  console.log(`[LeadAlert] Broadcasting SSE type=${type} channel=${(extra as any)?.channel ?? 'n/a'} clients=${clients.size}`);
   const payload = `event: ops_update\ndata: ${JSON.stringify(event)}\n\n`;
 
   for (const res of Array.from(clients)) {

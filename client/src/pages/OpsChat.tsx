@@ -1296,12 +1296,19 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Distinct ascending-arpeggio sound for new lead arrivals
   const LEAD_ALERT_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663254023424/bMcVRxTSaTukZing.wav";
   const playLeadSound = () => {
-    if (notifMuted) return;
+    console.log("[Lead Sound] attempting playback... muted=" + notifMuted + " url=" + LEAD_ALERT_URL);
+    if (notifMuted) { console.log("[Lead Sound] BLOCKED reason=muted"); return; }
     try {
       const audio = new Audio(LEAD_ALERT_URL);
       audio.volume = 0.75;
-      audio.play().catch(() => {});
-    } catch {}
+      audio.play().then(() => {
+        console.log("[Lead Sound] playing ✅");
+      }).catch((err: Error) => {
+        console.log("[Lead Sound] FAILED " + err.name + ": " + err.message);
+      });
+    } catch (err: unknown) {
+      console.log("[Lead Sound] EXCEPTION " + String(err));
+    }
   };
   const { notify: osNotify, permission: notifPermission, requestPermission: requestOsPermission } = useOsNotification();
   // Only the leader tab fires notifications — prevents duplicates when multiple tabs are open.
@@ -1413,19 +1420,30 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const lastSeenCommandMsgIdRef = useRef<number | undefined>(undefined);
   useEffect(() => {
     const realMsgs = commandMsgsForSound.filter((m) => m.id > 0);
+    console.log(`[LeadAlert] Cache Updated commandMsgsForSound length=${commandMsgsForSound.length} realMsgs=${realMsgs.length}`);
     if (!realMsgs.length) return;
     const currMax = Math.max(...realMsgs.map((m) => m.id));
     if (lastSeenCommandMsgIdRef.current === undefined) {
       // First load — initialize silently.
       lastSeenCommandMsgIdRef.current = currMax;
+      console.log(`[LeadAlert] Detection INIT lastSeenId=${currMax}`);
       return;
     }
+    console.log(`[LeadAlert] Detection lastSeenId=${lastSeenCommandMsgIdRef.current} highestId=${currMax} leader=${isNotifLeader} muted=${notifMuted}`);
     if (currMax > lastSeenCommandMsgIdRef.current) {
       const newLeads = realMsgs.filter(
         (m) => m.id > lastSeenCommandMsgIdRef.current! && m.quickAction === "new_lead"
       );
-      if (newLeads.length > 0 && isNotifLeader && !notifMuted) {
-        playLeadSound();
+      console.log(`[LeadAlert] Detection newLeads=${newLeads.length} ids=${newLeads.map(m=>m.id).join(',')} quickActions=${newLeads.map(m=>m.quickAction).join(',')}`);
+      if (newLeads.length > 0) {
+        if (!isNotifLeader) {
+          console.log("[LeadAlert] Detection willPlay=false reason=not_leader");
+        } else if (notifMuted) {
+          console.log("[LeadAlert] Detection willPlay=false reason=muted");
+        } else {
+          console.log("[LeadAlert] Detection willPlay=true — calling playLeadSound()");
+          playLeadSound();
+        }
       }
       lastSeenCommandMsgIdRef.current = currMax;
     }
@@ -1447,6 +1465,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // We immediately invalidate the relevant queries so React Query refetches.
   useOpsStream({
     onNewMessage: (channel, jobId) => {
+      if (channel === "command") console.log("[LeadAlert] SSE RECEIVED type=new_message channel=command");
       if (jobId) {
         utils.opsChat.getJobDetail.invalidate({ jobId });
       }
@@ -1471,6 +1490,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       utils.opsChat.getCommandChatData.invalidate();
     },
     onLeadUpdate: () => {
+      console.log("[LeadAlert] SSE RECEIVED type=lead_update — invalidating command channel cache");
       utils.opsChat.getCommandChatData.invalidate();
       utils.opsChat.listChannelMessages.invalidate({ channel: "command" });
     },

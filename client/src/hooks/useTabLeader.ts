@@ -78,6 +78,7 @@ export function useTabLeader(): { isLeader: boolean } {
       // before React flushes the setState.
       isLeaderRef.current = true;
       setIsLeader(true);
+      console.log("[LeadAlert] TabLeader: THIS TAB IS NOW LEADER");
       ch.postMessage({ type: "I_AM_LEADER" });
 
       // Stop watching for heartbeats (we are the source now)
@@ -93,6 +94,7 @@ export function useTabLeader(): { isLeader: boolean } {
     const becomeFollower = () => {
       isLeaderRef.current = false;
       setIsLeader(false);
+      console.log("[LeadAlert] TabLeader: this tab is a FOLLOWER");
       stopHeartbeatSend();
 
       // Start watching for heartbeats — re-elect if leader goes silent
