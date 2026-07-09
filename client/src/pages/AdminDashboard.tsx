@@ -3765,8 +3765,8 @@ export default function AdminDashboard() {
           const hist: Array<{ role: string; ts?: number }> = JSON.parse((s as any).messageHistory ?? "[]");
           const lastMsg = hist.length > 0 ? hist[hist.length - 1] : null;
           const lastRole = lastMsg?.role ?? null;
-          const closedStages = ["BOOKED", "COMPLETED", "CLOSED", "LOST", "COLD"];
-          const isUnresponded = (lastRole === "user" || lastRole === "customer") && !closedStages.includes(s.stage ?? "");
+          // Any session where the last message is from the customer shows up — no stage can hide a new inbound message
+          const isUnresponded = (lastRole === "user" || lastRole === "customer");
           // Exclude if agent already marked handled AND no new customer message since
           const respondedAt = (s as any).respondedAt as number | null | undefined;
           const isHandled = respondedAt && lastMsg?.ts && lastMsg.ts <= respondedAt;
@@ -3791,17 +3791,13 @@ export default function AdminDashboard() {
         // HOT_LEADS synthetic filter: active leads where the customer sent a message
         // within the last 72 hours (still thinking about booking).
         const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
-        const closedStages = ["BOOKED", "COMPLETED", "CLOSED", "LOST", "COLD"];
-        if (closedStages.includes(s.stage ?? "")) {
+        try {
+          const hist: Array<{ role: string; ts?: number }> = JSON.parse((s as any).messageHistory ?? "[]");
+          const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
+          // Any session with a recent inbound message shows up — no stage can hide it
+          matchesStage = !!lastCustomer?.ts && (Date.now() - lastCustomer.ts) <= SEVENTY_TWO_HOURS_MS;
+        } catch {
           matchesStage = false;
-        } else {
-          try {
-            const hist: Array<{ role: string; ts?: number }> = JSON.parse((s as any).messageHistory ?? "[]");
-            const lastCustomer = [...hist].reverse().find(m => m.role === "user" || m.role === "customer");
-            matchesStage = !!lastCustomer?.ts && (Date.now() - lastCustomer.ts) <= SEVENTY_TWO_HOURS_MS;
-          } catch {
-            matchesStage = false;
-          }
         }
       } else if (stageFilter === "UNREAD") {
         // UNREAD synthetic filter: leads where hasUnread is true (server-computed)
