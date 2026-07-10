@@ -18,6 +18,7 @@
 import crypto from "crypto";
 import { sql } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
+import { RECENT_CAMPAIGN_SMS_CTE } from "./audienceHelpers";
 import type {
   AudienceDefinition,
   AudienceStats,
