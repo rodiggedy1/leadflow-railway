@@ -869,6 +869,8 @@ export async function planAudienceForFreeze(
   db: MySql2Database<any>,
   def: AudienceDefinition
 ): Promise<import("./SafetyFilter").SafetyCandidate[]> {
+  const recentSmsDays = def.options?.recentSmsDays ?? 30;
+  const cutoffMs = Date.now() - recentSmsDays * 24 * 60 * 60 * 1000;
   const allIncludeRules = [...expandPresets(def), ...def.includeRules];
   const includeWhere = buildIncludeWhere(allIncludeRules);
 
