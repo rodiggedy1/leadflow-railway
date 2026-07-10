@@ -23,7 +23,7 @@
  */
 
 import crypto from "crypto";
-import { eq, and, gt, isNotNull } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import {
   smsCampaigns,
@@ -34,6 +34,7 @@ import {
   cleanerJobs,
 } from "../../drizzle/schema";
 import type { AudienceDefinition } from "./plannerTypes";
+import { getRecentlyTextedPhones } from "./audienceHelpers";
 import { planAudienceForFreeze, canonicalHash } from "./AudiencePlanner";
 import {
   buildDefaultSafetyChecks,
@@ -224,9 +225,9 @@ async function buildSafetySets(
   complaintPhones: Set<string>;
 }> {
   const recentSmsDays = def.options?.recentSmsDays ?? 30;
-  const cutoffDate = new Date(Date.now() - recentSmsDays * 24 * 60 * 60 * 1000);
+  const cutoffMs = Date.now() - recentSmsDays * 24 * 60 * 60 * 1000;
 
-  const [alwaysOnOptOuts, sessionOptOuts, jobOptOuts, recentlySent, complaints] =
+  const [alwaysOnOptOuts, sessionOptOuts, jobOptOuts, recentlySentPhones, complaints] =
     await Promise.all([
       // STOP opt-outs from alwaysOnEnrollments
       db
@@ -246,16 +247,8 @@ async function buildSafetySets(
         .from(completedJobs)
         .where(eq(completedJobs.status, "OPTED_OUT")),
 
-      // Recently texted: conversationSessions where lastAiMessageAt > cutoff
-      db
-        .selectDistinct({ phone: conversationSessions.leadPhone })
-        .from(conversationSessions)
-        .where(
-          and(
-            isNotNull(conversationSessions.lastAiMessageAt),
-            gt(conversationSessions.lastAiMessageAt, cutoffDate)
-          )
-        ),
+      // Recently texted via campaign — single source of truth (audienceHelpers.ts)
+      getRecentlyTextedPhones(db, cutoffMs),
 
       // Complaint phones: cleanerJobs where customerComplaint is not null/empty
       db
@@ -271,9 +264,7 @@ async function buildSafetySets(
   for (const r of sessionOptOuts) if (r.phone) optOutPhones.add(r.phone);
   for (const r of jobOptOuts) if (r.phone) optOutPhones.add(r.phone);
 
-  // Build recently sent set
-  const recentlySentPhones = new Set<string>();
-  for (const r of recentlySent) if (r.phone) recentlySentPhones.add(r.phone);
+  // recentlySentPhones is already a Set<string> from getRecentlyTextedPhones()
 
   // Build complaint phones set
   const complaintPhones = new Set<string>();

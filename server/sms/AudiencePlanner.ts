@@ -360,6 +360,7 @@ function computeConfidence(matchedBecause: string[], frequency: string, hasCompl
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function planAudience(db: MySql2Database<any>, def: AudienceDefinition): Promise<PlannerResult> {
   const recentSmsDays = def.options?.recentSmsDays ?? 30;
+  const cutoffMs = Date.now() - recentSmsDays * 24 * 60 * 60 * 1000;
   const sampleSize = def.options?.sampleSize ?? 10;
 
   // Merge preset rules with user include rules
@@ -375,7 +376,8 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
   // All aggregation happens in SQL — no N+1, no looping.
 
   const rawQuery = `
-    WITH customer_view AS (
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    customer_view AS (
       SELECT
         -- Normalize phone inline (Stage 3 will use stored column)
         CASE
@@ -414,17 +416,25 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
         -- Last outbound SMS (days ago)
-        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
+        DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
         -- Is opted out (STOP)
         MAX(CASE
           WHEN aoe.status = 'OPTED_OUT' THEN 1
-          WHEN cs.smsOptOut = 1 THEN 1
           WHEN cj.status = 'OPTED_OUT' THEN 1
           ELSE 0
         END) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
-      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END
+      )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
     ),
     deduplicated AS (
@@ -519,7 +529,8 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   // ── Sample included customers ─────────────────────────────────────────────
   const sampleIncludedQuery = `
-    WITH customer_view AS (
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    customer_view AS (
       SELECT
         CASE
           WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
@@ -538,12 +549,21 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
-        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
-        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cs.smsOptOut = 1 THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
+        DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
+        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
-      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END
+      )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
     )
     SELECT phoneNormalized, firstName, name, serviceType, frequency,
@@ -597,7 +617,8 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   // ── Sample excluded customers ─────────────────────────────────────────────
   const sampleExcludedQuery = `
-    WITH customer_view AS (
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    customer_view AS (
       SELECT
         CASE
           WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
@@ -617,12 +638,21 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
-        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
-        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cs.smsOptOut = 1 THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
+        DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
+        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
-      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END
+      )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
     ),
     deduplicated AS (SELECT * FROM customer_view WHERE rn = 1),
@@ -679,11 +709,11 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
     WITH cv AS (
       SELECT cj.frequency,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
-        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cs.smsOptOut = 1 THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
+        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
-        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
+        DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
         cj.phoneInvalid,
         CASE
           WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
@@ -697,7 +727,16 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         cj.lastBookingPrice, cj.jobDate AS lastJobDate, cj.serviceType, cj.bedrooms, cj.bathrooms
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
-      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END
+      )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
     )
     SELECT COALESCE(frequency, 'Unknown') AS freq, COUNT(*) AS cnt
@@ -721,11 +760,11 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
     WITH cv AS (
       SELECT cj.serviceType,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
-        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cs.smsOptOut = 1 THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
+        MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
-        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
+        DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
         cj.phoneInvalid,
         SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
         AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
@@ -735,7 +774,16 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         cj.frequency
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
-      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END
+      )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
     )
     SELECT COALESCE(serviceType, 'Unknown') AS svc, COUNT(*) AS cnt
@@ -831,7 +879,8 @@ export async function planAudienceForFreeze(
   const includeWhere = buildIncludeWhere(allIncludeRules);
 
   const candidateQuery = `
-    WITH customer_view AS (
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    customer_view AS (
       SELECT
         cj.id AS completedJobId,
         CASE
@@ -865,10 +914,9 @@ export async function planAudienceForFreeze(
         MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
-        DATEDIFF(NOW(), MAX(cs.lastAiMessageAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', ''))) AS lastSmsDaysAgo,
+        DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
         MAX(CASE
           WHEN aoe.status = 'OPTED_OUT' THEN 1
-          WHEN cs.smsOptOut = 1 THEN 1
           WHEN cj.status = 'OPTED_OUT' THEN 1
           ELSE 0
         END) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut,
@@ -878,7 +926,16 @@ export async function planAudienceForFreeze(
         ) AS preferredTeam
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
-      LEFT JOIN conversation_sessions cs ON cs.leadPhone = cj.phone
+      LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END
+      )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
     )
     SELECT
