@@ -459,15 +459,13 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
     ),
     excluded_recent_sms AS (
       SELECT phoneNormalized, 'RECENTLY_TEXTED' AS reason FROM included
-      WHERE lastSmsDaysAgo IS NOT NULL AND lastSmsDaysAgo <= ${recentSmsDays}
-        AND isOptedOut = 0 AND hasComplaint = 0
+      WHERE 1=0 -- rule-driven only; not a hardcoded exclusion
     ),
-    -- Final matched set (included minus all exclusions)
+    -- Final matched set (included minus hard exclusions; recently-texted is rule-driven)
     matched AS (
       SELECT i.* FROM included i
       WHERE i.isOptedOut = 0
         AND i.hasComplaint = 0
-        AND (i.lastSmsDaysAgo IS NULL OR i.lastSmsDaysAgo > ${recentSmsDays})
     ),
     -- Aggregate stats
     stats AS (
@@ -574,7 +572,6 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
       AND phoneInvalid = 0
       AND isOptedOut = 0
       AND hasComplaint = 0
-      AND (lastSmsDaysAgo IS NULL OR lastSmsDaysAgo > ${recentSmsDays})
       AND ${includeWhere.sql}
     ORDER BY RAND()
     LIMIT ${sampleSize}
@@ -669,11 +666,7 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
       UNION ALL
       SELECT phoneNormalized, firstName, name, 'OPEN_COMPLAINT' AS reason
       FROM included_base WHERE hasComplaint = 1 AND isOptedOut = 0
-      UNION ALL
-      SELECT phoneNormalized, firstName, name, 'RECENTLY_TEXTED' AS reason
-      FROM included_base
-      WHERE lastSmsDaysAgo IS NOT NULL AND lastSmsDaysAgo <= ${recentSmsDays}
-        AND isOptedOut = 0 AND hasComplaint = 0
+      -- RECENTLY_TEXTED is rule-driven; only excluded when user adds lastSmsDays rule
     )
     SELECT phoneNormalized, firstName, name, reason FROM excluded_union
     ORDER BY RAND()
