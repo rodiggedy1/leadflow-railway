@@ -707,7 +707,7 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   // ── Frequency breakdown ───────────────────────────────────────────────────
   const freqQuery = `
-    WITH cv AS (
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)}, cv AS (
       SELECT cj.frequency,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
         MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
@@ -758,7 +758,7 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   // ── Service type breakdown ────────────────────────────────────────────────
   const svcQuery = `
-    WITH cv AS (
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)}, cv AS (
       SELECT cj.serviceType,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
         MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
