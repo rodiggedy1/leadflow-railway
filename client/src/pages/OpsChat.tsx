@@ -2126,7 +2126,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             })}
           </div>
           {/* ── Page navigation shortcuts ── */}
-          <div className="flex flex-col items-center gap-0 mt-auto w-full pt-1">
+          <div className="flex flex-col items-center gap-0 w-full pt-1">
             {([
               { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
               { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
@@ -2150,7 +2150,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
 
           {/* Profile photo avatar */}
-          <div className="pt-3 pb-5 shrink-0">
+          <div className="mt-auto pt-4 pb-6 shrink-0">
             <button
               onClick={() => setProfilePhotoOpen(true)}
               className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block"
