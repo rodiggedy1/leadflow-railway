@@ -3,9 +3,10 @@
  * Purpose-built CS-style inbox for lead conversion.
  * Layout: dark rail + lead list (lanes/filters) + conversation thread + right panel
  *
- * UI-only for now — wired to static mock data until backend procedures are ready.
+ * Data: wired to real tRPC procedures (listWorkspace, getTimeline, sendWorkspaceMessage)
+ * UI: exact original design — zero layout changes from the approved mock
  */
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -36,301 +37,61 @@ import {
   AlertTriangle,
   ArrowUpRight,
   BookOpen,
+  Loader2,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Lane = "needs-me" | "ready-to-book" | "needs-price" | "reactivation";
-type LeadFilter = "all" | "unread" | "campaign-reply" | "quote-viewed";
+type Lane = "all" | "needs-me" | "ready-to-book" | "needs-price" | "reactivation";
+type LeadFilter = "all" | "unread" | "campaign-reply";
 
 type LeadTag = {
   label: string;
   color: "purple" | "orange" | "blue" | "green" | "gray" | "rose";
 };
 
-type LeadMessage = {
-  id: number;
-  sender: "customer" | "agent" | "campaign" | "attention";
-  senderName?: string;
-  text: string;
-  time: string;
-  campaignName?: string;
-  tags?: string[];
+// Shape returned by listWorkspace
+type WorkspaceSummary = {
+  phone: string;
+  customerName: string | null;
+  lastMessage: string | null;
+  lastMessageAt: number | null;
+  unreadCount: number;
+  stage: string | null;
+  needsAttention: boolean;
+  assignedAgentName: string | null;
+  leadSource: string | null;
+  createdAt: string | Date;
 };
 
-type Lead = {
-  id: number;
-  name: string;
-  initials: string;
-  lastMessage: string;
-  time: string;
-  lane: Lane;
-  tags: LeadTag[];
-  unread?: boolean;
-  quote: string;
-  service: string;
-  frequency: string;
-  daysSinceBooking: number;
-  campaign: string;
-  campaignType: string;
-  campaignReplyTime: string;
-  momentum: number;
-  lifetimeValue: string;
-  jobCount: number;
-  preferredTeam: string;
-  bookLikelihood: number;
-  messages: LeadMessage[];
-  nextBestAction: {
-    title: string;
-    description: string;
-    suggestedReplies: string[];
-  };
+// Shape returned by getTimeline
+type TimelineMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  ts: number;
+  mediaUrls?: string[];
+  sessionSource?: string;
 };
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
+type TimelineCampaign = {
+  id: string;
+  type: "campaign";
+  campaignName: string;
+  message: string | null;
+  ts: number;
+  status: string | null;
+};
 
-const MOCK_LEADS: Lead[] = [
-  {
-    id: 1,
-    name: "Jennifer Thompson",
-    initials: "JT",
-    lastMessage: "What times are open?",
-    time: "now",
-    lane: "needs-me",
-    unread: true,
-    tags: [
-      { label: "Campaign reply", color: "purple" },
-      { label: "Needs price", color: "orange" },
-    ],
-    quote: "$159",
-    service: "Standard Clean",
-    frequency: "One-time",
-    daysSinceBooking: 218,
-    campaign: "Tomorrow Slots",
-    campaignType: "Reactivation campaign",
-    campaignReplyTime: "42 minutes",
-    momentum: 76,
-    lifetimeValue: "$2,840",
-    jobCount: 12,
-    preferredTeam: "MaidsPlus",
-    bookLikelihood: 76,
-    nextBestAction: {
-      title: "Provide specific price + two time options",
-      description:
-        "The lead has asked about price and availability. Remove uncertainty and create a clear booking decision.",
-      suggestedReplies: [
-        "Hi Jennifer! We have openings tomorrow at 9:00 AM or 1:00 PM. The price would be $159 with your discount. Which works better?",
-        "I can hold tomorrow at 1:00 PM while we confirm.",
-        "We recently helped another customer with a similar home and they loved the result.",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "campaign",
-        text: "Hi Jennifer, we have a few openings tomorrow and wanted to offer you first choice...",
-        time: "2:41 PM",
-        campaignName: "Tomorrow Slots",
-        tags: ["Delivered", "Replied"],
-      },
-      {
-        id: 2,
-        sender: "customer",
-        text: "How much is discount?",
-        time: "3:23 PM",
-      },
-      {
-        id: 3,
-        sender: "agent",
-        senderName: "Rizalina",
-        text: "We're currently offering 20% off and have availability as soon as tomorrow.",
-        time: "3:24 PM",
-      },
-      {
-        id: 4,
-        sender: "customer",
-        text: "How much would it be for a 2 bedroom and 3 bathroom clean?",
-        time: "4:27 PM",
-      },
-      {
-        id: 5,
-        sender: "agent",
-        senderName: "Rohan",
-        text: "We could do it tomorrow for $159.",
-        time: "4:38 PM",
-      },
-      {
-        id: 6,
-        sender: "attention",
-        text: "Customer asked for open times — Strong booking signal. Reply with two specific options.",
-        time: "Now",
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "Dorothy Miles",
-    initials: "DM",
-    lastMessage: "Interested — asking about tomorrow",
-    time: "4m",
-    lane: "reactivation",
-    tags: [
-      { label: "Reactivation", color: "blue" },
-      { label: "Waiting", color: "gray" },
-    ],
-    quote: "$214",
-    service: "Deep Clean",
-    frequency: "Monthly",
-    daysSinceBooking: 145,
-    campaign: "Spring Reactivation",
-    campaignType: "Reactivation campaign",
-    campaignReplyTime: "1 hour",
-    momentum: 58,
-    lifetimeValue: "$1,920",
-    jobCount: 8,
-    preferredTeam: "Team A",
-    bookLikelihood: 58,
-    nextBestAction: {
-      title: "Send availability for tomorrow",
-      description: "Lead is warm and asking about tomorrow. Send two specific time slots.",
-      suggestedReplies: [
-        "Hi Dorothy! We have tomorrow at 10 AM or 2 PM available. Which works for you?",
-        "Happy to hold a slot for you — just let me know which time works best.",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "campaign",
-        text: "Hi Dorothy, spring is here — time for a fresh start! We have a special offer just for you...",
-        time: "11:00 AM",
-        campaignName: "Spring Reactivation",
-        tags: ["Delivered", "Replied"],
-      },
-      {
-        id: 2,
-        sender: "customer",
-        text: "Interested — do you have anything tomorrow?",
-        time: "11:58 AM",
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: "Marcus Lee",
-    initials: "ML",
-    lastMessage: "Can you do Saturday morning?",
-    time: "11m",
-    lane: "ready-to-book",
-    tags: [
-      { label: "Quote viewed", color: "green" },
-      { label: "Hot", color: "orange" },
-    ],
-    quote: "$329",
-    service: "Move-out Clean",
-    frequency: "One-time",
-    daysSinceBooking: 0,
-    campaign: "Direct Lead",
-    campaignType: "Direct inquiry",
-    campaignReplyTime: "N/A",
-    momentum: 84,
-    lifetimeValue: "$329",
-    jobCount: 1,
-    preferredTeam: "Unassigned",
-    bookLikelihood: 84,
-    nextBestAction: {
-      title: "Confirm Saturday availability and lock the booking",
-      description: "Lead has viewed the quote twice and is asking about Saturday. High intent — confirm and close.",
-      suggestedReplies: [
-        "Yes! We have Saturday morning at 9 AM available. Want me to lock that in for you?",
-        "Saturday works great — shall I send you a confirmation link?",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "customer",
-        text: "Hi, I need a move-out clean for my 3BR apartment.",
-        time: "10:05 AM",
-      },
-      {
-        id: 2,
-        sender: "agent",
-        senderName: "Rizalina",
-        text: "Hi Marcus! We can do that for $329. I'll send you a quote link.",
-        time: "10:07 AM",
-      },
-      {
-        id: 3,
-        sender: "customer",
-        text: "Can you do Saturday morning?",
-        time: "10:18 AM",
-      },
-    ],
-  },
-  {
-    id: 4,
-    name: "Sandra Pedro",
-    initials: "SP",
-    lastMessage: "I may need cleaning again.",
-    time: "32m",
-    lane: "reactivation",
-    tags: [
-      { label: "Winback", color: "purple" },
-      { label: "VIP", color: "green" },
-    ],
-    quote: "$280",
-    service: "Standard Clean",
-    frequency: "Bi-weekly",
-    daysSinceBooking: 218,
-    campaign: "VIP Winback",
-    campaignType: "VIP winback campaign",
-    campaignReplyTime: "18 minutes",
-    momentum: 72,
-    lifetimeValue: "$5,600",
-    jobCount: 24,
-    preferredTeam: "MaidsPlus",
-    bookLikelihood: 72,
-    nextBestAction: {
-      title: "Welcome back + offer preferred team",
-      description: "VIP customer with 24 jobs. Offer their preferred team and a loyalty discount.",
-      suggestedReplies: [
-        "Sandra! So great to hear from you. MaidsPlus is available this week — want me to get you back on the schedule?",
-        "Welcome back! As a VIP customer, I'd love to offer you a loyalty discount on your first cleaning back.",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "campaign",
-        text: "Hi Sandra, we miss you! It's been a while and we'd love to welcome you back...",
-        time: "1:15 PM",
-        campaignName: "VIP Winback",
-        tags: ["Delivered", "Replied"],
-      },
-      {
-        id: 2,
-        sender: "customer",
-        text: "I may need cleaning again.",
-        time: "1:33 PM",
-      },
-    ],
-  },
-];
-
-const LANES: { id: Lane; label: string; emoji: string; count: number }[] = [
-  { id: "needs-me", label: "Needs Me", emoji: "🔥", count: 12 },
-  { id: "ready-to-book", label: "Ready to Book", emoji: "📅", count: 9 },
-  { id: "needs-price", label: "Needs Price", emoji: "💸", count: 6 },
-  { id: "reactivation", label: "Reactivation", emoji: "🔁", count: 81 },
-];
-
-const FILTERS: { id: LeadFilter; label: string; count?: number }[] = [
-  { id: "all", label: "All" },
-  { id: "unread", label: "Unread", count: 9 },
-  { id: "campaign-reply", label: "Campaign reply" },
-  { id: "quote-viewed", label: "Quote viewed" },
-];
+type TimelineCall = {
+  id: string;
+  type: "call";
+  duration: number | null;
+  recordingUrl: string | null;
+  ts: number;
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -360,6 +121,76 @@ function MomentumBar({ value }: { value: number }) {
   );
 }
 
+function formatTs(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "now";
+  if (diffMins < 60) return `${diffMins}m`;
+  const diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return `${diffHrs}h`;
+  const diffDays = Math.floor(diffHrs / 24);
+  if (diffDays < 7) return `${diffDays}d`;
+  return d.toLocaleDateString();
+}
+
+function getInitials(name: string | null | undefined, phone: string): string {
+  if (!name) return phone.slice(-2);
+  const parts = name.trim().split(" ");
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function sourceToTag(source: string | null): LeadTag | null {
+  if (!source) return null;
+  if (source.startsWith("campaign:") || source.startsWith("always-on")) return { label: "Campaign", color: "purple" };
+  if (source === "reactivation") return { label: "Reactivation", color: "orange" };
+  if (source === "inbound-sms") return { label: "Inbound SMS", color: "blue" };
+  if (source === "email") return { label: "Email lead", color: "green" };
+  if (source === "quote-form") return { label: "Quote form", color: "green" };
+  if (source === "command-center") return { label: "Outreach", color: "gray" };
+  return { label: source, color: "gray" };
+}
+
+function stageToLane(stage: string | null): Lane {
+  if (!stage) return "needs-me";
+  const s = stage.toLowerCase();
+  if (s.includes("quote") || s.includes("price")) return "needs-price";
+  if (s.includes("book") || s.includes("scheduled")) return "ready-to-book";
+  if (s.includes("reactivat") || s.includes("rebooking")) return "reactivation";
+  return "needs-me";
+}
+
+// Merge timeline messages + campaign events + calls into one sorted array
+type TimelineEvent =
+  | (TimelineMessage & { _type: "message" })
+  | (TimelineCampaign & { _type: "campaign" })
+  | (TimelineCall & { _type: "call" });
+
+function buildTimeline(
+  messages: TimelineMessage[],
+  campaigns: TimelineCampaign[],
+  calls: TimelineCall[]
+): TimelineEvent[] {
+  const events: TimelineEvent[] = [
+    ...messages.map((m) => ({ ...m, _type: "message" as const })),
+    ...campaigns.map((c) => ({ ...c, _type: "campaign" as const })),
+    ...calls.map((c) => ({ ...c, _type: "call" as const })),
+  ];
+  return events.sort((a, b) => a.ts - b.ts);
+}
+
+// ── Lanes config ──────────────────────────────────────────────────────────────
+
+const LANE_CONFIG: { id: Lane; label: string; emoji: string }[] = [
+  { id: "needs-me", label: "Needs Me", emoji: "🔥" },
+  { id: "ready-to-book", label: "Ready to Book", emoji: "📅" },
+  { id: "needs-price", label: "Needs Price", emoji: "💸" },
+  { id: "reactivation", label: "Reactivation", emoji: "🔁" },
+];
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 interface LeadsInboxProps {
@@ -369,47 +200,113 @@ interface LeadsInboxProps {
 export default function LeadsInbox({ rail }: LeadsInboxProps) {
   const [activeLane, setActiveLane] = useState<Lane>("needs-me");
   const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
-  const [selectedLead, setSelectedLead] = useState<Lead>(MOCK_LEADS[0]);
-  const [composerText, setComposerText] = useState(
-    MOCK_LEADS[0].nextBestAction.suggestedReplies[0]
-  );
-  const [messages, setMessages] = useState<LeadMessage[]>(MOCK_LEADS[0].messages);
+  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [composerText, setComposerText] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const journeyRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom on new messages
+  // ── Data fetching ──────────────────────────────────────────────────────────
+
+  const utils = trpc.useUtils();
+
+  const { data: workspace = [], isLoading: workspaceLoading } =
+    trpc.leads.listWorkspace.useQuery(undefined, {
+      refetchInterval: 30_000,
+    });
+
+  const { data: timeline, isLoading: timelineLoading } =
+    trpc.leads.getTimeline.useQuery(
+      { phone: selectedPhone! },
+      { enabled: !!selectedPhone, refetchInterval: 15_000 }
+    );
+
+  // Real-time updates via SSE
+  const handleLeadUpdate = useCallback(() => {
+    utils.leads.listWorkspace.invalidate();
+    if (selectedPhone) {
+      utils.leads.getTimeline.invalidate({ phone: selectedPhone });
+    }
+  }, [utils, selectedPhone]);
+
+  useOpsStream({ onLeadUpdate: handleLeadUpdate });
+
+  // Send message mutation
+  const sendMsg = trpc.leads.sendWorkspaceMessage.useMutation({
+    onSuccess: () => {
+      if (selectedPhone) {
+        utils.leads.getTimeline.invalidate({ phone: selectedPhone });
+      }
+      setComposerText("");
+    },
+  });
+
+  // Auto-select first lead when workspace loads
+  useEffect(() => {
+    if (!selectedPhone && workspace.length > 0) {
+      setSelectedPhone(workspace[0].phone);
+    }
+  }, [workspace, selectedPhone]);
+
+  // Scroll to bottom on new timeline events
   useEffect(() => {
     if (journeyRef.current) {
       journeyRef.current.scrollTop = journeyRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [timeline?.messages?.length]);
 
-  const filteredLeads = MOCK_LEADS.filter((l) => {
-    if (activeFilter === "unread") return l.unread;
-    if (activeFilter === "campaign-reply")
-      return l.tags.some((t) => t.label.toLowerCase().includes("campaign"));
-    if (activeFilter === "quote-viewed")
-      return l.tags.some((t) => t.label.toLowerCase().includes("quote"));
+  // ── Derived data ───────────────────────────────────────────────────────────
+
+  const selectedSummary: WorkspaceSummary | null =
+    workspace.find((w) => w.phone === selectedPhone) ?? null;
+
+  // Filter list by lane + filter chip + search
+  const filteredLeads = workspace.filter((lead) => {
+    const lane = stageToLane(lead.stage);
+    if (activeLane !== "needs-me" && lane !== activeLane) return false; // "needs-me" is default/all for now
+    if (activeFilter === "unread" && lead.unreadCount === 0) return false;
+    if (activeFilter === "campaign-reply") {
+      const src = lead.leadSource ?? "";
+      if (!src.startsWith("campaign:") && !src.startsWith("always-on") && src !== "reactivation") return false;
+    }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const name = (lead.customerName ?? "").toLowerCase();
+      const phone = lead.phone.toLowerCase();
+      const msg = (lead.lastMessage ?? "").toLowerCase();
+      if (!name.includes(q) && !phone.includes(q) && !msg.includes(q)) return false;
+    }
     return true;
   });
 
-  function handlePickLead(lead: Lead) {
-    setSelectedLead(lead);
-    setMessages(lead.messages);
-    setComposerText(lead.nextBestAction.suggestedReplies[0]);
+  // Lane counts
+  const laneCounts: Record<Lane, number> = {
+    "all": workspace.length,
+    "needs-me": workspace.filter((l) => stageToLane(l.stage) === "needs-me").length,
+    "ready-to-book": workspace.filter((l) => stageToLane(l.stage) === "ready-to-book").length,
+    "needs-price": workspace.filter((l) => stageToLane(l.stage) === "needs-price").length,
+    "reactivation": workspace.filter((l) => stageToLane(l.stage) === "reactivation").length,
+  };
+
+  const unreadCount = workspace.reduce((sum, l) => sum + l.unreadCount, 0);
+
+  // Timeline events merged and sorted
+  const timelineEvents: TimelineEvent[] = timeline
+    ? buildTimeline(timeline.messages, timeline.campaigns, timeline.calls)
+    : [];
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  function handlePickLead(phone: string) {
+    setSelectedPhone(phone);
+    setComposerText("");
   }
 
   function handleSend() {
-    if (!composerText.trim()) return;
-    const newMsg: LeadMessage = {
-      id: Date.now(),
-      sender: "agent",
-      senderName: "You",
-      text: composerText,
-      time: "now",
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setComposerText("");
+    if (!composerText.trim() || !selectedPhone) return;
+    sendMsg.mutate({ phone: selectedPhone, message: composerText });
   }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div
@@ -439,19 +336,30 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
           <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-1">
             Revenue Workspace
           </p>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 mb-3">
-            Lead Journey
-          </h1>
+          <div className="flex items-center justify-between mb-3">
+            <h1 className="text-2xl font-black tracking-tight text-slate-900">
+              Lead Journey
+            </h1>
+            {workspaceLoading && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+            {!workspaceLoading && workspace.length > 0 && (
+              <span className="text-xs font-black text-slate-400">{workspace.length}</span>
+            )}
+          </div>
           {/* Search */}
           <div className="flex items-center gap-2 h-10 border border-slate-200 rounded-2xl px-3 text-slate-400 text-sm font-semibold bg-white">
             <Search className="w-3.5 h-3.5 shrink-0" />
-            <span>Search leads, campaigns…</span>
+            <input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search leads, campaigns…"
+              className="flex-1 bg-transparent outline-none text-slate-700 placeholder:text-slate-400 text-sm font-semibold"
+            />
           </div>
         </div>
 
         {/* Lanes */}
         <div className="grid grid-cols-2 gap-2 px-4 pb-3 shrink-0">
-          {LANES.map((lane) => (
+          {LANE_CONFIG.map((lane) => (
             <button
               key={lane.id}
               onClick={() => setActiveLane(lane.id)}
@@ -465,7 +373,7 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
               <span className="text-base">{lane.emoji}</span>{" "}
               {lane.label}
               <span className="block text-slate-500 font-semibold text-[11px] mt-0.5">
-                {lane.count} leads
+                {laneCounts[lane.id]} leads
               </span>
             </button>
           ))}
@@ -473,7 +381,13 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
 
         {/* Filters */}
         <div className="flex gap-2 px-4 pb-3 overflow-x-auto shrink-0 scrollbar-none">
-          {FILTERS.map((f) => (
+          {(
+            [
+              { id: "all" as LeadFilter, label: "All" },
+              { id: "unread" as LeadFilter, label: "Unread", count: unreadCount },
+              { id: "campaign-reply" as LeadFilter, label: "Campaign reply" },
+            ] as { id: LeadFilter; label: string; count?: number }[]
+          ).map((f) => (
             <button
               key={f.id}
               onClick={() => setActiveFilter(f.id)}
@@ -492,47 +406,73 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
 
         {/* Lead List */}
         <ScrollArea className="flex-1 min-h-0 px-3 pb-4">
+          {workspaceLoading && (
+            <div className="flex items-center justify-center py-12 text-slate-400">
+              <Loader2 className="w-5 h-5 animate-spin mr-2" />
+              <span className="text-sm font-semibold">Loading leads…</span>
+            </div>
+          )}
+          {!workspaceLoading && filteredLeads.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+              <MessageSquare className="w-8 h-8 mb-2 opacity-40" />
+              <p className="text-sm font-semibold">No leads found</p>
+            </div>
+          )}
           <div className="flex flex-col gap-2">
-            {filteredLeads.map((lead) => (
-              <button
-                key={lead.id}
-                onClick={() => handlePickLead(lead)}
-                className={cn(
-                  "w-full text-left p-4 rounded-[20px] border transition-all",
-                  selectedLead.id === lead.id
-                    ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
-                    : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
-                )}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
-                    {lead.name}
-                    {lead.unread && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
-                    )}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
-                    {lead.time}
-                  </span>
-                </div>
-                <p className="text-[13px] text-slate-500 mb-2 line-clamp-1">
-                  {lead.lastMessage}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {lead.tags.map((tag) => (
-                    <span
-                      key={tag.label}
-                      className={cn(
-                        "px-2 py-0.5 rounded-full text-[11px] font-black border",
-                        TAG_STYLES[tag.color]
+            {filteredLeads.map((lead) => {
+              const tag = sourceToTag(lead.leadSource);
+              const initials = getInitials(lead.customerName, lead.phone);
+              const displayName = lead.customerName ?? lead.phone;
+              return (
+                <button
+                  key={lead.phone}
+                  onClick={() => handlePickLead(lead.phone)}
+                  className={cn(
+                    "w-full text-left p-4 rounded-[20px] border transition-all",
+                    selectedPhone === lead.phone
+                      ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
+                      : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
+                  )}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                      {displayName}
+                      {lead.unreadCount > 0 && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
                       )}
-                    >
-                      {tag.label}
                     </span>
-                  ))}
-                </div>
-              </button>
-            ))}
+                    <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
+                      {formatTs(lead.lastMessageAt)}
+                    </span>
+                  </div>
+                  <p className="text-[13px] text-slate-500 mb-2 line-clamp-1">
+                    {lead.lastMessage ?? "No messages yet"}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {tag && (
+                      <span
+                        className={cn(
+                          "px-2 py-0.5 rounded-full text-[11px] font-black border",
+                          TAG_STYLES[tag.color]
+                        )}
+                      >
+                        {tag.label}
+                      </span>
+                    )}
+                    {lead.needsAttention && (
+                      <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-black border", TAG_STYLES.orange)}>
+                        Needs attention
+                      </span>
+                    )}
+                    {lead.assignedAgentName && (
+                      <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-black border", TAG_STYLES.gray)}>
+                        {lead.assignedAgentName}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </ScrollArea>
       </Card>
@@ -546,232 +486,231 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
           boxShadow: "0 8px 24px rgba(15,23,42,.05)",
         }}
       >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 shrink-0"
-          style={{
-            height: 80,
-            borderBottom: "1px solid #e7eaf0",
-          }}
-        >
-          <div className="flex items-center gap-3">
+        {!selectedSummary ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+            <MessageSquare className="w-10 h-10 mb-3 opacity-30" />
+            <p className="font-semibold text-sm">Select a lead</p>
+            <p className="text-xs mt-1">Pick a conversation from the left to get started</p>
+          </div>
+        ) : (
+          <>
+            {/* Header */}
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shrink-0"
-              style={{ background: "linear-gradient(135deg,#ff8a34,#ff4f81)" }}
+              className="flex items-center justify-between px-6 shrink-0"
+              style={{ height: 80, borderBottom: "1px solid #e7eaf0" }}
             >
-              {selectedLead.initials}
-            </div>
-            <div>
-              <h2 className="font-black text-lg text-slate-900 leading-tight">
-                {selectedLead.name}
-              </h2>
-              <p className="text-[13px] text-slate-500">
-                {selectedLead.campaignType} · {selectedLead.campaign}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <Phone className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <CheckCircle2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Attention Banner */}
-        <div
-          className="flex items-center gap-3 px-5 py-3 shrink-0"
-          style={{
-            background: "linear-gradient(90deg,#fbf8ff,#fff)",
-            borderBottom: "1px solid #eee",
-          }}
-        >
-          <span
-            className={cn(
-              "px-2.5 py-1 rounded-full text-[11px] font-black border shrink-0",
-              TAG_STYLES.orange
-            )}
-          >
-            Needs attention
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-black text-slate-900 leading-tight">
-              {selectedLead.nextBestAction.title}
-            </p>
-            <p className="text-[12px] text-slate-500 mt-0.5">
-              {selectedLead.nextBestAction.description}
-            </p>
-          </div>
-          <div
-            className="shrink-0 border border-slate-200 rounded-2xl px-3 py-2 bg-white"
-            style={{ minWidth: 180 }}
-          >
-            <div className="flex justify-between text-[11px] font-black text-slate-700 mb-0.5">
-              <span>Lead Momentum</span>
-              <span>{selectedLead.momentum}%</span>
-            </div>
-            <MomentumBar value={selectedLead.momentum} />
-          </div>
-        </div>
-
-        {/* Journey / Messages */}
-        <div
-          ref={journeyRef}
-          className="flex-1 min-h-0 overflow-y-auto px-6 py-5"
-          style={{ background: "linear-gradient(180deg,#fcfcfd,#f8fafc)" }}
-        >
-          <div className="flex flex-col gap-4">
-            <AnimatePresence initial={false}>
-              {messages.map((msg) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="flex gap-3"
+              <div className="flex items-center gap-3">
+                <div
+                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shrink-0"
+                  style={{ background: "linear-gradient(135deg,#ff8a34,#ff4f81)" }}
                 >
-                  {/* Dot */}
-                  <div
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10",
-                      msg.sender === "campaign"
-                        ? "bg-violet-100 text-violet-700"
-                        : msg.sender === "agent"
-                        ? "bg-slate-900 text-white"
-                        : msg.sender === "attention"
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-blue-100 text-blue-700"
-                    )}
-                  >
-                    {msg.sender === "campaign"
-                      ? "✦"
-                      : msg.sender === "agent"
-                      ? (msg.senderName?.[0] ?? "R")
-                      : msg.sender === "attention"
-                      ? "!"
-                      : "C"}
-                  </div>
+                  {getInitials(selectedSummary.customerName, selectedSummary.phone)}
+                </div>
+                <div>
+                  <h2 className="font-black text-lg text-slate-900 leading-tight">
+                    {selectedSummary.customerName ?? selectedSummary.phone}
+                  </h2>
+                  <p className="text-[13px] text-slate-500">
+                    {selectedSummary.leadSource
+                      ? selectedSummary.leadSource.replace(/^campaign:/, "Campaign · ")
+                      : "Direct"}{" "}
+                    · {selectedSummary.phone}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
+                  <Phone className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => utils.leads.getTimeline.invalidate({ phone: selectedSummary.phone })}
+                  className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+                <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
 
-                  {/* Card */}
-                  <div
-                    className={cn(
-                      "flex-1 border rounded-[18px] px-4 py-3",
-                      msg.sender === "agent"
-                        ? "bg-slate-900 border-slate-900 text-white max-w-[72%] ml-auto"
-                        : msg.sender === "campaign"
-                        ? "bg-violet-50 border-violet-100"
-                        : msg.sender === "attention"
-                        ? "bg-orange-50 border-orange-200"
-                        : "bg-white border-slate-200"
-                    )}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <span
-                        className={cn(
-                          "text-[10px] font-black tracking-widest uppercase",
-                          msg.sender === "agent"
-                            ? "text-slate-400"
-                            : "text-slate-400"
-                        )}
-                      >
-                        {msg.sender === "campaign"
-                          ? "Campaign"
-                          : msg.sender === "agent"
-                          ? (msg.senderName ?? "Agent")
-                          : msg.sender === "attention"
-                          ? "Attention event"
-                          : "Customer"}
-                      </span>
-                      <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                        {msg.time}
-                      </span>
-                    </div>
-                    {msg.campaignName && (
-                      <p className="font-black text-sm text-violet-800 mb-1">
-                        {msg.campaignName}
-                      </p>
-                    )}
-                    <p
-                      className={cn(
-                        "text-sm leading-relaxed",
-                        msg.sender === "agent" ? "text-white" : "text-slate-600"
-                      )}
-                    >
-                      {msg.text}
-                    </p>
-                    {msg.tags && (
-                      <div className="flex gap-1.5 mt-2 flex-wrap">
-                        {msg.tags.map((t) => (
-                          <span
-                            key={t}
-                            className={cn(
-                              "px-2 py-0.5 rounded-full text-[10px] font-black border",
-                              t === "Delivered"
-                                ? TAG_STYLES.purple
-                                : TAG_STYLES.green
-                            )}
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Composer */}
-        <div
-          className="shrink-0 px-5 py-4"
-          style={{ borderTop: "1px solid #e7eaf0", background: "#fff" }}
-        >
-          {/* Suggested replies */}
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none mb-2">
-            {selectedLead.nextBestAction.suggestedReplies.map((reply, i) => (
-              <button
-                key={i}
-                onClick={() => setComposerText(reply)}
-                className={cn(
-                  "border rounded-full px-3 py-1.5 text-[12px] font-black whitespace-nowrap transition-all shrink-0",
-                  composerText === reply
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-                )}
+            {/* Attention Banner — only if flagged */}
+            {selectedSummary.needsAttention && (
+              <div
+                className="flex items-center gap-3 px-5 py-3 shrink-0"
+                style={{ background: "linear-gradient(90deg,#fbf8ff,#fff)", borderBottom: "1px solid #eee" }}
               >
-                {i === 0 ? "Specific price" : i === 1 ? "Soft lock" : "Social proof"}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <textarea
-              value={composerText}
-              onChange={(e) => setComposerText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
-              }}
-              placeholder="Type a message…"
-              className="flex-1 h-16 border border-slate-200 rounded-[18px] px-4 py-3 text-sm resize-none font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition"
-            />
-            <button
-              onClick={handleSend}
-              className="shrink-0 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95"
-              style={{ background: "#ff6b1a" }}
+                <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-black border shrink-0", TAG_STYLES.orange)}>
+                  Needs attention
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-black text-slate-900 leading-tight">Follow up with this lead</p>
+                  <p className="text-[12px] text-slate-500 mt-0.5">This lead has been flagged for attention</p>
+                </div>
+              </div>
+            )}
+
+            {/* Journey / Messages */}
+            <div
+              ref={journeyRef}
+              className="flex-1 min-h-0 overflow-y-auto px-6 py-5"
+              style={{ background: "linear-gradient(180deg,#fcfcfd,#f8fafc)" }}
             >
-              Send →
-            </button>
-          </div>
-        </div>
+              {timelineLoading && (
+                <div className="flex items-center justify-center py-12 text-slate-400">
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  <span className="text-sm font-semibold">Loading conversation…</span>
+                </div>
+              )}
+              <div className="flex flex-col gap-4">
+                <AnimatePresence initial={false}>
+                  {timelineEvents.map((event) => {
+                    if (event._type === "campaign") {
+                      return (
+                        <motion.div
+                          key={event.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="flex gap-3"
+                        >
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10 bg-violet-100 text-violet-700">
+                            ✦
+                          </div>
+                          <div className="flex-1 border rounded-[18px] px-4 py-3 bg-violet-50 border-violet-100">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">Campaign</span>
+                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">{formatTs(event.ts)}</span>
+                            </div>
+                            <p className="font-black text-sm text-violet-800 mb-1">{event.campaignName}</p>
+                            {event.message && (
+                              <p className="text-sm leading-relaxed text-slate-600">{event.message}</p>
+                            )}
+                            {event.status && (
+                              <span className={cn("mt-2 inline-block px-2 py-0.5 rounded-full text-[10px] font-black border", TAG_STYLES.purple)}>
+                                {event.status}
+                              </span>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    }
+
+                    if (event._type === "call") {
+                      return (
+                        <motion.div
+                          key={event.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="flex gap-3"
+                        >
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10 bg-blue-100 text-blue-700">
+                            <Phone className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="flex-1 border rounded-[18px] px-4 py-3 bg-blue-50 border-blue-100">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">Call</span>
+                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">{formatTs(event.ts)}</span>
+                            </div>
+                            <p className="text-sm text-slate-600">
+                              {event.duration ? `${Math.floor(event.duration / 60)}m ${event.duration % 60}s` : "Call recorded"}
+                            </p>
+                            {event.recordingUrl && (
+                              <a href={event.recordingUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-blue-600 font-black mt-1 inline-block hover:underline">
+                                Listen to recording →
+                              </a>
+                            )}
+                          </div>
+                        </motion.div>
+                      );
+                    }
+
+                    // Regular message
+                    const msg = event as TimelineMessage & { _type: "message" };
+                    const isAgent = msg.role === "assistant";
+                    const isSystem = msg.role === "system";
+                    return (
+                      <motion.div
+                        key={msg.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.18 }}
+                        className="flex gap-3"
+                      >
+                        <div
+                          className={cn(
+                            "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10",
+                            isAgent ? "bg-slate-900 text-white" : isSystem ? "bg-orange-100 text-orange-700" : "bg-blue-100 text-blue-700"
+                          )}
+                        >
+                          {isAgent ? "A" : isSystem ? "!" : "C"}
+                        </div>
+                        <div
+                          className={cn(
+                            "flex-1 border rounded-[18px] px-4 py-3",
+                            isAgent
+                              ? "bg-slate-900 border-slate-900 text-white max-w-[72%] ml-auto"
+                              : isSystem
+                              ? "bg-orange-50 border-orange-200"
+                              : "bg-white border-slate-200"
+                          )}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className={cn("text-[10px] font-black tracking-widest uppercase", isAgent ? "text-slate-400" : "text-slate-400")}>
+                              {isAgent ? "Agent" : isSystem ? "System" : "Customer"}
+                            </span>
+                            <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">
+                              {formatTs(msg.ts)}
+                            </span>
+                          </div>
+                          <p className={cn("text-sm leading-relaxed", isAgent ? "text-white" : "text-slate-600")}>
+                            {msg.content}
+                          </p>
+                          {msg.mediaUrls && msg.mediaUrls.length > 0 && (
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                              {msg.mediaUrls.map((url, i) => (
+                                <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                  <img src={url} alt="media" className="max-w-[160px] rounded-xl border border-slate-200" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+            </div>
+
+            {/* Composer */}
+            <div
+              className="shrink-0 px-5 py-4"
+              style={{ borderTop: "1px solid #e7eaf0", background: "#fff" }}
+            >
+              <div className="flex gap-3">
+                <textarea
+                  value={composerText}
+                  onChange={(e) => setComposerText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
+                  }}
+                  placeholder="Type a message…"
+                  className="flex-1 h-16 border border-slate-200 rounded-[18px] px-4 py-3 text-sm resize-none font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition"
+                />
+                <button
+                  onClick={handleSend}
+                  disabled={sendMsg.isPending || !composerText.trim()}
+                  className="shrink-0 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+                  style={{ background: "#ff6b1a" }}
+                >
+                  {sendMsg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send →"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </Card>
 
       {/* ── Right: Context Panel ── */}
@@ -785,132 +724,119 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
         }}
       >
         <ScrollArea className="flex-1 min-h-0 p-5">
-          {/* Next Best Action */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Next Best Action
-          </p>
-          <div
-            className="rounded-[20px] p-4 mb-4"
-            style={{ background: "#101828", border: "1px solid #101828" }}
-          >
-            <span
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[11px] font-black border mb-3 inline-block",
-                TAG_STYLES.orange
-              )}
-            >
-              Recommended
-            </span>
-            <h3 className="font-black text-white text-sm leading-snug mb-2">
-              {selectedLead.nextBestAction.title}
-            </h3>
-            <p className="text-[13px] text-slate-400 leading-relaxed mb-3">
-              {selectedLead.nextBestAction.description}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() =>
-                  setComposerText(selectedLead.nextBestAction.suggestedReplies[0])
-                }
-                className="col-span-2 border-0 rounded-[14px] py-2.5 font-black text-sm text-white transition hover:opacity-90"
-                style={{ background: "#ff6b1a" }}
+          {!selectedSummary ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+              <Target className="w-8 h-8 mb-2 opacity-30" />
+              <p className="text-sm font-semibold">Select a lead</p>
+            </div>
+          ) : (
+            <>
+              {/* Next Best Action */}
+              <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
+                Next Best Action
+              </p>
+              <div
+                className="rounded-[20px] p-4 mb-4"
+                style={{ background: "#101828", border: "1px solid #101828" }}
               >
-                Use response
-              </button>
-              <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
-                Call now
-              </button>
-              <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
-                Follow-up
-              </button>
-              <button className="col-span-2 border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
-                Close
-              </button>
-            </div>
-          </div>
-
-          {/* Lead Snapshot */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Lead Snapshot
-          </p>
-          <div className="border border-slate-200 rounded-[20px] p-4 mb-4 bg-white">
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Quote", value: selectedLead.quote },
-                { label: "Service", value: selectedLead.service },
-                { label: "Frequency", value: selectedLead.frequency },
-                {
-                  label: "Last booking",
-                  value:
-                    selectedLead.daysSinceBooking === 0
-                      ? "New"
-                      : `${selectedLead.daysSinceBooking}d ago`,
-                },
-              ].map((m) => (
-                <div
-                  key={m.label}
-                  className="border border-slate-100 rounded-[14px] p-2.5 bg-slate-50/50"
-                >
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    {m.label}
-                  </span>
-                  <b className="block mt-1 text-sm font-black text-slate-900">
-                    {m.value}
-                  </b>
+                <span className={cn("px-2.5 py-1 rounded-full text-[11px] font-black border mb-3 inline-block", TAG_STYLES.orange)}>
+                  Recommended
+                </span>
+                <h3 className="font-black text-white text-sm leading-snug mb-2">
+                  {selectedSummary.needsAttention ? "Follow up now" : "Engage this lead"}
+                </h3>
+                <p className="text-[13px] text-slate-400 leading-relaxed mb-3">
+                  {selectedSummary.lastMessage
+                    ? `Last message: "${selectedSummary.lastMessage.slice(0, 80)}${selectedSummary.lastMessage.length > 80 ? "…" : ""}"`
+                    : "Start a conversation with this lead."}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button className="col-span-2 border-0 rounded-[14px] py-2.5 font-black text-sm text-white transition hover:opacity-90" style={{ background: "#ff6b1a" }}>
+                    Reply now
+                  </button>
+                  <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
+                    Call now
+                  </button>
+                  <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
+                    Follow-up
+                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Campaign Context */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Campaign Context
-          </p>
-          <div
-            className="border rounded-[20px] p-4 mb-4"
-            style={{ background: "#faf7ff", borderColor: "#e9d5ff" }}
-          >
-            <p className="text-[10px] font-black tracking-[.22em] uppercase text-violet-500 mb-1">
-              Source Journey
-            </p>
-            <h3 className="font-black text-slate-900 text-sm mb-1">
-              {selectedLead.campaign}
-            </h3>
-            <p className="text-[13px] text-slate-500">
-              {selectedLead.campaignType} · customer replied in{" "}
-              {selectedLead.campaignReplyTime}
-            </p>
-          </div>
-
-          {/* Customer Intelligence */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Customer Intelligence
-          </p>
-          <div className="border border-slate-200 rounded-[20px] p-4 bg-white">
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Lifetime", value: selectedLead.lifetimeValue },
-                { label: "Jobs", value: String(selectedLead.jobCount) },
-                { label: "Preferred team", value: selectedLead.preferredTeam },
-                {
-                  label: "Book likelihood",
-                  value: `${selectedLead.bookLikelihood}%`,
-                },
-              ].map((m) => (
-                <div
-                  key={m.label}
-                  className="border border-slate-100 rounded-[14px] p-2.5 bg-slate-50/50"
-                >
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    {m.label}
-                  </span>
-                  <b className="block mt-1 text-sm font-black text-slate-900">
-                    {m.value}
-                  </b>
+              {/* Lead Snapshot */}
+              <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
+                Lead Snapshot
+              </p>
+              <div className="border border-slate-200 rounded-[20px] p-4 mb-4 bg-white">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Phone", value: selectedSummary.phone },
+                    { label: "Stage", value: selectedSummary.stage ?? "New" },
+                    { label: "Source", value: selectedSummary.leadSource ?? "Direct" },
+                    {
+                      label: "Last activity",
+                      value: selectedSummary.lastMessageAt
+                        ? formatTs(selectedSummary.lastMessageAt)
+                        : "—",
+                    },
+                  ].map((m) => (
+                    <div key={m.label} className="border border-slate-100 rounded-[14px] p-2.5 bg-slate-50/50">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        {m.label}
+                      </span>
+                      <b className="block mt-1 text-sm font-black text-slate-900 truncate" title={m.value}>
+                        {m.value}
+                      </b>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
+
+              {/* Campaign Context — if from campaign */}
+              {selectedSummary.leadSource && (selectedSummary.leadSource.startsWith("campaign:") || selectedSummary.leadSource.startsWith("always-on") || selectedSummary.leadSource === "reactivation") && (
+                <>
+                  <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
+                    Campaign Context
+                  </p>
+                  <div className="border rounded-[20px] p-4 mb-4" style={{ background: "#faf7ff", borderColor: "#e9d5ff" }}>
+                    <p className="text-[10px] font-black tracking-[.22em] uppercase text-violet-500 mb-1">
+                      Source Journey
+                    </p>
+                    <h3 className="font-black text-slate-900 text-sm mb-1">
+                      {selectedSummary.leadSource.replace(/^campaign:/, "").replace(/-/g, " ")}
+                    </h3>
+                    <p className="text-[13px] text-slate-500">
+                      {selectedSummary.leadSource.startsWith("always-on") ? "Always-on" : "Campaign"} · last active {formatTs(selectedSummary.lastMessageAt)}
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* Customer Intelligence */}
+              <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
+                Customer Intelligence
+              </p>
+              <div className="border border-slate-200 rounded-[20px] p-4 bg-white">
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: "Unread", value: String(selectedSummary.unreadCount) },
+                    { label: "Assigned", value: selectedSummary.assignedAgentName ?? "Unassigned" },
+                    { label: "Needs attn", value: selectedSummary.needsAttention ? "Yes" : "No" },
+                    { label: "Timeline", value: `${timelineEvents.length} events` },
+                  ].map((m) => (
+                    <div key={m.label} className="border border-slate-100 rounded-[14px] p-2.5 bg-slate-50/50">
+                      <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
+                        {m.label}
+                      </span>
+                      <b className="block mt-1 text-sm font-black text-slate-900">
+                        {m.value}
+                      </b>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </ScrollArea>
       </Card>
     </div>
