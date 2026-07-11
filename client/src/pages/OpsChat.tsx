@@ -3074,43 +3074,48 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setActiveFilter={setCsFilter}
               focusSessionId={focusCsSessionId}
               rail={
-                <aside className="rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-                  <div className="flex flex-col items-center gap-1.5">
+                <aside className="rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                  <div className="flex flex-col items-center gap-0 w-full">
                     {([
-                      { id: "channels"    as const, icon: <Radio      className="w-4 h-4" />, label: "Command Chat" },
-                      { id: "cs"          as const, icon: <UserCheck  className="w-4 h-4" />, label: "Customer Service" },
-                      { id: "leadops"     as const, icon: <Workflow   className="w-4 h-4" />, label: "Lead Management" },
-                      { id: "leads-inbox" as const, icon: <Rocket     className="w-4 h-4" />, label: "Lead Chat" },
-                      { id: "today"       as const, icon: <Activity   className="w-4 h-4" />, label: "Operation Logs" },
-                    ]).map((ws) => (
-                      <div key={ws.id} className="group relative">
+                      { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
+                      { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Management" },
+                      { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+                      { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
+                    ]).map((ws) => {
+                      const isActive = activeTab === ws.id;
+                      return (
                         <button
+                          key={ws.id}
                           onClick={() => handleSetActiveTab(ws.id)}
-                          className={cn(
-                            "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                            activeTab === ws.id
-                              ? "bg-white text-[#1C1C1E] shadow-sm"
-                              : "text-white/50 hover:text-white hover:bg-white/10"
-                          )}
+                          className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
+                          style={{ opacity: isActive ? 1 : 0.4 }}
                         >
-                          {ws.icon}
-                          {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
-                          {ws.id === "channels" && (
-                            <CmdMentionBadge
-                              callerName={callerName}
-                              hidden={activeTab === "channels"}
-                              channelMsgs={channelMsgs}
-                              myNames={myNames}
-                            />
+                          {ws.id === "channels" ? (
+                            <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
+                              <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={2} />
+                              <CmdMentionBadge
+                                callerName={callerName}
+                                hidden={activeTab === "channels"}
+                                channelMsgs={channelMsgs}
+                                myNames={myNames}
+                              />
+                            </div>
+                          ) : (
+                            <div className="relative flex items-center justify-center">
+                              <ws.Icon size={28} style={{ color: ws.color }} strokeWidth={1.75} />
+                              {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-white font-medium leading-tight text-center">
+                            {ws.line1}{ws.line2 ? <><br />{ws.line2}</> : null}
+                          </span>
+                          {isActive && (
+                            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{ background: ws.color }} />
                           )}
                         </button>
-                        <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover:opacity-100 transition-none">
-                          <div className="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{background:'rgba(30,30,32,0.97)',boxShadow:'0 4px 16px rgba(0,0,0,0.32)'}}>
-                            {ws.label}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="w-5 h-px bg-white/10 my-0.5" />
                   <div className="relative mt-auto">
