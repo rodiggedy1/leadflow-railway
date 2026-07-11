@@ -1421,21 +1421,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     return `${Math.floor(diff / 3600_000)}h ago`;
   }
 
-  // ── Loading guard: show skeleton until both inbox list AND selected conversation are ready.
-  // Secondary queries (profile, recordings, NBA, insights, etc.) are NOT part of this gate —
-  // they hydrate progressively inside the main layout.
-  // Error states fall through to normal render so existing error UI can handle them.
-  const inboxLoaded = csData !== undefined || csDataIsError;
-  const convLoaded =
-    !effectiveSelectedId ||
-    conversationDetail !== undefined ||
-    conversationDetailIsError;
-  const ready = inboxLoaded && convLoaded;
-
-  if (!ready) {
+  // ── Loading guard: show skeleton only during initial load, not during background refetches.
+  // Error state falls through to normal render so the existing error UI can handle it.
+  if (csData === undefined && !csDataIsError) {
     return (
       <div className="h-full overflow-hidden flex cs-inbox-scope" style={{color:'#101828', background:'transparent', padding:'20px', gap:'16px'}}>
-        {rail}
         {/* Col 1 skeleton */}
         <div style={{width:'260px', flexShrink:0, background:'#FFFFFF', borderRadius:'28px', border:'1px solid rgba(16,24,40,.06)', boxShadow:'0 10px 28px rgba(15,23,42,.05)', padding:'24px', display:'flex', flexDirection:'column', gap:'16px'}}>
           <div style={{height:'12px', width:'60px', background:'#F2F4F7', borderRadius:'6px'}} />
