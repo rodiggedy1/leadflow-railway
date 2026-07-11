@@ -226,8 +226,8 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
   // Only "completed" is done — matches customer portal exactly
   // Index of the current (active) job — first non-completed, non-cancelled job
   const currentJobIdx = team.jobs.findIndex(j => j.jobStatus !== "completed" && j.jobStatus !== "cancelled");
-  // If all jobs are completed, treat the last one as current (all-done state)
-  const activeIdx = currentJobIdx === -1 ? team.jobs.length - 1 : currentJobIdx;
+  // If all jobs are completed, set activeIdx PAST the end so every node renders as a checkmark
+  const activeIdx = currentJobIdx === -1 ? team.jobs.length : currentJobIdx;
 
   return (
     <div className="overflow-hidden rounded-[20px] bg-white border border-slate-200 shadow-[0_2px_12px_rgba(15,23,42,.05)] hover:shadow-[0_8px_32px_rgba(15,23,42,.09)] transition-shadow">
@@ -282,10 +282,11 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
           {/* Nodes — ALL jobs shown */}
           <div className="relative" style={{ minWidth: Math.max(480, team.jobs.length * 110), height: 96 }}>
             {/* Connector lines */}
-            {team.jobs.map((_, i) => {
+            {team.jobs.map((job, i) => {
               if (i >= team.jobs.length - 1) return null;
               const x = 50 + i * 110 + 36;
-              const isDone = i < activeIdx;
+              const isDone = job.jobStatus === "completed";
+
               return (
                 <div key={`line-${i}`} className="absolute top-[36px]" style={{
                   left: x, width: 74, height: 2,
@@ -299,8 +300,8 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
             {/* Job nodes */}
             {team.jobs.map((job, i) => {
               const leftPos = 25 + i * 110;
-              const isDone = i < activeIdx;
-              const isCurrent = i === activeIdx;
+              const isDone = job.jobStatus === "completed";
+              const isCurrent = !isDone && i === activeIdx;
               const firstName = job.customerName?.split(" ")[0] ?? "";
               const lastInitial = job.customerName?.split(" ")[1]?.[0] ?? "";
               const city = job.jobAddress.split(",")[1]?.trim() ?? job.jobAddress;
