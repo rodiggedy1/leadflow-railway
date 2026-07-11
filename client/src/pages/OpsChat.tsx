@@ -1034,51 +1034,38 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     };
   }, [incomingTab]);
 
-  // ── DIAGNOSTIC: measure outermost OpsChat div + shell + overlay widths ──
+  // ── DIAGNOSTIC: measure shell before/after simulated w-full ──
   useEffect(() => {
-    // --- Measure outermost OpsChat div (rootRef) ---
-    if (rootRef.current) {
-      const root = rootRef.current;
-      const rootRect = root.getBoundingClientRect();
-      const rootStyle = getComputedStyle(root);
-      console.log('[DIAG-ROOT] outermost OpsChat BCR width:', rootRect.width, 'height:', rootRect.height);
-      console.log('[DIAG-ROOT] outermost OpsChat computed width:', rootStyle.width, 'height:', rootStyle.height);
-      const parent = root.parentElement;
-      if (parent) {
-        const parentRect = parent.getBoundingClientRect();
-        const parentStyle = getComputedStyle(parent);
-        console.log('[DIAG-ROOT] overlay parent BCR width:', parentRect.width, 'height:', parentRect.height);
-        console.log('[DIAG-ROOT] overlay parent computed display:', parentStyle.display, 'flexDir:', parentStyle.flexDirection);
-        console.log('[DIAG-ROOT] simulated w-full width (parent.offsetWidth):', parent.offsetWidth, 'px');
-      }
-    }
-    // --- Measure shell ---
-    if (!shellRef.current) return;
+    if (!shellRef.current || !rootRef.current) return;
     const shell = shellRef.current;
-    const shellRect = shell.getBoundingClientRect();
-    const shellStyle = getComputedStyle(shell);
-    console.log('[DIAG] shell BCR:', JSON.stringify({x: shellRect.x, y: shellRect.y, width: shellRect.width, height: shellRect.height}));
-    console.log('[DIAG] shell computed height:', shellStyle.height, 'width:', shellStyle.width, 'position:', shellStyle.position, 'overflow:', shellStyle.overflow);
-    const absChild = shell.firstElementChild as HTMLElement | null;
-    if (absChild) {
-      const childRect = absChild.getBoundingClientRect();
-      const childStyle = getComputedStyle(absChild);
-      console.log('[DIAG] absChild BCR:', JSON.stringify({x: childRect.x, y: childRect.y, width: childRect.width, height: childRect.height}));
-      console.log('[DIAG] absChild computed height:', childStyle.height, 'width:', childStyle.width, 'position:', childStyle.position);
-    }
-    // Walk up to find containing block for position:absolute
-    let el: HTMLElement | null = shell.parentElement;
-    let depth = 0;
-    while (el && depth < 10) {
-      const s = getComputedStyle(el);
-      if (s.position !== 'static') {
-        const r = el.getBoundingClientRect();
-        console.log('[DIAG] containing block at depth', depth, 'class:', el.className.slice(0, 80), 'BCR h:', r.height, 'w:', r.width, 'position:', s.position);
-        break;
-      }
-      el = el.parentElement;
-      depth++;
-    }
+    const root = rootRef.current;
+    const overlay = root.parentElement;
+
+    // Helper: snapshot all key widths
+    const snapshot = (label: string) => {
+      const overlayW = overlay ? overlay.getBoundingClientRect().width : -1;
+      const rootW = root.getBoundingClientRect().width;
+      const shellW = shell.getBoundingClientRect().width;
+      const displayed = shell.children[0] as HTMLElement | null;
+      const incoming  = shell.children[1] as HTMLElement | null;
+      const dispW  = displayed ? displayed.getBoundingClientRect().width : -1;
+      const incomW = incoming  ? incoming.getBoundingClientRect().width  : -1;
+      console.log(
+        `[DIAG-SHELL] ${label} | overlay:${overlayW.toFixed(1)} root:${rootW.toFixed(1)} shell:${shellW.toFixed(1)} displayed:${dispW.toFixed(1)} incoming:${incomW.toFixed(1)}`
+      );
+    };
+
+    // BEFORE: natural state
+    snapshot('BEFORE');
+
+    // SIMULATE: temporarily set width:100% on shell, force reflow, measure
+    shell.style.width = '100%';
+    // Force reflow
+    void shell.getBoundingClientRect();
+    snapshot('AFTER w-full on shell');
+
+    // RESTORE: remove the temporary style
+    shell.style.width = '';
   });
 
   const [composer, setComposer] = useState("");
