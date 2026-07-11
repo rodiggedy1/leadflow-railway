@@ -2068,8 +2068,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR — only shown outside CS tab (CS tab gets rail via prop) ── */}
-      {activeTab !== 'cs' && sidebarCollapsed ? (
-        /* Slim icon rail when collapsed */
+      {activeTab !== 'cs' && (
+        /* Slim icon rail */
         <aside className="shrink-0 w-[57px] self-stretch rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-1.5">
@@ -2273,7 +2273,9 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             </button>
           </div>
         </aside>
-      ) : activeTab !== 'cs' ? (
+      )}
+      {/* ── Ops job list panel — always visible on today tab ── */}
+      {activeTab === 'today' && (
       <div className="w-[300px] shrink-0 h-full bg-white rounded-3xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-3">
@@ -2470,7 +2472,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </p>
         </button>
       </div>
-      ) : null} {/* end sidebarCollapsed ternary — null on CS tab (rail is passed as prop) */}
+      )}{/* end today job list panel */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       <div className={`flex-1 flex flex-row overflow-hidden min-h-0 ${activeTab === 'cs' ? '' : 'gap-5'}`}>
