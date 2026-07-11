@@ -2150,7 +2150,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
 
           {/* Profile photo avatar */}
-          <div className="pb-3 shrink-0">
+          <div className="pt-3 pb-5 shrink-0">
             <button
               onClick={() => setProfilePhotoOpen(true)}
               className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block"
