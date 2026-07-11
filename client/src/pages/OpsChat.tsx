@@ -2148,115 +2148,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               </a>
             ))}
           </div>
-          {/* DMs / Agent status */}
-          <div className="relative w-full flex flex-col items-center shrink-0">
-            <button
-              onClick={() => setAgentStatusOpen(v => !v)}
-              className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100"
-              title="Agent status & DMs"
-            >
-              <div className="relative">
-                <Users size={22} style={{ color: "#94a3b8" }} strokeWidth={1.75} />
-                {totalDmUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none">
-                    {totalDmUnread > 9 ? "9+" : totalDmUnread}
-                  </span>
-                )}
-              </div>
-            </button>
-            {/* Agent status popover */}
-            {agentStatusOpen && (
-              <>
-              <div className="fixed inset-0 z-40" onClick={() => setAgentStatusOpen(false)} />
-              <div className="absolute left-full bottom-0 ml-3 z-50 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-800">Agent Status</p>
-                  <button onClick={() => setAgentStatusOpen(false)} className="text-slate-400 hover:text-slate-700">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
-                  {!agentStatusData ? (
-                    <div className="px-4 py-6 text-center text-sm text-slate-400">Loading...</div>
-                  ) : agentStatusData.agents.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-slate-400">No agents found</div>
-                  ) : agentStatusData.agents.map((ag) => {
-                    const now = Date.now();
-                    const seenMs = ag.lastSeenAt;
-                    const diffMin = seenMs ? Math.floor((now - seenMs) / 60_000) : null;
-                    const agStatus: "online" | "away" | "offline" = ag.awayStatus
-                      ? "away"
-                      : diffMin === null ? "offline"
-                      : diffMin <= 2 ? "online"
-                      : diffMin <= 15 ? "away"
-                      : "offline";
-                    const awayLabels: Record<string, string> = {
-                      away_sec: "Away for a sec ☕",
-                      lunch:    "Lunch break 🍔",
-                      back15:   "Back in 15 ⏰",
-                      eod:      "Signing off 🌙",
-                    };
-                    const statusLabel = ag.awayStatus ? (awayLabels[ag.awayStatus] ?? "Away")
-                      : seenMs === null || diffMin === null ? "Never logged in"
-                      : diffMin === 0 ? "Active now"
-                      : diffMin < 60 ? `${diffMin}m ago`
-                      : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago`
-                      : new Date(seenMs).toLocaleDateString("en-US", { timeZone: "America/New_York" });
-                    const dotColor = agStatus === "online" ? "bg-green-500" : agStatus === "away" ? "bg-amber-400" : "bg-slate-300";
-                    return (
-                      <div key={ag.id} className="flex items-center gap-3 px-4 py-2.5">
-                        <div className="relative shrink-0">
-                          {ag.photoUrl ? (
-                            <img src={ag.photoUrl} alt={ag.name} className="w-8 h-8 rounded-full object-cover" />
-                          ) : (
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                              style={{ backgroundColor: senderHex(ag.name) }}
-                            >
-                              {ag.name[0].toUpperCase()}
-                            </div>
-                          )}
-                          <span
-                            className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white", dotColor)}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{ag.name}</p>
-                          <p className={cn("text-xs truncate",
-                            agStatus === "online" ? "text-green-600 font-medium" :
-                            agStatus === "away" ? "text-amber-500" :
-                            "text-slate-400"
-                          )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
-                        </div>
-                        {(() => {
-                          const agEmail = ag.email ?? "";
-                          const threadKey = agEmail && myDmKey.includes("@")
-                            ? [myDmKey, agEmail].sort().join("::")
-                            : "";
-                          const agentUnread = threadKey ? (dmUnreadMap[threadKey] ?? 0) : 0;
-                          return (
-                            <button
-                              onClick={() => { openDm(ag.name, ag.email ?? ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
-                              className="relative ml-1 p-1 rounded-full hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors"
-                              title={agentUnread > 0 ? `${agentUnread} unread DM${agentUnread > 1 ? "s" : ""} from ${ag.name}` : `DM ${ag.name}`}
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                              {agentUnread > 0 && (
-                                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                                  {agentUnread > 9 ? "9+" : agentUnread}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              </>
-            )}
-          </div>
+
           {/* Profile photo avatar */}
           <div className="pb-3 shrink-0">
             <button
@@ -3594,6 +3486,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         callerName={callerName}
         currentPhotoUrl={profilePhotoUrl}
         onPhotoUpdated={(url) => setProfilePhotoUrl(url || null)}
+        agentStatusData={agentStatusData}
+        dmUnreadMap={dmUnreadMap}
+        myDmKey={myDmKey}
+        totalDmUnread={totalDmUnread}
+        onOpenDm={openDm}
       />
 
       {/* ── Floating DM Panels ─────────────────────────────────────────────────── */}
