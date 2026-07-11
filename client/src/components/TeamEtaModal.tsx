@@ -223,10 +223,10 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
     return "#3B82F6";
   }, [team.etaStatus]);
 
-  const DONE_STATUSES = ["completed", "in_progress", "finishing_up", "wrapping_up", "arrived"];
-  // Index of the current (active) job — first non-done, non-cancelled job
-  const currentJobIdx = team.jobs.findIndex(j => !DONE_STATUSES.includes(j.jobStatus ?? "") && j.jobStatus !== "cancelled");
-  // If all done, treat the last job as current
+  // Only "completed" is done — matches customer portal exactly
+  // Index of the current (active) job — first non-completed, non-cancelled job
+  const currentJobIdx = team.jobs.findIndex(j => j.jobStatus !== "completed" && j.jobStatus !== "cancelled");
+  // If all jobs are completed, treat the last one as current (all-done state)
   const activeIdx = currentJobIdx === -1 ? team.jobs.length - 1 : currentJobIdx;
 
   return (
