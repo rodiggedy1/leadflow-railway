@@ -2443,10 +2443,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       {/* Persistent shell — always in DOM so flex-1 never collapses during tab switch */}
       <div ref={shellRef} className="relative flex-1 min-h-0 overflow-hidden">
-        {/* Route loading bar — overlays content, no layout impact */}
-        <div
-          className={`route-bar${routeBar === "running" ? " route-bar--running" : ""}${routeBar === "complete" ? " route-bar--complete" : ""}`}
-        />
         {/* Currently displayed tab — stays visible during transition */}
         <div className="absolute inset-0 flex flex-row overflow-hidden min-h-0" style={{ gap: displayedTab === 'cs' ? 0 : '1.25rem' }}>
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
@@ -2778,7 +2774,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         </div>
 
         {/* VIEW: Command Chat */}
-        <div style={{ display: displayedTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div style={{ display: displayedTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="relative flex-1 flex flex-col overflow-hidden min-h-0">
+          {/* Route loading bar — scoped to center column only */}
+          <div
+            className={`route-bar${routeBar === "running" ? " route-bar--running" : ""}${routeBar === "complete" ? " route-bar--complete" : ""}`}
+          />
           <CommandChat
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, threadParentBody: (m as any).threadParentBody ?? null, threadParentFrom: (m as any).threadParentFrom ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
