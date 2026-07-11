@@ -644,6 +644,43 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
 
                     // Regular message
                     const msg = event as TimelineMessage & { _type: "message" };
+                    const isCampaignMsg = msg.role === "assistant" && (
+                      msg.sessionSource?.startsWith("campaign:") ||
+                      msg.sessionSource?.startsWith("always-on") ||
+                      msg.sessionSource === "reactivation" ||
+                      msg.sessionSource === "command-center"
+                    );
+                    // Campaign-sourced assistant messages → render as purple campaign bubble
+                    if (isCampaignMsg) {
+                      const srcLabel = msg.sessionSource?.startsWith("campaign:")
+                        ? msg.sessionSource.replace(/^campaign:/, "").replace(/-/g, " ")
+                        : msg.sessionSource?.startsWith("always-on")
+                        ? "Always-on campaign"
+                        : msg.sessionSource === "reactivation"
+                        ? "Reactivation campaign"
+                        : "Outreach campaign";
+                      return (
+                        <motion.div
+                          key={msg.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="flex gap-3"
+                        >
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10 bg-violet-100 text-violet-700">
+                            ✦
+                          </div>
+                          <div className="flex-1 border rounded-[18px] px-4 py-3 bg-violet-50 border-violet-100">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">Campaign</span>
+                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">{formatTs(msg.ts)}</span>
+                            </div>
+                            <p className="font-black text-sm text-violet-800 mb-1">{srcLabel}</p>
+                            <p className="text-sm leading-relaxed text-slate-600">{msg.content}</p>
+                          </div>
+                        </motion.div>
+                      );
+                    }
                     const isAgent = msg.role === "assistant";
                     const isSystem = msg.role === "system";
                     return (
