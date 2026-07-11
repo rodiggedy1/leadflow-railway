@@ -511,10 +511,27 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
                     {selectedSummary.customerName ?? selectedSummary.phone}
                   </h2>
                   <p className="text-[13px] text-slate-500">
-                    {selectedSummary.leadSource
-                      ? selectedSummary.leadSource.replace(/^campaign:/, "Campaign · ")
-                      : "Direct"}{" "}
-                    · {selectedSummary.phone}
+                    {(() => {
+                      const src = selectedSummary.leadSource ?? "";
+                      let sourceLabel = "Direct";
+                      if (src.startsWith("campaign:") || src.startsWith("always-on")) sourceLabel = "Campaign reply";
+                      else if (src === "reactivation") sourceLabel = "Reactivation";
+                      else if (src === "inbound-sms") sourceLabel = "Inbound SMS";
+                      else if (src === "email") sourceLabel = "Email lead";
+                      else if (src === "quote-form") sourceLabel = "Quote form";
+                      else if (src === "command-center") sourceLabel = "Outreach";
+                      else if (src === "review_rebooking") sourceLabel = "Review rebooking";
+                      else if (src) sourceLabel = src;
+
+                      const stage = selectedSummary.stage ?? "";
+                      let stageLabel = "";
+                      if (stage.toLowerCase().includes("quote") || stage.toLowerCase().includes("price")) stageLabel = "Ready for price";
+                      else if (stage.toLowerCase().includes("book") || stage.toLowerCase().includes("scheduled")) stageLabel = "Ready to book";
+                      else if (stage.toLowerCase().includes("reactivat") || stage.toLowerCase().includes("rebooking")) stageLabel = "Reactivation";
+                      else if (stage) stageLabel = stage.replace(/_/g, " ").toLowerCase();
+
+                      return stageLabel ? `${sourceLabel} · ${stageLabel}` : sourceLabel;
+                    })()}
                   </p>
                 </div>
               </div>
