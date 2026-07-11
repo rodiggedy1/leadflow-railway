@@ -975,6 +975,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Stale-request guard: each CS prefetch gets a unique token;
   // if the user clicks away before prefetch completes, the stale token is ignored.
   const pendingTabTokenRef = useRef<number>(0);
+  // Route loading bar: "running" = animating to 80%, "complete" = snap to 100% + fade
+  const [routeBar, setRouteBar] = useState<"idle" | "running" | "complete">("idle");
   const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1020,6 +1022,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         // Issue a unique token for this prefetch so stale completions are ignored
         const token = Date.now();
         pendingTabTokenRef.current = token;
+        setRouteBar("running");
         const runPrefetch = async () => {
           try {
             // 1. Prefetch inbox list (same input as CsInbox)
@@ -1042,6 +1045,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           }
           // Guard again after the second fetch
           if (pendingTabTokenRef.current !== token) return;
+          setRouteBar("complete");
           setIncomingTab(tab);
         };
         void runPrefetch();
@@ -1057,6 +1061,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     if (incomingTab !== null) {
       setDisplayedTab(incomingTab);
       setIncomingTab(null);
+      setRouteBar("idle");
     }
   };
 
@@ -2438,6 +2443,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       {/* Persistent shell — always in DOM so flex-1 never collapses during tab switch */}
       <div ref={shellRef} className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Route loading bar — overlays content, no layout impact */}
+        <div
+          className={`route-bar${routeBar === "running" ? " route-bar--running" : ""}${routeBar === "complete" ? " route-bar--complete" : ""}`}
+        />
         {/* Currently displayed tab — stays visible during transition */}
         <div className="absolute inset-0 flex flex-row overflow-hidden min-h-0" style={{ gap: displayedTab === 'cs' ? 0 : '1.25rem' }}>
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
