@@ -2955,7 +2955,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setActiveFilter={setCsFilter}
               focusSessionId={focusCsSessionId}
               rail={
-                <aside className="shrink-0 w-[80px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                <aside className="shrink-0 w-[72px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
                   <div className="flex flex-col items-center gap-0 w-full pb-1">
                     {([
                       { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
