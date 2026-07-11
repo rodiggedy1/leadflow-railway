@@ -1034,38 +1034,28 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     };
   }, [incomingTab]);
 
-  // ── DIAGNOSTIC: measure shell before/after simulated w-full ──
+  // ── DIAGNOSTIC: walk ancestors from shell to root, log each width ──
   useEffect(() => {
     if (!shellRef.current || !rootRef.current) return;
     const shell = shellRef.current;
     const root = rootRef.current;
-    const overlay = root.parentElement;
 
-    // Helper: snapshot all key widths
-    const snapshot = (label: string) => {
-      const overlayW = overlay ? overlay.getBoundingClientRect().width : -1;
-      const rootW = root.getBoundingClientRect().width;
-      const shellW = shell.getBoundingClientRect().width;
-      const displayed = shell.children[0] as HTMLElement | null;
-      const incoming  = shell.children[1] as HTMLElement | null;
-      const dispW  = displayed ? displayed.getBoundingClientRect().width : -1;
-      const incomW = incoming  ? incoming.getBoundingClientRect().width  : -1;
+    console.log('[DIAG-WALK] === ancestor walk from shell to root ===');
+    let el: HTMLElement | null = shell;
+    let depth = 0;
+    while (el && depth < 20) {
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      const tag = el.tagName.toLowerCase();
+      const cls = el.className?.toString().slice(0, 60) ?? '';
       console.log(
-        `[DIAG-SHELL] ${label} | overlay:${overlayW.toFixed(1)} root:${rootW.toFixed(1)} shell:${shellW.toFixed(1)} displayed:${dispW.toFixed(1)} incoming:${incomW.toFixed(1)}`
+        `[DIAG-WALK] depth:${depth} <${tag}> w:${r.width.toFixed(1)} h:${r.height.toFixed(1)} display:${s.display} flex:${s.flexDirection} overflow:${s.overflow} | "${cls}"`
       );
-    };
-
-    // BEFORE: natural state
-    snapshot('BEFORE');
-
-    // SIMULATE: temporarily set width:100% on shell, force reflow, measure
-    shell.style.width = '100%';
-    // Force reflow
-    void shell.getBoundingClientRect();
-    snapshot('AFTER w-full on shell');
-
-    // RESTORE: remove the temporary style
-    shell.style.width = '';
+      if (el === root) break;
+      el = el.parentElement;
+      depth++;
+    }
+    console.log('[DIAG-WALK] === end walk ===');
   });
 
   const [composer, setComposer] = useState("");
