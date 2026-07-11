@@ -223,9 +223,11 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
     return "#3B82F6";
   }, [team.etaStatus]);
 
-  // Completed jobs = those with jobStatus === "completed"
-  const completedJobs = team.jobs.filter(j => j.jobStatus === "completed");
-  const remainingJobs = team.jobs.filter(j => j.jobStatus !== "completed");
+  const DONE_STATUSES = ["completed", "in_progress", "finishing_up", "wrapping_up", "arrived"];
+  // Index of the current (active) job — first non-done, non-cancelled job
+  const currentJobIdx = team.jobs.findIndex(j => !DONE_STATUSES.includes(j.jobStatus ?? "") && j.jobStatus !== "cancelled");
+  // If all done, treat the last job as current
+  const activeIdx = currentJobIdx === -1 ? team.jobs.length - 1 : currentJobIdx;
 
   return (
     <div className="overflow-hidden rounded-[20px] bg-white border border-slate-200 shadow-[0_2px_12px_rgba(15,23,42,.05)] hover:shadow-[0_8px_32px_rgba(15,23,42,.09)] transition-shadow">
@@ -277,112 +279,102 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
             </div>
           </div>
 
-          {/* Nodes */}
-          <div className="relative" style={{ minWidth: 480, height: 96 }}>
-            {/* Completed segment */}
-            {completedJobs.length > 0 && (
-              <div
-                className="absolute top-[36px]"
-                style={{ left: 50, width: 110, height: 2, background: "#16A34A", borderRadius: 2 }}
-              />
-            )}
-            {/* Current segment */}
-            <div
-              className="absolute top-[36px]"
-              style={{ left: completedJobs.length > 0 ? 160 : 50, width: 60, height: 2, background: cfg.dot, borderRadius: 2 }}
-            />
-            {/* Future dashed */}
-            <div
-              className="absolute top-[36px]"
-              style={{ left: completedJobs.length > 0 ? 220 : 110, right: 0, height: 2, borderTop: "2px dashed #CBD5E1" }}
-            />
-
-            {/* Last completed node */}
-            {completedJobs.length > 0 && (() => {
-              const last = completedJobs[completedJobs.length - 1];
+          {/* Nodes — ALL jobs shown */}
+          <div className="relative" style={{ minWidth: Math.max(480, team.jobs.length * 110), height: 96 }}>
+            {/* Connector lines */}
+            {team.jobs.map((_, i) => {
+              if (i >= team.jobs.length - 1) return null;
+              const x = 50 + i * 110 + 36;
+              const isDone = i < activeIdx;
               return (
-                <div className="absolute flex flex-col items-center" style={{ left: 25, top: 14, width: 50 }}>
-                  <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">
-                    {formatTime(last.serviceDateTime)}
-                  </div>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#16A34A" }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  </div>
-                  <div className="mt-1 text-center">
-                    <div className="text-[10px] font-[700] text-slate-700 truncate max-w-[60px]">{last.customerName.split(" ")[0]} {last.customerName.split(" ")[1]?.[0]}.</div>
-                    <div className="text-[9px] text-slate-400 truncate max-w-[60px]">{last.jobAddress.split(",")[1]?.trim() ?? last.jobAddress}</div>
-                  </div>
-                </div>
+                <div key={`line-${i}`} className="absolute top-[36px]" style={{
+                  left: x, width: 74, height: 2,
+                  background: isDone ? "#16A34A" : undefined,
+                  borderTop: isDone ? undefined : "2px dashed #CBD5E1",
+                  borderRadius: isDone ? 2 : undefined,
+                }} />
               );
-            })()}
+            })}
 
-            {/* Current job node (van) */}
-            {(() => {
-              const currentJob = team.jobs.find(j => j.jobStatus !== "completed" && j.jobStatus !== "cancelled") ?? team.jobs[team.jobs.length - 1];
-              const leftPos = completedJobs.length > 0 ? 148 : 38;
-              return (
-                <div className="absolute flex flex-col items-center" style={{ left: leftPos, top: 4, width: 70 }}>
-                  <div className="text-[12px] font-[750] mb-1 whitespace-nowrap text-center" style={{ color: cfg.badgeText }}>
-                    {team.etaStatus === "pending" ? "ETA Pending" :
-                     team.etaStatus === "no_answer" ? "ETA Pending" :
-                     team.etaStatus === "unclear" ? "ETA Unclear" :
-                     team.etaTimestamp ? `${formatTime(new Date(team.etaTimestamp))} ETA` : "—"}
-                  </div>
-                  <div
-                    className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white"
-                    style={{ borderColor: cfg.dot }}
-                  >
-                    {(team.etaStatus === "on_time" || team.etaStatus === "early" || team.etaStatus === "running_late") ? (
-                      <svg width="30" height="20" viewBox="0 0 56 40" fill="none">
-                        <rect x="4" y="10" width="46" height="22" rx="5" fill="white" stroke={cfg.dot} strokeWidth="2"/>
-                        <rect x="4" y="10" width="18" height="14" rx="3" fill={cfg.badgeBg} stroke={cfg.dot} strokeWidth="1.5"/>
-                        <rect x="24" y="10" width="26" height="14" rx="2" fill={cfg.badgeBg} stroke={cfg.dot} strokeWidth="1.5"/>
-                        <circle cx="14" cy="33" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
-                        <circle cx="14" cy="33" r="2.5" fill="#9CA3AF"/>
-                        <circle cx="42" cy="33" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
-                        <circle cx="42" cy="33" r="2.5" fill="#9CA3AF"/>
-                        <text x="28" y="22" textAnchor="middle" fontSize="5" fontWeight="700" fill={cfg.dot} fontFamily="Inter,sans-serif">MIB</text>
-                      </svg>
-                    ) : team.etaStatus === "no_answer" ? (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={cfg.dot} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.25 7.76 15.57 6.68 13.6"/>
-                        <line x1="1" y1="1" x2="23" y2="23"/>
-                      </svg>
-                    ) : (
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={cfg.dot} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                        <line x1="12" y1="17" x2="12.01" y2="17"/>
-                      </svg>
-                    )}
-                  </div>
-                  <div className="mt-1 text-center">
-                    {team.etaStatus === "running_late" && team.delayMinutes > 0 ? (
-                      <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>{team.delayMinutes} min late</div>
-                    ) : (() => {
-                      const s = team.currentJobStatus;
-                      if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Cleaning</div>;
-                      if (s === "arrived") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Arrived</div>;
-                      if (s === "on_the_way" || s === "running_late") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
-                      if (team.etaStatus === "on_time" || team.etaStatus === "early") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
-                      return null;
-                    })()}
-                    <div className="text-[9px] text-slate-400 truncate max-w-[70px]">{currentJob.jobAddress.split(",")[1]?.trim() ?? currentJob.jobAddress}</div>
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Job nodes */}
+            {team.jobs.map((job, i) => {
+              const leftPos = 25 + i * 110;
+              const isDone = i < activeIdx;
+              const isCurrent = i === activeIdx;
+              const firstName = job.customerName?.split(" ")[0] ?? "";
+              const lastInitial = job.customerName?.split(" ")[1]?.[0] ?? "";
+              const city = job.jobAddress.split(",")[1]?.trim() ?? job.jobAddress;
 
-            {/* Up next jobs */}
-            {remainingJobs.slice(1, 4).map((job, idx) => {
-              const leftPos = (completedJobs.length > 0 ? 268 : 158) + idx * 110;
+              if (isCurrent) {
+                // Van node
+                return (
+                  <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos - 10, top: 4, width: 70 }}>
+                    <div className="text-[11px] font-[750] mb-1 whitespace-nowrap text-center" style={{ color: cfg.badgeText }}>
+                      {team.etaStatus === "pending" || team.etaStatus === "no_answer" ? "ETA Pending" :
+                       team.etaStatus === "unclear" ? "ETA Unclear" :
+                       team.etaTimestamp ? `${formatTime(new Date(team.etaTimestamp))} ETA` : "—"}
+                    </div>
+                    <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white" style={{ borderColor: cfg.dot }}>
+                      {(team.etaStatus === "on_time" || team.etaStatus === "early" || team.etaStatus === "running_late") ? (
+                        <svg width="30" height="20" viewBox="0 0 56 40" fill="none">
+                          <rect x="4" y="10" width="46" height="22" rx="5" fill="white" stroke={cfg.dot} strokeWidth="2"/>
+                          <rect x="4" y="10" width="18" height="14" rx="3" fill={cfg.badgeBg} stroke={cfg.dot} strokeWidth="1.5"/>
+                          <rect x="24" y="10" width="26" height="14" rx="2" fill={cfg.badgeBg} stroke={cfg.dot} strokeWidth="1.5"/>
+                          <circle cx="14" cy="33" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
+                          <circle cx="14" cy="33" r="2.5" fill="#9CA3AF"/>
+                          <circle cx="42" cy="33" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
+                          <circle cx="42" cy="33" r="2.5" fill="#9CA3AF"/>
+                          <text x="28" y="22" textAnchor="middle" fontSize="5" fontWeight="700" fill={cfg.dot} fontFamily="Inter,sans-serif">MIB</text>
+                        </svg>
+                      ) : team.etaStatus === "no_answer" ? (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={cfg.dot} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.25 7.76 15.57 6.68 13.6"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={cfg.dot} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                          <line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                      )}
+                    </div>
+                    <div className="mt-1 text-center">
+                      {(() => {
+                        const s = team.currentJobStatus;
+                        if (team.etaStatus === "running_late" && team.delayMinutes > 0) return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>{team.delayMinutes} min late</div>;
+                        if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Cleaning</div>;
+                        if (s === "arrived") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Arrived</div>;
+                        if (s === "on_the_way" || s === "running_late" || team.etaStatus === "on_time" || team.etaStatus === "early") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
+                        return null;
+                      })()}
+                      <div className="text-[10px] font-[700] text-slate-700 truncate max-w-[70px]">{firstName} {lastInitial}.</div>
+                      <div className="text-[9px] text-slate-400 truncate max-w-[70px]">{city}</div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isDone) {
+                // Checkmark node
+                return (
+                  <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos, top: 14, width: 50 }}>
+                    <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#16A34A" }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div className="mt-1 text-center">
+                      <div className="text-[10px] font-[700] text-slate-700 truncate max-w-[60px]">{firstName} {lastInitial}.</div>
+                      <div className="text-[9px] text-slate-400 truncate max-w-[60px]">{city}</div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Future house node
               return (
                 <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos, top: 14, width: 50 }}>
-                  <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">
-                    {formatTime(job.serviceDateTime)}
-                  </div>
+                  <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
                   <div className="w-9 h-9 rounded-full border-2 border-slate-200 bg-white flex items-center justify-center">
                     <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
                       <polygon points="24,6 44,22 4,22" fill="#D1FAE5" stroke="#A7F3D0" strokeWidth="2"/>
@@ -391,8 +383,8 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                     </svg>
                   </div>
                   <div className="mt-1 text-center">
-                    <div className="text-[10px] font-[700] text-slate-700 truncate max-w-[60px]">{job.customerName.split(" ")[0]} {job.customerName.split(" ")[1]?.[0]}.</div>
-                    <div className="text-[9px] text-slate-400 truncate max-w-[60px]">{job.jobAddress.split(",")[1]?.trim() ?? job.jobAddress}</div>
+                    <div className="text-[10px] font-[700] text-slate-700 truncate max-w-[60px]">{firstName} {lastInitial}.</div>
+                    <div className="text-[9px] text-slate-400 truncate max-w-[60px]">{city}</div>
                   </div>
                 </div>
               );
