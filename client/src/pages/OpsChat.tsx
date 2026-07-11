@@ -2955,7 +2955,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setActiveFilter={setCsFilter}
               focusSessionId={focusCsSessionId}
               rail={
-                <aside className="rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
                   <div className="flex flex-col items-center gap-0 w-full">
                     {([
                       { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
@@ -2998,34 +2998,30 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       );
                     })}
                   </div>
-                  <div className="w-5 h-px bg-white/10 my-0.5" />
-                  <div className="relative mt-auto">
-                    <button
-                      onClick={() => setAgentStatusOpen(v => !v)}
-                      className={cn(
-                        "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                        agentStatusOpen ? "bg-white text-[#1C1C1E] shadow-sm" : "text-white/50 hover:text-white hover:bg-white/10"
-                      )}
-                      title="Agent status"
-                    >
-                      <Users className="w-4 h-4" />
-                    </button>
-                    {totalDmUnread > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
-                        {totalDmUnread > 9 ? "9+" : totalDmUnread}
-                      </span>
-                    )}
+                  <div className="flex flex-col items-center gap-0 w-full pt-1">
+                    {([
+                      { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+                      { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+                      { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+                      { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+                      { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+                    ]).map((nav) => (
+                      <a
+                        key={nav.href}
+                        href={nav.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+                      >
+                        <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                        <span className="text-[10px] text-white font-medium leading-tight text-center">
+                          {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                        </span>
+                      </a>
+                    ))}
                   </div>
-                  <div className="flex flex-col items-center gap-1.5 pb-1">
-                    <div className="h-px w-5 bg-white/10 mb-1" />
-                    <a href="/admin/leads" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Leads"><LayoutDashboard className="w-4 h-4" /></a>
-                    <a href="/admin/command-center" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Control Tower"><Radio className="w-4 h-4" /></a>
-                    <a href="/admin/field-management" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Field Mgmt"><ClipboardList className="w-4 h-4" /></a>
-                    <a href="/admin/hiring" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Hiring"><Briefcase className="w-4 h-4" /></a>
-                    <a href="/agent" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Agent Workspace"><UserCircle className="w-4 h-4" /></a>
-                  </div>
-                  <div className="pb-3">
-                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow" title={`${callerName} — edit profile`}>
+                  <div className="mt-auto pt-4 pb-6 shrink-0">
+                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
                       {profilePhotoUrl ? (
                         <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
                       ) : (
@@ -3047,7 +3043,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             <LeadOps
               focusSessionId={focusLeadSessionId}
               rail={
-                <aside className="rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
                   <div className="flex flex-col items-center gap-0 w-full">
                     {([
                       { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
@@ -3089,6 +3085,39 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                         </button>
                       );
                     })}
+                  </div>
+                  <div className="flex flex-col items-center gap-0 w-full pt-1">
+                    {([
+                      { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+                      { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+                      { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+                      { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+                      { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+                    ]).map((nav) => (
+                      <a
+                        key={nav.href}
+                        href={nav.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+                      >
+                        <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                        <span className="text-[10px] text-white font-medium leading-tight text-center">
+                          {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                  <div className="mt-auto pt-4 pb-6 shrink-0">
+                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
+                      {profilePhotoUrl ? (
+                        <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: senderHex(callerName) }}>
+                          {(callerName ?? "?")[0].toUpperCase()}
+                        </div>
+                      )}
+                    </button>
                   </div>
                 </aside>
               }
