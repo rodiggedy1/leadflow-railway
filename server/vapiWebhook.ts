@@ -319,7 +319,7 @@ export function registerVapiWebhookRoute(app: Express): void {
 
             // Update fieldMgmtCalls row with outcome/transcript
             const [updatedCall] = await db.update(fieldMgmtCalls)
-              .set({ outcome, durationSeconds, transcript, summary, recordingUrl, endedReason: endedReason ?? null })
+              .set({ outcome, durationSeconds, transcript, summary, recordingUrl, endedReason: endedReason ?? null, completedAt: new Date() })
               .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
               .catch(() => [null]) as any;
 
@@ -330,6 +330,7 @@ export function registerVapiWebhookRoute(app: Express): void {
                 clientStatusInquirySessionId: fieldMgmtCalls.clientStatusInquirySessionId,
                 calledPhone: fieldMgmtCalls.calledPhone,
                 vapiCallId: fieldMgmtCalls.vapiCallId,
+                cleanerJobId: fieldMgmtCalls.cleanerJobId,
               })
               .from(fieldMgmtCalls)
               .where(eq(fieldMgmtCalls.vapiCallId, vapiCallId))
@@ -353,6 +354,17 @@ export function registerVapiWebhookRoute(app: Express): void {
                 outcome,
                 cleanerName: cleanerRow?.name ?? null,
               }).catch((err: unknown) => console.error("[Vapi] handleStatusInquiryCallEnd error:", err));
+            }
+
+            if (callRow?.step === "eta_call_1" || callRow?.step === "eta_call_2") {
+              const { handleEtaCallEnd } = await import("./fieldMgmtEngine");
+              await handleEtaCallEnd({
+                vapiCallId: callRow.vapiCallId ?? "",
+                transcript: transcript ?? null,
+                outcome,
+                step: callRow.step as "eta_call_1" | "eta_call_2",
+                cleanerJobId: callRow.cleanerJobId,
+              }).catch((err: unknown) => console.error("[Vapi] handleEtaCallEnd error:", err));
             }
 
             if (callRow?.step === "schedule_escalation") {

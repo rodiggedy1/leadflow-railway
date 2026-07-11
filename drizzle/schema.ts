@@ -1141,6 +1141,14 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   issueNote: text("issueNote"),
   /** Absolute ETA as Unix ms timestamp — computed when cleaner picks an ETA option (now + duration) */
   etaTimestamp: bigint("etaTimestamp", { mode: "number" }),
+  /** ETA Engine: confidence score 0–100. Set after ETA call resolves. */
+  etaConfidence: int("etaConfidence"),
+  /** ETA Engine: source of the current ETA — eta_call | portal_tap | maps_estimate */
+  etaSource: varchar("etaSource", { length: 32 }),
+  /** ETA Engine: when the first ETA call (eta_call_1) was placed */
+  etaCallFiredAt: timestamp("etaCallFiredAt"),
+  /** ETA Engine: when Maps verification completed and ETA was written */
+  etaVerifiedAt: timestamp("etaVerifiedAt"),
   /** Whether this job has been flagged for admin review */
   flagged: int("flagged").default(0).notNull(),
   /** Admin notes on this job */
@@ -1501,6 +1509,9 @@ export const fieldMgmtSteps = [
   "post_start_cs_alert",
   "post_start_call_2",
   "post_start_noshow_flag",
+  // T-30min ETA verification calls (mandatory for every job)
+  "eta_call_1",   // Primary call at T-28 to T-32 min
+  "eta_call_2",   // Retry 3 minutes after no answer on attempt 1
 ] as const;
 
 export type FieldMgmtStep = (typeof fieldMgmtSteps)[number];
@@ -1622,6 +1633,8 @@ export const fieldMgmtCalls = mysqlTable("field_mgmt_calls", {
   smsReply: text("smsReply"),
   /** Whether the customer confirmed via SMS reply */
   smsConfirmed: tinyint("smsConfirmed").default(0).notNull(),
+  /** Set by the end-of-call webhook when outcome is written. Anchors the 3-minute eta_call_2 retry window. */
+  completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({
   idxCleanerJobId: index("idx_fmc_cleaner_job_id").on(table.cleanerJobId),

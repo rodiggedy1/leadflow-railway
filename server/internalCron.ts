@@ -39,6 +39,7 @@ import {
   runCheckinCallsT30,
   runPostStartEscalation,
   sendClientEtaApproachingSms,
+  runEtaCallTrigger,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
@@ -916,6 +917,21 @@ export function startInternalCron(): void {
     await runGmailHealthCheck();
   }, { timezone: "America/New_York" });
 
+  // ── ETA call trigger: every 2 minutes ─────────────────────────────────────
+  // Fires eta_call_1 for jobs 28–32 min before scheduled start, and eta_call_2
+  // (retry) 3 minutes after eta_call_1 completed with no answer.
+  if (FIELD_MGMT_ENABLED) {
+    cron.schedule("*/2 * * * *", async () => {
+      try {
+        await runEtaCallTrigger();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[InternalCron] EtaCallTrigger failed:", msg);
+        await recordHeartbeat("eta-call-trigger", `error: ${msg}`, false);
+      }
+    }, { timezone: "America/New_York" });
+  }
+
   // ── Startup Gmail reconciliation ────────────────────────────────────────────
   // Run once immediately so a deployment doesn't wait up to 12 hours to discover
   // an expired watch. Fire-and-forget — never blocks server startup.
@@ -943,6 +959,7 @@ export function startInternalCron(): void {
   console.log("  - ScheduleEscalation: 8 PM ET daily");
   console.log("  - GmailWatchReconcile: 6 AM + 6 PM ET daily (+ startup)");
   console.log("  - GmailHealthCheck:   9 AM ET daily");
+  console.log(`  - EtaCallTrigger:     every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
 }
 
 // ── Gmail watch reconciliation ────────────────────────────────────────────────

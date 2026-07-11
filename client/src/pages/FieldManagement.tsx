@@ -778,6 +778,12 @@ type JobWithTimeline = {
   timeline: TimelineEvent[];
   /** 1 = cleaner confirmed their schedule for this day, 0 = not yet */
   scheduleConfirmed?: number;
+  /** ETA confidence score 0-100 from AI call (null = no call yet) */
+  etaConfidence?: number | null;
+  /** Source of ETA: 'eta_call_1' | 'eta_call_2' | null */
+  etaSource?: string | null;
+  /** Timestamp when the first ETA call was fired */
+  etaCallFiredAt?: Date | string | null;
 };
 
 function JobCard({ job }: { job: JobWithTimeline }) {
@@ -825,7 +831,22 @@ function JobCard({ job }: { job: JobWithTimeline }) {
               {job.teamName && job.teamName !== job.cleanerName && (
                 <span className="text-xs text-gray-400">({job.teamName})</span>
               )}
-              {/* Schedule confirmation badge — only shown after 5 PM cron has run */}
+              {/* ETA confidence badge — shown after AI call fires */}
+              {job.etaConfidence != null && (
+                <span
+                  title={`ETA confidence: ${job.etaConfidence}% (source: ${job.etaSource ?? 'AI call'})`}
+                  className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                    job.etaConfidence >= 71
+                      ? "bg-green-50 text-green-700 border-green-200"
+                      : job.etaConfidence >= 41
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-red-50 text-red-700 border-red-200"
+                  }`}
+                >
+                  📞 ETA {job.etaConfidence}%
+                </span>
+              )}
+            {/* Schedule confirmation badge — only shown after 5 PM cron has run */}
               {job.scheduleConfirmed === 1 ? (
                 <span
                   title="Cleaner confirmed their schedule"

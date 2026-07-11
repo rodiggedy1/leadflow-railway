@@ -664,6 +664,9 @@ export const fieldMgmtRouter = router({
           bookingStatus: cleanerJobs.bookingStatus,
           cleanerProfileId: cleanerJobs.cleanerProfileId,
           scheduleConfirmed: cleanerJobs.scheduleConfirmed,
+          etaConfidence: cleanerJobs.etaConfidence,
+          etaSource: cleanerJobs.etaSource,
+          etaCallFiredAt: cleanerJobs.etaCallFiredAt,
         })
         .from(cleanerJobs)
         .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
@@ -776,6 +779,9 @@ export const fieldMgmtRouter = router({
           cleanerProfileId: job.cleanerProfileId,
           magicLinkToken: job.cleanerProfileId != null ? (magicTokenMap.get(job.cleanerProfileId) ?? null) : null,
           scheduleConfirmed: job.scheduleConfirmed ?? 0,
+          etaConfidence: job.etaConfidence ?? null,
+          etaSource: job.etaSource ?? null,
+          etaCallFiredAt: job.etaCallFiredAt ?? null,
         };
       });
     }),

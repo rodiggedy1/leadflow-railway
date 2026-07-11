@@ -34,6 +34,7 @@ import { sendSms, sleep } from "./openphone";
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
+import { invokeLLM } from "./_core/llm";
 // isWithinBusinessHours is imported for reference; we define a stricter 8am–5pm variant
 import { isWithinBusinessHours as _isWithinBusinessHours } from "./vapiLeadNotification";
 
@@ -2465,4 +2466,656 @@ export async function runPostStartEscalation(): Promise<{ checked: number; acted
   }
 
   return { checked: jobs.length, acted, errors };
+}
+
+
+// ── ETA Engine ────────────────────────────────────────────────────────────────
+
+/**
+ * ETA status extracted from a T-30 verification call transcript.
+ *
+ * The AI asks: "What time do you think you'll arrive?"
+ * The LLM extracts the cleaner's answer and converts it to a minutes offset
+ * from the scheduled start time. Application code converts the offset to a
+ * final timestamp — no business logic inside the LLM.
+ */
+export type EtaCallStatus = "on_time" | "late" | "early" | "unclear";
+
+export interface ExtractedCleanerStatus {
+  /**
+   * Minutes offset from the scheduled start time.
+   * 0 = on time, positive = late (e.g. 20 = 20 min late), negative = early (e.g. -5 = 5 min early).
+   * null when the cleaner's answer was unclear or not quantifiable.
+   */
+  estimatedArrivalMinutesOffset: number | null;
+  status: EtaCallStatus;
+  /** The cleaner's own words only — not the AI's question. */
+  cleanerStatement: string;
+}
+
+/**
+ * extractCleanerStatus — pure function, no DB access, no side effects.
+ *
+ * Takes a Vapi call transcript and the scheduled start time (ET clock string,
+ * e.g. "1:00 PM") and returns the cleaner's estimated arrival as a minutes
+ * offset from that scheduled time.
+ *
+ * Throws only on LLM/API failure or invalid schema response.
+ * Returns status: "unclear" for voicemail, silence, vague answers, or
+ * anything the LLM cannot confidently convert to a time.
+ */
+export async function extractCleanerStatus(
+  transcript: string,
+  scheduledTimeET: string // e.g. "1:00 PM" — used by LLM to convert relative answers
+): Promise<ExtractedCleanerStatus> {
+  const response = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `You are extracting a cleaner's estimated arrival time from a voice call transcript.
+The AI assistant asked the cleaner what time they think they will arrive at their next job.
+The job is scheduled for ${scheduledTimeET}.
+
+Rules:
+- Only use statements made by the CLEANER, not the AI assistant.
+- Do not treat the AI's questions or prompts as the cleaner's response.
+- Convert the cleaner's answer to a minutes offset from the scheduled time (${scheduledTimeET}).
+  Examples:
+  "Right on time" → estimatedArrivalMinutesOffset: 0, status: "on_time"
+  "About 1:10" (scheduled 1:00 PM) → estimatedArrivalMinutesOffset: 10, status: "late"
+  "Maybe 12:55" (scheduled 1:00 PM) → estimatedArrivalMinutesOffset: -5, status: "early"
+  "Probably 20 minutes late" → estimatedArrivalMinutesOffset: 20, status: "late"
+  "I'm not sure" → estimatedArrivalMinutesOffset: null, status: "unclear"
+- Use status "unclear" for: voicemail, silence, incomplete transcripts, contradictory answers, or vague responses that cannot be converted to a time.
+- cleanerStatement must be the cleaner's own words only — a short verbatim or paraphrased quote.`,
+      },
+      {
+        role: "user",
+        content: `Transcript:\n${transcript}`,
+      },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "cleaner_eta_status",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            estimatedArrivalMinutesOffset: {
+              type: ["number", "null"],
+              description: "Minutes offset from scheduled time. 0 = on time, positive = late, negative = early. null if unclear.",
+            },
+            status: {
+              type: "string",
+              enum: ["on_time", "late", "early", "unclear"],
+              description: "Arrival status relative to scheduled time.",
+            },
+            cleanerStatement: {
+              type: "string",
+              description: "The cleaner's own words from the transcript.",
+            },
+          },
+          required: ["estimatedArrivalMinutesOffset", "status", "cleanerStatement"],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+
+  const rawContent = response?.choices?.[0]?.message?.content;
+  const raw = typeof rawContent === "string" ? rawContent : null;
+  if (!raw) throw new Error("[EtaEngine] extractCleanerStatus: LLM returned empty content");
+
+  let parsed: ExtractedCleanerStatus;
+  try {
+    parsed = JSON.parse(raw) as ExtractedCleanerStatus;
+  } catch {
+    throw new Error(`[EtaEngine] extractCleanerStatus: failed to parse LLM JSON: ${raw}`);
+  }
+
+  // Validate status enum
+  const validStatuses: EtaCallStatus[] = ["on_time", "late", "early", "unclear"];
+  if (!validStatuses.includes(parsed.status)) {
+    throw new Error(`[EtaEngine] extractCleanerStatus: invalid status value: ${parsed.status}`);
+  }
+
+  return parsed;
+}
+
+/**
+ * placeEtaCall — places the T-30 ETA verification call to the cleaner.
+ *
+ * Asks one question: "What time do you think you'll arrive?"
+ * Listens for the answer, confirms, and ends the call.
+ *
+ * Step claim happens AFTER Vapi returns a call ID so a Vapi failure
+ * does not permanently block the retry.
+ *
+ * outcome is set to "initiated" on insert — updated to the real outcome
+ * by the end-of-call webhook (handleEtaCallEnd).
+ */
+export async function placeEtaCall(params: {
+  cleanerJobId: number;
+  step: "eta_call_1" | "eta_call_2";
+  cleanerPhone: string;
+  cleanerFirstName: string;
+  customerFirstName: string;
+  scheduledTimeET: string; // e.g. "1:00 PM"
+}): Promise<{ success: boolean; vapiCallId?: string; reason?: string }> {
+  if (!FIELD_MGMT_ENABLED) return { success: false, reason: "Field management kill switch is off" };
+  if (!ENV.vapiPrivateKey) return { success: false, reason: "VAPI_PRIVATE_KEY not configured" };
+
+  const { cleanerJobId, step, cleanerPhone, cleanerFirstName, customerFirstName, scheduledTimeET } = params;
+
+  // ── Self-call protection ──────────────────────────────────────────────────
+  const normalizedTarget = normalizePhoneLegacy(cleanerPhone.trim());
+  if (normalizedTarget === VAPI_OUTBOUND_PHONE_NUMBER) {
+    console.error(`[EtaEngine] Self-call protection triggered — refusing to call Vapi outbound number`);
+    return { success: false, reason: "Self-call protection: cannot call the VAPI outbound number" };
+  }
+
+  // ── Check step lock before calling (read-only check, not claim yet) ───────
+  // We claim AFTER Vapi succeeds so a Vapi failure doesn't permanently block retry.
+  const db = await getDb();
+  if (!db) return { success: false, reason: "DB unavailable" };
+
+  const existingLock = await db
+    .select({ id: stepLocks.id })
+    .from(stepLocks)
+    .where(and(eq(stepLocks.cleanerJobId, cleanerJobId), eq(stepLocks.step, step)))
+    .limit(1);
+  if (existingLock.length > 0) {
+    console.log(`[EtaEngine] Step ${step} already claimed for job ${cleanerJobId} — skipping`);
+    return { success: false, reason: "Step already claimed" };
+  }
+
+  // ── Build Vapi payload ────────────────────────────────────────────────────
+  const firstMessage =
+    `Hi ${cleanerFirstName}, this is Maid in Black. ` +
+    `I just wanted to check in about your ${scheduledTimeET} cleaning for ${customerFirstName}. ` +
+    `What time do you think you'll arrive?`;
+
+  const payload = {
+    phoneNumberId: VAPI_OUTBOUND_PHONE_NUMBER_ID,
+    customer: { number: normalizedTarget },
+    assistant: {
+      name: "EtaCheckIn",
+      firstMessage,
+      model: {
+        provider: "openai",
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a brief check-in assistant for Maid in Black. " +
+              "The cleaner has answered your question about their arrival time. " +
+              "Respond with: 'Perfect, thank you! I'll update the customer. Have a great day.' " +
+              "Then end the call. Do not ask any follow-up questions.",
+          },
+        ],
+      },
+      voice: {
+        provider: "11labs",
+        voiceId: "EXAVITQu4vr4xnSDxMaL",
+        stability: 0.5,
+        similarityBoost: 0.75,
+        style: 0.3,
+        useSpeakerBoost: true,
+      },
+      maxDurationSeconds: 45,
+    },
+  };
+
+  // ── Place the call ────────────────────────────────────────────────────────
+  let vapiCallId: string;
+  try {
+    const result = await vapiPost("/call", payload) as { id?: string };
+    if (!result?.id) throw new Error("Vapi returned no call ID");
+    vapiCallId = result.id;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[EtaEngine] placeEtaCall failed for job ${cleanerJobId} step ${step}:`, msg);
+    return { success: false, reason: msg };
+  }
+
+  // ── Claim the step AFTER Vapi success ─────────────────────────────────────
+  await tryClaimStep({ cleanerJobId, step });
+
+  // ── Store call record ─────────────────────────────────────────────────────
+  try {
+    await db.insert(fieldMgmtCalls).values({
+      cleanerJobId,
+      step,
+      vapiCallId,
+      calledPhone: normalizedTarget,
+      outcome: "initiated",
+      durationSeconds: 0,
+      transcript: null,
+      summary: null,
+      endedReason: null,
+      recordingUrl: null,
+    });
+  } catch (err) {
+    console.error(`[EtaEngine] Failed to insert fieldMgmtCalls row for job ${cleanerJobId}:`, err);
+    // Non-fatal — call is already placed
+  }
+
+  // ── Update etaCallFiredAt on first attempt only ───────────────────────────
+  if (step === "eta_call_1") {
+    try {
+      await db
+        .update(cleanerJobs)
+        .set({ etaCallFiredAt: new Date() })
+        .where(eq(cleanerJobs.id, cleanerJobId));
+    } catch (err) {
+      console.error(`[EtaEngine] Failed to update etaCallFiredAt for job ${cleanerJobId}:`, err);
+    }
+  }
+
+  console.log(`[EtaEngine] ${step} placed for job ${cleanerJobId} → Vapi call ID: ${vapiCallId}`);
+  return { success: true, vapiCallId };
+}
+
+/**
+ * handleEtaCallEnd — processes the end-of-call webhook for eta_call_1 and eta_call_2.
+ *
+ * Called from vapiWebhook.ts when a fieldMgmtCalls row with step="eta_call_1"
+ * or step="eta_call_2" is found for the completed vapiCallId.
+ *
+ * Flow:
+ *  1. Load the fieldMgmtCalls row (already updated by vapiWebhook before calling us)
+ *  2. Load the cleanerJob for all context (customer name/phone, scheduled time, etc.)
+ *  3. If no_answer / voicemail:
+ *     - eta_call_1 → cron will fire eta_call_2 (3 min after this call's createdAt)
+ *     - eta_call_2 → post Command Chat dispatcher alert
+ *  4. If answered:
+ *     - Run extractCleanerStatus() to get minutes offset
+ *     - If unclear → post Command Chat alert
+ *     - If valid offset → calculate etaTimestamp, update cleanerJobs, send customer SMS
+ *  5. Dedup guard: skip SMS if etaVerifiedAt is already set (duplicate webhook delivery)
+ */
+export async function handleEtaCallEnd(params: {
+  vapiCallId: string;
+  transcript: string | null;
+  outcome: string; // "answered" | "no_answer" | "voicemail" | "initiated" | "failed"
+  step: "eta_call_1" | "eta_call_2";
+  cleanerJobId: number;
+}): Promise<void> {
+  const { vapiCallId, transcript, outcome, step, cleanerJobId } = params;
+  const db = await getDb();
+  if (!db) {
+    console.error(`[EtaEngine] handleEtaCallEnd: DB unavailable for job ${cleanerJobId}`);
+    return;
+  }
+
+  // ── Load the job ──────────────────────────────────────────────────────────
+  const [job] = await db
+    .select()
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.id, cleanerJobId))
+    .limit(1);
+  if (!job) {
+    console.error(`[EtaEngine] handleEtaCallEnd: cleanerJob ${cleanerJobId} not found`);
+    return;
+  }
+
+  const customerPhone = job.customerPhone ?? null;
+  const customerFirstName = firstName(job.customerName);
+  const cleanerFirstName = firstName(job.cleanerName);
+  const scheduledMs = job.serviceDateTime ? parseServiceDateTime(job.serviceDateTime)?.getTime() ?? null : null;
+  const scheduledTimeET = scheduledMs ? formatTimeET(new Date(scheduledMs)) : null;
+  const jobDate = job.jobDate;
+
+  // ── Helper: post Command Chat alert ──────────────────────────────────────
+  async function postEtaAlert(body: string, quickAction: string, meta: Record<string, unknown>) {
+    try {
+      await db!.insert(opsChatMessages).values({
+        channel: "command",
+        from: "System",
+        authorName: "System",
+        authorRole: "system",
+        body,
+        metadata: JSON.stringify(meta),
+        cleanerJobId,
+        quickAction,
+      } as any);
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("new_message");
+    } catch (e) {
+      console.error(`[EtaEngine] Failed to post ops alert for job ${cleanerJobId}:`, e);
+    }
+  }
+
+  // ── No answer / voicemail ─────────────────────────────────────────────────
+  const isNoAnswer = outcome === "no_answer" || outcome === "voicemail" || outcome === "initiated";
+  if (isNoAnswer) {
+    if (step === "eta_call_1") {
+      // Retry will be fired by cron 3 min after eta_call_1 createdAt — no action needed here
+      console.log(`[EtaEngine] eta_call_1 no answer for job ${cleanerJobId} — cron will fire eta_call_2`);
+    } else {
+      // eta_call_2 also no answer — alert dispatch
+      const timeStr = scheduledTimeET ?? jobDate;
+      await postEtaAlert(
+        `📵 ETA UNVERIFIED — ${cleanerFirstName} did not answer after 2 attempts. ` +
+        `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
+        "eta_no_answer",
+        {
+          cleanerJobId,
+          cleanerName: job.cleanerName,
+          customerName: job.customerName,
+          scheduledTime: timeStr,
+          vapiCallId,
+        }
+      );
+      console.log(`[EtaEngine] eta_call_2 no answer — dispatcher alert posted for job ${cleanerJobId}`);
+    }
+    return;
+  }
+
+  // ── Answered — extract ETA ────────────────────────────────────────────────
+  if (!transcript || transcript.trim().length < 5) {
+    // Technically "answered" but no usable speech
+    const timeStr = scheduledTimeET ?? jobDate;
+    await postEtaAlert(
+      `⚠️ ETA CALL ANSWERED but no usable transcript for ${cleanerFirstName}. ` +
+      `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
+      "eta_unclear",
+      { cleanerJobId, cleanerName: job.cleanerName, customerName: job.customerName, scheduledTime: timeStr, vapiCallId }
+    );
+    return;
+  }
+
+  let extracted: ExtractedCleanerStatus;
+  try {
+    extracted = await extractCleanerStatus(transcript, scheduledTimeET ?? "the scheduled time");
+  } catch (err) {
+    console.error(`[EtaEngine] extractCleanerStatus failed for job ${cleanerJobId}:`, err);
+    const timeStr = scheduledTimeET ?? jobDate;
+    await postEtaAlert(
+      `⚠️ ETA extraction failed for ${cleanerFirstName}. ` +
+      `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
+      "eta_unclear",
+      { cleanerJobId, cleanerName: job.cleanerName, customerName: job.customerName, scheduledTime: timeStr, vapiCallId }
+    );
+    return;
+  }
+
+  const { estimatedArrivalMinutesOffset, status, cleanerStatement } = extracted;
+
+  // ── Unclear status → alert dispatch ──────────────────────────────────────
+  if (status === "unclear" || estimatedArrivalMinutesOffset === null) {
+    const timeStr = scheduledTimeET ?? jobDate;
+    await postEtaAlert(
+      `❓ ETA UNCLEAR — ${cleanerFirstName} said: "${cleanerStatement}". ` +
+      `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
+      "eta_unclear",
+      {
+        cleanerJobId,
+        cleanerName: job.cleanerName,
+        customerName: job.customerName,
+        scheduledTime: timeStr,
+        cleanerStatement,
+        vapiCallId,
+      }
+    );
+    console.log(`[EtaEngine] ETA unclear for job ${cleanerJobId} — dispatcher alert posted`);
+    return;
+  }
+
+  // ── Valid ETA — calculate arrival timestamp ───────────────────────────────
+  if (!scheduledMs) {
+    console.error(`[EtaEngine] Cannot calculate ETA: no serviceDateTime on job ${cleanerJobId}`);
+    return;
+  }
+
+  const etaMs = scheduledMs + estimatedArrivalMinutesOffset * 60 * 1000;
+
+  // ── Validate ETA is on the correct service date and within a reasonable range ──
+  const etaDate = new Date(etaMs);
+  const etaDateStr = etaDate.toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
+  // jobDate is YYYY-MM-DD — convert to MM/DD/YYYY for comparison
+  const [y, m, d] = jobDate.split("-");
+  const jobDateFormatted = `${m}/${d}/${y}`;
+  const offsetAbsMin = Math.abs(estimatedArrivalMinutesOffset);
+  if (etaDateStr !== jobDateFormatted || offsetAbsMin > 120) {
+    const timeStr = scheduledTimeET ?? jobDate;
+    console.warn(`[EtaEngine] ETA validation failed for job ${cleanerJobId}: offset=${estimatedArrivalMinutesOffset}min, etaDate=${etaDateStr}, jobDate=${jobDateFormatted}`);
+    await postEtaAlert(
+      `⚠️ ETA OUT OF RANGE — ${cleanerFirstName} said: "${cleanerStatement}" (offset: ${estimatedArrivalMinutesOffset} min). ` +
+      `Next job: ${customerFirstName} at ${timeStr}. Manual verification required.`,
+      "eta_unclear",
+      { cleanerJobId, cleanerName: job.cleanerName, customerName: job.customerName, scheduledTime: timeStr, cleanerStatement, estimatedArrivalMinutesOffset, vapiCallId }
+    );
+    return;
+  }
+
+  // ── Dedup guard: skip if already processed ────────────────────────────────
+  if (job.etaVerifiedAt) {
+    console.log(`[EtaEngine] etaVerifiedAt already set for job ${cleanerJobId} — skipping duplicate webhook`);
+    return;
+  }
+
+  // ── Update cleanerJobs ────────────────────────────────────────────────────
+  await db
+    .update(cleanerJobs)
+    .set({
+      etaTimestamp: etaMs,
+      etaConfidence: 85,
+      etaSource: "eta_call",
+      etaVerifiedAt: new Date(),
+    })
+    .where(eq(cleanerJobs.id, cleanerJobId));
+
+  const etaTimeStr = formatTimeET(etaDate);
+  console.log(`[EtaEngine] ETA updated for job ${cleanerJobId}: ${etaTimeStr} (offset: ${estimatedArrivalMinutesOffset} min, status: ${status})`);
+
+  // ── Send customer SMS ─────────────────────────────────────────────────────
+  if (!customerPhone) {
+    console.warn(`[EtaEngine] No customer phone for job ${cleanerJobId} — skipping SMS`);
+    return;
+  }
+
+  let smsBody: string;
+  if (status === "late") {
+    smsBody =
+      `Hi ${customerFirstName}! Your cleaning team is running a little behind and now expects to arrive around ${etaTimeStr}. ` +
+      `Thank you for your patience — we'll keep you updated.`;
+  } else {
+    // on_time or early
+    smsBody =
+      `Hi ${customerFirstName}! Your Maid in Black team is on schedule and expects to arrive around ${etaTimeStr}. ` +
+      `We'll keep you updated. 🚗`;
+  }
+
+  const smsClaimed = await tryClaimStep({
+    cleanerJobId,
+    step: "eta_sms",
+    smsSent: smsBody,
+    recipientPhone: customerPhone,
+  });
+  if (!smsClaimed) {
+    console.log(`[EtaEngine] eta_sms step already claimed for job ${cleanerJobId} — skipping duplicate SMS`);
+    return;
+  }
+
+  const smsResult = await sendSms({ to: customerPhone, content: smsBody });
+  if (smsResult.success) {
+    console.log(`[EtaEngine] ETA SMS sent to ${customerPhone} for job ${cleanerJobId} (${status}, ETA: ${etaTimeStr})`);
+    if (smsResult.messageId) await updateStepMessageId(cleanerJobId, "eta_sms", smsResult.messageId);
+  } else {
+    await updateStepOutcome(cleanerJobId, "eta_sms", false, smsResult.error);
+    console.error(`[EtaEngine] ETA SMS FAILED for job ${cleanerJobId}:`, smsResult.error);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ETA CALL TRIGGER CRON
+// Runs every 2 minutes. Fires eta_call_1 for jobs 28–32 min before scheduled
+// start, and eta_call_2 (retry) 3 minutes after eta_call_1 completed with no answer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _etaTriggerRunning = false;
+
+export async function runEtaCallTrigger(): Promise<void> {
+  if (_etaTriggerRunning) {
+    console.log("[EtaTrigger] Previous run still in progress — skipping");
+    return;
+  }
+  _etaTriggerRunning = true;
+  try {
+    const db = await getDb();
+    if (!db) return;
+    const nowMs = Date.now();
+
+    // ── Query 1: Fire eta_call_1 ──────────────────────────────────────────────
+    // Window: scheduled start is between 5 min ago (catch-up) and 32 min from now
+    const windowStart = new Date(nowMs - 5 * 60 * 1000);
+    const windowEnd   = new Date(nowMs + 32 * 60 * 1000);
+
+    const eligibleJobs = await db
+      .select({
+        id:               cleanerJobs.id,
+        serviceDateTime:  cleanerJobs.serviceDateTime,
+        cleanerProfileId: cleanerJobs.cleanerProfileId,
+        cleanerName:      cleanerJobs.cleanerName,
+        customerName:     cleanerJobs.customerName,
+      })
+      .from(cleanerJobs)
+      .where(
+        and(
+          eq(cleanerJobs.bookingStatus, "assigned"),
+          isNull(cleanerJobs.etaCallFiredAt),
+          gte(cleanerJobs.serviceDateTime, windowStart.toISOString()),
+          lte(cleanerJobs.serviceDateTime, windowEnd.toISOString()),
+        )
+      )
+      .catch((err: unknown) => {
+        console.error("[EtaTrigger] Query 1 error:", err);
+        return [] as typeof cleanerJobs.$inferSelect[];
+      });
+
+    for (const job of eligibleJobs) {
+      try {
+        // Verify step lock not already claimed
+        const [existingLock] = await db
+          .select({ id: stepLocks.id })
+          .from(stepLocks)
+          .where(and(eq(stepLocks.cleanerJobId, job.id), eq(stepLocks.step, "eta_call_1")))
+          .limit(1);
+        if (existingLock) continue;
+
+                if (!job.serviceDateTime) continue;
+        const serviceTime = parseServiceDateTime(job.serviceDateTime);
+        if (!serviceTime) continue;
+        const diffMin = (serviceTime.getTime() - nowMs) / 60_000;
+        if (diffMin < -5 || diffMin > 32) continue;
+        if (!job.cleanerProfileId) {
+          console.warn(`[EtaTrigger] Job ${job.id} has no cleanerProfileId — skipping`);
+          continue;
+        }
+        const [profile] = await db
+          .select({ phone: cleanerProfiles.phone })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+          .limit(1);
+        if (!profile?.phone) {
+          console.warn(`[EtaTrigger] No phone for cleanerProfileId ${job.cleanerProfileId} (job ${job.id}) — skipping`);
+          continue;
+        }
+
+        const scheduledTimeET = formatTimeET(serviceTime);
+        const customerFirstName = (job.customerName ?? "your customer").split(" ")[0];
+        const cleanerFirstName  = (job.cleanerName  ?? "there").split(" ")[0];
+
+        console.log(`[EtaTrigger] Firing eta_call_1 for job ${job.id} (${cleanerFirstName} → ${customerFirstName} at ${scheduledTimeET})`);
+        await placeEtaCall({
+          cleanerJobId:      job.id,
+          step:              "eta_call_1",
+          cleanerPhone:      profile.phone,
+          cleanerFirstName,
+          customerFirstName,
+          scheduledTimeET,
+        });
+      } catch (err) {
+        console.error(`[EtaTrigger] eta_call_1 failed for job ${job.id}:`, err);
+      }
+    }
+
+    // ── Query 2: Fire eta_call_2 (retry after no answer) ─────────────────────
+    // Retry 3 minutes after eta_call_1 completedAt
+    const retryThreshold = new Date(nowMs - 3 * 60 * 1000);
+
+    const noAnswerCalls = await db
+      .select({
+        cleanerJobId: fieldMgmtCalls.cleanerJobId,
+        completedAt:  fieldMgmtCalls.completedAt,
+      })
+      .from(fieldMgmtCalls)
+      .where(
+        and(
+          eq(fieldMgmtCalls.step, "eta_call_1"),
+          eq(fieldMgmtCalls.outcome, "no_answer"),
+          lte(fieldMgmtCalls.completedAt, retryThreshold),
+        )
+      )
+      .catch((err: unknown) => {
+        console.error("[EtaTrigger] Query 2 error:", err);
+        return [] as { cleanerJobId: number; completedAt: Date | null }[];
+      });
+
+    for (const call of noAnswerCalls) {
+      try {
+        const [existingLock] = await db
+          .select({ id: stepLocks.id })
+          .from(stepLocks)
+          .where(and(eq(stepLocks.cleanerJobId, call.cleanerJobId), eq(stepLocks.step, "eta_call_2")))
+          .limit(1);
+        if (existingLock) continue;
+
+        const [job] = await db
+          .select({
+            id:               cleanerJobs.id,
+            serviceDateTime:  cleanerJobs.serviceDateTime,
+            cleanerProfileId: cleanerJobs.cleanerProfileId,
+            cleanerName:      cleanerJobs.cleanerName,
+            customerName:     cleanerJobs.customerName,
+            bookingStatus:    cleanerJobs.bookingStatus,
+          })
+          .from(cleanerJobs)
+          .where(eq(cleanerJobs.id, call.cleanerJobId))
+          .limit(1);
+                if (!job || job.bookingStatus !== "assigned") continue;
+        if (!job.serviceDateTime) continue;
+        const serviceTime = parseServiceDateTime(job.serviceDateTime);
+        if (!serviceTime) continue;
+        if (!job.cleanerProfileId) continue;
+        const [profile] = await db
+          .select({ phone: cleanerProfiles.phone })
+          .from(cleanerProfiles)
+          .where(eq(cleanerProfiles.id, job.cleanerProfileId))
+          .limit(1);
+        if (!profile?.phone) continue;
+
+        const scheduledTimeET = formatTimeET(serviceTime);
+        const customerFirstName = (job.customerName ?? "your customer").split(" ")[0];
+        const cleanerFirstName  = (job.cleanerName  ?? "there").split(" ")[0];
+
+        console.log(`[EtaTrigger] Firing eta_call_2 retry for job ${job.id} (${cleanerFirstName} → ${customerFirstName} at ${scheduledTimeET})`);
+        await placeEtaCall({
+          cleanerJobId:      job.id,
+          step:              "eta_call_2",
+          cleanerPhone:      profile.phone,
+          cleanerFirstName,
+          customerFirstName,
+          scheduledTimeET,
+        });
+      } catch (err) {
+        console.error(`[EtaTrigger] eta_call_2 failed for job ${call.cleanerJobId}:`, err);
+      }
+    }
+  } finally {
+    _etaTriggerRunning = false;
+  }
 }

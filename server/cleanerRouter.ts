@@ -20,7 +20,7 @@ import { publicProcedure, cleanerProcedure, agentProcedure, opsChatProcedure, ro
 import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
-import { sendClientOnTheWaySms, sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
+import { sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
 import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
 import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
@@ -709,11 +709,9 @@ export const cleanerRouter = router({
       }
 
       if (input.status === "on_the_way") {
-        // sendClientOnTheWaySms is deduped via tryClaimStep — fires exactly once per job.
-        // ETA update SMS intentionally removed: one "on the way" text per job is the rule.
-        sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
-          console.error("[FieldMgmt] sendClientOnTheWaySms error:", err)
-        );
+        // on_the_way SMS intentionally removed: customer SMS is now handled exclusively
+        // by the ETA engine (eta_call_1 / eta_call_2) which fires ~30 min before the job.
+        // sendClientOnTheWaySms() is no longer called here.
       }
       if (input.status === "arrived") {
         sendArrivedCheckin(input.cleanerJobId).catch(err =>
