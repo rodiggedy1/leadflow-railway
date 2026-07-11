@@ -76,6 +76,12 @@ import {
   Workflow,
   Rocket,
   Activity,
+  Megaphone,
+  PhoneCall,
+  PhoneIncoming,
+  CreditCard,
+  Banknote,
+  Wrench,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -2119,33 +2125,55 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               );
             })}
           </div>
-          <div className="w-5 h-px bg-white/10 my-0.5" />
-          {/* Agent status icon */}
-          <div className="relative mt-auto">
+          {/* ── Page navigation shortcuts ── */}
+          <div className="flex flex-col items-center gap-0 mt-auto w-full overflow-y-auto">
+            <div className="h-px w-10 bg-white/10 my-2 mx-auto shrink-0" />
+            {([
+              { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+              { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+              { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+              { href: "/admin/calls",             Icon: PhoneCall,     color: "#22c55e", line1: "Voice",    line2: "" },
+              { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+              { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+              { href: "/admin/team-pay",          Icon: Banknote,      color: "#10b981", line1: "Team",     line2: "Pay" },
+            ]).map((nav) => (
+              <a
+                key={nav.href}
+                href={nav.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+              >
+                <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                <span className="text-[10px] text-white font-medium leading-tight text-center">
+                  {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                </span>
+              </a>
+            ))}
+          </div>
+          {/* DMs / Agent status */}
+          <div className="relative w-full flex flex-col items-center shrink-0">
+            <div className="h-px w-10 bg-white/10 my-2 mx-auto" />
             <button
               onClick={() => setAgentStatusOpen(v => !v)}
-              className={cn(
-                "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                agentStatusOpen
-                  ? "bg-white text-[#1C1C1E] shadow-sm"
-                  : "text-white/50 hover:text-white hover:bg-white/10"
-              )}
-              title="Agent status"
+              className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100"
+              title="Agent status & DMs"
             >
-              <Users className="w-4 h-4" />
+              <div className="relative">
+                <Users size={22} style={{ color: "#94a3b8" }} strokeWidth={1.75} />
+                {totalDmUnread > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none pointer-events-none">
+                    {totalDmUnread > 9 ? "9+" : totalDmUnread}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-white font-medium leading-tight text-center">DMs</span>
             </button>
-            {/* DM unread badge */}
-            {totalDmUnread > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
-                {totalDmUnread > 9 ? "9+" : totalDmUnread}
-              </span>
-            )}
             {/* Agent status popover */}
             {agentStatusOpen && (
               <>
-              {/* Backdrop — click outside to close */}
               <div className="fixed inset-0 z-40" onClick={() => setAgentStatusOpen(false)} />
-              <div className="absolute left-12 bottom-0 z-50 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+              <div className="absolute left-full bottom-0 ml-3 z-50 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
                   <p className="text-sm font-semibold text-slate-800">Agent Status</p>
                   <button onClick={() => setAgentStatusOpen(false)} className="text-slate-400 hover:text-slate-700">
@@ -2161,14 +2189,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     const now = Date.now();
                     const seenMs = ag.lastSeenAt;
                     const diffMin = seenMs ? Math.floor((now - seenMs) / 60_000) : null;
-                    // awayStatus field takes precedence over time-based heuristic
                     const agStatus: "online" | "away" | "offline" = ag.awayStatus
                       ? "away"
                       : diffMin === null ? "offline"
                       : diffMin <= 2 ? "online"
                       : diffMin <= 15 ? "away"
                       : "offline";
-                    // Status label: show the named away reason when explicitly set
                     const awayLabels: Record<string, string> = {
                       away_sec: "Away for a sec ☕",
                       lunch:    "Lunch break 🍔",
@@ -2197,7 +2223,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                           )}
                           <span
                             className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white", dotColor)}
-                            title={agStatus === "online" ? "Online" : agStatus === "away" ? (ag.awayStatus ? statusLabel : "Away (active <15m)") : "Offline"}
                           />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -2208,9 +2233,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                             "text-slate-400"
                           )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
                         </div>
-                        {/* DM button with per-agent unread badge */}
                         {(() => {
-                          // Build the canonical thread key for this agent pair
                           const agEmail = ag.email ?? "";
                           const threadKey = agEmail && myDmKey.includes("@")
                             ? [myDmKey, agEmail].sort().join("::")
@@ -2239,40 +2262,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               </>
             )}
           </div>
-          {/* ── Page navigation shortcuts ── */}
-          <div className="flex flex-col items-center gap-1.5 pb-1">
-            <div className="h-px w-5 bg-white/10 mb-1" />
-            <a href="/admin/leads" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Leads / Admin Dashboard">
-              <LayoutDashboard className="w-4 h-4" />
-            </a>
-            <a href="/admin/command-center" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Control Tower">
-              <Radio className="w-4 h-4" />
-            </a>
-            <a href="/admin/field-management" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Field Mgmt Day Board">
-              <ClipboardList className="w-4 h-4" />
-            </a>
-            <a href="/admin/hiring" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Hiring Pipeline">
-              <Briefcase className="w-4 h-4" />
-            </a>
-            <a href="/agent" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Agent Workspace">
-              <UserCircle className="w-4 h-4" />
-            </a>
-          </div>
           {/* Profile photo avatar */}
-          <div className="pb-3">
+          <div className="pb-3 shrink-0">
             <button
               onClick={() => setProfilePhotoOpen(true)}
-              className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow"
+              className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block"
               title={`${callerName} — edit profile photo`}
             >
               {profilePhotoUrl ? (
