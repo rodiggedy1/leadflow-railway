@@ -1609,14 +1609,9 @@ export const fieldMgmtRouter = router({
 
         const etaCall = latestEtaCallByJob.get(currentJob.id) ?? null;
 
-        // Derive etaStatus
+        // Derive etaStatus from the ETA call outcome only — job status never overrides this
         let etaStatus: "on_time" | "running_late" | "early" | "unclear" | "no_answer" | "pending" = "pending";
-        const allCompleted = team.jobs.every(j => (j.jobStatus as string) === "completed");
-        const currentStatus = currentJob.jobStatus as string;
-        // If all jobs done, or current job is in any active/completed state, mark on_time
-        if (allCompleted || currentStatus === "completed" || currentStatus === "arrived" || currentStatus === "in_progress" || currentStatus === "finishing_up" || currentStatus === "wrapping_up") {
-          etaStatus = "on_time";
-        } else if (etaCall) {
+        if (etaCall) {
           if (etaCall.outcome === "no_answer") {
             etaStatus = "no_answer";
           } else if (etaCall.outcome === "answered") {
