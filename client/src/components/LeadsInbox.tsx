@@ -512,25 +512,24 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
                   </h2>
                   <p className="text-[13px] text-slate-500">
                     {(() => {
+                      // Show the most recent campaign name that drove this conversation
+                      const latestCampaign = timeline?.campaigns
+                        ? [...timeline.campaigns].sort((a, b) => b.ts - a.ts)[0]
+                        : null;
+                      if (latestCampaign?.campaignName) {
+                        return `${latestCampaign.campaignName} · Campaign reply`;
+                      }
+                      // Fallback to source label
                       const src = selectedSummary.leadSource ?? "";
-                      let sourceLabel = "Direct";
-                      if (src.startsWith("campaign:") || src.startsWith("always-on")) sourceLabel = "Campaign reply";
-                      else if (src === "reactivation") sourceLabel = "Reactivation";
-                      else if (src === "inbound-sms") sourceLabel = "Inbound SMS";
-                      else if (src === "email") sourceLabel = "Email lead";
-                      else if (src === "quote-form") sourceLabel = "Quote form";
-                      else if (src === "command-center") sourceLabel = "Outreach";
-                      else if (src === "review_rebooking") sourceLabel = "Review rebooking";
-                      else if (src) sourceLabel = src;
-
-                      const stage = selectedSummary.stage ?? "";
-                      let stageLabel = "";
-                      if (stage.toLowerCase().includes("quote") || stage.toLowerCase().includes("price")) stageLabel = "Ready for price";
-                      else if (stage.toLowerCase().includes("book") || stage.toLowerCase().includes("scheduled")) stageLabel = "Ready to book";
-                      else if (stage.toLowerCase().includes("reactivat") || stage.toLowerCase().includes("rebooking")) stageLabel = "Reactivation";
-                      else if (stage) stageLabel = stage.replace(/_/g, " ").toLowerCase();
-
-                      return stageLabel ? `${sourceLabel} · ${stageLabel}` : sourceLabel;
+                      if (src.startsWith("campaign:")) return src.replace(/^campaign:/, "").replace(/-/g, " ") + " · Campaign reply";
+                      if (src.startsWith("always-on")) return "Always-on · Campaign reply";
+                      if (src === "reactivation") return "Reactivation campaign";
+                      if (src === "inbound-sms") return "Inbound SMS";
+                      if (src === "email") return "Email lead";
+                      if (src === "quote-form") return "Quote form";
+                      if (src === "command-center") return "Outreach";
+                      if (src === "review_rebooking") return "Review rebooking";
+                      return src || "Direct";
                     })()}
                   </p>
                 </div>
