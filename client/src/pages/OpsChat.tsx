@@ -2127,7 +2127,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
           {/* ── Page navigation shortcuts ── */}
           <div className="flex flex-col items-center gap-0 mt-auto w-full">
-            <div className="h-px w-10 bg-white/10 my-2 mx-auto shrink-0" />
             {([
               { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
               { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
@@ -2165,7 +2164,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                   </span>
                 )}
               </div>
-              <span className="text-[10px] text-white font-medium leading-tight text-center">DMs</span>
             </button>
             {/* Agent status popover */}
             {agentStatusOpen && (
