@@ -2082,7 +2082,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         /* Wide icon rail — new style */
         <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
-          <div className="flex flex-col items-center gap-0 w-full">
+          <div className="flex flex-col items-center gap-0 w-full pb-1">
             {([
               { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
               { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
@@ -2126,7 +2126,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             })}
           </div>
           {/* ── Page navigation shortcuts ── */}
-          <div className="flex flex-col items-center gap-0 mt-auto w-full">
+          <div className="flex flex-col items-center gap-0 mt-auto w-full pt-1">
             {([
               { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
               { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
@@ -2150,7 +2150,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
           {/* DMs / Agent status */}
           <div className="relative w-full flex flex-col items-center shrink-0">
-            <div className="h-px w-10 bg-white/10 my-2 mx-auto" />
             <button
               onClick={() => setAgentStatusOpen(v => !v)}
               className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100"
