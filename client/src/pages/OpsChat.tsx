@@ -2080,7 +2080,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {/* ── LEFT SIDEBAR — only shown outside CS tab (CS tab gets rail via prop) ── */}
       {activeTab !== 'cs' && activeTab !== 'leadops' && (
         /* Wide icon rail — new style */
-        <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+        <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-0 w-full pb-1">
             {([
