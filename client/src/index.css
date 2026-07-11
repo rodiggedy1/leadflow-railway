@@ -1149,3 +1149,40 @@
   width: 8px; height: 8px; background: #ef4444;
   border-radius: 999px; animation: pulseDot 1.4s infinite;
 }
+
+/* ── OpsChat tab crossfade transition ───────────────────────────── */
+.tab-enter {
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+.tab-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* ── OpsChat route loading bar (fixed, measured to shell column) ─────── */
+.route-bar-fixed {
+  position: fixed;
+  height: 3px;
+  background: #3B82F6;
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 0;
+  z-index: 9999;
+  pointer-events: none;
+}
+.route-bar--running {
+  opacity: 1;
+  animation: routeBarRun 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.route-bar--complete {
+  opacity: 0 !important;
+  transform: scaleX(1) !important;
+  transition: opacity 150ms ease 50ms !important;
+}
+@keyframes routeBarRun {
+  0%   { transform: scaleX(0.02); }
+  30%  { transform: scaleX(0.5);  }
+  60%  { transform: scaleX(0.75); }
+  100% { transform: scaleX(0.82); }
+}

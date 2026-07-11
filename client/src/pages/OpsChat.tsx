@@ -17,6 +17,7 @@ import CommandChat from "@/components/CommandChat";
 import LeadOps from "@/components/LeadOps";
 import LeadsInbox from "@/components/LeadsInbox";
 import CsInbox, { type InboxFilter } from "@/components/CsInbox";
+import { getInitialCsConversationId } from "@shared/csInboxUtils";
 import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
 import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
@@ -71,6 +72,17 @@ import {
   Briefcase,
   Headphones,
   Zap,
+  TrendingUp,
+  UserCheck,
+  Workflow,
+  Rocket,
+  Activity,
+  Megaphone,
+  PhoneCall,
+  PhoneIncoming,
+  CreditCard,
+  Banknote,
+  Wrench,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -949,6 +961,25 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
+  // ── Tab crossfade transition state ──────────────────────────────────────
+  // displayedTab: the tab currently visible (persists during transition)
+  // incomingTab: the tab fading in (null when idle)
+  // isTransitioning is derived: incomingTab !== null
+  const [displayedTab, setDisplayedTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox">(
+    initialTabProp ?? ctxInitialTab ?? "channels"
+  );
+  const [incomingTab, setIncomingTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox" | null>(null);
+  const incomingRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Stale-request guard: each CS prefetch gets a unique token;
+  // if the user clicks away before prefetch completes, the stale token is ignored.
+  const pendingTabTokenRef = useRef<number>(0);
+  // Route loading bar: "running" = animating to 80%, "complete" = snap to 100% + fade
+  const [routeBar, setRouteBar] = useState<"idle" | "running" | "complete">("idle");
+  // Measured shell position for the fixed-position route bar
+  const [barRect, setBarRect] = useState<{ left: number; right: number; top: number } | null>(null);
+  const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
@@ -976,27 +1007,88 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
   const handleSetActiveTab = (tab: "today" | "channels" | "cs" | "leadops" | "leads-inbox") => {
-    if (tab === "leads-inbox") {
-      setActiveTab("leads-inbox");
-      setSidebarCollapsed(true);
-    } else if (tab === "leadops") {
-      setActiveTab("leadops");
-      setSidebarCollapsed(true);
-    } else if (tab === "cs") {
-      setActiveTab("cs");
+    // Update sidebar state immediately (no visual change, just state)
+    if (tab === "leads-inbox" || tab === "leadops" || tab === "cs" || tab === "today") {
       setSidebarCollapsed(true);
     } else if (tab === "channels" && activeTab === "today") {
-      // Coming from jobs view → land on command channel, sidebar collapsed
-      setActiveTab("channels");
       setActiveChannel("command");
       setSidebarCollapsed(true);
-    } else if (tab === "today") {
-      setActiveTab("today");
-      setSidebarCollapsed(false);
-    } else {
-      setActiveTab(tab);
+    }
+    // Update activeTab immediately so all enabled/query guards respond
+    setActiveTab(tab);
+    // If switching to a different tab, trigger the crossfade transition.
+    // For CS Inbox: prefetch the two minimum queries first so CsInbox mounts into
+    // a warm cache and paints instantly — no blank flash.
+    if (tab !== displayedTab) {
+      if (shellRef.current) {
+        const r = shellRef.current.getBoundingClientRect();
+        setBarRect({ left: r.left, right: window.innerWidth - r.right, top: r.top });
+      }
+      if (tab === "cs") {
+        // Issue a unique token for this prefetch so stale completions are ignored
+        const token = Date.now();
+        pendingTabTokenRef.current = token;
+        setRouteBar("running");
+        const runPrefetch = async () => {
+          try {
+            // 1. Prefetch inbox list (same input as CsInbox)
+            const list = await utils.leads.listCsInbox.fetch(
+              { showResolved: true },
+              { staleTime: 10_000 } // reuse cache if fresh within 10s
+            );
+            // Guard: user may have clicked away while we were fetching
+            if (pendingTabTokenRef.current !== token) return;
+            // 2. Resolve initial conversation using the shared helper
+            const initialId = getInitialCsConversationId(list ?? []);
+            if (initialId) {
+              await utils.leads.getCsConversation.fetch(
+                { sessionId: initialId },
+                { staleTime: 0 } // always fresh — matches CsInbox staleTime
+              );
+            }
+          } catch {
+            // Prefetch failed — mount CsInbox anyway so it can show its own error state
+          }
+          // Guard again after the second fetch
+          if (pendingTabTokenRef.current !== token) return;
+          setRouteBar("complete");
+          setIncomingTab(tab);
+        };
+        void runPrefetch();
+      } else {
+        // All other tabs are always-mounted — fire bar then transition immediately
+        setRouteBar("running");
+        // Complete bar on next frame so the animation is visible briefly
+        requestAnimationFrame(() => {
+          setRouteBar("complete");
+          setIncomingTab(tab);
+        });
+      }
     }
   };
+
+  // Called by onTransitionEnd on the incoming tab div
+  const completeTransition = () => {
+    if (incomingTab !== null) {
+      setDisplayedTab(incomingTab);
+      setIncomingTab(null);
+      setRouteBar("idle");
+    }
+  };
+
+  // Trigger the CSS transition on the incoming tab after it mounts (next frame)
+  useEffect(() => {
+    if (!incomingRef.current) return;
+    const el = incomingRef.current;
+    // Force a reflow so the browser registers the initial opacity:0 state
+    void el.offsetHeight;
+    el.classList.add('tab-enter-active');
+    return () => {
+      el.classList.remove('tab-enter-active');
+    };
+  }, [incomingTab]);
+
+
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
@@ -2037,7 +2129,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{background: 'transparent'}}>
+    <div ref={rootRef} className="flex flex-col h-full w-full overflow-hidden" style={{background: 'transparent'}}>
+      {/* Fixed route bar — scoped to shell column via measured coordinates */}
+      {barRect && routeBar !== "idle" && (
+        <div
+          className={`route-bar-fixed${routeBar === "running" ? " route-bar--running" : ""}${routeBar === "complete" ? " route-bar--complete" : ""}`}
+          style={{ left: barRect.left, right: barRect.right, top: barRect.top }}
+        />
+      )}
       <div className="pointer-events-none absolute inset-0" />
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
@@ -2063,238 +2162,86 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? '' : 'p-5 gap-5'}`}>
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${displayedTab === 'cs' || displayedTab === 'leadops' ? '' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR — only shown outside CS tab (CS tab gets rail via prop) ── */}
-      {activeTab !== 'cs' && sidebarCollapsed ? (
-        /* Slim icon rail when collapsed */
-        <aside className="shrink-0 w-[57px] self-stretch rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-          <button
-            onClick={() => setSidebarCollapsed(false)}
-            className="mb-1 h-8 w-8 flex items-center justify-center rounded-[12px] text-white/40 hover:text-white/80 hover:bg-white/10 transition"
-            title="Expand sidebar"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          {activeTab === "cs" ? (
-            /* CS filter buttons: A P N A R */
-            ([
-              { id: "All"      as InboxFilter, label: "All",      dot: "bg-slate-400" },
-              { id: "Priority" as InboxFilter, label: "Priority", dot: "bg-rose-500"  },
-              { id: "New"      as InboxFilter, label: "New",      dot: "bg-blue-500"  },
-              { id: "Active"   as InboxFilter, label: "Active",   dot: "bg-amber-400" },
-              { id: "Resolved" as InboxFilter, label: "Resolved", dot: "bg-emerald-500" },
-            ] as const).map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setCsFilter(f.id)}
-                className={cn(
-                  "relative w-8 h-8 flex items-center justify-center rounded-[12px] font-bold text-[10px] transition",
-                  csFilter === f.id
-                    ? "bg-white text-[#1C1C1E] shadow-sm"
-                    : "text-white/50 hover:text-white hover:bg-white/10"
-                )}
-                title={f.label}
-              >
-
-                {f.label.charAt(0)}
-              </button>
-            ))
-          ) : (
-            <>
-              {/* Channel icons */}
-              {CHANNELS.map((ch) => {
-                const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
-                return (
-                  <button
-                    key={ch.key}
-                    onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
-                    className={cn(
-                      "relative w-8 h-8 rounded-[12px] flex items-center justify-center text-[10px] font-bold transition",
-                      activeChannel === ch.key && activeTab === "channels"
-                        ? "bg-white text-[#1C1C1E] shadow-sm"
-                        : "text-white/50 hover:text-white hover:bg-white/10"
-                    )}
-                    title={ch.label}
-                  >
-                    {ch.label.charAt(0)}
-                    {count > 0 && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] flex items-center justify-center font-bold">
-                        {count > 9 ? "9+" : count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-              {/* Today ops icon */}
-              <button
-                onClick={() => { handleSetActiveTab("today"); }}
-                className={cn(
-                  "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                  activeTab === "today"
-                    ? "bg-white text-[#1C1C1E] shadow-sm"
-                    : "text-white/50 hover:text-white hover:bg-white/10"
-                )}
-                title="Today Ops"
-              >
-                <CalendarDays className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          {/* Agent status icon */}
-          <div className="relative mt-auto">
-            <button
-              onClick={() => setAgentStatusOpen(v => !v)}
-              className={cn(
-                "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                agentStatusOpen
-                  ? "bg-white text-[#1C1C1E] shadow-sm"
-                  : "text-white/50 hover:text-white hover:bg-white/10"
-              )}
-              title="Agent status"
-            >
-              <Users className="w-4 h-4" />
-            </button>
-            {/* DM unread badge */}
-            {totalDmUnread > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
-                {totalDmUnread > 9 ? "9+" : totalDmUnread}
-              </span>
-            )}
-            {/* Agent status popover */}
-            {agentStatusOpen && (
-              <>
-              {/* Backdrop — click outside to close */}
-              <div className="fixed inset-0 z-40" onClick={() => setAgentStatusOpen(false)} />
-              <div className="absolute left-12 bottom-0 z-50 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-slate-800">Agent Status</p>
-                  <button onClick={() => setAgentStatusOpen(false)} className="text-slate-400 hover:text-slate-700">
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
-                  {!agentStatusData ? (
-                    <div className="px-4 py-6 text-center text-sm text-slate-400">Loading...</div>
-                  ) : agentStatusData.agents.length === 0 ? (
-                    <div className="px-4 py-6 text-center text-sm text-slate-400">No agents found</div>
-                  ) : agentStatusData.agents.map((ag) => {
-                    const now = Date.now();
-                    const seenMs = ag.lastSeenAt;
-                    const diffMin = seenMs ? Math.floor((now - seenMs) / 60_000) : null;
-                    // awayStatus field takes precedence over time-based heuristic
-                    const agStatus: "online" | "away" | "offline" = ag.awayStatus
-                      ? "away"
-                      : diffMin === null ? "offline"
-                      : diffMin <= 2 ? "online"
-                      : diffMin <= 15 ? "away"
-                      : "offline";
-                    // Status label: show the named away reason when explicitly set
-                    const awayLabels: Record<string, string> = {
-                      away_sec: "Away for a sec ☕",
-                      lunch:    "Lunch break 🍔",
-                      back15:   "Back in 15 ⏰",
-                      eod:      "Signing off 🌙",
-                    };
-                    const statusLabel = ag.awayStatus ? (awayLabels[ag.awayStatus] ?? "Away")
-                      : seenMs === null || diffMin === null ? "Never logged in"
-                      : diffMin === 0 ? "Active now"
-                      : diffMin < 60 ? `${diffMin}m ago`
-                      : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h ago`
-                      : new Date(seenMs).toLocaleDateString("en-US", { timeZone: "America/New_York" });
-                    const dotColor = agStatus === "online" ? "bg-green-500" : agStatus === "away" ? "bg-amber-400" : "bg-slate-300";
-                    return (
-                      <div key={ag.id} className="flex items-center gap-3 px-4 py-2.5">
-                        <div className="relative shrink-0">
-                          {ag.photoUrl ? (
-                            <img src={ag.photoUrl} alt={ag.name} className="w-8 h-8 rounded-full object-cover" />
-                          ) : (
-                            <div
-                              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
-                              style={{ backgroundColor: senderHex(ag.name) }}
-                            >
-                              {ag.name[0].toUpperCase()}
-                            </div>
-                          )}
-                          <span
-                            className={cn("absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white", dotColor)}
-                            title={agStatus === "online" ? "Online" : agStatus === "away" ? (ag.awayStatus ? statusLabel : "Away (active <15m)") : "Offline"}
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{ag.name}</p>
-                          <p className={cn("text-xs truncate",
-                            agStatus === "online" ? "text-green-600 font-medium" :
-                            agStatus === "away" ? "text-amber-500" :
-                            "text-slate-400"
-                          )}>{agStatus === "online" ? "Online" : agStatus === "away" ? `Away • ${statusLabel}` : statusLabel}</p>
-                        </div>
-                        {/* DM button with per-agent unread badge */}
-                        {(() => {
-                          // Build the canonical thread key for this agent pair
-                          const agEmail = ag.email ?? "";
-                          const threadKey = agEmail && myDmKey.includes("@")
-                            ? [myDmKey, agEmail].sort().join("::")
-                            : "";
-                          const agentUnread = threadKey ? (dmUnreadMap[threadKey] ?? 0) : 0;
-                          return (
-                            <button
-                              onClick={() => { openDm(ag.name, ag.email ?? ag.name, ag.photoUrl); setAgentStatusOpen(false); }}
-                              className="relative ml-1 p-1 rounded-full hover:bg-blue-50 text-blue-500 hover:text-blue-700 transition-colors"
-                              title={agentUnread > 0 ? `${agentUnread} unread DM${agentUnread > 1 ? "s" : ""} from ${ag.name}` : `DM ${ag.name}`}
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                              {agentUnread > 0 && (
-                                <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center leading-none">
-                                  {agentUnread > 9 ? "9+" : agentUnread}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              </>
-            )}
+      {displayedTab !== 'cs' && displayedTab !== 'leadops' && (
+        /* Wide icon rail — new style */
+        <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+          {/* ── Workspace switcher icons ── */}
+          <div className="flex flex-col items-center gap-0 w-full pb-1">
+            {([
+              { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
+              { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+              { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+              { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+              { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
+            ]).map((ws) => {
+              const isActive = activeTab === ws.id;
+              return (
+                <button
+                  key={ws.id}
+                  onClick={() => handleSetActiveTab(ws.id)}
+                  className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
+                  style={{ opacity: isActive ? 1 : 0.4 }}
+                >
+                  {ws.id === "channels" ? (
+                    /* Command Chat — white circle with colored icon */
+                    <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
+                      <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={2} />
+                      <CmdMentionBadge
+                        callerName={callerName}
+                        hidden={activeTab === "channels"}
+                        channelMsgs={channelMsgs}
+                        myNames={myNames}
+                      />
+                    </div>
+                  ) : (
+                    <div className="relative flex items-center justify-center">
+                      <ws.Icon size={28} style={{ color: ws.color }} strokeWidth={1.75} />
+                      {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                    </div>
+                  )}
+                  <span className="text-[10px] text-white font-medium leading-tight text-center">
+                    {ws.line1}{ws.line2 ? <><br />{ws.line2}</> : null}
+                  </span>
+                  {isActive && (
+                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{ background: ws.color }} />
+                  )}
+                </button>
+              );
+            })}
           </div>
           {/* ── Page navigation shortcuts ── */}
-          <div className="flex flex-col items-center gap-1.5 pb-1">
-            <div className="h-px w-5 bg-white/10 mb-1" />
-            <a href="/admin/leads" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Leads / Admin Dashboard">
-              <LayoutDashboard className="w-4 h-4" />
-            </a>
-            <a href="/admin/command-center" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Control Tower">
-              <Radio className="w-4 h-4" />
-            </a>
-            <a href="/admin/field-management" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Field Mgmt Day Board">
-              <ClipboardList className="w-4 h-4" />
-            </a>
-            <a href="/admin/hiring" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Hiring Pipeline">
-              <Briefcase className="w-4 h-4" />
-            </a>
-            <a href="/agent" target="_blank" rel="noopener noreferrer"
-              className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition"
-              title="Agent Workspace">
-              <UserCircle className="w-4 h-4" />
-            </a>
+          <div className="flex flex-col items-center gap-0 w-full pt-1">
+            {([
+              { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+              { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+              { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+              { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+              { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+            ]).map((nav) => (
+              <a
+                key={nav.href}
+                href={nav.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+              >
+                <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                <span className="text-[10px] text-white font-medium leading-tight text-center">
+                  {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                </span>
+              </a>
+            ))}
           </div>
+
           {/* Profile photo avatar */}
-          <div className="pb-3">
+          <div className="mt-auto pt-4 pb-6 shrink-0">
             <button
               onClick={() => setProfilePhotoOpen(true)}
-              className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow"
+              className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block"
               title={`${callerName} — edit profile photo`}
             >
               {profilePhotoUrl ? (
@@ -2310,7 +2257,9 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             </button>
           </div>
         </aside>
-      ) : activeTab !== 'cs' ? (
+      )}
+      {/* ── Ops job list panel — always visible on today tab ── */}
+      {activeTab === 'today' && (
       <div className="w-[300px] shrink-0 h-full bg-white rounded-3xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 pt-4 pb-3">
@@ -2507,16 +2456,19 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </p>
         </button>
       </div>
-      ) : null} {/* end sidebarCollapsed ternary — null on CS tab (rail is passed as prop) */}
+      )}{/* end today job list panel */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
-      <div className={`flex-1 flex flex-row overflow-hidden min-h-0 ${activeTab === 'cs' ? '' : 'gap-5'}`}>
+      {/* Persistent shell — always in DOM so flex-1 never collapses during tab switch */}
+      <div ref={shellRef} className="relative flex-1 min-h-0 overflow-hidden">
+        {/* Currently displayed tab — stays visible during transition */}
+        <div className="absolute inset-0 flex flex-row overflow-hidden min-h-0" style={{ gap: displayedTab === 'cs' ? 0 : '1.25rem' }}>
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
              This keeps scrollTop, refs, and query caches alive across tab switches.
              No save/restore needed — the DOM node simply never dies. ── */}
 
         {/* VIEW: Job Thread */}
-        <div style={{ display: activeTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div style={{ display: displayedTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           {selectedJob ? (
           <>
             {/* Center header */}
@@ -2840,7 +2792,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         </div>
 
         {/* VIEW: Command Chat */}
-        <div style={{ display: activeTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div style={{ display: displayedTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="relative flex-1 flex flex-col overflow-hidden min-h-0">
           <CommandChat
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, threadParentBody: (m as any).threadParentBody ?? null, threadParentFrom: (m as any).threadParentFrom ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
@@ -3079,14 +3031,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         </div>
 
         {/* VIEW: Fallback — no job selected */}
-        {activeTab === "today" && !selectedJob && (
+        {displayedTab === "today" && !selectedJob && (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
             Select a job from the left panel
           </div>
         )}
 
         {/* VIEW: CS Inbox */}
-        {activeTab === "cs" && (
+        {displayedTab === "cs" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <CsInbox
               onSwitchTab={handleSetActiveTab}
@@ -3094,55 +3046,73 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setActiveFilter={setCsFilter}
               focusSessionId={focusCsSessionId}
               rail={
-                <aside className="rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-                  {([  
-                    { id: "All"      as InboxFilter, label: "All" },
-                    { id: "Priority" as InboxFilter, label: "Priority" },
-                    { id: "New"      as InboxFilter, label: "New" },
-                    { id: "Active"   as InboxFilter, label: "Active" },
-                    { id: "Resolved" as InboxFilter, label: "Resolved" },
-                  ] as const).map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => setCsFilter(f.id)}
-                      className={cn(
-                        "relative w-8 h-8 flex items-center justify-center rounded-[12px] font-bold text-[10px] transition",
-                        csFilter === f.id
-                          ? "bg-white text-[#1C1C1E] shadow-sm"
-                          : "text-white/50 hover:text-white hover:bg-white/10"
-                      )}
-                      title={f.label}
-                    >
-                      {f.label.charAt(0)}
-                    </button>
-                  ))}
-                  <div className="relative mt-auto">
-                    <button
-                      onClick={() => setAgentStatusOpen(v => !v)}
-                      className={cn(
-                        "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                        agentStatusOpen ? "bg-white text-[#1C1C1E] shadow-sm" : "text-white/50 hover:text-white hover:bg-white/10"
-                      )}
-                      title="Agent status"
-                    >
-                      <Users className="w-4 h-4" />
-                    </button>
-                    {totalDmUnread > 0 && (
-                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center pointer-events-none">
-                        {totalDmUnread > 9 ? "9+" : totalDmUnread}
-                      </span>
-                    )}
+                <aside className="shrink-0 w-[72px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                  <div className="flex flex-col items-center gap-0 w-full pb-1">
+                    {([
+                      { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
+                      { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+                      { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+                      { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
+                    ]).map((ws) => {
+                      const isActive = activeTab === ws.id;
+                      return (
+                        <button
+                          key={ws.id}
+                          onClick={() => handleSetActiveTab(ws.id)}
+                          className="relative flex flex-col items-center gap-1 w-full py-2.5 px-1 transition-all"
+                          style={{ opacity: isActive ? 1 : 0.4 }}
+                        >
+                          {ws.id === "channels" ? (
+                            <div className="relative w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md">
+                              <ws.Icon size={18} style={{ color: ws.color }} strokeWidth={2} />
+                              <CmdMentionBadge
+                                callerName={callerName}
+                                hidden={activeTab === "channels"}
+                                channelMsgs={channelMsgs}
+                                myNames={myNames}
+                              />
+                            </div>
+                          ) : (
+                            <div className="relative flex items-center justify-center">
+                              <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={1.75} />
+                              {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                            </div>
+                          )}
+                          <span className="text-[9px] text-white font-medium leading-tight text-center">
+                            {ws.line1}{ws.line2 ? <><br />{ws.line2}</> : null}
+                          </span>
+                          {isActive && (
+                            <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-0.5 rounded-full" style={{ background: ws.color }} />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="flex flex-col items-center gap-1.5 pb-1">
-                    <div className="h-px w-5 bg-white/10 mb-1" />
-                    <a href="/admin/leads" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Leads"><LayoutDashboard className="w-4 h-4" /></a>
-                    <a href="/admin/command-center" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Control Tower"><Radio className="w-4 h-4" /></a>
-                    <a href="/admin/field-management" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Field Mgmt"><ClipboardList className="w-4 h-4" /></a>
-                    <a href="/admin/hiring" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Hiring"><Briefcase className="w-4 h-4" /></a>
-                    <a href="/agent" target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded-[12px] flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition" title="Agent Workspace"><UserCircle className="w-4 h-4" /></a>
+                  <div className="flex flex-col items-center gap-0 w-full pt-1">
+                    {([
+                      { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+                      { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+                      { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+                      { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+                      { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+                    ]).map((nav) => (
+                      <a
+                        key={nav.href}
+                        href={nav.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-0.5 w-full py-1.5 px-1 transition-all opacity-50 hover:opacity-100 shrink-0"
+                      >
+                        <nav.Icon size={18} style={{ color: nav.color }} strokeWidth={1.75} />
+                        <span className="text-[9px] text-white font-medium leading-tight text-center">
+                          {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                        </span>
+                      </a>
+                    ))}
                   </div>
-                  <div className="pb-3">
-                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow" title={`${callerName} — edit profile`}>
+                  <div className="mt-auto pt-3 pb-5 shrink-0">
+                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
                       {profilePhotoUrl ? (
                         <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
                       ) : (
@@ -3159,19 +3129,135 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         )}
 
         {/* VIEW: Lead Ops */}
-        {activeTab === "leadops" && (
+        {displayedTab === "leadops" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <LeadOps focusSessionId={focusLeadSessionId} />
+            <LeadOps
+              focusSessionId={focusLeadSessionId}
+              rail={
+                <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                  <div className="flex flex-col items-center gap-0 w-full">
+                    {([
+                      { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
+                      { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+                      { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+                      { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
+                    ]).map((ws) => {
+                      const isActive = activeTab === ws.id;
+                      return (
+                        <button
+                          key={ws.id}
+                          onClick={() => handleSetActiveTab(ws.id)}
+                          className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
+                          style={{ opacity: isActive ? 1 : 0.4 }}
+                        >
+                          {ws.id === "channels" ? (
+                            <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
+                              <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={2} />
+                              <CmdMentionBadge
+                                callerName={callerName}
+                                hidden={activeTab === "channels"}
+                                channelMsgs={channelMsgs}
+                                myNames={myNames}
+                              />
+                            </div>
+                          ) : (
+                            <div className="relative flex items-center justify-center">
+                              <ws.Icon size={28} style={{ color: ws.color }} strokeWidth={1.75} />
+                              {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-white font-medium leading-tight text-center">
+                            {ws.line1}{ws.line2 ? <><br />{ws.line2}</> : null}
+                          </span>
+                          {isActive && (
+                            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{ background: ws.color }} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex flex-col items-center gap-0 w-full pt-1">
+                    {([
+                      { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+                      { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+                      { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+                      { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+                      { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+                    ]).map((nav) => (
+                      <a
+                        key={nav.href}
+                        href={nav.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+                      >
+                        <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                        <span className="text-[10px] text-white font-medium leading-tight text-center">
+                          {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                  <div className="mt-auto pt-4 pb-6 shrink-0">
+                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
+                      {profilePhotoUrl ? (
+                        <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: senderHex(callerName) }}>
+                          {(callerName ?? "?")[0].toUpperCase()}
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </aside>
+              }
+            />
           </div>
         )}
         {/* VIEW: Leads Inbox */}
-        {activeTab === "leads-inbox" && (
+        {displayedTab === "leads-inbox" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <LeadsInbox />
           </div>
         )}
-      </div>
+        </div>{/* end displayed tab */}
 
+        {/* Incoming tab — fades in over 180ms with 6px rise, then replaces displayed tab */}
+        {isTransitioning && incomingTab && (
+          <div
+            ref={incomingRef}
+            className="absolute inset-0 flex flex-row overflow-hidden min-h-0 tab-enter"
+            style={{ gap: incomingTab === 'cs' ? 0 : '1.25rem' }}
+            onTransitionEnd={completeTransition}
+          >
+            {/* VIEW: Job Thread (incoming) */}
+            <div style={{ display: incomingTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              {/* skeleton placeholder during transition */}
+            </div>
+            {/* VIEW: Command Chat (incoming) */}
+            <div style={{ display: incomingTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+              {/* skeleton placeholder during transition */}
+            </div>
+            {/* VIEW: CS Inbox (incoming) */}
+            {incomingTab === "cs" && (
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col" />
+            )}
+            {/* VIEW: Lead Ops (incoming) */}
+            {incomingTab === "leadops" && (
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col" />
+            )}
+            {/* VIEW: Leads Inbox (incoming) */}
+            {incomingTab === "leads-inbox" && (
+              <div className="flex-1 min-h-0 overflow-hidden flex flex-col" />
+            )}
+            {/* VIEW: Fallback (incoming) */}
+            {incomingTab === "today" && !selectedJob && (
+              <div className="flex-1 flex items-center justify-center" />
+            )}
+          </div>
+        )}
+      </div>{/* end persistent shell */}
       {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
       {activeTab === "today" && jobDetail && (
         <div className="w-[300px] shrink-0 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -3555,6 +3641,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         callerName={callerName}
         currentPhotoUrl={profilePhotoUrl}
         onPhotoUpdated={(url) => setProfilePhotoUrl(url || null)}
+        agentStatusData={agentStatusData}
+        dmUnreadMap={dmUnreadMap}
+        myDmKey={myDmKey}
+        totalDmUnread={totalDmUnread}
+        onOpenDm={openDm}
       />
 
       {/* ── Floating DM Panels ─────────────────────────────────────────────────── */}

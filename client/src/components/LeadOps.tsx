@@ -4,7 +4,7 @@
  * Layer 1: Real lead list from leads.listForLeadOps
  * Layer 3: Claim, Send, Book, Close, Follow-up, Assign mutations wired
  */
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -536,7 +536,7 @@ function AssignModal({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function LeadOps({ focusSessionId }: { focusSessionId?: number } = {}) {
+export default function LeadOps({ focusSessionId, rail }: { focusSessionId?: number; rail?: ReactNode } = {}) {
   const [activeLead, setActiveLead] = useState<RealLead | null>(null);
   const [filterTab, setFilterTab] = useState<"Hot" | "Follow-up" | "Booked">("Hot");
   const [search, setSearch] = useState("");
@@ -962,7 +962,8 @@ export default function LeadOps({ focusSessionId }: { focusSessionId?: number } 
         </div>
       )}
 
-      <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950">
+      <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950" style={{padding: rail ? '20px 0 20px 20px' : '0', gap: rail ? '16px' : '0'}}>
+        {rail}
         {/* ── Left panel: lead list ─────────────────────────────────────── */}
         <aside className="w-[340px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4">
           <div className="mb-4 flex items-center justify-between">
