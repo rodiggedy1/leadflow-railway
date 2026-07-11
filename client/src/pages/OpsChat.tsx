@@ -2068,11 +2068,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' ? '' : 'p-5 gap-5'}`}>
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' || activeTab === 'leadops' ? '' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR — only shown outside CS tab (CS tab gets rail via prop) ── */}
-      {activeTab !== 'cs' && (
+      {activeTab !== 'cs' && activeTab !== 'leadops' && (
         /* Wide icon rail — new style */
         <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
