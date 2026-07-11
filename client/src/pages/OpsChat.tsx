@@ -2126,16 +2126,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             })}
           </div>
           {/* ── Page navigation shortcuts ── */}
-          <div className="flex flex-col items-center gap-0 mt-auto w-full overflow-y-auto">
+          <div className="flex flex-col items-center gap-0 mt-auto w-full">
             <div className="h-px w-10 bg-white/10 my-2 mx-auto shrink-0" />
             {([
               { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
               { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
               { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
-              { href: "/admin/calls",             Icon: PhoneCall,     color: "#22c55e", line1: "Voice",    line2: "" },
               { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
               { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
-              { href: "/admin/team-pay",          Icon: Banknote,      color: "#10b981", line1: "Team",     line2: "Pay" },
             ]).map((nav) => (
               <a
                 key={nav.href}
