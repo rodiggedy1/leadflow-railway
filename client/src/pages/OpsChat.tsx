@@ -3058,27 +3058,39 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               focusSessionId={focusCsSessionId}
               rail={
                 <aside className="rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-                  {([  
-                    { id: "All"      as InboxFilter, label: "All" },
-                    { id: "Priority" as InboxFilter, label: "Priority" },
-                    { id: "New"      as InboxFilter, label: "New" },
-                    { id: "Active"   as InboxFilter, label: "Active" },
-                    { id: "Resolved" as InboxFilter, label: "Resolved" },
-                  ] as const).map((f) => (
-                    <button
-                      key={f.id}
-                      onClick={() => setCsFilter(f.id)}
-                      className={cn(
-                        "relative w-8 h-8 flex items-center justify-center rounded-[12px] font-bold text-[10px] transition",
-                        csFilter === f.id
-                          ? "bg-white text-[#1C1C1E] shadow-sm"
-                          : "text-white/50 hover:text-white hover:bg-white/10"
-                      )}
-                      title={f.label}
-                    >
-                      {f.label.charAt(0)}
-                    </button>
-                  ))}
+                  <div className="flex flex-col items-center gap-1.5">
+                    {([
+                      { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Chat" },
+                      { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "CS" },
+                      { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Ops" },
+                      { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Revenue" },
+                      { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Ops" },
+                    ]).map((ws) => (
+                      <button
+                        key={ws.id}
+                        onClick={() => handleSetActiveTab(ws.id)}
+                        className={cn(
+                          "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                          activeTab === ws.id
+                            ? "bg-white text-[#1C1C1E] shadow-sm"
+                            : "text-white/50 hover:text-white hover:bg-white/10"
+                        )}
+                        title={ws.label}
+                      >
+                        {ws.icon}
+                        {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                        {ws.id === "channels" && (
+                          <CmdMentionBadge
+                            callerName={callerName}
+                            hidden={activeTab === "channels"}
+                            channelMsgs={channelMsgs}
+                            myNames={myNames}
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="w-5 h-px bg-white/10 my-0.5" />
                   <div className="relative mt-auto">
                     <button
                       onClick={() => setAgentStatusOpen(v => !v)}
