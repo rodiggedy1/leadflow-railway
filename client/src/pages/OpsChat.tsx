@@ -970,6 +970,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [incomingTab, setIncomingTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox" | null>(null);
   const incomingRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1033,8 +1034,25 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     };
   }, [incomingTab]);
 
-  // ── DIAGNOSTIC: measure shell and absolute child dimensions on every render ──
+  // ── DIAGNOSTIC: measure outermost OpsChat div + shell + overlay widths ──
   useEffect(() => {
+    // --- Measure outermost OpsChat div (rootRef) ---
+    if (rootRef.current) {
+      const root = rootRef.current;
+      const rootRect = root.getBoundingClientRect();
+      const rootStyle = getComputedStyle(root);
+      console.log('[DIAG-ROOT] outermost OpsChat BCR width:', rootRect.width, 'height:', rootRect.height);
+      console.log('[DIAG-ROOT] outermost OpsChat computed width:', rootStyle.width, 'height:', rootStyle.height);
+      const parent = root.parentElement;
+      if (parent) {
+        const parentRect = parent.getBoundingClientRect();
+        const parentStyle = getComputedStyle(parent);
+        console.log('[DIAG-ROOT] overlay parent BCR width:', parentRect.width, 'height:', parentRect.height);
+        console.log('[DIAG-ROOT] overlay parent computed display:', parentStyle.display, 'flexDir:', parentStyle.flexDirection);
+        console.log('[DIAG-ROOT] simulated w-full width (parent.offsetWidth):', parent.offsetWidth, 'px');
+      }
+    }
+    // --- Measure shell ---
     if (!shellRef.current) return;
     const shell = shellRef.current;
     const shellRect = shell.getBoundingClientRect();
@@ -2103,7 +2121,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full overflow-hidden" style={{background: 'transparent'}}>
+    <div ref={rootRef} className="flex flex-col h-full overflow-hidden" style={{background: 'transparent'}}>
       <div className="pointer-events-none absolute inset-0" />
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
