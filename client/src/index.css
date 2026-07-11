@@ -1149,14 +1149,3 @@
   width: 8px; height: 8px; background: #ef4444;
   border-radius: 999px; animation: pulseDot 1.4s infinite;
 }
-
-/* ── OpsChat tab crossfade transition ───────────────────────────── */
-.tab-enter {
-  opacity: 0;
-  transform: translateY(6px);
-  transition: opacity 180ms ease, transform 180ms ease;
-}
-.tab-enter-active {
-  opacity: 1;
-  transform: translateY(0);
-}

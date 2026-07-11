@@ -960,16 +960,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
-  // ── Tab crossfade transition state ──────────────────────────────────────
-  // displayedTab: the tab currently visible (persists during transition)
-  // incomingTab: the tab fading in (null when idle)
-  // isTransitioning is derived: incomingTab !== null
-  const [displayedTab, setDisplayedTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox">(
-    initialTabProp ?? ctxInitialTab ?? "channels"
-  );
-  const [incomingTab, setIncomingTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox" | null>(null);
-  const incomingRef = useRef<HTMLDivElement>(null);
-  const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
@@ -997,40 +987,27 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
   const handleSetActiveTab = (tab: "today" | "channels" | "cs" | "leadops" | "leads-inbox") => {
-    // Update sidebar state immediately (no visual change, just state)
-    if (tab === "leads-inbox" || tab === "leadops" || tab === "cs" || tab === "today") {
+    if (tab === "leads-inbox") {
+      setActiveTab("leads-inbox");
+      setSidebarCollapsed(true);
+    } else if (tab === "leadops") {
+      setActiveTab("leadops");
+      setSidebarCollapsed(true);
+    } else if (tab === "cs") {
+      setActiveTab("cs");
       setSidebarCollapsed(true);
     } else if (tab === "channels" && activeTab === "today") {
+      // Coming from jobs view → land on command channel, sidebar collapsed
+      setActiveTab("channels");
       setActiveChannel("command");
       setSidebarCollapsed(true);
-    }
-    // Update activeTab immediately so all enabled/query guards respond
-    setActiveTab(tab);
-    // If switching to a different tab, trigger the crossfade transition
-    if (tab !== displayedTab) {
-      setIncomingTab(tab);
-    }
-  };
-
-  // Called by onTransitionEnd on the incoming tab div
-  const completeTransition = () => {
-    if (incomingTab !== null) {
-      setDisplayedTab(incomingTab);
-      setIncomingTab(null);
+    } else if (tab === "today") {
+      setActiveTab("today");
+      setSidebarCollapsed(true);
+    } else {
+      setActiveTab(tab);
     }
   };
-
-  // Trigger the CSS transition on the incoming tab after it mounts (next frame)
-  useEffect(() => {
-    if (!incomingRef.current) return;
-    const el = incomingRef.current;
-    // Force a reflow so the browser registers the initial opacity:0 state
-    void el.offsetHeight;
-    el.classList.add('tab-enter-active');
-    return () => {
-      el.classList.remove('tab-enter-active');
-    };
-  }, [incomingTab]);
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
@@ -2394,16 +2371,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       )}{/* end today job list panel */}
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
-      {/* Persistent shell — always in DOM so flex-1 never collapses during tab switch */}
-      <div className="relative flex-1 min-h-0 overflow-hidden">
-        {/* Currently displayed tab — stays visible during transition */}
-        <div className="absolute inset-0 flex flex-row overflow-hidden min-h-0" style={{ gap: displayedTab === 'cs' ? 0 : '1.25rem' }}>
+      <div className={`flex-1 flex flex-row overflow-hidden min-h-0 ${activeTab === 'cs' ? '' : 'gap-5'}`}>
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
              This keeps scrollTop, refs, and query caches alive across tab switches.
              No save/restore needed — the DOM node simply never dies. ── */}
 
         {/* VIEW: Job Thread */}
-        <div style={{ display: displayedTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div style={{ display: activeTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           {selectedJob ? (
           <>
             {/* Center header */}
@@ -2727,7 +2701,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         </div>
 
         {/* VIEW: Command Chat */}
-        <div style={{ display: displayedTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div style={{ display: activeTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
           <CommandChat
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, threadParentBody: (m as any).threadParentBody ?? null, threadParentFrom: (m as any).threadParentFrom ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}
@@ -2966,14 +2940,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         </div>
 
         {/* VIEW: Fallback — no job selected */}
-        {displayedTab === "today" && !selectedJob && (
+        {activeTab === "today" && !selectedJob && (
           <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
             Select a job from the left panel
           </div>
         )}
 
         {/* VIEW: CS Inbox */}
-        {displayedTab === "cs" && (
+        {activeTab === "cs" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <CsInbox
               onSwitchTab={handleSetActiveTab}
@@ -3064,7 +3038,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         )}
 
         {/* VIEW: Lead Ops */}
-        {displayedTab === "leadops" && (
+        {activeTab === "leadops" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <LeadOps
               focusSessionId={focusLeadSessionId}
@@ -3151,48 +3125,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         )}
         {/* VIEW: Leads Inbox */}
-        {displayedTab === "leads-inbox" && (
+        {activeTab === "leads-inbox" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <LeadsInbox />
           </div>
         )}
-        </div>{/* end displayed tab */}
+      </div>
 
-        {/* Incoming tab — fades in over 180ms with 6px rise, then replaces displayed tab */}
-        {isTransitioning && incomingTab && (
-          <div
-            ref={incomingRef}
-            className="absolute inset-0 flex flex-row overflow-hidden min-h-0 tab-enter"
-            style={{ gap: incomingTab === 'cs' ? 0 : '1.25rem' }}
-            onTransitionEnd={completeTransition}
-          >
-            {/* VIEW: Job Thread (incoming) */}
-            <div style={{ display: incomingTab === "today" && selectedJob ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
-              {/* skeleton placeholder during transition */}
-            </div>
-            {/* VIEW: Command Chat (incoming) */}
-            <div style={{ display: incomingTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="flex-1 flex flex-col overflow-hidden min-h-0">
-              {/* skeleton placeholder during transition */}
-            </div>
-            {/* VIEW: CS Inbox (incoming) */}
-            {incomingTab === "cs" && (
-              <div className="flex-1 min-h-0 overflow-hidden flex flex-col" />
-            )}
-            {/* VIEW: Lead Ops (incoming) */}
-            {incomingTab === "leadops" && (
-              <div className="flex-1 min-h-0 overflow-hidden flex flex-col" />
-            )}
-            {/* VIEW: Leads Inbox (incoming) */}
-            {incomingTab === "leads-inbox" && (
-              <div className="flex-1 min-h-0 overflow-hidden flex flex-col" />
-            )}
-            {/* VIEW: Fallback (incoming) */}
-            {incomingTab === "today" && !selectedJob && (
-              <div className="flex-1 flex items-center justify-center" />
-            )}
-          </div>
-        )}
-      </div>{/* end persistent shell */}
       {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
       {activeTab === "today" && jobDetail && (
         <div className="w-[300px] shrink-0 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
