@@ -976,6 +976,9 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // if the user clicks away before prefetch completes, the stale token is ignored.
   const pendingTabTokenRef = useRef<number>(0);
   const isTransitioning = incomingTab !== null;
+  // layoutTab: frozen at displayedTab during a transition so the rail and padding
+  // stay stable until the incoming tab takes over on transitionend
+  const layoutTab = isTransitioning ? displayedTab : activeTab;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
@@ -2139,9 +2142,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      {/* layoutTab: use displayedTab during a transition so the current tab's
-           rail and padding stay stable until the incoming tab takes over */}
-      {(() => { const layoutTab = isTransitioning ? displayedTab : activeTab; return (
       <div className={`flex flex-1 min-h-0 overflow-hidden ${layoutTab === 'cs' || layoutTab === 'leadops' ? '' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
@@ -3238,7 +3238,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         )}
       </div>{/* end persistent shell */}
-      </div>); })()}
       {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
       {activeTab === "today" && jobDetail && (
         <div className="w-[300px] shrink-0 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
