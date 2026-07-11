@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns, reactivationContacts, reactivationCampaigns } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -5793,6 +5793,56 @@ Return JSON with exactly these fields:
             ts: r.sentAt!,
             status: r.status,
           }));
+
+        // 3b. Reactivation campaign events for this phone
+        const reactivationRows = await db
+          .select({
+            campaignName: reactivationCampaigns.name,
+            sentAt: reactivationContacts.sentAt,
+            phone: reactivationContacts.phone,
+            campaignId: reactivationContacts.campaignId,
+          })
+          .from(reactivationContacts)
+          .leftJoin(reactivationCampaigns, eq(reactivationContacts.campaignId, reactivationCampaigns.id))
+          .where(or(
+            sql`REGEXP_REPLACE(${reactivationContacts.phone}, '[^0-9]', '') LIKE ${`%${digits}`}`,
+            norm ? eq(reactivationContacts.phone, norm) : sql`0`
+          ))
+          .orderBy(reactivationContacts.sentAt)
+          .limit(50);
+
+        for (const r of reactivationRows) {
+          if (!r.sentAt) continue;
+          const ts = r.sentAt instanceof Date ? r.sentAt.getTime() : new Date(r.sentAt as string).getTime();
+          // Find the matching assistant message in messageHistory and tag it as campaign
+          const matchIdx = messages.findIndex(m =>
+            m.role === 'assistant' &&
+            m.sessionSource === 'reactivation' &&
+            Math.abs(m.ts - ts) < 120_000 // within 2 minutes
+          );
+          if (matchIdx !== -1) {
+            // Promote the message to a campaign event — remove from messages
+            const [promoted] = messages.splice(matchIdx, 1);
+            campaigns.push({
+              id: `reactivation-${r.campaignId}-${ts}`,
+              type: 'campaign' as const,
+              campaignName: r.campaignName ?? 'Reactivation campaign',
+              message: promoted.content,
+              ts,
+              status: 'SENT',
+            });
+          } else {
+            // No matching message found — add as campaign event with no message body
+            campaigns.push({
+              id: `reactivation-${r.campaignId}-${ts}`,
+              type: 'campaign' as const,
+              campaignName: r.campaignName ?? 'Reactivation campaign',
+              message: null,
+              ts,
+              status: 'SENT',
+            });
+          }
+        }
 
         // 4. Call recordings for this phone
         const callRows = await db
