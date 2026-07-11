@@ -2170,7 +2170,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         /* Wide icon rail — new style */
         <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
-          <div className="flex flex-col items-center gap-0 w-full pb-1">
+          <div className="flex flex-col items-center gap-0 w-full">
             {([
               { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
               { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
@@ -2183,7 +2183,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 <button
                   key={ws.id}
                   onClick={() => handleSetActiveTab(ws.id)}
-                  className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
+                  className="relative flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all"
                   style={{ opacity: isActive ? 1 : 0.65 }}
                 >
                   {ws.id === "channels" ? (
@@ -2214,7 +2214,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             })}
           </div>
           {/* ── Page navigation shortcuts ── */}
-          <div className="flex flex-col items-center gap-0 w-full pt-1">
+          <div className="flex flex-col items-center gap-0 w-full">
             {([
               { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
               { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
@@ -2227,7 +2227,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 href={nav.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
+                className="flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
               >
                 <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
                 <span className="text-[10px] text-white font-medium leading-tight text-center">
@@ -3047,7 +3047,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               focusSessionId={focusCsSessionId}
               rail={
                 <aside className="shrink-0 w-[72px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-                  <div className="flex flex-col items-center gap-0 w-full pb-1">
+                  <div className="flex flex-col items-center gap-0 w-full">
                     {([
                       { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
                       { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
@@ -3089,7 +3089,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       );
                     })}
                   </div>
-                  <div className="flex flex-col items-center gap-0 w-full pt-1">
+                  <div className="flex flex-col items-center gap-0 w-full">
                     {([
                       { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
                       { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
@@ -3102,7 +3102,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                         href={nav.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-0.5 w-full py-1.5 px-1 transition-all opacity-50 hover:opacity-100 shrink-0"
+                        className="flex flex-col items-center gap-1 w-full py-2.5 px-1 transition-all opacity-65 hover:opacity-100 shrink-0"
                       >
                         <nav.Icon size={18} style={{ color: nav.color }} strokeWidth={1.75} />
                         <span className="text-[9px] text-white font-medium leading-tight text-center">
@@ -3148,7 +3148,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                         <button
                           key={ws.id}
                           onClick={() => handleSetActiveTab(ws.id)}
-                          className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
+                          className="relative flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all"
                           style={{ opacity: isActive ? 1 : 0.65 }}
                         >
                           {ws.id === "channels" ? (
@@ -3177,7 +3177,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       );
                     })}
                   </div>
-                  <div className="flex flex-col items-center gap-0 w-full pt-1">
+                  <div className="flex flex-col items-center gap-0 w-full">
                     {([
                       { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
                       { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
@@ -3190,7 +3190,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                         href={nav.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
+                        className="flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
                       >
                         <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
                         <span className="text-[10px] text-white font-medium leading-tight text-center">
