@@ -1557,6 +1557,27 @@ export const fieldMgmtRouter = router({
         }
       }
 
+      // 2b. Fetch arrived timestamps from jobStatusHistory
+      const arrivedRows = await db
+        .select({
+          cleanerJobId: jobStatusHistory.cleanerJobId,
+          changedAt: jobStatusHistory.changedAt,
+        })
+        .from(jobStatusHistory)
+        .where(and(
+          inArray(jobStatusHistory.cleanerJobId, jobIds),
+          eq(jobStatusHistory.status, "arrived")
+        ))
+        .orderBy(asc(jobStatusHistory.changedAt));
+
+      // Map first arrived timestamp per job
+      const arrivedAtByJob = new Map<number, Date>();
+      for (const row of arrivedRows) {
+        if (!arrivedAtByJob.has(row.cleanerJobId)) {
+          arrivedAtByJob.set(row.cleanerJobId, row.changedAt);
+        }
+      }
+
       // 3. Group jobs by teamName
       const teamMap = new Map<string, {
         teamName: string;
@@ -1621,6 +1642,7 @@ export const fieldMgmtRouter = router({
           currentJobAddress: currentJob.jobAddress,
           currentJobServiceDateTime: currentJob.serviceDateTime,
           currentJobStatus: currentJob.jobStatus,
+          arrivedAt: arrivedAtByJob.get(currentJob.id) ?? null,
           etaCall: etaCall ? {
             id: etaCall.id,
             step: etaCall.step,

@@ -27,6 +27,7 @@ interface TeamEtaSummaryItem {
   currentJobAddress: string;
   currentJobServiceDateTime: Date | null;
   currentJobStatus: string;
+  arrivedAt: Date | null;
   etaCall: {
     id: number;
     step: string;
@@ -195,10 +196,11 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
   const ribbonMsg = useMemo(() => {
     const s = team.currentJobStatus;
     // Arrived / on-site statuses take priority over ETA call status
-    if (s === "in_progress") return "Cleaning in progress";
-    if (s === "finishing_up") return "Finishing up";
-    if (s === "wrapping_up") return "Wrapping up";
-    if (s === "arrived") return "Team has arrived";
+    const arrivedDisplay = team.arrivedAt ? ` · arrived ${formatTime(new Date(team.arrivedAt))}` : "";
+    if (s === "in_progress") return `Cleaning in progress${arrivedDisplay}`;
+    if (s === "finishing_up") return `Finishing up${arrivedDisplay}`;
+    if (s === "wrapping_up") return `Wrapping up${arrivedDisplay}`;
+    if (s === "arrived") return `Team has arrived${arrivedDisplay}`;
     if (s === "completed") return "Job completed";
     // Only show ETA time if we actually have one from a call — never show scheduled time as ETA
     const etaDisplay = team.etaTimestamp ? formatTime(new Date(team.etaTimestamp)) : null;
