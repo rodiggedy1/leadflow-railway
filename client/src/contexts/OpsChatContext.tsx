@@ -10,7 +10,7 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 export type OpsChatWindowState = "closed" | "open" | "minimized";
-export type OpsChatTab = "today" | "channels" | "cs" | "leadops";
+export type OpsChatTab = "today" | "channels" | "cs" | "leadops" | "leads-inbox";
 
 interface OpsChatContextValue {
   state: OpsChatWindowState;

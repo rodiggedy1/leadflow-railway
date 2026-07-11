@@ -15,6 +15,7 @@ import { TypingBubble } from "@/components/TypingBubble";
 import { senderHex, senderColorClass } from "@/lib/senderColor";
 import CommandChat from "@/components/CommandChat";
 import LeadOps from "@/components/LeadOps";
+import LeadsInbox from "@/components/LeadsInbox";
 import CsInbox, { type InboxFilter } from "@/components/CsInbox";
 import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
@@ -70,6 +71,7 @@ import {
   Briefcase,
   Headphones,
   Zap,
+  TrendingUp,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -924,7 +926,7 @@ function CmdMentionBadge({ callerName, hidden, channelMsgs, myNames }: {
 interface OpsChatProps {
   onMinimize?: () => void;
   onClose?: () => void;
-  initialTab?: "today" | "channels" | "cs" | "leadops";
+  initialTab?: "today" | "channels" | "cs" | "leadops" | "leads-inbox";
 }
 
 export default function OpsChat({ onMinimize, onClose, initialTab: initialTabProp }: OpsChatProps = {}) {
@@ -945,7 +947,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [csFilter, setCsFilter] = useState<InboxFilter>("All");
   const [focusLeadSessionId, setFocusLeadSessionId] = useState<number | undefined>(undefined);
   const [focusCsSessionId, setFocusCsSessionId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops">(
+  const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
   const [activeChannel, setActiveChannel] = useState<string>("command");
@@ -974,8 +976,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // Switching to today always expands sidebar.
   // Switching to channels from today defaults to command channel with sidebar collapsed.
-  const handleSetActiveTab = (tab: "today" | "channels" | "cs" | "leadops") => {
-    if (tab === "leadops") {
+  const handleSetActiveTab = (tab: "today" | "channels" | "cs" | "leadops" | "leads-inbox") => {
+    if (tab === "leads-inbox") {
+      setActiveTab("leads-inbox");
+      setSidebarCollapsed(true);
+    } else if (tab === "leadops") {
       setActiveTab("leadops");
       setSidebarCollapsed(true);
     } else if (tab === "cs") {
@@ -2066,78 +2071,40 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       {activeTab !== 'cs' && sidebarCollapsed ? (
         /* Slim icon rail when collapsed */
         <aside className="shrink-0 w-[57px] self-stretch rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-          <button
-            onClick={() => setSidebarCollapsed(false)}
-            className="mb-1 h-8 w-8 flex items-center justify-center rounded-[12px] text-white/40 hover:text-white/80 hover:bg-white/10 transition"
-            title="Expand sidebar"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-          {activeTab === "cs" ? (
-            /* CS filter buttons: A P N A R */
-            ([
-              { id: "All"      as InboxFilter, label: "All",      dot: "bg-slate-400" },
-              { id: "Priority" as InboxFilter, label: "Priority", dot: "bg-rose-500"  },
-              { id: "New"      as InboxFilter, label: "New",      dot: "bg-blue-500"  },
-              { id: "Active"   as InboxFilter, label: "Active",   dot: "bg-amber-400" },
-              { id: "Resolved" as InboxFilter, label: "Resolved", dot: "bg-emerald-500" },
-            ] as const).map((f) => (
+          {/* ── Workspace switcher icons ── */}
+          <div className="flex flex-col items-center gap-1.5">
+            {([
+              { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Chat" },
+              { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "CS" },
+              { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Ops" },
+              { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Revenue" },
+              { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Ops" },
+            ]).map((ws) => (
               <button
-                key={f.id}
-                onClick={() => setCsFilter(f.id)}
+                key={ws.id}
+                onClick={() => handleSetActiveTab(ws.id)}
                 className={cn(
-                  "relative w-8 h-8 flex items-center justify-center rounded-[12px] font-bold text-[10px] transition",
-                  csFilter === f.id
+                  "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                  activeTab === ws.id
                     ? "bg-white text-[#1C1C1E] shadow-sm"
                     : "text-white/50 hover:text-white hover:bg-white/10"
                 )}
-                title={f.label}
+                title={ws.label}
               >
-
-                {f.label.charAt(0)}
-              </button>
-            ))
-          ) : (
-            <>
-              {/* Channel icons */}
-              {CHANNELS.map((ch) => {
-                const count = channelCounts ? (channelCounts as Record<string, number>)[ch.key] ?? 0 : 0;
-                return (
-                  <button
-                    key={ch.key}
-                    onClick={() => { handleSetActiveTab("channels"); handleSetActiveChannel(ch.key); }}
-                    className={cn(
-                      "relative w-8 h-8 rounded-[12px] flex items-center justify-center text-[10px] font-bold transition",
-                      activeChannel === ch.key && activeTab === "channels"
-                        ? "bg-white text-[#1C1C1E] shadow-sm"
-                        : "text-white/50 hover:text-white hover:bg-white/10"
-                    )}
-                    title={ch.label}
-                  >
-                    {ch.label.charAt(0)}
-                    {count > 0 && (
-                      <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] flex items-center justify-center font-bold">
-                        {count > 9 ? "9+" : count}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-              {/* Today ops icon */}
-              <button
-                onClick={() => { handleSetActiveTab("today"); }}
-                className={cn(
-                  "w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                  activeTab === "today"
-                    ? "bg-white text-[#1C1C1E] shadow-sm"
-                    : "text-white/50 hover:text-white hover:bg-white/10"
+                {ws.icon}
+                {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                {ws.id === "channels" && (
+                  <CmdMentionBadge
+                    callerName={callerName}
+                    hidden={activeTab === "channels"}
+                    channelMsgs={channelMsgs}
+                    myNames={myNames}
+                  />
                 )}
-                title="Today Ops"
-              >
-                <CalendarDays className="w-4 h-4" />
               </button>
-            </>
-          )}
+            ))}
+          </div>
+          <div className="w-5 h-px bg-white/10 my-0.5" />
           {/* Agent status icon */}
           <div className="relative mt-auto">
             <button
@@ -2330,7 +2297,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               { id: "today"    as const, label: "Ops",  icon: <CalendarDays className="w-3.5 h-3.5" /> },
               { id: "channels" as const, label: "Chat", icon: <MessageSquare className="w-3.5 h-3.5" /> },
               { id: "cs"       as const, label: "CS",      icon: <Headphones className="w-3.5 h-3.5" /> },
-              { id: "leadops"  as const, label: "Lead Ops", icon: <Zap        className="w-3.5 h-3.5" /> },
+              { id: "leadops"     as const, label: "Lead Ops", icon: <Zap          className="w-3.5 h-3.5" /> },
+              { id: "leads-inbox" as const, label: "Leads",    icon: <MessageSquare className="w-3.5 h-3.5" /> },
             ]).map((tab) => (
               <button
                 key={tab.id}
@@ -3157,6 +3125,12 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {activeTab === "leadops" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             <LeadOps focusSessionId={focusLeadSessionId} />
+          </div>
+        )}
+        {/* VIEW: Leads Inbox */}
+        {activeTab === "leads-inbox" && (
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <LeadsInbox />
           </div>
         )}
       </div>
