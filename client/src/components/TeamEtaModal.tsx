@@ -193,6 +193,13 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
   // Determine ribbon message
   const ribbonMsg = useMemo(() => {
+    const s = team.currentJobStatus;
+    // Arrived / on-site statuses take priority over ETA call status
+    if (s === "in_progress") return "Cleaning in progress";
+    if (s === "finishing_up") return "Finishing up";
+    if (s === "wrapping_up") return "Wrapping up";
+    if (s === "arrived") return "Team has arrived";
+    if (s === "completed") return "Job completed";
     // Only show ETA time if we actually have one from a call — never show scheduled time as ETA
     const etaDisplay = team.etaTimestamp ? formatTime(new Date(team.etaTimestamp)) : null;
     if (team.etaStatus === "on_time") return etaDisplay ? `On track · ETA ${etaDisplay}` : "On track";
@@ -352,9 +359,14 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   <div className="mt-1 text-center">
                     {team.etaStatus === "running_late" && team.delayMinutes > 0 ? (
                       <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>{team.delayMinutes} min late</div>
-                    ) : team.etaStatus === "on_time" || team.etaStatus === "early" ? (
-                      <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>
-                    ) : null}
+                    ) : (() => {
+                      const s = team.currentJobStatus;
+                      if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Cleaning</div>;
+                      if (s === "arrived") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Arrived</div>;
+                      if (s === "on_the_way" || s === "running_late") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
+                      if (team.etaStatus === "on_time" || team.etaStatus === "early") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
+                      return null;
+                    })()}
                     <div className="text-[9px] text-slate-400 truncate max-w-[70px]">{currentJob.jobAddress.split(",")[1]?.trim() ?? currentJob.jobAddress}</div>
                   </div>
                 </div>
