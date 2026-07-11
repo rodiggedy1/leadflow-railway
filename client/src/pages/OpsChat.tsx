@@ -72,6 +72,10 @@ import {
   Headphones,
   Zap,
   TrendingUp,
+  UserCheck,
+  Workflow,
+  Rocket,
+  Activity,
 } from "lucide-react";
 
 // ── AwayBanner ───────────────────────────────────────────────────────────────
@@ -2074,11 +2078,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-1.5">
             {([
-              { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Command Chat" },
-              { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "Customer Service" },
-              { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Management" },
-              { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Lead Chat" },
-              { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Operation Logs" },
+              { id: "channels"    as const, icon: <Radio      className="w-4 h-4" />, label: "Command Chat" },
+              { id: "cs"          as const, icon: <UserCheck  className="w-4 h-4" />, label: "Customer Service" },
+              { id: "leadops"     as const, icon: <Workflow   className="w-4 h-4" />, label: "Lead Management" },
+              { id: "leads-inbox" as const, icon: <Rocket     className="w-4 h-4" />, label: "Lead Chat" },
+              { id: "today"       as const, icon: <Activity   className="w-4 h-4" />, label: "Operation Logs" },
             ]).map((ws) => (
               <div key={ws.id} className="group relative">
                 <button
@@ -3068,11 +3072,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 <aside className="rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
                   <div className="flex flex-col items-center gap-1.5">
                     {([
-                      { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Command Chat" },
-                      { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "Customer Service" },
-                      { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Management" },
-                      { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Lead Chat" },
-                      { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Operation Logs" },
+                      { id: "channels"    as const, icon: <Radio      className="w-4 h-4" />, label: "Command Chat" },
+                      { id: "cs"          as const, icon: <UserCheck  className="w-4 h-4" />, label: "Customer Service" },
+                      { id: "leadops"     as const, icon: <Workflow   className="w-4 h-4" />, label: "Lead Management" },
+                      { id: "leads-inbox" as const, icon: <Rocket     className="w-4 h-4" />, label: "Lead Chat" },
+                      { id: "today"       as const, icon: <Activity   className="w-4 h-4" />, label: "Operation Logs" },
                     ]).map((ws) => (
                       <div key={ws.id} className="group relative">
                         <button
