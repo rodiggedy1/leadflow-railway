@@ -969,6 +969,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   );
   const [incomingTab, setIncomingTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox" | null>(null);
   const incomingRef = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1031,6 +1032,37 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       el.classList.remove('tab-enter-active');
     };
   }, [incomingTab]);
+
+  // ── DIAGNOSTIC: measure shell and absolute child dimensions on every render ──
+  useEffect(() => {
+    if (!shellRef.current) return;
+    const shell = shellRef.current;
+    const shellRect = shell.getBoundingClientRect();
+    const shellStyle = getComputedStyle(shell);
+    console.log('[DIAG] shell BCR:', JSON.stringify({x: shellRect.x, y: shellRect.y, width: shellRect.width, height: shellRect.height}));
+    console.log('[DIAG] shell computed height:', shellStyle.height, 'width:', shellStyle.width, 'position:', shellStyle.position, 'overflow:', shellStyle.overflow);
+    const absChild = shell.firstElementChild as HTMLElement | null;
+    if (absChild) {
+      const childRect = absChild.getBoundingClientRect();
+      const childStyle = getComputedStyle(absChild);
+      console.log('[DIAG] absChild BCR:', JSON.stringify({x: childRect.x, y: childRect.y, width: childRect.width, height: childRect.height}));
+      console.log('[DIAG] absChild computed height:', childStyle.height, 'width:', childStyle.width, 'position:', childStyle.position);
+    }
+    // Walk up to find containing block for position:absolute
+    let el: HTMLElement | null = shell.parentElement;
+    let depth = 0;
+    while (el && depth < 10) {
+      const s = getComputedStyle(el);
+      if (s.position !== 'static') {
+        const r = el.getBoundingClientRect();
+        console.log('[DIAG] containing block at depth', depth, 'class:', el.className.slice(0, 80), 'BCR h:', r.height, 'w:', r.width, 'position:', s.position);
+        break;
+      }
+      el = el.parentElement;
+      depth++;
+    }
+  });
+
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
   const threadBottomRef = useRef<HTMLDivElement>(null);
@@ -2395,7 +2427,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
       {/* ── CENTER PANEL ─────────────────────────────────────────────────── */}
       {/* Persistent shell — always in DOM so flex-1 never collapses during tab switch */}
-      <div className="relative flex-1 min-h-0 overflow-hidden">
+      <div ref={shellRef} className="relative flex-1 min-h-0 overflow-hidden">
         {/* Currently displayed tab — stays visible during transition */}
         <div className="absolute inset-0 flex flex-row overflow-hidden min-h-0" style={{ gap: displayedTab === 'cs' ? 0 : '1.25rem' }}>
         {/* ── WhatsApp-style: all views always mounted, hidden with display:none.
