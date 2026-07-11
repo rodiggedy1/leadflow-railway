@@ -962,8 +962,8 @@ export default function LeadOps({ focusSessionId, rail }: { focusSessionId?: num
         </div>
       )}
 
-      <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950">
-        {rail && <div className="shrink-0 self-stretch flex items-start py-5 pl-5">{rail}</div>}
+      <div className="flex h-full overflow-hidden bg-slate-100 text-slate-950" style={{padding: rail ? '20px 0 20px 20px' : '0', gap: rail ? '16px' : '0'}}>
+        {rail}
         {/* ── Left panel: lead list ─────────────────────────────────────── */}
         <aside className="w-[340px] shrink-0 overflow-y-auto border-r border-slate-200 bg-white p-4">
           <div className="mb-4 flex items-center justify-between">
