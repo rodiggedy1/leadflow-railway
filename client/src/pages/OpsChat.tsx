@@ -2074,34 +2074,40 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-1.5">
             {([
-              { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Chat" },
-              { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "CS" },
-              { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Ops" },
-              { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Revenue" },
-              { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Ops" },
+              { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Command Chat" },
+              { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "Customer Service" },
+              { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Management" },
+              { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Lead Chat" },
+              { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Operation Logs" },
             ]).map((ws) => (
-              <button
-                key={ws.id}
-                onClick={() => handleSetActiveTab(ws.id)}
-                className={cn(
-                  "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                  activeTab === ws.id
-                    ? "bg-white text-[#1C1C1E] shadow-sm"
-                    : "text-white/50 hover:text-white hover:bg-white/10"
-                )}
-                title={ws.label}
-              >
-                {ws.icon}
-                {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
-                {ws.id === "channels" && (
-                  <CmdMentionBadge
-                    callerName={callerName}
-                    hidden={activeTab === "channels"}
-                    channelMsgs={channelMsgs}
-                    myNames={myNames}
-                  />
-                )}
-              </button>
+              <div key={ws.id} className="group relative">
+                <button
+                  onClick={() => handleSetActiveTab(ws.id)}
+                  className={cn(
+                    "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                    activeTab === ws.id
+                      ? "bg-white text-[#1C1C1E] shadow-sm"
+                      : "text-white/50 hover:text-white hover:bg-white/10"
+                  )}
+                >
+                  {ws.icon}
+                  {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                  {ws.id === "channels" && (
+                    <CmdMentionBadge
+                      callerName={callerName}
+                      hidden={activeTab === "channels"}
+                      channelMsgs={channelMsgs}
+                      myNames={myNames}
+                    />
+                  )}
+                </button>
+                {/* Instant hover tooltip */}
+                <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover:opacity-100 transition-none">
+                  <div className="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{background:'rgba(30,30,32,0.97)',boxShadow:'0 4px 16px rgba(0,0,0,0.32)'}}>
+                    {ws.label}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
           <div className="w-5 h-px bg-white/10 my-0.5" />
@@ -3062,34 +3068,39 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 <aside className="rounded-[28px] flex flex-col items-center py-4 gap-2.5 overflow-visible px-1.5" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
                   <div className="flex flex-col items-center gap-1.5">
                     {([
-                      { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Chat" },
-                      { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "CS" },
-                      { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Ops" },
-                      { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Revenue" },
-                      { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Ops" },
+                      { id: "channels"    as const, icon: <MessageSquare className="w-4 h-4" />, label: "Command Chat" },
+                      { id: "cs"          as const, icon: <Headphones    className="w-4 h-4" />, label: "Customer Service" },
+                      { id: "leadops"     as const, icon: <Zap            className="w-4 h-4" />, label: "Lead Management" },
+                      { id: "leads-inbox" as const, icon: <TrendingUp     className="w-4 h-4" />, label: "Lead Chat" },
+                      { id: "today"       as const, icon: <CalendarDays   className="w-4 h-4" />, label: "Operation Logs" },
                     ]).map((ws) => (
-                      <button
-                        key={ws.id}
-                        onClick={() => handleSetActiveTab(ws.id)}
-                        className={cn(
-                          "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
-                          activeTab === ws.id
-                            ? "bg-white text-[#1C1C1E] shadow-sm"
-                            : "text-white/50 hover:text-white hover:bg-white/10"
-                        )}
-                        title={ws.label}
-                      >
-                        {ws.icon}
-                        {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
-                        {ws.id === "channels" && (
-                          <CmdMentionBadge
-                            callerName={callerName}
-                            hidden={activeTab === "channels"}
-                            channelMsgs={channelMsgs}
-                            myNames={myNames}
-                          />
-                        )}
-                      </button>
+                      <div key={ws.id} className="group relative">
+                        <button
+                          onClick={() => handleSetActiveTab(ws.id)}
+                          className={cn(
+                            "relative w-8 h-8 rounded-[12px] flex items-center justify-center transition",
+                            activeTab === ws.id
+                              ? "bg-white text-[#1C1C1E] shadow-sm"
+                              : "text-white/50 hover:text-white hover:bg-white/10"
+                          )}
+                        >
+                          {ws.icon}
+                          {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                          {ws.id === "channels" && (
+                            <CmdMentionBadge
+                              callerName={callerName}
+                              hidden={activeTab === "channels"}
+                              channelMsgs={channelMsgs}
+                              myNames={myNames}
+                            />
+                          )}
+                        </button>
+                        <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 opacity-0 group-hover:opacity-100 transition-none">
+                          <div className="whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-white" style={{background:'rgba(30,30,32,0.97)',boxShadow:'0 4px 16px rgba(0,0,0,0.32)'}}>
+                            {ws.label}
+                          </div>
+                        </div>
+                      </div>
                     ))}
                   </div>
                   <div className="w-5 h-px bg-white/10 my-0.5" />
