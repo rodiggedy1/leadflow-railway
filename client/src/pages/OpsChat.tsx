@@ -1020,9 +1020,22 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     // For CS Inbox: prefetch the two minimum queries first so CsInbox mounts into
     // a warm cache and paints instantly — no blank flash.
     if (tab !== displayedTab) {
-      // Measure shell for the fixed route bar
+      // ── DIAGNOSTIC: measure shell and its parent ──
       if (shellRef.current) {
         const r = shellRef.current.getBoundingClientRect();
+        const parent = shellRef.current.parentElement;
+        const pr = parent ? parent.getBoundingClientRect() : null;
+        console.log("[DIAG-BAR] shellRef BCR:", { left: r.left, width: r.width, right: r.right, top: r.top });
+        console.log("[DIAG-BAR] shellRef parent:", { className: parent?.className, display: parent ? getComputedStyle(parent).display : null, width: pr?.width });
+        // Walk up to find first child of the flex row (the direct parent of the workspace)
+        let el: HTMLElement | null = shellRef.current;
+        let depth = 0;
+        while (el && depth < 6) {
+          const elR = el.getBoundingClientRect();
+          console.log(`[DIAG-BAR] depth ${depth}:`, { className: el.className.slice(0, 80), width: elR.width, left: elR.left, right: elR.right });
+          el = el.parentElement;
+          depth++;
+        }
         setBarRect({ left: r.left, right: window.innerWidth - r.right, top: r.top });
       }
       if (tab === "cs") {
