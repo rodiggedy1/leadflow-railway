@@ -2184,7 +2184,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                   key={ws.id}
                   onClick={() => handleSetActiveTab(ws.id)}
                   className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
-                  style={{ opacity: isActive ? 1 : 0.4 }}
+                  style={{ opacity: isActive ? 1 : 0.65 }}
                 >
                   {ws.id === "channels" ? (
                     /* Command Chat — white circle with colored icon */
@@ -2227,7 +2227,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 href={nav.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+                className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
               >
                 <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
                 <span className="text-[10px] text-white font-medium leading-tight text-center">
@@ -3061,7 +3061,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                           key={ws.id}
                           onClick={() => handleSetActiveTab(ws.id)}
                           className="relative flex flex-col items-center gap-1 w-full py-2.5 px-1 transition-all"
-                          style={{ opacity: isActive ? 1 : 0.4 }}
+                          style={{ opacity: isActive ? 1 : 0.65 }}
                         >
                           {ws.id === "channels" ? (
                             <div className="relative w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md">
@@ -3149,7 +3149,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                           key={ws.id}
                           onClick={() => handleSetActiveTab(ws.id)}
                           className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
-                          style={{ opacity: isActive ? 1 : 0.4 }}
+                          style={{ opacity: isActive ? 1 : 0.65 }}
                         >
                           {ws.id === "channels" ? (
                             <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
@@ -3190,7 +3190,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                         href={nav.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-50 hover:opacity-100 shrink-0"
+                        className="flex flex-col items-center gap-1 w-full py-2 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
                       >
                         <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
                         <span className="text-[10px] text-white font-medium leading-tight text-center">
