@@ -1149,6 +1149,199 @@ function CallDebriefCard({
   );
 }
 
+// ── ETA Call Result Card ──────────────────────────────────────────────────────
+// Posted to Command Chat after every ETA call (success, no-answer, unclear).
+// Extends the CallDebriefCard audio player pattern with ETA-specific details.
+function EtaCallResultCard({
+  cleanerName, customerName, scheduledTime, step,
+  recordingUrl, transcript, resultType,
+  etaTimeStr, etaStatus, cleanerStatement,
+  clientNotified, clientSmsBody, createdAt,
+}: {
+  cleanerName: string | null;
+  customerName: string | null;
+  scheduledTime: string | null;
+  step: string | null;
+  recordingUrl: string | null;
+  transcript: string | null;
+  resultType: "success" | "no_answer" | "unclear" | "dispatcher_needed";
+  etaTimeStr: string | null;
+  etaStatus: string | null;
+  cleanerStatement: string | null;
+  clientNotified: boolean;
+  clientSmsBody: string | null;
+  createdAt: Date;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const hasRecording = !!recordingUrl;
+  const hasTranscript = !!transcript && transcript.trim().length > 5;
+
+  const waveHeights = [3,5,8,12,16,20,14,18,22,16,10,14,20,24,18,12,16,20,14,8,12,18,22,16,10,6,10,14,18,12,8,5];
+
+  function togglePlay(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!audioRef.current) return;
+    if (isPlaying) { audioRef.current.pause(); setIsPlaying(false); }
+    else { audioRef.current.play(); setIsPlaying(true); }
+  }
+
+  const headerStyle = resultType === "success"
+    ? "bg-emerald-900/60 border-b border-emerald-700/50"
+    : resultType === "no_answer"
+    ? "bg-slate-800/80 border-b border-slate-700/50"
+    : resultType === "dispatcher_needed"
+    ? "bg-red-900/60 border-b border-red-700/50"
+    : "bg-amber-900/50 border-b border-amber-700/50";
+
+  const headerIcon = resultType === "success"
+    ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+    : resultType === "no_answer"
+    ? <PhoneMissed className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+    : resultType === "dispatcher_needed"
+    ? <ShieldAlert className="h-3.5 w-3.5 text-red-400 shrink-0" />
+    : <TriangleAlert className="h-3.5 w-3.5 text-amber-400 shrink-0" />;
+
+  const headerLabel = resultType === "success" ? "ETA Confirmed"
+    : resultType === "no_answer" ? "No Answer — Retry Queued"
+    : resultType === "dispatcher_needed" ? "No Answer — Manual Follow-up"
+    : "ETA Unclear — Manual Follow-up";
+
+  const headerLabelColor = resultType === "success" ? "text-emerald-300"
+    : resultType === "no_answer" ? "text-slate-300"
+    : resultType === "dispatcher_needed" ? "text-red-300"
+    : "text-amber-300";
+
+  const etaStatusBadge = etaStatus === "late"
+    ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Running Late</span>
+    : etaStatus === "early"
+    ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">Arriving Early</span>
+    : etaStatus === "on_time"
+    ? <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">On Time</span>
+    : null;
+
+  const callAttempt = step === "eta_call_2" ? "Attempt 2" : "Attempt 1";
+  const hasExpandable = hasTranscript || !!clientSmsBody;
+
+  return (
+    <div className="flex justify-start my-1 px-1">
+      <div className="w-full max-w-[520px]">
+        {/* Main card */}
+        <div
+          className="rounded-2xl overflow-hidden bg-[#0f172a] border border-slate-700 shadow-sm hover:border-slate-600 transition-all duration-150 cursor-pointer select-none"
+          onClick={() => hasExpandable && setExpanded(v => !v)}
+        >
+          {/* Colored header strip */}
+          <div className={`flex items-center gap-2 px-3 py-2 ${headerStyle}`}>
+            {headerIcon}
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${headerLabelColor} flex-1`}>{headerLabel}</span>
+            <span className="text-[10px] text-slate-500 tabular-nums">{callAttempt}</span>
+            <span className="text-[10px] text-slate-500 tabular-nums ml-1">{fmtMsgTime(createdAt)}</span>
+            {hasExpandable && (
+              expanded
+                ? <ChevronUp className="h-3.5 w-3.5 text-slate-500 ml-1" />
+                : <ChevronDown className="h-3.5 w-3.5 text-slate-500 ml-1" />
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="px-3 pt-2.5 pb-2.5">
+            {/* Row 1: Cleaner → Customer + scheduled time */}
+            <div className="flex items-center gap-1.5 mb-2">
+              <PhoneCall className="h-3 w-3 text-slate-500 shrink-0" />
+              <span className="text-xs text-slate-300 font-medium">{cleanerName ?? "Cleaner"}</span>
+              <ArrowRight className="h-3 w-3 text-slate-600 shrink-0" />
+              <span className="text-xs text-slate-400">{customerName ?? "Client"}</span>
+              {scheduledTime && (
+                <span className="ml-auto text-[10px] text-slate-500 tabular-nums">Sched. {scheduledTime}</span>
+              )}
+            </div>
+
+            {/* Row 2: ETA time + status badge (success only) */}
+            {resultType === "success" && etaTimeStr && (
+              <div className="flex items-center gap-2 mb-2.5 pl-0.5">
+                <Clock className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                <span className="text-sm font-bold text-emerald-300 tabular-nums">{etaTimeStr}</span>
+                {etaStatusBadge}
+              </div>
+            )}
+
+            {/* Row 3: Cleaner's statement */}
+            {cleanerStatement && cleanerStatement !== "(no speech detected)" && cleanerStatement !== "(extraction error)" && (
+              <div className="mb-2.5 bg-slate-800/60 rounded-lg px-2.5 py-1.5 border border-slate-700/50">
+                <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Cleaner said</p>
+                <p className="text-xs text-slate-300 italic leading-relaxed">"{cleanerStatement}"</p>
+              </div>
+            )}
+
+            {/* Row 4: Client notification status */}
+            <div className="flex items-center gap-1.5 mb-2.5">
+              {clientNotified ? (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  <span className="text-xs text-emerald-400 font-medium">Client notified via SMS</span>
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                  <span className="text-xs text-slate-500">No SMS sent — manual follow-up needed</span>
+                </>
+              )}
+            </div>
+
+            {/* Row 5: Audio player */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={togglePlay}
+                className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                  hasRecording ? "bg-teal-600 hover:bg-teal-700 text-white" : "bg-slate-700 text-slate-500 cursor-not-allowed"
+                }`}
+              >
+                {isPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5 ml-0.5" />}
+              </button>
+              <div className="flex items-center gap-[2px] flex-1 h-7">
+                {waveHeights.map((h, wi) => (
+                  <div key={wi} className={`rounded-full w-[3px] ${hasRecording ? "bg-teal-600/70" : "bg-slate-700"}`} style={{ height: `${h}px` }} />
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-600 shrink-0">ETA Call</span>
+            </div>
+            {hasRecording && (
+              <audio
+                ref={audioRef}
+                src={recordingUrl!}
+                onEnded={() => setIsPlaying(false)}
+                onPause={() => setIsPlaying(false)}
+                className="hidden"
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Expandable: transcript + SMS preview */}
+        {hasExpandable && expanded && (
+          <div className="mt-1 rounded-xl border border-slate-700 bg-[#0f172a]/80 px-3 py-2.5 animate-in slide-in-from-top-1 duration-150 space-y-3">
+            {clientSmsBody && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600 mb-1">📱 SMS sent to client</p>
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/60 rounded-lg px-2.5 py-1.5 border border-slate-700/50">{clientSmsBody}</p>
+              </div>
+            )}
+            {hasTranscript && (
+              <div className={clientSmsBody ? "border-t border-slate-700 pt-3" : ""}>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1">📝 Call transcript</p>
+                <p className="text-xs text-slate-400 leading-relaxed whitespace-pre-wrap">{transcript}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 const MessageList = memo(function MessageList({
   channelMsgs,
   channelLoading,
@@ -2016,6 +2209,29 @@ const MessageList = memo(function MessageList({
                       recordingUrl={recordingUrl}
                       callerName={callerName}
                       callerPhone={callerPhone}
+                      createdAt={msg.createdAt}
+                    />
+                  );
+                }
+                // ── ETA Call Result card ─────────────────────────────────────────────
+                if (msg.quickAction === "eta_call_result") {
+                  let meta: Record<string, unknown> = {};
+                  try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+                  return (
+                    <EtaCallResultCard
+                      key={msg.id}
+                      cleanerName={(meta.cleanerName as string | null) ?? null}
+                      customerName={(meta.customerName as string | null) ?? null}
+                      scheduledTime={(meta.scheduledTime as string | null) ?? null}
+                      step={(meta.step as string | null) ?? null}
+                      recordingUrl={(meta.recordingUrl as string | null) ?? null}
+                      transcript={(meta.transcript as string | null) ?? null}
+                      resultType={((meta.resultType as string) ?? "unclear") as "success" | "no_answer" | "unclear" | "dispatcher_needed"}
+                      etaTimeStr={(meta.etaTimeStr as string | null) ?? null}
+                      etaStatus={(meta.etaStatus as string | null) ?? null}
+                      cleanerStatement={(meta.cleanerStatement as string | null) ?? null}
+                      clientNotified={!!(meta.clientNotified as boolean)}
+                      clientSmsBody={(meta.clientSmsBody as string | null) ?? null}
                       createdAt={msg.createdAt}
                     />
                   );

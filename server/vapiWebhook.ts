@@ -361,6 +361,7 @@ export function registerVapiWebhookRoute(app: Express): void {
               await handleEtaCallEnd({
                 vapiCallId: callRow.vapiCallId ?? "",
                 transcript: transcript ?? null,
+                recordingUrl: recordingUrl ?? null,
                 outcome,
                 step: callRow.step as "eta_call_1" | "eta_call_2",
                 cleanerJobId: callRow.cleanerJobId,

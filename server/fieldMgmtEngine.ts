@@ -2739,11 +2739,12 @@ export async function placeEtaCall(params: {
 export async function handleEtaCallEnd(params: {
   vapiCallId: string;
   transcript: string | null;
+  recordingUrl: string | null;
   outcome: string; // "answered" | "no_answer" | "voicemail" | "initiated" | "failed"
   step: "eta_call_1" | "eta_call_2";
   cleanerJobId: number;
 }): Promise<void> {
-  const { vapiCallId, transcript, outcome, step, cleanerJobId } = params;
+  const { vapiCallId, transcript, recordingUrl, outcome, step, cleanerJobId } = params;
   const db = await getDb();
   if (!db) {
     console.error(`[EtaEngine] handleEtaCallEnd: DB unavailable for job ${cleanerJobId}`);
@@ -2768,23 +2769,54 @@ export async function handleEtaCallEnd(params: {
   const scheduledTimeET = scheduledMs ? formatTimeET(new Date(scheduledMs)) : null;
   const jobDate = job.jobDate;
 
-  // ── Helper: post Command Chat alert ──────────────────────────────────────
-  async function postEtaAlert(body: string, quickAction: string, meta: Record<string, unknown>) {
+  // ── Helper: post ETA call result card to Command Chat ────────────────────
+  // All ETA call outcomes post a single 'eta_call_result' card with rich metadata.
+  // The UI renders this as a beautiful card with audio player + transcript.
+  async function postEtaResultCard(params: {
+    resultType: "success" | "no_answer" | "unclear" | "dispatcher_needed";
+    etaTimeStr?: string | null;
+    etaStatus?: string | null;       // "on_time" | "late" | "early" | "unclear"
+    cleanerStatement?: string | null;
+    clientNotified: boolean;
+    clientSmsBody?: string | null;
+    scheduledTime?: string | null;
+  }) {
     try {
+      const meta: Record<string, unknown> = {
+        cleanerJobId,
+        cleanerName: job.cleanerName,
+        customerName: job.customerName,
+        scheduledTime: params.scheduledTime ?? scheduledTimeET,
+        step,
+        vapiCallId,
+        recordingUrl: recordingUrl ?? null,
+        transcript: transcript ?? null,
+        resultType: params.resultType,
+        etaTimeStr: params.etaTimeStr ?? null,
+        etaStatus: params.etaStatus ?? null,
+        cleanerStatement: params.cleanerStatement ?? null,
+        clientNotified: params.clientNotified,
+        clientSmsBody: params.clientSmsBody ?? null,
+      };
+      const bodyPreview = params.resultType === "success"
+        ? `ETA confirmed: ${params.etaTimeStr} — ${params.clientNotified ? "client notified" : "SMS pending"}`
+        : params.resultType === "no_answer"
+        ? `No answer after ${step === "eta_call_2" ? "2 attempts" : "1 attempt"} — manual follow-up needed`
+        : `ETA unclear — manual follow-up needed`;
       await db!.insert(opsChatMessages).values({
         channel: "command",
         from: "System",
         authorName: "System",
         authorRole: "system",
-        body,
+        body: bodyPreview,
         metadata: JSON.stringify(meta),
         cleanerJobId,
-        quickAction,
+        quickAction: "eta_call_result",
       } as any);
       const { broadcastOpsUpdate } = await import("./sseBroadcast");
       broadcastOpsUpdate("new_message");
     } catch (e) {
-      console.error(`[EtaEngine] Failed to post ops alert for job ${cleanerJobId}:`, e);
+      console.error(`[EtaEngine] Failed to post ETA result card for job ${cleanerJobId}:`, e);
     }
   }
 
@@ -2792,23 +2824,21 @@ export async function handleEtaCallEnd(params: {
   const isNoAnswer = outcome === "no_answer" || outcome === "voicemail" || outcome === "initiated";
   if (isNoAnswer) {
     if (step === "eta_call_1") {
-      // Retry will be fired by cron 3 min after eta_call_1 createdAt — no action needed here
+      // Retry will be fired by cron 3 min after eta_call_1 createdAt — no action needed here.
+      // Post a card so dispatchers can see the first attempt failed.
+      await postEtaResultCard({
+        resultType: "no_answer",
+        clientNotified: false,
+        scheduledTime: scheduledTimeET ?? jobDate,
+      });
       console.log(`[EtaEngine] eta_call_1 no answer for job ${cleanerJobId} — cron will fire eta_call_2`);
     } else {
       // eta_call_2 also no answer — alert dispatch
-      const timeStr = scheduledTimeET ?? jobDate;
-      await postEtaAlert(
-        `📵 ETA UNVERIFIED — ${cleanerFirstName} did not answer after 2 attempts. ` +
-        `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
-        "eta_no_answer",
-        {
-          cleanerJobId,
-          cleanerName: job.cleanerName,
-          customerName: job.customerName,
-          scheduledTime: timeStr,
-          vapiCallId,
-        }
-      );
+      await postEtaResultCard({
+        resultType: "dispatcher_needed",
+        clientNotified: false,
+        scheduledTime: scheduledTimeET ?? jobDate,
+      });
       console.log(`[EtaEngine] eta_call_2 no answer — dispatcher alert posted for job ${cleanerJobId}`);
     }
     return;
@@ -2817,13 +2847,12 @@ export async function handleEtaCallEnd(params: {
   // ── Answered — extract ETA ────────────────────────────────────────────────
   if (!transcript || transcript.trim().length < 5) {
     // Technically "answered" but no usable speech
-    const timeStr = scheduledTimeET ?? jobDate;
-    await postEtaAlert(
-      `⚠️ ETA CALL ANSWERED but no usable transcript for ${cleanerFirstName}. ` +
-      `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
-      "eta_unclear",
-      { cleanerJobId, cleanerName: job.cleanerName, customerName: job.customerName, scheduledTime: timeStr, vapiCallId }
-    );
+    await postEtaResultCard({
+      resultType: "unclear",
+      cleanerStatement: "(no speech detected)",
+      clientNotified: false,
+      scheduledTime: scheduledTimeET ?? jobDate,
+    });
     return;
   }
 
@@ -2832,13 +2861,12 @@ export async function handleEtaCallEnd(params: {
     extracted = await extractCleanerStatus(transcript, scheduledTimeET ?? "the scheduled time");
   } catch (err) {
     console.error(`[EtaEngine] extractCleanerStatus failed for job ${cleanerJobId}:`, err);
-    const timeStr = scheduledTimeET ?? jobDate;
-    await postEtaAlert(
-      `⚠️ ETA extraction failed for ${cleanerFirstName}. ` +
-      `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
-      "eta_unclear",
-      { cleanerJobId, cleanerName: job.cleanerName, customerName: job.customerName, scheduledTime: timeStr, vapiCallId }
-    );
+    await postEtaResultCard({
+      resultType: "unclear",
+      cleanerStatement: "(extraction error)",
+      clientNotified: false,
+      scheduledTime: scheduledTimeET ?? jobDate,
+    });
     return;
   }
 
@@ -2846,20 +2874,12 @@ export async function handleEtaCallEnd(params: {
 
   // ── Unclear status → alert dispatch ──────────────────────────────────────
   if (status === "unclear" || estimatedArrivalMinutesOffset === null) {
-    const timeStr = scheduledTimeET ?? jobDate;
-    await postEtaAlert(
-      `❓ ETA UNCLEAR — ${cleanerFirstName} said: "${cleanerStatement}". ` +
-      `Next job: ${customerFirstName} at ${timeStr}. Manual follow-up required.`,
-      "eta_unclear",
-      {
-        cleanerJobId,
-        cleanerName: job.cleanerName,
-        customerName: job.customerName,
-        scheduledTime: timeStr,
-        cleanerStatement,
-        vapiCallId,
-      }
-    );
+    await postEtaResultCard({
+      resultType: "unclear",
+      cleanerStatement,
+      clientNotified: false,
+      scheduledTime: scheduledTimeET ?? jobDate,
+    });
     console.log(`[EtaEngine] ETA unclear for job ${cleanerJobId} — dispatcher alert posted`);
     return;
   }
@@ -2880,14 +2900,13 @@ export async function handleEtaCallEnd(params: {
   const jobDateFormatted = `${m}/${d}/${y}`;
   const offsetAbsMin = Math.abs(estimatedArrivalMinutesOffset);
   if (etaDateStr !== jobDateFormatted || offsetAbsMin > 120) {
-    const timeStr = scheduledTimeET ?? jobDate;
     console.warn(`[EtaEngine] ETA validation failed for job ${cleanerJobId}: offset=${estimatedArrivalMinutesOffset}min, etaDate=${etaDateStr}, jobDate=${jobDateFormatted}`);
-    await postEtaAlert(
-      `⚠️ ETA OUT OF RANGE — ${cleanerFirstName} said: "${cleanerStatement}" (offset: ${estimatedArrivalMinutesOffset} min). ` +
-      `Next job: ${customerFirstName} at ${timeStr}. Manual verification required.`,
-      "eta_unclear",
-      { cleanerJobId, cleanerName: job.cleanerName, customerName: job.customerName, scheduledTime: timeStr, cleanerStatement, estimatedArrivalMinutesOffset, vapiCallId }
-    );
+    await postEtaResultCard({
+      resultType: "unclear",
+      cleanerStatement: `${cleanerStatement} (offset: ${estimatedArrivalMinutesOffset} min — out of range)`,
+      clientNotified: false,
+      scheduledTime: scheduledTimeET ?? jobDate,
+    });
     return;
   }
 
@@ -2914,6 +2933,15 @@ export async function handleEtaCallEnd(params: {
   // ── Send customer SMS ─────────────────────────────────────────────────────
   if (!customerPhone) {
     console.warn(`[EtaEngine] No customer phone for job ${cleanerJobId} — skipping SMS`);
+    // Still post a success card so dispatchers can see the ETA was extracted
+    await postEtaResultCard({
+      resultType: "success",
+      etaTimeStr,
+      etaStatus: status,
+      cleanerStatement,
+      clientNotified: false,
+      scheduledTime: scheduledTimeET ?? jobDate,
+    });
     return;
   }
 
@@ -2937,17 +2965,39 @@ export async function handleEtaCallEnd(params: {
   });
   if (!smsClaimed) {
     console.log(`[EtaEngine] eta_sms step already claimed for job ${cleanerJobId} — skipping duplicate SMS`);
+    // Post card even if SMS was already claimed (dedup)
+    await postEtaResultCard({
+      resultType: "success",
+      etaTimeStr,
+      etaStatus: status,
+      cleanerStatement,
+      clientNotified: true,
+      clientSmsBody: smsBody,
+      scheduledTime: scheduledTimeET ?? jobDate,
+    });
     return;
   }
 
   const smsResult = await sendSms({ to: customerPhone, content: smsBody });
-  if (smsResult.success) {
+  const smsSentOk = smsResult.success;
+  if (smsSentOk) {
     console.log(`[EtaEngine] ETA SMS sent to ${customerPhone} for job ${cleanerJobId} (${status}, ETA: ${etaTimeStr})`);
     if (smsResult.messageId) await updateStepMessageId(cleanerJobId, "eta_sms", smsResult.messageId);
   } else {
     await updateStepOutcome(cleanerJobId, "eta_sms", false, smsResult.error);
     console.error(`[EtaEngine] ETA SMS FAILED for job ${cleanerJobId}:`, smsResult.error);
   }
+
+  // ── Post ETA result card to Command Chat ───────────────────────────────
+  await postEtaResultCard({
+    resultType: "success",
+    etaTimeStr,
+    etaStatus: status,
+    cleanerStatement,
+    clientNotified: smsSentOk,
+    clientSmsBody: smsSentOk ? smsBody : null,
+    scheduledTime: scheduledTimeET ?? jobDate,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
