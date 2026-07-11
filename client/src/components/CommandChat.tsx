@@ -7625,14 +7625,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className="shrink-0 h-9 px-2.5 rounded-full border-2 border-slate-200 bg-white hover:border-slate-400 flex items-center gap-1.5 transition text-slate-500"
                 title="Team ETA — live arrival updates"
               >
-                <svg width="15" height="11" viewBox="0 0 56 40" fill="none">
-                  <rect x="4" y="8" width="46" height="22" rx="5" fill="white" stroke="#94A3B8" strokeWidth="2"/>
-                  <rect x="4" y="8" width="18" height="14" rx="3" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5"/>
-                  <rect x="24" y="8" width="26" height="14" rx="2" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5"/>
-                  <circle cx="14" cy="31" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
-                  <circle cx="14" cy="31" r="2.5" fill="#9CA3AF"/>
-                  <circle cx="42" cy="31" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
-                  <circle cx="42" cy="31" r="2.5" fill="#9CA3AF"/>
+                <svg width="18" height="12" viewBox="0 0 64 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  {/* car body */}
+                  <path d="M4 22 L10 10 Q12 7 16 7 L44 7 Q48 7 50 10 L58 22 L60 22 Q62 22 62 24 L62 28 Q62 30 60 30 L56 30 Q55 34 51 34 Q47 34 46 30 L18 30 Q17 34 13 34 Q9 34 8 30 L4 30 Q2 30 2 28 L2 24 Q2 22 4 22Z" fill="#475569" stroke="#1E293B" strokeWidth="1.5" strokeLinejoin="round"/>
+                  {/* windshield */}
+                  <path d="M14 22 L19 11 Q20 9 22 9 L38 9 Q40 9 41 11 L46 22Z" fill="#BAE6FD" stroke="#7DD3FC" strokeWidth="1"/>
+                  {/* rear window */}
+                  <path d="M8 22 L13 12 Q14 10 16 10 L18 10 L14 22Z" fill="#BAE6FD" stroke="#7DD3FC" strokeWidth="1"/>
+                  {/* wheels */}
+                  <circle cx="13" cy="30" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="1"/>
+                  <circle cx="13" cy="30" r="2.5" fill="#94A3B8"/>
+                  <circle cx="51" cy="30" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="1"/>
+                  <circle cx="51" cy="30" r="2.5" fill="#94A3B8"/>
+                  {/* headlight */}
+                  <ellipse cx="58" cy="22" rx="2.5" ry="2" fill="#FEF08A" stroke="#EAB308" strokeWidth="0.8"/>
                 </svg>
                 <span className="text-[10px] font-[700] tracking-wide">ETA</span>
               </button>
