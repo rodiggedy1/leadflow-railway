@@ -8,7 +8,7 @@ import { signAgentSession, verifyAgentSession } from "./_core/agentAuth";
 import { z } from "zod";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, like, lte, ne, notInArray, or, sql, SQL } from "drizzle-orm";
 import { getDb, getAgentByEmail, getAgentById, getAllAgents, createAgent, setAgentActive } from "./db";
-import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog } from "../drizzle/schema";
+import { quoteLeads, conversationSessions, nurtureEnrollments, leadCallLogs, callOutcomes, pageViews, voiceCalls, completedJobs, openphoneCallRecordings, opsChatMessages, agents, cleanerJobs, cleanerProfiles, followUps, leadAssignments, callLog, smsCampaignRecipients, smsCampaigns } from "../drizzle/schema";
 import { sendSms, estimatePrice } from "./openphone";
 import { generateQuoteMessage, generatePricingFollowUp, handleOffScriptReply, handlePostBookingReply, buildMadisonQuoteMessage } from "./aiService";
 import bcrypt from "bcryptjs";
@@ -5606,6 +5606,291 @@ Return JSON with exactly these fields:
         } catch {
           return null;
         }
+      }),
+
+    /**
+     * leads.listWorkspace — Revenue Workspace read model.
+     * Returns one row per normalized phone number.
+     * Sessions are an internal implementation detail — never exposed.
+     * Phone is the canonical customer identity.
+     */
+    listWorkspace: publicProcedure
+      .input(z.object({ mode: z.enum(["active", "all"]).optional().default("active") }).optional())
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return [];
+        const mode = input?.mode ?? "active";
+
+        // Canonical phone normalizer SQL expression — strips non-digits, extracts last 10.
+        // Used consistently for all joins so +1302..., 302..., and formatted numbers match.
+        const phoneNorm = sql.raw(`REGEXP_REPLACE(leadPhone, '[^0-9]', '')`);
+
+        // Pull all sessions that qualify under leads.list source filter.
+        // For mode=active we only surface sessions with actual customer engagement.
+        const sourceFilter = sql.raw(`(
+          (leadSource IS NULL OR leadSource NOT IN (${NON_LEAD_SOURCES.map(s => `'${s}'`).join(', ')}))
+          AND (leadSource IS NULL OR leadSource != 'review')
+          AND (
+            leadSource IS NULL
+            OR (leadSource NOT LIKE 'always-on%' AND leadSource NOT LIKE 'campaign:%' AND leadSource NOT IN ('reactivation','command-center','review_rebooking'))
+            OR ((leadSource LIKE 'always-on%' OR leadSource LIKE 'campaign:%' OR leadSource IN ('reactivation','command-center'))
+                AND JSON_SEARCH(messageHistory, 'one', 'user', NULL, '$[*].role') IS NOT NULL)
+            OR (leadSource = 'review_rebooking' AND JSON_SEARCH(messageHistory, 'one', 'user', NULL, '$[*].role') IS NOT NULL)
+          )
+        )`);
+
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(sourceFilter)
+          .orderBy(desc(sql`COALESCE(${conversationSessions.lastCustomerMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
+          .limit(2000);
+
+        // Group by normalized phone — one entry per customer.
+        // The most recent session (first in the ordered list) is the canonical one.
+        const byPhone = new Map<string, typeof sessions[0]>();
+        for (const s of sessions) {
+          if (!s.leadPhone) continue;
+          const norm = normalizePhone(s.leadPhone) ?? s.leadPhone.replace(/[^\d]/g, '').slice(-10);
+          if (!byPhone.has(norm)) {
+            byPhone.set(norm, s);
+          }
+        }
+
+        // Build summary rows — no session IDs in the output.
+        const summaries = Array.from(byPhone.entries()).map(([phone, s]) => {
+          // Parse last message
+          let lastMessage: string | null = null;
+          let lastMessageAt: number | null = null;
+          let unreadCount = 0;
+          try {
+            const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(s.messageHistory ?? '[]');
+            if (history.length > 0) {
+              const last = history[history.length - 1];
+              lastMessage = typeof last.content === 'string' ? last.content.slice(0, 120) : null;
+              lastMessageAt = last.ts ?? null;
+            }
+            // Count unread: messages from customer after lastReadAt
+            const lastReadAt = (s.lastReadAt as number | null) ?? 0;
+            for (const m of history) {
+              if ((m.role === 'user' || m.role === 'customer') && m.ts && m.ts > lastReadAt) {
+                unreadCount++;
+              }
+            }
+          } catch { /* ignore */ }
+
+          return {
+            phone,                                    // canonical E.164 key
+            customerName: s.leadName ?? null,
+            lastMessage,
+            lastMessageAt,
+            unreadCount,
+            stage: s.stage,
+            needsAttention: !!(s as any).flagged,
+            assignedAgentName: s.assignedAgentName ?? null,
+            leadSource: s.leadSource ?? null,
+            createdAt: s.createdAt,
+          };
+        });
+
+        // Sort by lastMessageAt descending (most recent first)
+        summaries.sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));
+        return summaries;
+      }),
+
+    /**
+     * leads.getTimeline — loads the complete customer journey for a phone number.
+     * Merges messages from all sessions + campaign events + calls.
+     * Sessions remain internal — the frontend never sees session IDs.
+     */
+    getTimeline: publicProcedure
+      .input(z.object({ phone: z.string().min(7) }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return { messages: [], campaigns: [], calls: [], customerName: null };
+
+        const norm = normalizePhone(input.phone);
+        const digits = input.phone.replace(/[^\d]/g, '').slice(-10);
+
+        // 1. All sessions for this phone (any source — full history)
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(or(
+            eq(conversationSessions.leadPhone, input.phone),
+            norm ? eq(conversationSessions.leadPhone, norm) : sql`0`,
+            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') LIKE ${`%${digits}`}`
+          ))
+          .orderBy(conversationSessions.createdAt);
+
+        // Canonical session for replies: most recent non-review/non-hiring session
+        const reversedSessions = sessions.slice().reverse();
+        const canonicalSession = reversedSessions.find(s =>
+          s.stage !== 'QUALITY_RATING_REQUESTED' &&
+          s.stage !== 'QUALITY_MISSED_FOLLOWUP' &&
+          s.stage !== 'REVIEW_REQUESTED' &&
+          s.stage !== 'REVIEW_DONE' &&
+          s.stage !== 'REVIEW_REBOOKING_REQUESTED' &&
+          s.stage !== 'REVIEW_REBOOKING_DONE' &&
+          s.stage !== 'INTERVIEW_LINK_SENT' &&
+          s.stage !== 'INTERVIEW_NUDGE_1' &&
+          s.stage !== 'INTERVIEW_NUDGE_2'
+        ) ?? reversedSessions[0];
+
+        // 2. Merge all messages from all sessions into one timeline
+        const messages: Array<{
+          id: string;
+          role: 'user' | 'assistant' | 'system';
+          content: string;
+          ts: number;
+          mediaUrls?: string[];
+          sessionSource?: string;
+        }> = [];
+
+        for (const session of sessions) {
+          try {
+            const history: Array<{ role: string; content: string; ts?: number; mediaUrls?: string[] }> =
+              JSON.parse(session.messageHistory ?? '[]');
+            for (const msg of history) {
+              if (!msg.content || !msg.ts) continue;
+              messages.push({
+                id: `s${session.id}-${msg.ts}`,
+                role: (msg.role === 'user' || msg.role === 'customer') ? 'user' : msg.role === 'assistant' ? 'assistant' : 'system',
+                content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content),
+                ts: msg.ts,
+                mediaUrls: msg.mediaUrls,
+                sessionSource: session.leadSource ?? undefined,
+              });
+            }
+          } catch { /* ignore */ }
+        }
+
+        // 3. Campaign events for this phone
+        const campaignRows = await db
+          .select({
+            campaignId: smsCampaignRecipients.campaignId,
+            sentAt: smsCampaignRecipients.sentAt,
+            status: smsCampaignRecipients.status,
+            personalizedMessage: smsCampaignRecipients.personalizedMessage,
+            campaignName: smsCampaigns.name,
+          })
+          .from(smsCampaignRecipients)
+          .leftJoin(smsCampaigns, eq(smsCampaignRecipients.campaignId, smsCampaigns.id))
+          .where(or(
+            sql`REGEXP_REPLACE(${smsCampaignRecipients.phoneNormalized}, '[^0-9]', '') LIKE ${`%${digits}`}`,
+            norm ? eq(smsCampaignRecipients.phoneNormalized, norm) : sql`0`
+          ))
+          .orderBy(smsCampaignRecipients.sentAt)
+          .limit(100);
+
+        const campaigns = campaignRows
+          .filter(r => r.sentAt)
+          .map(r => ({
+            id: `campaign-${r.campaignId}-${r.sentAt}`,
+            type: 'campaign' as const,
+            campaignName: r.campaignName ?? 'Campaign',
+            message: r.personalizedMessage,
+            ts: r.sentAt!,
+            status: r.status,
+          }));
+
+        // 4. Call recordings for this phone
+        const callRows = await db
+          .select()
+          .from(openphoneCallRecordings)
+          .where(or(
+            sql`REGEXP_REPLACE(${openphoneCallRecordings.callerPhone}, '[^0-9]', '') LIKE ${`%${digits}`}`,
+            norm ? eq(openphoneCallRecordings.callerPhone, norm) : sql`0`
+          ))
+          .orderBy(openphoneCallRecordings.createdAt)
+          .limit(50);
+
+        const calls = callRows.map(r => ({
+          id: `call-${r.id}`,
+          type: 'call' as const,
+          duration: (r as any).duration ?? null,
+          recordingUrl: r.recordingUrl ?? null,
+          ts: r.createdAt instanceof Date ? r.createdAt.getTime() : new Date(r.createdAt as string).getTime(),
+        }));
+
+        // Sort all messages chronologically
+        messages.sort((a, b) => a.ts - b.ts);
+
+        const customerName = sessions.find(s => s.leadName)?.leadName ?? null;
+        const canonicalSessionId = canonicalSession?.id ?? null; // internal only — not in return type
+
+        return {
+          messages,
+          campaigns,
+          calls,
+          customerName,
+          _canonicalSessionId: canonicalSessionId, // used only by sendWorkspaceMessage
+        };
+      }),
+
+    /**
+     * leads.sendWorkspaceMessage — send a message to a customer by phone.
+     * Backend resolves the canonical session. Frontend never sends a session ID.
+     */
+    sendWorkspaceMessage: publicProcedure
+      .input(z.object({
+        phone: z.string().min(7),
+        message: z.string().min(1).max(1600),
+      }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+
+        const norm = normalizePhone(input.phone);
+        const digits = input.phone.replace(/[^\d]/g, '').slice(-10);
+
+        // Resolve canonical session — same logic as the webhook router.
+        const sessions = await db
+          .select()
+          .from(conversationSessions)
+          .where(or(
+            eq(conversationSessions.leadPhone, input.phone),
+            norm ? eq(conversationSessions.leadPhone, norm) : sql`0`,
+            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') LIKE ${`%${digits}`}`
+          ))
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(20);
+
+        // Pick canonical: most recent non-review/non-hiring session
+        const canonicalSession = sessions.find(s =>
+          s.stage !== 'QUALITY_RATING_REQUESTED' &&
+          s.stage !== 'QUALITY_MISSED_FOLLOWUP' &&
+          s.stage !== 'REVIEW_REQUESTED' &&
+          s.stage !== 'REVIEW_DONE' &&
+          s.stage !== 'REVIEW_REBOOKING_REQUESTED' &&
+          s.stage !== 'REVIEW_REBOOKING_DONE' &&
+          s.stage !== 'INTERVIEW_LINK_SENT' &&
+          s.stage !== 'INTERVIEW_NUDGE_1' &&
+          s.stage !== 'INTERVIEW_NUDGE_2'
+        ) ?? sessions[0];
+
+        if (!canonicalSession) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'No conversation found for this phone number' });
+        }
+
+        const toPhone = norm ?? canonicalSession.leadPhone;
+        const smsResult = await sendSms({ to: toPhone, content: input.message });
+        if (!smsResult.success) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: smsResult.error ?? 'SMS send failed' });
+        }
+
+        // Append to message history
+        let history: Array<{ role: string; content: string; ts: number }> = [];
+        try { history = JSON.parse(canonicalSession.messageHistory ?? '[]'); } catch { history = []; }
+        const ts = Date.now();
+        history.push({ role: 'assistant', content: input.message, ts });
+
+        await db
+          .update(conversationSessions)
+          .set({ messageHistory: JSON.stringify(history), lastReadAt: ts } as any)
+          .where(eq(conversationSessions.id, canonicalSession.id));
+
+        return { success: true, ts };
       }),
   }),
   /**

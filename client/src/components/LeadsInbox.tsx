@@ -1,918 +1,547 @@
 /**
- * LeadsInbox — Revenue Workspace / Lead Journey
- * Purpose-built CS-style inbox for lead conversion.
- * Layout: dark rail + lead list (lanes/filters) + conversation thread + right panel
+ * LeadsInbox — Revenue Workspace
  *
- * UI-only for now — wired to static mock data until backend procedures are ready.
+ * Architecture:
+ *   - Phone is the canonical customer identity. No session IDs in the UI.
+ *   - Left panel: one row per customer via leads.listWorkspace
+ *   - Center: full chronological timeline via leads.getTimeline(phone)
+ *   - Reply: leads.sendWorkspaceMessage(phone, message) — backend resolves session
+ *   - Real-time: useOpsStream invalidates listWorkspace + getTimeline on lead_update
  */
-import React, { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { trpc } from "@/lib/trpc";
+import { useOpsStream } from "@/hooks/useOpsStream";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  Search,
+  MessageSquare,
   Phone,
-  RefreshCw,
-  Pencil,
-  CheckCircle2,
+  Search,
   Send,
-  Flame,
-  Calendar,
-  DollarSign,
-  RotateCcw,
   Zap,
   Clock,
-  Star,
-  TrendingUp,
-  MessageSquare,
+  User,
   ChevronRight,
-  ChevronLeft,
-  Users,
-  Target,
-  Sparkles,
-  AlertTriangle,
-  ArrowUpRight,
-  BookOpen,
+  Radio,
+  Inbox,
 } from "lucide-react";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-type Lane = "needs-me" | "ready-to-book" | "needs-price" | "reactivation";
-type LeadFilter = "all" | "unread" | "campaign-reply" | "quote-viewed";
+function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "").slice(-10);
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return phone;
+}
 
-type LeadTag = {
-  label: string;
-  color: "purple" | "orange" | "blue" | "green" | "gray" | "rose";
+function timeAgo(ts: number | null | undefined): string {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDate(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return "Today";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type WorkspaceSummary = {
+  phone: string;
+  customerName: string | null;
+  lastMessage: string | null;
+  lastMessageAt: number | null;
+  unreadCount: number;
+  stage: string | null;
+  needsAttention: boolean;
+  assignedAgentName: string | null;
+  leadSource: string | null;
 };
 
-type LeadMessage = {
-  id: number;
-  sender: "customer" | "agent" | "campaign" | "attention";
-  senderName?: string;
-  text: string;
-  time: string;
-  campaignName?: string;
-  tags?: string[];
+type TimelineMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  ts: number;
+  mediaUrls?: string[];
+  sessionSource?: string;
 };
 
-type Lead = {
-  id: number;
-  name: string;
-  initials: string;
-  lastMessage: string;
-  time: string;
-  lane: Lane;
-  tags: LeadTag[];
-  unread?: boolean;
-  quote: string;
-  service: string;
-  frequency: string;
-  daysSinceBooking: number;
-  campaign: string;
-  campaignType: string;
-  campaignReplyTime: string;
-  momentum: number;
-  lifetimeValue: string;
-  jobCount: number;
-  preferredTeam: string;
-  bookLikelihood: number;
-  messages: LeadMessage[];
-  nextBestAction: {
-    title: string;
-    description: string;
-    suggestedReplies: string[];
-  };
+type CampaignEvent = {
+  id: string;
+  type: "campaign";
+  campaignName: string;
+  message: string;
+  ts: number;
+  status: string;
 };
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-
-const MOCK_LEADS: Lead[] = [
-  {
-    id: 1,
-    name: "Jennifer Thompson",
-    initials: "JT",
-    lastMessage: "What times are open?",
-    time: "now",
-    lane: "needs-me",
-    unread: true,
-    tags: [
-      { label: "Campaign reply", color: "purple" },
-      { label: "Needs price", color: "orange" },
-    ],
-    quote: "$159",
-    service: "Standard Clean",
-    frequency: "One-time",
-    daysSinceBooking: 218,
-    campaign: "Tomorrow Slots",
-    campaignType: "Reactivation campaign",
-    campaignReplyTime: "42 minutes",
-    momentum: 76,
-    lifetimeValue: "$2,840",
-    jobCount: 12,
-    preferredTeam: "MaidsPlus",
-    bookLikelihood: 76,
-    nextBestAction: {
-      title: "Provide specific price + two time options",
-      description:
-        "The lead has asked about price and availability. Remove uncertainty and create a clear booking decision.",
-      suggestedReplies: [
-        "Hi Jennifer! We have openings tomorrow at 9:00 AM or 1:00 PM. The price would be $159 with your discount. Which works better?",
-        "I can hold tomorrow at 1:00 PM while we confirm.",
-        "We recently helped another customer with a similar home and they loved the result.",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "campaign",
-        text: "Hi Jennifer, we have a few openings tomorrow and wanted to offer you first choice...",
-        time: "2:41 PM",
-        campaignName: "Tomorrow Slots",
-        tags: ["Delivered", "Replied"],
-      },
-      {
-        id: 2,
-        sender: "customer",
-        text: "How much is discount?",
-        time: "3:23 PM",
-      },
-      {
-        id: 3,
-        sender: "agent",
-        senderName: "Rizalina",
-        text: "We're currently offering 20% off and have availability as soon as tomorrow.",
-        time: "3:24 PM",
-      },
-      {
-        id: 4,
-        sender: "customer",
-        text: "How much would it be for a 2 bedroom and 3 bathroom clean?",
-        time: "4:27 PM",
-      },
-      {
-        id: 5,
-        sender: "agent",
-        senderName: "Rohan",
-        text: "We could do it tomorrow for $159.",
-        time: "4:38 PM",
-      },
-      {
-        id: 6,
-        sender: "attention",
-        text: "Customer asked for open times — Strong booking signal. Reply with two specific options.",
-        time: "Now",
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "Dorothy Miles",
-    initials: "DM",
-    lastMessage: "Interested — asking about tomorrow",
-    time: "4m",
-    lane: "reactivation",
-    tags: [
-      { label: "Reactivation", color: "blue" },
-      { label: "Waiting", color: "gray" },
-    ],
-    quote: "$214",
-    service: "Deep Clean",
-    frequency: "Monthly",
-    daysSinceBooking: 145,
-    campaign: "Spring Reactivation",
-    campaignType: "Reactivation campaign",
-    campaignReplyTime: "1 hour",
-    momentum: 58,
-    lifetimeValue: "$1,920",
-    jobCount: 8,
-    preferredTeam: "Team A",
-    bookLikelihood: 58,
-    nextBestAction: {
-      title: "Send availability for tomorrow",
-      description: "Lead is warm and asking about tomorrow. Send two specific time slots.",
-      suggestedReplies: [
-        "Hi Dorothy! We have tomorrow at 10 AM or 2 PM available. Which works for you?",
-        "Happy to hold a slot for you — just let me know which time works best.",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "campaign",
-        text: "Hi Dorothy, spring is here — time for a fresh start! We have a special offer just for you...",
-        time: "11:00 AM",
-        campaignName: "Spring Reactivation",
-        tags: ["Delivered", "Replied"],
-      },
-      {
-        id: 2,
-        sender: "customer",
-        text: "Interested — do you have anything tomorrow?",
-        time: "11:58 AM",
-      },
-    ],
-  },
-  {
-    id: 3,
-    name: "Marcus Lee",
-    initials: "ML",
-    lastMessage: "Can you do Saturday morning?",
-    time: "11m",
-    lane: "ready-to-book",
-    tags: [
-      { label: "Quote viewed", color: "green" },
-      { label: "Hot", color: "orange" },
-    ],
-    quote: "$329",
-    service: "Move-out Clean",
-    frequency: "One-time",
-    daysSinceBooking: 0,
-    campaign: "Direct Lead",
-    campaignType: "Direct inquiry",
-    campaignReplyTime: "N/A",
-    momentum: 84,
-    lifetimeValue: "$329",
-    jobCount: 1,
-    preferredTeam: "Unassigned",
-    bookLikelihood: 84,
-    nextBestAction: {
-      title: "Confirm Saturday availability and lock the booking",
-      description: "Lead has viewed the quote twice and is asking about Saturday. High intent — confirm and close.",
-      suggestedReplies: [
-        "Yes! We have Saturday morning at 9 AM available. Want me to lock that in for you?",
-        "Saturday works great — shall I send you a confirmation link?",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "customer",
-        text: "Hi, I need a move-out clean for my 3BR apartment.",
-        time: "10:05 AM",
-      },
-      {
-        id: 2,
-        sender: "agent",
-        senderName: "Rizalina",
-        text: "Hi Marcus! We can do that for $329. I'll send you a quote link.",
-        time: "10:07 AM",
-      },
-      {
-        id: 3,
-        sender: "customer",
-        text: "Can you do Saturday morning?",
-        time: "10:18 AM",
-      },
-    ],
-  },
-  {
-    id: 4,
-    name: "Sandra Pedro",
-    initials: "SP",
-    lastMessage: "I may need cleaning again.",
-    time: "32m",
-    lane: "reactivation",
-    tags: [
-      { label: "Winback", color: "purple" },
-      { label: "VIP", color: "green" },
-    ],
-    quote: "$280",
-    service: "Standard Clean",
-    frequency: "Bi-weekly",
-    daysSinceBooking: 218,
-    campaign: "VIP Winback",
-    campaignType: "VIP winback campaign",
-    campaignReplyTime: "18 minutes",
-    momentum: 72,
-    lifetimeValue: "$5,600",
-    jobCount: 24,
-    preferredTeam: "MaidsPlus",
-    bookLikelihood: 72,
-    nextBestAction: {
-      title: "Welcome back + offer preferred team",
-      description: "VIP customer with 24 jobs. Offer their preferred team and a loyalty discount.",
-      suggestedReplies: [
-        "Sandra! So great to hear from you. MaidsPlus is available this week — want me to get you back on the schedule?",
-        "Welcome back! As a VIP customer, I'd love to offer you a loyalty discount on your first cleaning back.",
-      ],
-    },
-    messages: [
-      {
-        id: 1,
-        sender: "campaign",
-        text: "Hi Sandra, we miss you! It's been a while and we'd love to welcome you back...",
-        time: "1:15 PM",
-        campaignName: "VIP Winback",
-        tags: ["Delivered", "Replied"],
-      },
-      {
-        id: 2,
-        sender: "customer",
-        text: "I may need cleaning again.",
-        time: "1:33 PM",
-      },
-    ],
-  },
-];
-
-const LANES: { id: Lane; label: string; emoji: string; count: number }[] = [
-  { id: "needs-me", label: "Needs Me", emoji: "🔥", count: 12 },
-  { id: "ready-to-book", label: "Ready to Book", emoji: "📅", count: 9 },
-  { id: "needs-price", label: "Needs Price", emoji: "💸", count: 6 },
-  { id: "reactivation", label: "Reactivation", emoji: "🔁", count: 81 },
-];
-
-const FILTERS: { id: LeadFilter; label: string; count?: number }[] = [
-  { id: "all", label: "All" },
-  { id: "unread", label: "Unread", count: 9 },
-  { id: "campaign-reply", label: "Campaign reply" },
-  { id: "quote-viewed", label: "Quote viewed" },
-];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-const TAG_STYLES: Record<LeadTag["color"], string> = {
-  purple: "bg-violet-50 text-violet-700 border-violet-200",
-  orange: "bg-orange-50 text-orange-700 border-orange-200",
-  blue: "bg-blue-50 text-blue-700 border-blue-200",
-  green: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  gray: "bg-slate-100 text-slate-600 border-slate-200",
-  rose: "bg-rose-50 text-rose-700 border-rose-200",
+type CallEvent = {
+  id: string;
+  type: "call";
+  duration: number | null;
+  recordingUrl: string | null;
+  ts: number;
 };
 
-function MomentumBar({ value }: { value: number }) {
-  const color =
-    value >= 80
-      ? "from-emerald-500 to-emerald-400"
-      : value >= 60
-      ? "from-violet-500 to-orange-400"
-      : "from-slate-400 to-slate-300";
+// ─── Left Panel: Lead List ────────────────────────────────────────────────────
+
+function LeadListItem({
+  summary,
+  selected,
+  onClick,
+}: {
+  summary: WorkspaceSummary;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const displayName = summary.customerName || formatPhone(summary.phone);
+  const hasUnread = summary.unreadCount > 0;
+
   return (
-    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1.5">
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-3 py-3 border-b border-white/5 transition-colors ${
+        selected
+          ? "bg-white/10 border-l-2 border-l-blue-400"
+          : "hover:bg-white/5 border-l-2 border-l-transparent"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0 mt-0.5">
+          {displayName[0]?.toUpperCase() ?? "?"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-1">
+            <span className={`text-sm truncate ${hasUnread ? "font-semibold text-white" : "font-medium text-white/80"}`}>
+              {displayName}
+            </span>
+            <span className="text-[10px] text-white/40 flex-shrink-0">
+              {timeAgo(summary.lastMessageAt)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-1 mt-0.5">
+            <p className={`text-xs truncate ${hasUnread ? "text-white/70" : "text-white/40"}`}>
+              {summary.lastMessage ?? "No messages yet"}
+            </p>
+            {hasUnread && (
+              <span className="flex-shrink-0 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] flex items-center justify-center font-bold">
+                {summary.unreadCount > 9 ? "9+" : summary.unreadCount}
+              </span>
+            )}
+          </div>
+          {summary.leadSource && (
+            <span className="text-[9px] text-white/30 mt-0.5 block">
+              via {summary.leadSource}
+            </span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─── Center Panel: Timeline Events ───────────────────────────────────────────
+
+function TimelineEventBubble({ event }: { event: CampaignEvent | CallEvent }) {
+  if (event.type === "campaign") {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="bg-purple-900/40 border border-purple-500/30 rounded-lg px-4 py-2 max-w-sm text-center">
+          <div className="flex items-center justify-center gap-1.5 mb-1">
+            <Radio className="w-3 h-3 text-purple-400" />
+            <span className="text-xs font-medium text-purple-300">Campaign: {event.campaignName}</span>
+          </div>
+          <p className="text-xs text-white/60 leading-relaxed">{event.message}</p>
+          <span className="text-[10px] text-white/30 mt-1 block">{formatTime(event.ts)}</span>
+        </div>
+      </div>
+    );
+  }
+  if (event.type === "call") {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="bg-green-900/30 border border-green-500/20 rounded-lg px-4 py-2 flex items-center gap-2">
+          <Phone className="w-3 h-3 text-green-400" />
+          <span className="text-xs text-green-300">
+            Call {event.duration ? `· ${Math.round(event.duration / 60)}m` : ""}
+          </span>
+          <span className="text-[10px] text-white/30">{formatTime(event.ts)}</span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function MessageBubble({ msg }: { msg: TimelineMessage }) {
+  const isUser = msg.role === "user";
+  return (
+    <div className={`flex ${isUser ? "justify-start" : "justify-end"} mb-2`}>
       <div
-        className={`h-full bg-gradient-to-r ${color} rounded-full transition-all duration-500`}
-        style={{ width: `${value}%` }}
-      />
+        className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 ${
+          isUser
+            ? "bg-white/10 text-white/90 rounded-tl-sm"
+            : "bg-blue-600 text-white rounded-tr-sm"
+        }`}
+      >
+        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
+        {msg.mediaUrls?.map((url, i) => (
+          <img key={i} src={url} alt="media" className="mt-1.5 rounded-lg max-w-full max-h-48 object-cover" />
+        ))}
+        <span className="text-[10px] opacity-50 mt-1 block text-right">{formatTime(msg.ts)}</span>
+      </div>
     </div>
   );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
-
-interface LeadsInboxProps {
-  rail?: React.ReactNode;
+function DateDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 my-4">
+      <div className="flex-1 h-px bg-white/10" />
+      <span className="text-[10px] text-white/30 font-medium">{label}</span>
+      <div className="flex-1 h-px bg-white/10" />
+    </div>
+  );
 }
 
-export default function LeadsInbox({ rail }: LeadsInboxProps) {
-  const [activeLane, setActiveLane] = useState<Lane>("needs-me");
-  const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
-  const [selectedLead, setSelectedLead] = useState<Lead>(MOCK_LEADS[0]);
-  const [composerText, setComposerText] = useState(
-    MOCK_LEADS[0].nextBestAction.suggestedReplies[0]
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function LeadsInbox() {
+  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const utils = trpc.useUtils();
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const { data: workspaceList = [], isLoading: listLoading } = trpc.leads.listWorkspace.useQuery(
+    { mode: "active" },
+    { refetchInterval: 30000 }
   );
-  const [messages, setMessages] = useState<LeadMessage[]>(MOCK_LEADS[0].messages);
-  const journeyRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    if (journeyRef.current) {
-      journeyRef.current.scrollTop = journeyRef.current.scrollHeight;
-    }
-  }, [messages]);
+  const { data: timeline, isLoading: timelineLoading } = trpc.leads.getTimeline.useQuery(
+    { phone: selectedPhone! },
+    { enabled: !!selectedPhone, refetchInterval: 15000 }
+  );
 
-  const filteredLeads = MOCK_LEADS.filter((l) => {
-    if (activeFilter === "unread") return l.unread;
-    if (activeFilter === "campaign-reply")
-      return l.tags.some((t) => t.label.toLowerCase().includes("campaign"));
-    if (activeFilter === "quote-viewed")
-      return l.tags.some((t) => t.label.toLowerCase().includes("quote"));
-    return true;
+  const sendMutation = trpc.leads.sendWorkspaceMessage.useMutation({
+    onSuccess: () => {
+      utils.leads.getTimeline.invalidate({ phone: selectedPhone! });
+      utils.leads.listWorkspace.invalidate();
+    },
   });
 
-  function handlePickLead(lead: Lead) {
-    setSelectedLead(lead);
-    setMessages(lead.messages);
-    setComposerText(lead.nextBestAction.suggestedReplies[0]);
+  // ── Real-time updates ─────────────────────────────────────────────────────
+  const handleLeadUpdate = useCallback(() => {
+    utils.leads.listWorkspace.invalidate();
+    if (selectedPhone) {
+      utils.leads.getTimeline.invalidate({ phone: selectedPhone });
+    }
+  }, [utils, selectedPhone]);
+
+  useOpsStream({ onLeadUpdate: handleLeadUpdate });
+
+  // ── Auto-scroll ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [timeline?.messages]);
+
+  // ── Filtered list ─────────────────────────────────────────────────────────
+  const filtered = (workspaceList as WorkspaceSummary[]).filter((s) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      (s.customerName ?? "").toLowerCase().includes(q) ||
+      s.phone.includes(q) ||
+      (s.lastMessage ?? "").toLowerCase().includes(q)
+    );
+  });
+
+  // ── Send handler ──────────────────────────────────────────────────────────
+  const handleSend = () => {
+    if (!selectedPhone || !message.trim()) return;
+    sendMutation.mutate({ phone: selectedPhone, message: message.trim() });
+    setMessage("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // ── Build merged timeline ─────────────────────────────────────────────────
+  type TimelineItem =
+    | { kind: "message"; data: TimelineMessage; ts: number }
+    | { kind: "campaign"; data: CampaignEvent; ts: number }
+    | { kind: "call"; data: CallEvent; ts: number }
+    | { kind: "date"; label: string; ts: number };
+
+  const timelineItems: TimelineItem[] = [];
+
+  if (timeline) {
+    const allEvents: TimelineItem[] = [
+      ...timeline.messages.map((m: TimelineMessage) => ({ kind: "message" as const, data: m, ts: m.ts })),
+      ...timeline.campaigns.map((c: CampaignEvent) => ({ kind: "campaign" as const, data: c, ts: c.ts })),
+      ...timeline.calls.map((c: CallEvent) => ({ kind: "call" as const, data: c, ts: c.ts })),
+    ].sort((a, b) => a.ts - b.ts);
+
+    let lastDate = "";
+    for (const item of allEvents) {
+      const dateLabel = formatDate(item.ts);
+      if (dateLabel !== lastDate) {
+        timelineItems.push({ kind: "date", label: dateLabel, ts: item.ts - 1 });
+        lastDate = dateLabel;
+      }
+      timelineItems.push(item);
+    }
   }
 
-  function handleSend() {
-    if (!composerText.trim()) return;
-    const newMsg: LeadMessage = {
-      id: Date.now(),
-      sender: "agent",
-      senderName: "You",
-      text: composerText,
-      time: "now",
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setComposerText("");
-  }
+  const selectedSummary = (workspaceList as WorkspaceSummary[]).find((s) => s.phone === selectedPhone);
+  const displayName = selectedSummary?.customerName || (selectedPhone ? formatPhone(selectedPhone) : "");
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div
-      className="h-full overflow-hidden flex leads-inbox-scope"
-      style={{
-        color: "#101828",
-        background: "transparent",
-        padding: "20px",
-        gap: "16px",
-      }}
-    >
-      {/* ── Rail ── */}
-      {rail && <div className="shrink-0">{rail}</div>}
+    <div className="flex h-full bg-[#0f1117] text-white overflow-hidden">
 
-      {/* ── Left: Lead List ── */}
-      <Card
-        className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0 shrink-0"
-        style={{
-          width: 340,
-          background: "#FCFCFD",
-          border: "1px solid rgba(16,24,40,.06)",
-          boxShadow: "0 10px 28px rgba(15,23,42,.05)",
-        }}
-      >
-        {/* Header */}
-        <div className="px-5 pt-5 pb-3 shrink-0">
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-1">
-            Revenue Workspace
-          </p>
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 mb-3">
-            Lead Journey
-          </h1>
-          {/* Search */}
-          <div className="flex items-center gap-2 h-10 border border-slate-200 rounded-2xl px-3 text-slate-400 text-sm font-semibold bg-white">
-            <Search className="w-3.5 h-3.5 shrink-0" />
-            <span>Search leads, campaigns…</span>
-          </div>
-        </div>
-
-        {/* Lanes */}
-        <div className="grid grid-cols-2 gap-2 px-4 pb-3 shrink-0">
-          {LANES.map((lane) => (
-            <button
-              key={lane.id}
-              onClick={() => setActiveLane(lane.id)}
-              className={cn(
-                "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all",
-                activeLane === lane.id
-                  ? "bg-blue-50 border-blue-200 text-slate-900"
-                  : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
-              )}
-            >
-              <span className="text-base">{lane.emoji}</span>{" "}
-              {lane.label}
-              <span className="block text-slate-500 font-semibold text-[11px] mt-0.5">
-                {lane.count} leads
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Filters */}
-        <div className="flex gap-2 px-4 pb-3 overflow-x-auto shrink-0 scrollbar-none">
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              onClick={() => setActiveFilter(f.id)}
-              className={cn(
-                "border rounded-full px-3 py-1.5 text-[12px] font-black whitespace-nowrap transition-all",
-                activeFilter === f.id
-                  ? "bg-slate-900 text-white border-slate-900"
-                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-300"
-              )}
-            >
-              {f.label}
-              {f.count ? ` ${f.count}` : ""}
-            </button>
-          ))}
-        </div>
-
-        {/* Lead List */}
-        <ScrollArea className="flex-1 min-h-0 px-3 pb-4">
-          <div className="flex flex-col gap-2">
-            {filteredLeads.map((lead) => (
-              <button
-                key={lead.id}
-                onClick={() => handlePickLead(lead)}
-                className={cn(
-                  "w-full text-left p-4 rounded-[20px] border transition-all",
-                  selectedLead.id === lead.id
-                    ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
-                    : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
-                )}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
-                    {lead.name}
-                    {lead.unread && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
-                    )}
-                  </span>
-                  <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
-                    {lead.time}
-                  </span>
-                </div>
-                <p className="text-[13px] text-slate-500 mb-2 line-clamp-1">
-                  {lead.lastMessage}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {lead.tags.map((tag) => (
-                    <span
-                      key={tag.label}
-                      className={cn(
-                        "px-2 py-0.5 rounded-full text-[11px] font-black border",
-                        TAG_STYLES[tag.color]
-                      )}
-                    >
-                      {tag.label}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
-      </Card>
-
-      {/* ── Center: Conversation Thread ── */}
-      <Card
-        className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0 flex-1 min-w-0"
-        style={{
-          background: "linear-gradient(180deg,#FCFCFD 0%,#F8F9FC 100%)",
-          border: "1px solid rgba(16,24,40,.06)",
-          boxShadow: "0 8px 24px rgba(15,23,42,.05)",
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-6 shrink-0"
-          style={{
-            height: 80,
-            borderBottom: "1px solid #e7eaf0",
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shrink-0"
-              style={{ background: "linear-gradient(135deg,#ff8a34,#ff4f81)" }}
-            >
-              {selectedLead.initials}
+      {/* ── Left Panel: Lead List ─────────────────────────────────────────── */}
+      <div className="w-72 flex-shrink-0 flex flex-col border-r border-white/10 bg-[#111318]">
+        <div className="px-3 py-3 border-b border-white/10">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <Inbox className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-semibold text-white">Revenue Workspace</span>
             </div>
-            <div>
-              <h2 className="font-black text-lg text-slate-900 leading-tight">
-                {selectedLead.name}
-              </h2>
-              <p className="text-[13px] text-slate-500">
-                {selectedLead.campaignType} · {selectedLead.campaign}
+            {workspaceList.length > 0 && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-white/10 text-white/60 border-0">
+                {workspaceList.length}
+              </Badge>
+            )}
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search leads..."
+              className="pl-7 h-7 text-xs bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-500/50"
+            />
+          </div>
+        </div>
+
+        <ScrollArea className="flex-1">
+          {listLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+              <MessageSquare className="w-8 h-8 text-white/20 mb-2" />
+              <p className="text-xs text-white/40">
+                {search ? "No matches found" : "No active leads"}
               </p>
             </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <Phone className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <Pencil className="w-4 h-4" />
-            </button>
-            <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
-              <CheckCircle2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Attention Banner */}
-        <div
-          className="flex items-center gap-3 px-5 py-3 shrink-0"
-          style={{
-            background: "linear-gradient(90deg,#fbf8ff,#fff)",
-            borderBottom: "1px solid #eee",
-          }}
-        >
-          <span
-            className={cn(
-              "px-2.5 py-1 rounded-full text-[11px] font-black border shrink-0",
-              TAG_STYLES.orange
-            )}
-          >
-            Needs attention
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-black text-slate-900 leading-tight">
-              {selectedLead.nextBestAction.title}
-            </p>
-            <p className="text-[12px] text-slate-500 mt-0.5">
-              {selectedLead.nextBestAction.description}
-            </p>
-          </div>
-          <div
-            className="shrink-0 border border-slate-200 rounded-2xl px-3 py-2 bg-white"
-            style={{ minWidth: 180 }}
-          >
-            <div className="flex justify-between text-[11px] font-black text-slate-700 mb-0.5">
-              <span>Lead Momentum</span>
-              <span>{selectedLead.momentum}%</span>
-            </div>
-            <MomentumBar value={selectedLead.momentum} />
-          </div>
-        </div>
-
-        {/* Journey / Messages */}
-        <div
-          ref={journeyRef}
-          className="flex-1 min-h-0 overflow-y-auto px-6 py-5"
-          style={{ background: "linear-gradient(180deg,#fcfcfd,#f8fafc)" }}
-        >
-          <div className="flex flex-col gap-4">
-            <AnimatePresence initial={false}>
-              {messages.map((msg) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="flex gap-3"
-                >
-                  {/* Dot */}
-                  <div
-                    className={cn(
-                      "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10",
-                      msg.sender === "campaign"
-                        ? "bg-violet-100 text-violet-700"
-                        : msg.sender === "agent"
-                        ? "bg-slate-900 text-white"
-                        : msg.sender === "attention"
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-blue-100 text-blue-700"
-                    )}
-                  >
-                    {msg.sender === "campaign"
-                      ? "✦"
-                      : msg.sender === "agent"
-                      ? (msg.senderName?.[0] ?? "R")
-                      : msg.sender === "attention"
-                      ? "!"
-                      : "C"}
-                  </div>
-
-                  {/* Card */}
-                  <div
-                    className={cn(
-                      "flex-1 border rounded-[18px] px-4 py-3",
-                      msg.sender === "agent"
-                        ? "bg-slate-900 border-slate-900 text-white max-w-[72%] ml-auto"
-                        : msg.sender === "campaign"
-                        ? "bg-violet-50 border-violet-100"
-                        : msg.sender === "attention"
-                        ? "bg-orange-50 border-orange-200"
-                        : "bg-white border-slate-200"
-                    )}
-                  >
-                    <div className="flex justify-between items-center mb-1">
-                      <span
-                        className={cn(
-                          "text-[10px] font-black tracking-widest uppercase",
-                          msg.sender === "agent"
-                            ? "text-slate-400"
-                            : "text-slate-400"
-                        )}
-                      >
-                        {msg.sender === "campaign"
-                          ? "Campaign"
-                          : msg.sender === "agent"
-                          ? (msg.senderName ?? "Agent")
-                          : msg.sender === "attention"
-                          ? "Attention event"
-                          : "Customer"}
-                      </span>
-                      <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">
-                        {msg.time}
-                      </span>
-                    </div>
-                    {msg.campaignName && (
-                      <p className="font-black text-sm text-violet-800 mb-1">
-                        {msg.campaignName}
-                      </p>
-                    )}
-                    <p
-                      className={cn(
-                        "text-sm leading-relaxed",
-                        msg.sender === "agent" ? "text-white" : "text-slate-600"
-                      )}
-                    >
-                      {msg.text}
-                    </p>
-                    {msg.tags && (
-                      <div className="flex gap-1.5 mt-2 flex-wrap">
-                        {msg.tags.map((t) => (
-                          <span
-                            key={t}
-                            className={cn(
-                              "px-2 py-0.5 rounded-full text-[10px] font-black border",
-                              t === "Delivered"
-                                ? TAG_STYLES.purple
-                                : TAG_STYLES.green
-                            )}
-                          >
-                            {t}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </div>
-
-        {/* Composer */}
-        <div
-          className="shrink-0 px-5 py-4"
-          style={{ borderTop: "1px solid #e7eaf0", background: "#fff" }}
-        >
-          {/* Suggested replies */}
-          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none mb-2">
-            {selectedLead.nextBestAction.suggestedReplies.map((reply, i) => (
-              <button
-                key={i}
-                onClick={() => setComposerText(reply)}
-                className={cn(
-                  "border rounded-full px-3 py-1.5 text-[12px] font-black whitespace-nowrap transition-all shrink-0",
-                  composerText === reply
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-                )}
-              >
-                {i === 0 ? "Specific price" : i === 1 ? "Soft lock" : "Social proof"}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <textarea
-              value={composerText}
-              onChange={(e) => setComposerText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSend();
-              }}
-              placeholder="Type a message…"
-              className="flex-1 h-16 border border-slate-200 rounded-[18px] px-4 py-3 text-sm resize-none font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition"
-            />
-            <button
-              onClick={handleSend}
-              className="shrink-0 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95"
-              style={{ background: "#ff6b1a" }}
-            >
-              Send →
-            </button>
-          </div>
-        </div>
-      </Card>
-
-      {/* ── Right: Context Panel ── */}
-      <Card
-        className="rounded-[28px] overflow-hidden flex flex-col h-full py-0 gap-0 shrink-0"
-        style={{
-          width: 300,
-          background: "#FCFCFD",
-          border: "1px solid rgba(16,24,40,.06)",
-          boxShadow: "0 10px 28px rgba(15,23,42,.05)",
-        }}
-      >
-        <ScrollArea className="flex-1 min-h-0 p-5">
-          {/* Next Best Action */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Next Best Action
-          </p>
-          <div
-            className="rounded-[20px] p-4 mb-4"
-            style={{ background: "#101828", border: "1px solid #101828" }}
-          >
-            <span
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[11px] font-black border mb-3 inline-block",
-                TAG_STYLES.orange
-              )}
-            >
-              Recommended
-            </span>
-            <h3 className="font-black text-white text-sm leading-snug mb-2">
-              {selectedLead.nextBestAction.title}
-            </h3>
-            <p className="text-[13px] text-slate-400 leading-relaxed mb-3">
-              {selectedLead.nextBestAction.description}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() =>
-                  setComposerText(selectedLead.nextBestAction.suggestedReplies[0])
-                }
-                className="col-span-2 border-0 rounded-[14px] py-2.5 font-black text-sm text-white transition hover:opacity-90"
-                style={{ background: "#ff6b1a" }}
-              >
-                Use response
-              </button>
-              <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
-                Call now
-              </button>
-              <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
-                Follow-up
-              </button>
-              <button className="col-span-2 border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
-                Close
-              </button>
-            </div>
-          </div>
-
-          {/* Lead Snapshot */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Lead Snapshot
-          </p>
-          <div className="border border-slate-200 rounded-[20px] p-4 mb-4 bg-white">
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Quote", value: selectedLead.quote },
-                { label: "Service", value: selectedLead.service },
-                { label: "Frequency", value: selectedLead.frequency },
-                {
-                  label: "Last booking",
-                  value:
-                    selectedLead.daysSinceBooking === 0
-                      ? "New"
-                      : `${selectedLead.daysSinceBooking}d ago`,
-                },
-              ].map((m) => (
-                <div
-                  key={m.label}
-                  className="border border-slate-100 rounded-[14px] p-2.5 bg-slate-50/50"
-                >
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    {m.label}
-                  </span>
-                  <b className="block mt-1 text-sm font-black text-slate-900">
-                    {m.value}
-                  </b>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Campaign Context */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Campaign Context
-          </p>
-          <div
-            className="border rounded-[20px] p-4 mb-4"
-            style={{ background: "#faf7ff", borderColor: "#e9d5ff" }}
-          >
-            <p className="text-[10px] font-black tracking-[.22em] uppercase text-violet-500 mb-1">
-              Source Journey
-            </p>
-            <h3 className="font-black text-slate-900 text-sm mb-1">
-              {selectedLead.campaign}
-            </h3>
-            <p className="text-[13px] text-slate-500">
-              {selectedLead.campaignType} · customer replied in{" "}
-              {selectedLead.campaignReplyTime}
-            </p>
-          </div>
-
-          {/* Customer Intelligence */}
-          <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
-            Customer Intelligence
-          </p>
-          <div className="border border-slate-200 rounded-[20px] p-4 bg-white">
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: "Lifetime", value: selectedLead.lifetimeValue },
-                { label: "Jobs", value: String(selectedLead.jobCount) },
-                { label: "Preferred team", value: selectedLead.preferredTeam },
-                {
-                  label: "Book likelihood",
-                  value: `${selectedLead.bookLikelihood}%`,
-                },
-              ].map((m) => (
-                <div
-                  key={m.label}
-                  className="border border-slate-100 rounded-[14px] p-2.5 bg-slate-50/50"
-                >
-                  <span className="block text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    {m.label}
-                  </span>
-                  <b className="block mt-1 text-sm font-black text-slate-900">
-                    {m.value}
-                  </b>
-                </div>
-              ))}
-            </div>
-          </div>
+          ) : (
+            filtered.map((s) => (
+              <LeadListItem
+                key={s.phone}
+                summary={s}
+                selected={s.phone === selectedPhone}
+                onClick={() => setSelectedPhone(s.phone)}
+              />
+            ))
+          )}
         </ScrollArea>
-      </Card>
+      </div>
+
+      {/* ── Center Panel: Conversation ────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {!selectedPhone ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+            <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center">
+              <MessageSquare className="w-7 h-7 text-white/20" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white/60">Select a lead</p>
+              <p className="text-xs text-white/30 mt-1">Pick a conversation from the left to get started</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3 bg-[#111318]">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                {displayName[0]?.toUpperCase() ?? "?"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{displayName}</p>
+                <p className="text-xs text-white/40">{formatPhone(selectedPhone)}</p>
+              </div>
+              {selectedSummary?.stage && (
+                <Badge className="text-[10px] bg-white/10 text-white/60 border-0">
+                  {selectedSummary.stage.replace(/_/g, " ")}
+                </Badge>
+              )}
+            </div>
+
+            <ScrollArea className="flex-1 px-4 py-3">
+              {timelineLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
+                </div>
+              ) : timelineItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-xs text-white/30">No messages yet</p>
+                </div>
+              ) : (
+                timelineItems.map((item, i) => {
+                  if (item.kind === "date") {
+                    return <DateDivider key={`date-${i}`} label={item.label} />;
+                  }
+                  if (item.kind === "message") {
+                    return <MessageBubble key={item.data.id} msg={item.data} />;
+                  }
+                  if (item.kind === "campaign" || item.kind === "call") {
+                    return <TimelineEventBubble key={item.data.id} event={item.data} />;
+                  }
+                  return null;
+                })
+              )}
+              <div ref={bottomRef} />
+            </ScrollArea>
+
+            <div className="px-4 py-3 border-t border-white/10 bg-[#111318]">
+              <div className="flex gap-2 items-end">
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+                  className="flex-1 min-h-[40px] max-h-32 resize-none text-sm bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-blue-500/50"
+                  rows={1}
+                />
+                <Button
+                  onClick={handleSend}
+                  disabled={!message.trim() || sendMutation.isPending}
+                  size="sm"
+                  className="h-10 w-10 p-0 bg-blue-600 hover:bg-blue-700 flex-shrink-0"
+                >
+                  {sendMutation.isPending ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                </Button>
+              </div>
+              {sendMutation.isError && (
+                <p className="text-xs text-red-400 mt-1">{sendMutation.error.message}</p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Right Panel: Customer Snapshot ───────────────────────────────── */}
+      {selectedPhone && selectedSummary && (
+        <div className="w-64 flex-shrink-0 border-l border-white/10 bg-[#111318] flex flex-col overflow-y-auto">
+          <div className="px-4 py-3 border-b border-white/10">
+            <p className="text-xs font-semibold text-white/60 uppercase tracking-wider">Customer</p>
+          </div>
+          <div className="px-4 py-4 space-y-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <User className="w-3.5 h-3.5 text-white/40" />
+                <span className="text-sm text-white font-medium">
+                  {selectedSummary.customerName ?? "Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-white/40" />
+                <span className="text-xs text-white/60">{formatPhone(selectedPhone)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="bg-white/5 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] text-white/40 uppercase tracking-wider">Stage</span>
+                  <ChevronRight className="w-3 h-3 text-white/20" />
+                </div>
+                <p className="text-sm text-white font-medium">
+                  {selectedSummary.stage?.replace(/_/g, " ") ?? "—"}
+                </p>
+              </div>
+
+              {selectedSummary.assignedAgentName && (
+                <div className="bg-white/5 rounded-lg p-3">
+                  <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Agent</span>
+                  <p className="text-sm text-white">{selectedSummary.assignedAgentName}</p>
+                </div>
+              )}
+
+              {selectedSummary.leadSource && (
+                <div className="bg-white/5 rounded-lg p-3">
+                  <span className="text-[10px] text-white/40 uppercase tracking-wider block mb-1">Source</span>
+                  <p className="text-sm text-white">{selectedSummary.leadSource}</p>
+                </div>
+              )}
+
+              {timeline && timeline.campaigns.length > 0 && (
+                <div className="bg-purple-900/30 border border-purple-500/20 rounded-lg p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Zap className="w-3 h-3 text-purple-400" />
+                    <span className="text-[10px] text-purple-300 uppercase tracking-wider">Campaigns</span>
+                  </div>
+                  <p className="text-sm text-white">{timeline.campaigns.length} sent</p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    Last: {timeAgo(timeline.campaigns[timeline.campaigns.length - 1]?.ts)}
+                  </p>
+                </div>
+              )}
+
+              {timeline && timeline.calls.length > 0 && (
+                <div className="bg-green-900/20 border border-green-500/20 rounded-lg p-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <Phone className="w-3 h-3 text-green-400" />
+                    <span className="text-[10px] text-green-300 uppercase tracking-wider">Calls</span>
+                  </div>
+                  <p className="text-sm text-white">{timeline.calls.length} recorded</p>
+                </div>
+              )}
+
+              <div className="bg-white/5 rounded-lg p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Clock className="w-3 h-3 text-white/40" />
+                  <span className="text-[10px] text-white/40 uppercase tracking-wider">Last Activity</span>
+                </div>
+                <p className="text-xs text-white/60">{timeAgo(selectedSummary.lastMessageAt)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
