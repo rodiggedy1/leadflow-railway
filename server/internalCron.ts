@@ -48,7 +48,8 @@ import { runScheduleConfirmSend, runScheduleConfirmNudge } from "./scheduleConfi
 import { postOpsSummary } from "./opsSummaryEngine";
 import { runEscalationCalls } from "./escalationEngine";
 import { runMessageIntegrityCheck } from "./messageIntegrityEngine";
-import { opsReminders, opsChatMessages, agents, jobAlerts } from "../drizzle/schema";
+import { setupGmailWatch, alertInvalidGrant } from "./gmailService";
+import { opsReminders, opsChatMessages, agents, jobAlerts, gmailState } from "../drizzle/schema";
 import { and, eq, isNull, lte, lt, gte, isNotNull, desc, sql } from "drizzle-orm";
 
 async function recordHeartbeat(jobName: string, resultSummary: string, didWork: boolean): Promise<void> {
@@ -900,6 +901,30 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Gmail watch reconciliation: every 12 hours (6 AM + 6 PM ET) ─────────────
+  // Renews the Gmail Pub/Sub watch if it expires within 48 hours or is missing.
+  // Decision is based solely on gmailState.watchExpiration — no heartbeat heuristic.
+  // This is idempotent and self-healing after outages or deployments.
+  cron.schedule("0 0 6,18 * * *", async () => {
+    await runGmailWatchReconciliation();
+  }, { timezone: "America/New_York" });
+
+  // ── Daily Gmail health check: 9 AM ET ──────────────────────────────────────
+  // Makes a lightweight authenticated API call to detect revoked OAuth tokens.
+  // Also warns if the watch expires within 48 hours (belt-and-suspenders with reconciliation).
+  cron.schedule("0 0 9 * * *", async () => {
+    await runGmailHealthCheck();
+  }, { timezone: "America/New_York" });
+
+  // ── Startup Gmail reconciliation ────────────────────────────────────────────
+  // Run once immediately so a deployment doesn't wait up to 12 hours to discover
+  // an expired watch. Fire-and-forget — never blocks server startup.
+  setTimeout(() => {
+    runGmailWatchReconciliation().catch((err) =>
+      console.error("[InternalCron] Startup Gmail reconciliation failed:", err)
+    );
+  }, 15_000); // 15s delay — let DB connections stabilise first
+
   console.log("[InternalCron] All schedules registered:");
   console.log("  - SilenceFollowUp:    every 5 minutes");
   console.log("  - ScheduledFollowUp:  9 AM ET daily");
@@ -916,4 +941,227 @@ export function startInternalCron(): void {
   console.log("  - ScheduleConfirm:    5 PM ET daily");
   console.log("  - ScheduleConfirmNudge: 7 PM ET daily");
   console.log("  - ScheduleEscalation: 8 PM ET daily");
+  console.log("  - GmailWatchReconcile: 6 AM + 6 PM ET daily (+ startup)");
+  console.log("  - GmailHealthCheck:   9 AM ET daily");
+}
+
+// ── Gmail watch reconciliation ────────────────────────────────────────────────
+/**
+ * Checks gmailState.watchExpiration and renews the Gmail Pub/Sub watch if:
+ *   - watchExpiration is missing / zero (DB state unknown or never written)
+ *   - watchExpiration is within 48 hours of now
+ *
+ * On invalid_grant or auth failure: calls alertInvalidGrant() which posts a
+ * re-auth card to Command Chat (deduped per hour inside that function).
+ *
+ * Structured log output for easy diagnosis without opening the DB.
+ */
+export async function runGmailWatchReconciliation(): Promise<void> {
+  const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+  const now = Date.now();
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[GmailWatchReconcile] DB unavailable — skipping");
+      return;
+    }
+
+    const topicName = process.env.GMAIL_PUBSUB_TOPIC ?? "";
+    if (!topicName) {
+      console.error("[GmailWatchReconcile] GMAIL_PUBSUB_TOPIC not set — cannot renew watch");
+      await recordHeartbeat("gmail-watch-reconcile", "error: GMAIL_PUBSUB_TOPIC not set", false);
+      return;
+    }
+
+    const [state] = await db.select().from(gmailState).where(eq(gmailState.id, 1));
+    const watchExpiration = state?.watchExpiration ?? 0;
+    const expiresAt = watchExpiration > 0 ? new Date(watchExpiration).toISOString() : "(not set)";
+    const hoursRemaining = watchExpiration > 0
+      ? ((watchExpiration - now) / (60 * 60 * 1000)).toFixed(1)
+      : "N/A";
+
+    const needsRenewal = !watchExpiration || watchExpiration <= now + FORTY_EIGHT_HOURS_MS;
+
+    if (!needsRenewal) {
+      console.log(
+        `[GmailWatchReconcile] Action: Skipped (healthy) | Current expiration: ${expiresAt} | Hours remaining: ${hoursRemaining}`
+      );
+      await recordHeartbeat(
+        "gmail-watch-reconcile",
+        `skipped: watch healthy, expires ${expiresAt} (${hoursRemaining}h remaining)`,
+        false
+      );
+      return;
+    }
+
+    console.log(
+      `[GmailWatchReconcile] Action: Renewing | Current expiration: ${expiresAt} | Hours remaining: ${hoursRemaining}`
+    );
+
+    const { historyId, expiration } = await setupGmailWatch(topicName);
+    const newExpiresAt = new Date(Number(expiration)).toISOString();
+
+    await db
+      .update(gmailState)
+      .set({ historyId, watchExpiration: Number(expiration) })
+      .where(eq(gmailState.id, 1));
+
+    console.log(
+      `[GmailWatchReconcile] Action: Renewed | New expiration: ${newExpiresAt} | historyId: ${historyId}`
+    );
+    await recordHeartbeat(
+      "gmail-watch-reconcile",
+      `renewed: old=${expiresAt}, new=${newExpiresAt}, historyId=${historyId}`,
+      true
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const isAuthError =
+      msg.toLowerCase().includes("invalid_grant") ||
+      msg.toLowerCase().includes("invalid grant") ||
+      msg.toLowerCase().includes("unauthorized_client") ||
+      msg.toLowerCase().includes("token has been expired") ||
+      msg.toLowerCase().includes("token has been revoked");
+
+    if (isAuthError) {
+      console.error(`[GmailWatchReconcile] Auth failure — ${msg}`);
+      await alertInvalidGrant("gmail-watch-reconcile");
+      await recordHeartbeat("gmail-watch-reconcile", `error: auth failure — ${msg}`, false);
+    } else {
+      console.error(`[GmailWatchReconcile] Error — ${msg}`);
+      await recordHeartbeat("gmail-watch-reconcile", `error: ${msg}`, false);
+    }
+  }
+}
+
+// ── Daily Gmail health check ──────────────────────────────────────────────────
+/**
+ * Makes a lightweight authenticated Gmail API call (users.getProfile) to verify
+ * the OAuth token is still valid. Detects revoked tokens before the watch expires.
+ *
+ * Also checks watchExpiration and posts a warning card if fewer than 48 hours remain
+ * (belt-and-suspenders with the reconciliation job).
+ */
+async function runGmailHealthCheck(): Promise<void> {
+  const FORTY_EIGHT_HOURS_MS = 48 * 60 * 60 * 1000;
+  const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.warn("[GmailHealthCheck] DB unavailable — skipping");
+      return;
+    }
+
+    // ── 1. Authenticated probe ────────────────────────────────────────────────
+    // Import google client directly — we need errors to propagate, not be swallowed.
+    const { google } = await import("googleapis");
+    const { ENV } = await import("./_core/env");
+    const { getDb: _db } = await import("./db");
+    const { gmailState: _gs } = await import("../drizzle/schema");
+    const { eq: _eq } = await import("drizzle-orm");
+
+    // Resolve refresh token (env var takes priority, then DB)
+    let refreshToken: string | null = ENV.gmailRefreshToken || null;
+    if (!refreshToken) {
+      const _dbConn = await _db();
+      if (_dbConn) {
+        const [_state] = await _dbConn.select().from(_gs).where(_eq(_gs.id, 1));
+        refreshToken = _state?.refreshToken ?? null;
+      }
+    }
+
+    if (!refreshToken) {
+      console.error("[GmailHealthCheck] No refresh token found — OAuth not completed");
+      await alertInvalidGrant("gmail-health-check: no refresh token");
+      await recordHeartbeat("gmail-health-check", "error: no refresh token", false);
+      return;
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      ENV.gmailClientId,
+      ENV.gmailClientSecret,
+      ENV.gmailRedirectUri
+    );
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+    let emailAddress: string;
+    try {
+      const profile = await gmail.users.getProfile({ userId: "me" });
+      emailAddress = profile.data.emailAddress ?? "(unknown)";
+    } catch (authErr) {
+      const authMsg = authErr instanceof Error ? authErr.message : String(authErr);
+      const isAuthError =
+        authMsg.toLowerCase().includes("invalid_grant") ||
+        authMsg.toLowerCase().includes("invalid grant") ||
+        authMsg.toLowerCase().includes("unauthorized_client") ||
+        authMsg.toLowerCase().includes("token has been expired") ||
+        authMsg.toLowerCase().includes("token has been revoked") ||
+        (authErr as any)?.response?.status === 401 ||
+        (authErr as any)?.response?.status === 403;
+
+      if (isAuthError) {
+        console.error(`[GmailHealthCheck] Auth failure — ${authMsg}`);
+        await alertInvalidGrant("gmail-health-check");
+        await recordHeartbeat("gmail-health-check", `error: auth failure — ${authMsg}`, false);
+      } else {
+        console.error(`[GmailHealthCheck] API error — ${authMsg}`);
+        await recordHeartbeat("gmail-health-check", `error: api error — ${authMsg}`, false);
+      }
+      return;
+    }
+
+    // ── 2. Watch expiration check ─────────────────────────────────────────────
+    const [state] = await db.select().from(gmailState).where(eq(gmailState.id, 1));
+    const watchExpiration = state?.watchExpiration ?? 0;
+    const expiresAt = watchExpiration > 0 ? new Date(watchExpiration).toISOString() : "(not set)";
+    const hoursRemaining = watchExpiration > 0
+      ? ((watchExpiration - now) / (60 * 60 * 1000)).toFixed(1)
+      : "N/A";
+
+    // Post a warning card if watch expires within 48 hours (deduped per 24h)
+    if (!watchExpiration || watchExpiration <= now + FORTY_EIGHT_HOURS_MS) {
+      const recentCutoff = new Date(now - TWENTY_FOUR_HOURS_MS);
+      const existing = await db
+        .select({ id: opsChatMessages.id })
+        .from(opsChatMessages)
+        .where(
+          and(
+            eq(opsChatMessages.quickAction as any, "gmail_watch_expiring"),
+            gte(opsChatMessages.createdAt, recentCutoff)
+          )
+        )
+        .limit(1);
+
+      if (existing.length === 0) {
+        const expiryLabel = !watchExpiration
+          ? "watch expiration is not set"
+          : `watch expires in ${hoursRemaining} hours (${expiresAt})`;
+        await db.insert(opsChatMessages).values({
+          channel: "command",
+          authorName: "System",
+          authorRole: "system",
+          body: `⚠️ Gmail Watch Expiring Soon\n\nThe Gmail Pub/Sub watch will expire within 48 hours (${expiryLabel}).\nThe reconciliation cron will renew it automatically at the next 6 AM or 6 PM ET tick.\nIf email stops working before then, visit: https://quote.maidinblack.com/api/gmail/watch/setup`,
+          quickAction: "gmail_watch_expiring",
+          metadata: JSON.stringify({ expiresAt, hoursRemaining }),
+        } as any);
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("new_message", { channel: "command" });
+      }
+    }
+
+    console.log(
+      `[GmailHealthCheck] ok | account: ${emailAddress} | watch expires: ${expiresAt} | hours remaining: ${hoursRemaining}`
+    );
+    await recordHeartbeat(
+      "gmail-health-check",
+      `ok: authenticated as ${emailAddress}, watch expires ${expiresAt} (${hoursRemaining}h remaining)`,
+      false
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[GmailHealthCheck] Unexpected error — ${msg}`);
+    await recordHeartbeat("gmail-health-check", `error: ${msg}`, false);
+  }
 }
