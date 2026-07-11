@@ -977,6 +977,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const pendingTabTokenRef = useRef<number>(0);
   // Route loading bar: "running" = animating to 80%, "complete" = snap to 100% + fade
   const [routeBar, setRouteBar] = useState<"idle" | "running" | "complete">("idle");
+  // Measured shell position for the fixed-position route bar
+  const [barRect, setBarRect] = useState<{ left: number; right: number; top: number } | null>(null);
   const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1018,6 +1020,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     // For CS Inbox: prefetch the two minimum queries first so CsInbox mounts into
     // a warm cache and paints instantly — no blank flash.
     if (tab !== displayedTab) {
+      // Measure shell for the fixed route bar
+      if (shellRef.current) {
+        const r = shellRef.current.getBoundingClientRect();
+        setBarRect({ left: r.left, right: window.innerWidth - r.right, top: r.top });
+      }
       if (tab === "cs") {
         // Issue a unique token for this prefetch so stale completions are ignored
         const token = Date.now();
@@ -1050,8 +1057,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         };
         void runPrefetch();
       } else {
-        // All other tabs are always-mounted (display:none toggle) — transition immediately
-        setIncomingTab(tab);
+        // All other tabs are always-mounted — fire bar then transition immediately
+        setRouteBar("running");
+        // Complete bar on next frame so the animation is visible briefly
+        requestAnimationFrame(() => {
+          setRouteBar("complete");
+          setIncomingTab(tab);
+        });
       }
     }
   };
@@ -2119,6 +2131,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div ref={rootRef} className="flex flex-col h-full w-full overflow-hidden" style={{background: 'transparent'}}>
+      {/* Fixed route bar — scoped to shell column via measured coordinates */}
+      {barRect && routeBar !== "idle" && (
+        <div
+          className={`route-bar-fixed${routeBar === "running" ? " route-bar--running" : ""}${routeBar === "complete" ? " route-bar--complete" : ""}`}
+          style={{ left: barRect.left, right: barRect.right, top: barRect.top }}
+        />
+      )}
       <div className="pointer-events-none absolute inset-0" />
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
@@ -2775,10 +2794,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
         {/* VIEW: Command Chat */}
         <div style={{ display: displayedTab === "channels" && activeChannel === "command" ? "flex" : "none" }} className="relative flex-1 flex flex-col overflow-hidden min-h-0">
-          {/* Route loading bar — scoped to center column only */}
-          <div
-            className={`route-bar${routeBar === "running" ? " route-bar--running" : ""}${routeBar === "complete" ? " route-bar--complete" : ""}`}
-          />
           <CommandChat
             channelMsgs={channelMsgs.map(m => ({ id: m.id, from: m.from, role: m.role, body: m.body, mediaUrl: m.mediaUrl, quickAction: m.quickAction, metadata: m.metadata ?? null, replyToId: m.replyToId ?? null, replyToBody: m.replyToBody ?? null, replyToAuthor: m.replyToAuthor ?? null, threadParentId: (m as any).threadParentId ?? null, threadParentBody: (m as any).threadParentBody ?? null, threadParentFrom: (m as any).threadParentFrom ?? null, replyCount: (m as any).replyCount ?? 0, createdAt: new Date(m.ts) }))}
             channelLoading={channelLoading}

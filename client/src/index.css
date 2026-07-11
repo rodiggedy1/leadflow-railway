@@ -1160,18 +1160,15 @@
   opacity: 1;
   transform: translateY(0);
 }
-/* ── OpsChat route loading bar ─────────────────────────────────────── */
-.route-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+/* ── OpsChat route loading bar (fixed, measured to shell column) ─────── */
+.route-bar-fixed {
+  position: fixed;
   height: 3px;
   background: #3B82F6;
   transform-origin: left;
   transform: scaleX(0);
   opacity: 0;
-  z-index: 50;
+  z-index: 9999;
   pointer-events: none;
 }
 .route-bar--running {
