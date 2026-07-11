@@ -4017,6 +4017,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
 
   // ── Team ETA modal state ─────────────────────────────────────────────────
   const [teamEtaOpen, setTeamEtaOpen] = useState(false);
+  const etaTodayDate = useMemo(() => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }), []);
+  const { data: etaTeams } = trpc.fieldMgmt.getTeamEtaSummary.useQuery(
+    { date: etaTodayDate },
+    { refetchInterval: 60_000, staleTime: 30_000 }
+  );
+  const movingTeamsCount = useMemo(() => {
+    if (!etaTeams) return 0;
+    return etaTeams.filter(t => {
+      const s = t.currentJobStatus as string;
+      return s === "on_the_way" || s === "in_progress" || s === "finishing_up" || s === "wrapping_up";
+    }).length;
+  }, [etaTeams]);
 
   // ── Issue Engine (Phase 1) state ──────────────────────────────────────────
   const [issueEngineOverlayOpen, setIssueEngineOverlayOpen] = useState(false);
@@ -7619,28 +7631,49 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   <Mic className="h-4 w-4" />
                 )}
               </button>
-              {/* Team ETA button */}
+              {/* Team ETA pill button */}
               <button
                 onClick={() => setTeamEtaOpen(true)}
-                className="shrink-0 h-9 px-2.5 rounded-full border-2 border-slate-200 bg-white hover:border-slate-400 flex items-center gap-1.5 transition text-slate-500"
                 title="Team ETA — live arrival updates"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "14px",
+                  width: "260px",
+                  height: "60px",
+                  padding: "0 20px",
+                  borderRadius: "999px",
+                  cursor: "pointer",
+                  color: "white",
+                  border: "none",
+                  background: "linear-gradient(135deg, #366CFF 0%, #4F5FFF 30%, #6A49FF 65%, #8A3DFF 100%)",
+                  boxShadow: "0 14px 32px rgba(88,90,255,.28), inset 0 1px 0 rgba(255,255,255,.22)",
+                  transition: ".25s",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 22px 46px rgba(88,90,255,.40), inset 0 1px 0 rgba(255,255,255,.22)";
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = "";
+                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 14px 32px rgba(88,90,255,.28), inset 0 1px 0 rgba(255,255,255,.22)";
+                }}
               >
-                <svg width="18" height="12" viewBox="0 0 64 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  {/* car body */}
-                  <path d="M4 22 L10 10 Q12 7 16 7 L44 7 Q48 7 50 10 L58 22 L60 22 Q62 22 62 24 L62 28 Q62 30 60 30 L56 30 Q55 34 51 34 Q47 34 46 30 L18 30 Q17 34 13 34 Q9 34 8 30 L4 30 Q2 30 2 28 L2 24 Q2 22 4 22Z" fill="#475569" stroke="#1E293B" strokeWidth="1.5" strokeLinejoin="round"/>
-                  {/* windshield */}
-                  <path d="M14 22 L19 11 Q20 9 22 9 L38 9 Q40 9 41 11 L46 22Z" fill="#BAE6FD" stroke="#7DD3FC" strokeWidth="1"/>
-                  {/* rear window */}
-                  <path d="M8 22 L13 12 Q14 10 16 10 L18 10 L14 22Z" fill="#BAE6FD" stroke="#7DD3FC" strokeWidth="1"/>
-                  {/* wheels */}
-                  <circle cx="13" cy="30" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="1"/>
-                  <circle cx="13" cy="30" r="2.5" fill="#94A3B8"/>
-                  <circle cx="51" cy="30" r="5" fill="#1E293B" stroke="#0F172A" strokeWidth="1"/>
-                  <circle cx="51" cy="30" r="2.5" fill="#94A3B8"/>
-                  {/* headlight */}
-                  <ellipse cx="58" cy="22" rx="2.5" ry="2" fill="#FEF08A" stroke="#EAB308" strokeWidth="0.8"/>
+                {/* floating van icon */}
+                <span style={{ fontSize: "22px", animation: "etaVanFloat 2.8s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center", width: "34px", height: "34px", flexShrink: 0 }}>🚐</span>
+                {/* text */}
+                <span style={{ flex: 1, textAlign: "left" }}>
+                  <span style={{ display: "block", fontSize: "21px", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>Live ETAs</span>
+                  <span style={{ display: "block", marginTop: "5px", fontSize: "15px", color: "rgba(255,255,255,.82)" }}>
+                    {movingTeamsCount > 0 ? `${movingTeamsCount} team${movingTeamsCount === 1 ? "" : "s"} moving` : "View team status"}
+                  </span>
+                </span>
+                {/* arrow */}
+                <svg viewBox="0 0 24 24" style={{ width: "18px", height: "18px", opacity: 0.72, flexShrink: 0 }}>
+                  <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
-                <span className="text-[10px] font-[700] tracking-wide">ETA</span>
+                <style>{`@keyframes etaVanFloat { 0%{transform:translateX(0)} 50%{transform:translateX(3px)} 100%{transform:translateX(0)} }`}</style>
               </button>
               {/* Emoji picker */}
               <div ref={emojiRef} className="relative shrink-0">
