@@ -2139,11 +2139,14 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         </div>
       )}
-      <div className={`flex flex-1 min-h-0 overflow-hidden ${activeTab === 'cs' || activeTab === 'leadops' ? '' : 'p-5 gap-5'}`}>
+      {/* layoutTab: use displayedTab during a transition so the current tab's
+           rail and padding stay stable until the incoming tab takes over */}
+      {(() => { const layoutTab = isTransitioning ? displayedTab : activeTab; return (
+      <div className={`flex flex-1 min-h-0 overflow-hidden ${layoutTab === 'cs' || layoutTab === 'leadops' ? '' : 'p-5 gap-5'}`}>
       {/* ── Reminder popup (fires when a due reminder is detected) ── */}
       <ReminderPopup />
       {/* ── LEFT SIDEBAR — only shown outside CS tab (CS tab gets rail via prop) ── */}
-      {activeTab !== 'cs' && activeTab !== 'leadops' && (
+      {layoutTab !== 'cs' && layoutTab !== 'leadops' && (
         /* Wide icon rail — new style */
         <aside className="shrink-0 w-[96px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
           {/* ── Workspace switcher icons ── */}
@@ -3235,6 +3238,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           </div>
         )}
       </div>{/* end persistent shell */}
+      </div>); })()}
       {/* ── RIGHT PANEL (Job Details + Actions) ──────────────────────────── */}
       {activeTab === "today" && jobDetail && (
         <div className="w-[300px] shrink-0 bg-slate-50 overflow-y-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
