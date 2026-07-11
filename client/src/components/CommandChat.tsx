@@ -7638,16 +7638,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: "14px",
-                  width: "260px",
-                  height: "60px",
-                  padding: "0 20px",
+                  gap: "7px",
+                  width: "130px",
+                  height: "30px",
+                  padding: "0 10px",
                   borderRadius: "999px",
                   cursor: "pointer",
                   color: "white",
                   border: "none",
                   background: "linear-gradient(135deg, #366CFF 0%, #4F5FFF 30%, #6A49FF 65%, #8A3DFF 100%)",
-                  boxShadow: "0 14px 32px rgba(88,90,255,.28), inset 0 1px 0 rgba(255,255,255,.22)",
+                  boxShadow: "0 7px 16px rgba(88,90,255,.28), inset 0 1px 0 rgba(255,255,255,.22)",
                   transition: ".25s",
                   flexShrink: 0,
                 }}
@@ -7661,16 +7661,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 }}
               >
                 {/* floating van icon */}
-                <span style={{ fontSize: "22px", animation: "etaVanFloat 2.8s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center", width: "34px", height: "34px", flexShrink: 0 }}>🚐</span>
+                <span style={{ fontSize: "11px", animation: "etaVanFloat 2.8s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center", width: "17px", height: "17px", flexShrink: 0 }}>🚐</span>
                 {/* text */}
                 <span style={{ flex: 1, textAlign: "left" }}>
-                  <span style={{ display: "block", fontSize: "21px", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>Live ETAs</span>
-                  <span style={{ display: "block", marginTop: "5px", fontSize: "15px", color: "rgba(255,255,255,.82)" }}>
+                  <span style={{ display: "block", fontSize: "10.5px", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>Live ETAs</span>
+                  <span style={{ display: "block", marginTop: "2px", fontSize: "7.5px", color: "rgba(255,255,255,.82)" }}>
                     {movingTeamsCount > 0 ? `${movingTeamsCount} team${movingTeamsCount === 1 ? "" : "s"} moving` : "View team status"}
                   </span>
                 </span>
                 {/* arrow */}
-                <svg viewBox="0 0 24 24" style={{ width: "18px", height: "18px", opacity: 0.72, flexShrink: 0 }}>
+<svg viewBox="0 0 24 24" style={{ width: "9px", height: "9px", opacity: 0.72, flexShrink: 0 }}>
                   <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
                 <style>{`@keyframes etaVanFloat { 0%{transform:translateX(0)} 50%{transform:translateX(3px)} 100%{transform:translateX(0)} }`}</style>
