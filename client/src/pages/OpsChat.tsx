@@ -993,7 +993,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
       setSidebarCollapsed(true);
     } else if (tab === "today") {
       setActiveTab("today");
-      setSidebarCollapsed(false);
+      setSidebarCollapsed(true);
     } else {
       setActiveTab(tab);
     }
