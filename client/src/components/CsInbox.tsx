@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { getInitialCsConversationId } from "@shared/csInboxUtils";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { TypingBubble } from "@/components/TypingBubble";
 import Picker from "@emoji-mart/react";
@@ -601,7 +602,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const teamConvs = useMemo(() => filtered.filter((c) => c.queue === "Teams"), [filtered]);
 
   // For effectiveSelectedId: prefer client lane first, then team lane
-  const effectiveSelectedId = selectedId ?? (filtered[0]?.id ?? null);
+  const effectiveSelectedId = selectedId ?? getInitialCsConversationId(filtered);
   const selected = filtered.find((c) => c.id === effectiveSelectedId) || filtered[0] || displayConversations[0];
   // ── Detail query: fetch full messageHistory only for the open conversation ──────
   // This is the architectural split: the inbox list no longer needs to carry

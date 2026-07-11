@@ -17,6 +17,7 @@ import CommandChat from "@/components/CommandChat";
 import LeadOps from "@/components/LeadOps";
 import LeadsInbox from "@/components/LeadsInbox";
 import CsInbox, { type InboxFilter } from "@/components/CsInbox";
+import { getInitialCsConversationId } from "@shared/csInboxUtils";
 import DmPanel from "@/components/DmPanel";
 import ReminderPopup from "@/components/ReminderPopup";
 import ProfilePhotoDrawer from "@/components/ProfilePhotoDrawer";
@@ -971,6 +972,9 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const incomingRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  // Stale-request guard: each CS prefetch gets a unique token;
+  // if the user clicks away before prefetch completes, the stale token is ignored.
+  const pendingTabTokenRef = useRef<number>(0);
   const isTransitioning = incomingTab !== null;
   const [activeChannel, setActiveChannel] = useState<string>("command");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
@@ -1008,9 +1012,43 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     }
     // Update activeTab immediately so all enabled/query guards respond
     setActiveTab(tab);
-    // If switching to a different tab, trigger the crossfade transition
+    // If switching to a different tab, trigger the crossfade transition.
+    // For CS Inbox: prefetch the two minimum queries first so CsInbox mounts into
+    // a warm cache and paints instantly — no blank flash.
     if (tab !== displayedTab) {
-      setIncomingTab(tab);
+      if (tab === "cs") {
+        // Issue a unique token for this prefetch so stale completions are ignored
+        const token = Date.now();
+        pendingTabTokenRef.current = token;
+        const runPrefetch = async () => {
+          try {
+            // 1. Prefetch inbox list (same input as CsInbox)
+            const list = await utils.leads.listCsInbox.fetch(
+              { showResolved: true },
+              { staleTime: 10_000 } // reuse cache if fresh within 10s
+            );
+            // Guard: user may have clicked away while we were fetching
+            if (pendingTabTokenRef.current !== token) return;
+            // 2. Resolve initial conversation using the shared helper
+            const initialId = getInitialCsConversationId(list ?? []);
+            if (initialId) {
+              await utils.leads.getCsConversation.fetch(
+                { sessionId: initialId },
+                { staleTime: 0 } // always fresh — matches CsInbox staleTime
+              );
+            }
+          } catch {
+            // Prefetch failed — mount CsInbox anyway so it can show its own error state
+          }
+          // Guard again after the second fetch
+          if (pendingTabTokenRef.current !== token) return;
+          setIncomingTab(tab);
+        };
+        void runPrefetch();
+      } else {
+        // All other tabs are always-mounted (display:none toggle) — transition immediately
+        setIncomingTab(tab);
+      }
     }
   };
 
@@ -1034,29 +1072,6 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
     };
   }, [incomingTab]);
 
-  // ── DIAGNOSTIC: walk ancestors from shell to root, log each width ──
-  useEffect(() => {
-    if (!shellRef.current || !rootRef.current) return;
-    const shell = shellRef.current;
-    const root = rootRef.current;
-
-    console.log('[DIAG-WALK] === ancestor walk from shell to root ===');
-    let el: HTMLElement | null = shell;
-    let depth = 0;
-    while (el && depth < 20) {
-      const r = el.getBoundingClientRect();
-      const s = getComputedStyle(el);
-      const tag = el.tagName.toLowerCase();
-      const cls = el.className?.toString().slice(0, 60) ?? '';
-      console.log(
-        `[DIAG-WALK] depth:${depth} <${tag}> w:${r.width.toFixed(1)} h:${r.height.toFixed(1)} display:${s.display} flex:${s.flexDirection} overflow:${s.overflow} | "${cls}"`
-      );
-      if (el === root) break;
-      el = el.parentElement;
-      depth++;
-    }
-    console.log('[DIAG-WALK] === end walk ===');
-  });
 
   const [composer, setComposer] = useState("");
   const [selectedQuickAction, setSelectedQuickAction] = useState<string | null>(null);
