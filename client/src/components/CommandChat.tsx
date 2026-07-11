@@ -5866,16 +5866,6 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </div>
             </div>
-            {/* Team ETA button */}
-            <button
-              onClick={() => setTeamEtaOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-[700] border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors shrink-0"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              Team ETA
-            </button>
             {/* Issue Engine pill */}
             <ActiveIssuesPill onClick={() => setIssueEngineOverlayOpen(true)} />
             {/* Agent presence circles — far right */}
@@ -7628,6 +7618,23 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 ) : (
                   <Mic className="h-4 w-4" />
                 )}
+              </button>
+              {/* Team ETA button */}
+              <button
+                onClick={() => setTeamEtaOpen(true)}
+                className="shrink-0 h-9 px-2.5 rounded-full border-2 border-slate-200 bg-white hover:border-slate-400 flex items-center gap-1.5 transition text-slate-500"
+                title="Team ETA — live arrival updates"
+              >
+                <svg width="15" height="11" viewBox="0 0 56 40" fill="none">
+                  <rect x="4" y="8" width="46" height="22" rx="5" fill="white" stroke="#94A3B8" strokeWidth="2"/>
+                  <rect x="4" y="8" width="18" height="14" rx="3" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5"/>
+                  <rect x="24" y="8" width="26" height="14" rx="2" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5"/>
+                  <circle cx="14" cy="31" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
+                  <circle cx="14" cy="31" r="2.5" fill="#9CA3AF"/>
+                  <circle cx="42" cy="31" r="5" fill="#374151" stroke="#111827" strokeWidth="1.5"/>
+                  <circle cx="42" cy="31" r="2.5" fill="#9CA3AF"/>
+                </svg>
+                <span className="text-[10px] font-[700] tracking-wide">ETA</span>
               </button>
               {/* Emoji picker */}
               <div ref={emojiRef} className="relative shrink-0">

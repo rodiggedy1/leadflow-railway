@@ -1580,7 +1580,8 @@ export const fieldMgmtRouter = router({
 
       // 4. Derive per-team ETA status from the current job
       const result = Array.from(teamMap.values()).map(team => {
-        // Find the "current" job — first non-completed job
+        // Find the "current" job — first in-progress job (not completed/arrived/cancelled)
+        // "arrived" means the cleaner is at the property — treat as the active current job
         const currentJob = team.jobs.find(j =>
           (j.jobStatus as string) !== "completed" && (j.jobStatus as string) !== "cancelled"
         ) ?? team.jobs[team.jobs.length - 1];
@@ -1589,7 +1590,10 @@ export const fieldMgmtRouter = router({
 
         // Derive etaStatus
         let etaStatus: "on_time" | "running_late" | "early" | "unclear" | "no_answer" | "pending" = "pending";
-        if (etaCall) {
+        // If cleaner has already arrived, override to on_time regardless of call outcome
+        if ((currentJob.jobStatus as string) === "arrived" || (currentJob.jobStatus as string) === "in_progress" || (currentJob.jobStatus as string) === "finishing_up" || (currentJob.jobStatus as string) === "wrapping_up") {
+          etaStatus = "on_time";
+        } else if (etaCall) {
           if (etaCall.outcome === "no_answer") {
             etaStatus = "no_answer";
           } else if (etaCall.outcome === "answered") {

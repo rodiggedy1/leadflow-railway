@@ -193,8 +193,12 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
   // Determine ribbon message
   const ribbonMsg = useMemo(() => {
-    if (team.etaStatus === "on_time") return `On track · ETA ${formatTime(team.currentJobServiceDateTime)}`;
-    if (team.etaStatus === "early") return `Arriving early · ETA ${formatTime(team.currentJobServiceDateTime)}`;
+    // Use etaTimestamp (from the call) if available, otherwise fall back to scheduled time
+    const etaDisplay = team.etaTimestamp
+      ? formatTime(new Date(team.etaTimestamp))
+      : formatTime(team.currentJobServiceDateTime);
+    if (team.etaStatus === "on_time") return `On track · ETA ${etaDisplay}`;
+    if (team.etaStatus === "early") return `Arriving early · ETA ${etaDisplay}`;
     if (team.etaStatus === "running_late") return `Running ~${team.delayMinutes} min behind schedule`;
     if (team.etaStatus === "no_answer") {
       const attempt = team.etaCall?.step === "eta_call_2" ? "2nd" : "1st";
@@ -317,7 +321,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                     {team.etaStatus === "pending" ? "ETA Pending" :
                      team.etaStatus === "no_answer" ? "ETA Pending" :
                      team.etaStatus === "unclear" ? "ETA Unclear" :
-                     `${formatTime(currentJob.serviceDateTime)} ETA`}
+                     `${team.etaTimestamp ? formatTime(new Date(team.etaTimestamp)) : formatTime(currentJob.serviceDateTime)} ETA`}
                   </div>
                   <div
                     className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white"
