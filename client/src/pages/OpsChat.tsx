@@ -2955,26 +2955,26 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               setActiveFilter={setCsFilter}
               focusSessionId={focusCsSessionId}
               rail={
-                <aside className="shrink-0 w-[57px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
-                  <div className="flex flex-col items-center gap-0 w-full">
+                <aside className="shrink-0 w-[80px] self-stretch rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-y-auto overflow-x-visible h-full" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                  <div className="flex flex-col items-center gap-0 w-full pb-1">
                     {([
-                      { id: "channels"    as const, Icon: Radio,     color: "#a78bfa" },
-                      { id: "cs"          as const, Icon: UserCheck, color: "#10b981" },
-                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b" },
-                      { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6" },
-                      { id: "today"       as const, Icon: Activity,  color: "#8b5cf6" },
+                      { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
+                      { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+                      { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+                      { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
                     ]).map((ws) => {
                       const isActive = activeTab === ws.id;
                       return (
                         <button
                           key={ws.id}
                           onClick={() => handleSetActiveTab(ws.id)}
-                          className="relative flex flex-col items-center w-full py-2.5 px-1 transition-all"
+                          className="relative flex flex-col items-center gap-1 w-full py-2.5 px-1 transition-all"
                           style={{ opacity: isActive ? 1 : 0.4 }}
                         >
                           {ws.id === "channels" ? (
-                            <div className="relative w-9 h-9 rounded-full bg-white flex items-center justify-center shadow-md">
-                              <ws.Icon size={17} style={{ color: ws.color }} strokeWidth={2} />
+                            <div className="relative w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-md">
+                              <ws.Icon size={18} style={{ color: ws.color }} strokeWidth={2} />
                               <CmdMentionBadge
                                 callerName={callerName}
                                 hidden={activeTab === "channels"}
@@ -2984,10 +2984,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                             </div>
                           ) : (
                             <div className="relative flex items-center justify-center">
-                              <ws.Icon size={20} style={{ color: ws.color }} strokeWidth={1.75} />
+                              <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={1.75} />
                               {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
                             </div>
                           )}
+                          <span className="text-[9px] text-white font-medium leading-tight text-center">
+                            {ws.line1}{ws.line2 ? <><br />{ws.line2}</> : null}
+                          </span>
                           {isActive && (
                             <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-3 h-0.5 rounded-full" style={{ background: ws.color }} />
                           )}
@@ -2995,31 +2998,34 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                       );
                     })}
                   </div>
-                  <div className="flex flex-col items-center gap-0 w-full mt-auto">
+                  <div className="flex flex-col items-center gap-0 w-full pt-1">
                     {([
-                      { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b" },
-                      { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9" },
-                      { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e" },
-                      { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa" },
-                      { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b" },
+                      { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
+                      { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
+                      { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
+                      { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+                      { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
                     ]).map((nav) => (
                       <a
                         key={nav.href}
                         href={nav.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-center w-full py-2 transition-all opacity-40 hover:opacity-100 shrink-0"
+                        className="flex flex-col items-center gap-0.5 w-full py-1.5 px-1 transition-all opacity-50 hover:opacity-100 shrink-0"
                       >
                         <nav.Icon size={18} style={{ color: nav.color }} strokeWidth={1.75} />
+                        <span className="text-[9px] text-white font-medium leading-tight text-center">
+                          {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
+                        </span>
                       </a>
                     ))}
                   </div>
-                  <div className="pt-3 pb-5 shrink-0">
-                    <button onClick={() => setProfilePhotoOpen(true)} className="w-7 h-7 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
+                  <div className="mt-auto pt-3 pb-5 shrink-0">
+                    <button onClick={() => setProfilePhotoOpen(true)} className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-white/20 hover:ring-white/50 transition shadow mx-auto block" title={`${callerName} — edit profile photo`}>
                       {profilePhotoUrl ? (
                         <img src={profilePhotoUrl} alt={callerName} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" style={{ backgroundColor: senderHex(callerName) }}>
+                        <div className="w-full h-full flex items-center justify-center text-[11px] font-bold text-white" style={{ backgroundColor: senderHex(callerName) }}>
                           {(callerName ?? "?")[0].toUpperCase()}
                         </div>
                       )}
