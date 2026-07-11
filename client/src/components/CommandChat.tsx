@@ -49,6 +49,7 @@ import AllThreadsPanel from "@/components/AllThreadsPanel";
 import AICallPanel from "@/components/AICallPanel";
 import { CustomerMentionChip, QuickReplyModal, CustomerData, renderMessageWithMentions, renderMessageParts } from "@/components/CustomerMentionChip";
 import { IssueEngineOverlay, CreateIssueModal, ActiveIssuesPill } from "@/components/IssueEngineOverlay";
+import { TeamEtaModal } from "@/components/TeamEtaModal";
 
 // ── Payment Link Modal ───────────────────────────────────────────────────────
 function _normalizePhone(raw: string) {
@@ -4014,6 +4015,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     },
   });
 
+  // ── Team ETA modal state ─────────────────────────────────────────────────
+  const [teamEtaOpen, setTeamEtaOpen] = useState(false);
+
   // ── Issue Engine (Phase 1) state ──────────────────────────────────────────
   const [issueEngineOverlayOpen, setIssueEngineOverlayOpen] = useState(false);
   const [issueEngineInitialId, setIssueEngineInitialId] = useState<number | null>(null);
@@ -5862,6 +5866,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   )}
                 </div>
             </div>
+            {/* Team ETA button */}
+            <button
+              onClick={() => setTeamEtaOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-[700] border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors shrink-0"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Team ETA
+            </button>
             {/* Issue Engine pill */}
             <ActiveIssuesPill onClick={() => setIssueEngineOverlayOpen(true)} />
             {/* Agent presence circles — far right */}
@@ -7883,6 +7897,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>
         </div>{/* end white card */}
       </div>
+
+      {/* ── Team ETA Modal ── */}
+      <TeamEtaModal open={teamEtaOpen} onClose={() => setTeamEtaOpen(false)} />
 
       {/* ── Issue Engine Overlay ── */}
       <IssueEngineOverlay

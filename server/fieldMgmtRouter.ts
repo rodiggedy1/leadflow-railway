@@ -1484,6 +1484,165 @@ export const fieldMgmtRouter = router({
     }),
 
   /**
+   * Returns a team-grouped ETA summary for today.
+   * Powers the Team ETA modal in Command Chat.
+   * Each team entry includes:
+   *  - cleaner name, phone, team name
+   *  - all jobs for the day (sorted by serviceDateTime)
+   *  - the most recent ETA call result (recordingUrl, transcript, outcome, smsSentBody)
+   *  - derived etaStatus: on_time | running_late | early | unclear | no_answer | pending
+   */
+  getTeamEtaSummary: agentProcedure
+    .input(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // 1. Fetch all non-cancelled jobs for the day
+      const jobs = await db
+        .select({
+          id: cleanerJobs.id,
+          cleanerName: cleanerJobs.cleanerName,
+          teamName: cleanerJobs.teamName,
+          customerName: cleanerJobs.customerName,
+          customerPhone: cleanerJobs.customerPhone,
+          cleanerPhone: cleanerProfiles.phone,
+          jobAddress: cleanerJobs.jobAddress,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          jobStatus: cleanerJobs.jobStatus,
+          delayMinutes: cleanerJobs.delayMinutes,
+          etaTimestamp: cleanerJobs.etaTimestamp,
+          etaConfidence: cleanerJobs.etaConfidence,
+          etaSource: cleanerJobs.etaSource,
+          etaCallFiredAt: cleanerJobs.etaCallFiredAt,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
+        })
+        .from(cleanerJobs)
+        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+        .where(and(
+          eq(cleanerJobs.jobDate, input.date),
+          ne(cleanerJobs.bookingStatus, "cancelled"),
+          ne(cleanerJobs.bookingStatus, "rescheduled")
+        ))
+        .orderBy(cleanerJobs.serviceDateTime);
+
+      if (jobs.length === 0) return [];
+
+      // 2. Fetch all ETA calls for these jobs
+      const jobIds = jobs.map(j => j.id);
+      const etaCalls = await db
+        .select({
+          id: fieldMgmtCalls.id,
+          cleanerJobId: fieldMgmtCalls.cleanerJobId,
+          step: fieldMgmtCalls.step,
+          outcome: fieldMgmtCalls.outcome,
+          transcript: fieldMgmtCalls.transcript,
+          recordingUrl: fieldMgmtCalls.recordingUrl,
+          durationSeconds: fieldMgmtCalls.durationSeconds,
+          smsFollowupBody: fieldMgmtCalls.smsFollowupBody,
+          createdAt: fieldMgmtCalls.createdAt,
+        })
+        .from(fieldMgmtCalls)
+        .where(and(
+          inArray(fieldMgmtCalls.cleanerJobId, jobIds),
+          inArray(fieldMgmtCalls.step, ["eta_call_1", "eta_call_2"])
+        ))
+        .orderBy(desc(fieldMgmtCalls.createdAt));
+
+      // Map latest ETA call per job
+      const latestEtaCallByJob = new Map<number, typeof etaCalls[0]>();
+      for (const call of etaCalls) {
+        if (!latestEtaCallByJob.has(call.cleanerJobId)) {
+          latestEtaCallByJob.set(call.cleanerJobId, call);
+        }
+      }
+
+      // 3. Group jobs by teamName
+      const teamMap = new Map<string, {
+        teamName: string;
+        cleanerName: string;
+        cleanerPhone: string | null;
+        jobs: typeof jobs;
+      }>();
+
+      for (const job of jobs) {
+        const key = job.teamName ?? job.cleanerName;
+        if (!teamMap.has(key)) {
+          teamMap.set(key, {
+            teamName: key,
+            cleanerName: job.cleanerName,
+            cleanerPhone: job.cleanerPhone ?? null,
+            jobs: [],
+          });
+        }
+        teamMap.get(key)!.jobs.push(job);
+      }
+
+      // 4. Derive per-team ETA status from the current job
+      const result = Array.from(teamMap.values()).map(team => {
+        // Find the "current" job — first non-completed job
+        const currentJob = team.jobs.find(j =>
+          (j.jobStatus as string) !== "completed" && (j.jobStatus as string) !== "cancelled"
+        ) ?? team.jobs[team.jobs.length - 1];
+
+        const etaCall = latestEtaCallByJob.get(currentJob.id) ?? null;
+
+        // Derive etaStatus
+        let etaStatus: "on_time" | "running_late" | "early" | "unclear" | "no_answer" | "pending" = "pending";
+        if (etaCall) {
+          if (etaCall.outcome === "no_answer") {
+            etaStatus = "no_answer";
+          } else if (etaCall.outcome === "answered") {
+            const delay = currentJob.delayMinutes ?? 0;
+            if (delay <= -5) etaStatus = "early";
+            else if (delay <= 10) etaStatus = "on_time";
+            else etaStatus = "running_late";
+          } else {
+            etaStatus = "unclear";
+          }
+        } else if (currentJob.etaCallFiredAt) {
+          etaStatus = "unclear";
+        }
+
+        return {
+          teamName: team.teamName,
+          cleanerName: team.cleanerName,
+          cleanerPhone: team.cleanerPhone,
+          etaStatus,
+          delayMinutes: currentJob.delayMinutes ?? 0,
+          etaTimestamp: currentJob.etaTimestamp ?? null,
+          etaConfidence: currentJob.etaConfidence ?? null,
+          etaCallFiredAt: currentJob.etaCallFiredAt ?? null,
+          currentJobId: currentJob.id,
+          currentJobAddress: currentJob.jobAddress,
+          currentJobServiceDateTime: currentJob.serviceDateTime,
+          currentJobStatus: currentJob.jobStatus,
+          etaCall: etaCall ? {
+            id: etaCall.id,
+            step: etaCall.step,
+            outcome: etaCall.outcome,
+            transcript: etaCall.transcript ?? null,
+            recordingUrl: etaCall.recordingUrl ?? null,
+            durationSeconds: etaCall.durationSeconds,
+            smsSentBody: etaCall.smsFollowupBody ?? null,
+            createdAt: etaCall.createdAt,
+          } : null,
+          jobs: team.jobs.map(j => ({
+            id: j.id,
+            customerName: j.customerName,
+            customerPhone: j.customerPhone,
+            jobAddress: j.jobAddress,
+            serviceDateTime: j.serviceDateTime,
+            jobStatus: j.jobStatus,
+            delayMinutes: j.delayMinutes ?? 0,
+          })),
+        };
+      });
+
+      return result;
+    }),
+
+  /**
    * Returns the timestamp of the last successful today-sync-jobs run.
    * Used by the Field Management header to show data freshness.
    */
