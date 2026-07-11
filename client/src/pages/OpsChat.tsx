@@ -2080,7 +2080,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             {([
               { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
               { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
-              { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Management" },
+              { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
               { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
               { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
             ]).map((ws) => {
@@ -3079,7 +3079,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     {([
                       { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
                       { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
-                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Management" },
+                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
                       { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
                       { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
                     ]).map((ws) => {
@@ -3163,7 +3163,55 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: Lead Ops */}
         {activeTab === "leadops" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <LeadOps focusSessionId={focusLeadSessionId} />
+            <LeadOps
+              focusSessionId={focusLeadSessionId}
+              rail={
+                <aside className="rounded-[28px] flex flex-col items-center py-5 gap-0 overflow-visible" style={{background: '#16181B', border: '1px solid rgba(255,255,255,0.09)', boxShadow: '0 12px 48px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.16)'}}>
+                  <div className="flex flex-col items-center gap-0 w-full">
+                    {([
+                      { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
+                      { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+                      { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+                      { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+                      { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
+                    ]).map((ws) => {
+                      const isActive = activeTab === ws.id;
+                      return (
+                        <button
+                          key={ws.id}
+                          onClick={() => handleSetActiveTab(ws.id)}
+                          className="relative flex flex-col items-center gap-1.5 w-full py-3 px-2 transition-all"
+                          style={{ opacity: isActive ? 1 : 0.4 }}
+                        >
+                          {ws.id === "channels" ? (
+                            <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
+                              <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={2} />
+                              <CmdMentionBadge
+                                callerName={callerName}
+                                hidden={activeTab === "channels"}
+                                channelMsgs={channelMsgs}
+                                myNames={myNames}
+                              />
+                            </div>
+                          ) : (
+                            <div className="relative flex items-center justify-center">
+                              <ws.Icon size={28} style={{ color: ws.color }} strokeWidth={1.75} />
+                              {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
+                            </div>
+                          )}
+                          <span className="text-[10px] text-white font-medium leading-tight text-center">
+                            {ws.line1}{ws.line2 ? <><br />{ws.line2}</> : null}
+                          </span>
+                          {isActive && (
+                            <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-4 h-0.5 rounded-full" style={{ background: ws.color }} />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+              }
+            />
           </div>
         )}
         {/* VIEW: Leads Inbox */}
