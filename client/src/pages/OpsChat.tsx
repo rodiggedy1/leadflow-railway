@@ -2098,7 +2098,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div ref={rootRef} className="flex flex-col h-full overflow-hidden" style={{background: 'transparent'}}>
+    <div ref={rootRef} className="flex flex-col h-full w-full overflow-hidden" style={{background: 'transparent'}}>
       <div className="pointer-events-none absolute inset-0" />
       {/* ── Notification permission banner ── */}
       {!notifBannerDismissed && notifPermission !== "granted" && notifPermission !== "denied" && notifPermission !== "unsupported" && isAuthenticated && (
