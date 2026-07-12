@@ -51,6 +51,7 @@ type Team = {
   distance?: string;
   confidence?: number;
   cleanerSaid?: string;
+  recordingUrl?: string;
   customerMessage?: string;
   deliveredAt?: string;
   finishBy?: string;
@@ -185,6 +186,7 @@ function mapTeam(t: {
     distance: t.delayMinutes > 0 ? `${t.delayMinutes} min away` : undefined,
     confidence: t.etaConfidence ?? undefined,
     cleanerSaid: t.etaCall?.cleanerStatement ?? undefined,
+    recordingUrl: t.etaCall?.recordingUrl ?? undefined,
     customerMessage: t.etaCall?.smsSentBody ?? undefined,
     deliveredAt: t.etaCall?.createdAt ? formatTime(new Date(t.etaCall.createdAt)) : undefined,
     finishBy: t.jobs[t.jobs.length - 1]?.serviceDateTime
@@ -436,7 +438,7 @@ function ExpandedCard({ team }: { team: Team }) {
               <div className="text-[15px] font-semibold italic leading-6 text-slate-700">"{team.cleanerSaid || "No clear ETA was provided."}"</div>
             </div>
           </div>
-          <AudioPlayer url={null /* recordingUrl wired via team.cleanerSaid source */} />
+          <AudioPlayer url={team.recordingUrl ?? null} />
         </section>
 
         {/* Customer Notified — verbatim */}
