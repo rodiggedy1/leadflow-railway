@@ -11,6 +11,7 @@ import {
   CarFront,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock3,
   MessageCircle,
@@ -52,6 +53,7 @@ type Team = {
   confidence?: number;
   cleanerSaid?: string;
   recordingUrl?: string;
+  transcript?: string;
   customerMessage?: string;
   deliveredAt?: string;
   finishBy?: string;
@@ -187,6 +189,7 @@ function mapTeam(t: {
     confidence: t.etaConfidence ?? undefined,
     cleanerSaid: t.etaCall?.cleanerStatement ?? undefined,
     recordingUrl: t.etaCall?.recordingUrl ?? undefined,
+    transcript: t.etaCall?.transcript ?? undefined,
     customerMessage: t.etaCall?.smsSentBody ?? undefined,
     deliveredAt: t.etaCall?.createdAt ? formatTime(new Date(t.etaCall.createdAt)) : undefined,
     finishBy: t.jobs[t.jobs.length - 1]?.serviceDateTime
@@ -398,6 +401,46 @@ function AudioPlayer({ url }: { url: string | null }) {
   );
 }
 
+// CleanerUpdatePanel — Cleaner Update section with expandable transcript
+function CleanerUpdatePanel({ team }: { team: Team }) {
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const hasTranscript = !!team.transcript && team.transcript.trim().length > 5;
+  return (
+    <section className="rounded-[22px] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
+      <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-indigo-600">
+        <MessageCircle className="h-4 w-4" />Cleaner update
+      </div>
+      <div className="mt-4 flex items-start gap-3">
+        <img src={team.avatarUrl} alt={team.cleaner} className="h-10 w-10 flex-shrink-0 rounded-full object-cover shadow-sm" />
+        <div className="rounded-[20px] rounded-tl-md bg-indigo-100/80 p-4 flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[13px] font-extrabold text-slate-800">{team.cleaner}</span>
+            {team.deliveredAt && <span className="text-[11px] text-slate-400">{team.deliveredAt}</span>}
+          </div>
+          <div className="text-[15px] font-semibold italic leading-6 text-slate-700">"{team.cleanerSaid || "No clear ETA was provided."}"</div>
+        </div>
+      </div>
+      <AudioPlayer url={team.recordingUrl ?? null} />
+      {hasTranscript && (
+        <div className="mt-3">
+          <button
+            onClick={() => setTranscriptOpen(v => !v)}
+            className="flex w-full items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-indigo-500 hover:bg-indigo-100/60 transition-colors"
+          >
+            <span>Call transcript</span>
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
+          </button>
+          {transcriptOpen && (
+            <div className="mt-1.5 rounded-xl border border-indigo-100 bg-white/80 px-3 py-2.5 text-xs leading-relaxed text-slate-600 whitespace-pre-wrap animate-in slide-in-from-top-1 duration-150">
+              {team.transcript}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ExpandedCard — verbatim from design reference lines 215-238, data from mapped Team
 function ExpandedCard({ team }: { team: Team }) {
   const s = stateStyles[team.state];
@@ -426,20 +469,7 @@ function ExpandedCard({ team }: { team: Team }) {
         </section>
 
         {/* Cleaner Update — verbatim */}
-        <section className="rounded-[22px] border border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
-          <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.16em] text-indigo-600"><MessageCircle className="h-4 w-4" />Cleaner update</div>
-          <div className="mt-4 flex items-start gap-3">
-            <img src={team.avatarUrl} alt={team.cleaner} className="h-10 w-10 flex-shrink-0 rounded-full object-cover shadow-sm" />
-            <div className="rounded-[20px] rounded-tl-md bg-indigo-100/80 p-4 flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-[13px] font-extrabold text-slate-800">{team.cleaner}</span>
-                {team.deliveredAt && <span className="text-[11px] text-slate-400">{team.deliveredAt}</span>}
-              </div>
-              <div className="text-[15px] font-semibold italic leading-6 text-slate-700">"{team.cleanerSaid || "No clear ETA was provided."}"</div>
-            </div>
-          </div>
-          <AudioPlayer url={team.recordingUrl ?? null} />
-        </section>
+        <CleanerUpdatePanel team={team} />
 
         {/* Customer Notified — verbatim */}
         <section className="rounded-[22px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
