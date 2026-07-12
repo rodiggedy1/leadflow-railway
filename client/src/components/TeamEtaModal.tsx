@@ -279,7 +279,7 @@ function Timeline({ team }: { team: Team }) {
       <div className="relative flex items-end justify-between gap-6">
 
         {/* Track line — runs behind everything, positioned at the van/dot level */}
-        <div className="pointer-events-none absolute inset-x-0" style={{ bottom: 36 }}>
+        <div className="pointer-events-none absolute inset-x-0" style={{ bottom: 60 }}>
           {/* Grey background */}
           <div className="absolute inset-x-0 h-[3px] rounded-full bg-slate-200" />
           {/* Green completed portion */}
