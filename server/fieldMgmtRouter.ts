@@ -1513,6 +1513,7 @@ export const fieldMgmtRouter = router({
           etaSource: cleanerJobs.etaSource,
           etaCallFiredAt: cleanerJobs.etaCallFiredAt,
           cleanerProfileId: cleanerJobs.cleanerProfileId,
+          completedAt: cleanerJobs.completedAt,
         })
         .from(cleanerJobs)
         .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
@@ -1656,7 +1657,7 @@ export const fieldMgmtRouter = router({
           currentJobServiceDateTime: currentJob.serviceDateTime,
           currentJobStatus: currentJob.jobStatus,
           arrivedAt: arrivedAtByJob.get(currentJob.id) ?? null,
-          completedAt: completedAtByJob.get(currentJob.id) ?? null,
+          completedAt: completedAtByJob.get(currentJob.id) ?? currentJob.completedAt ?? null,
           etaCall: etaCard ? {
             step: etaCard.meta.step ?? null,
             resultType: etaCard.meta.resultType,
@@ -1680,7 +1681,7 @@ export const fieldMgmtRouter = router({
               jobStatus: j.jobStatus,
               delayMinutes: j.delayMinutes ?? 0,
               arrivedAt: arrivedAtByJob.get(j.id) ?? null,
-              completedAt: completedAtByJob.get(j.id) ?? null,
+              completedAt: completedAtByJob.get(j.id) ?? j.completedAt ?? null,
               etaCall: jobCard ? {
                 step: jobCard.meta.step ?? null,
                 resultType: jobCard.meta.resultType,
