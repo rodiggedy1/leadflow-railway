@@ -438,7 +438,7 @@ function Timeline({ team }: { team: Team }) {
                 {done ? "Completed" : "Upcoming"}
               </div>
               {done && job.completedAt && (
-                <div className="text-[11px] font-semibold text-slate-500">{job.completedAt}</div>
+                <div className="text-[11px] font-semibold text-emerald-500">{job.completedAt}</div>
               )}
             </div>
           );
