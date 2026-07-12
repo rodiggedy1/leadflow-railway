@@ -35,6 +35,7 @@ type Job = {
   city: string;
   address: string;
   scheduled: string;
+  completedAt?: string;
   eta?: string;
   status: JobStatus;
 };
@@ -197,6 +198,7 @@ function mapTeam(t: {
       address: j.jobAddress ?? "—",
       city: j.jobAddress?.split(",").slice(-2, -1)[0]?.trim() ?? j.jobAddress ?? "—",
       scheduled: formatTime(j.serviceDateTime),
+      completedAt: j.completedAt ? formatTime(j.completedAt) : undefined,
       eta: j.etaCall?.etaTimeStr ?? undefined,
       status,
     };
@@ -431,7 +433,7 @@ function Timeline({ team }: { team: Team }) {
                 )}
               </div>
               {/* Time + status below */}
-              <div className="mt-4 text-sm font-extrabold text-slate-800">{job.scheduled}</div>
+              <div className="mt-4 text-sm font-extrabold text-slate-800">{done && job.completedAt ? job.completedAt : job.scheduled}</div>
               <div className={`text-[11px] font-semibold ${done ? "text-emerald-500" : "text-slate-400"}`}>
                 {done ? "Completed" : "Upcoming"}
               </div>
