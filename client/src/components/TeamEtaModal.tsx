@@ -313,9 +313,7 @@ function Timeline({ team }: { team: Team }) {
                     </div>
                   )}
                   <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
-                  {(job.eta || team.eta) && job.scheduled && (
-                    <div className="mt-2 border-t border-slate-100 pt-1.5 text-[11px] text-slate-400">Scheduled: {job.scheduled}</div>
-                  )}
+
                 </div>
                 {/* Van image with hover tooltip */}
                 <div className="group relative">
