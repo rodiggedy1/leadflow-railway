@@ -25,8 +25,8 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
-// ─── Design-reference types (verbatim) ────────────────────────────────────────
-type TeamState = "on_time" | "late" | "critical" | "unclear" | "no_answer";
+// ─── Design-reference types ──────────────────────────────────────────────────
+type TeamState = "on_time" | "late" | "critical" | "unclear" | "no_answer" | "arrived" | "in_progress" | "finishing_up" | "wrapping_up" | "issue_at_property" | "completed";
 type JobStatus = "completed" | "current" | "upcoming";
 
 type Job = {
@@ -57,17 +57,25 @@ type Team = {
   customerMessage?: string;
   deliveredAt?: string;
   finishBy?: string;
+  arrivedAt?: string;   // formatted time cleaner arrived at current job
+  completedAt?: string; // formatted time cleaner completed current job
   jobs: Job[];
 };
 
-// ─── Design-reference stateStyles (verbatim) ──────────────────────────────────
-const stateStyles = {
-  on_time:   { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Cruising" },
-  late:      { accent: "#F97316", soft: "#FFF7ED", text: "#C2410C", border: "#FED7AA", label: "Running Behind" },
-  critical:  { accent: "#EF4444", soft: "#FFF1F2", text: "#BE123C", border: "#FECDD3", label: "Needs Attention" },
-  unclear:   { accent: "#7C5CFC", soft: "#F7F5FF", text: "#5B3FD6", border: "#DDD6FE", label: "Waiting on ETA" },
-  no_answer: { accent: "#3B82F6", soft: "#F2F7FF", text: "#1D4ED8", border: "#BFDBFE", label: "No Answer" },
-} satisfies Record<TeamState, { accent: string; soft: string; text: string; border: string; label: string }>;
+// ─── State styles ─────────────────────────────────────────────────────────────
+const stateStyles: Record<TeamState, { accent: string; soft: string; text: string; border: string; label: string }> = {
+  on_time:           { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Cruising" },
+  late:              { accent: "#F97316", soft: "#FFF7ED", text: "#C2410C", border: "#FED7AA", label: "Running Behind" },
+  critical:          { accent: "#EF4444", soft: "#FFF1F2", text: "#BE123C", border: "#FECDD3", label: "Needs Attention" },
+  unclear:           { accent: "#7C5CFC", soft: "#F7F5FF", text: "#5B3FD6", border: "#DDD6FE", label: "Waiting on ETA" },
+  no_answer:         { accent: "#3B82F6", soft: "#F2F7FF", text: "#1D4ED8", border: "#BFDBFE", label: "No Answer" },
+  arrived:           { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Arrived" },
+  in_progress:       { accent: "#7C3AED", soft: "#F5F3FF", text: "#5B21B6", border: "#DDD6FE", label: "In Progress" },
+  finishing_up:      { accent: "#4F46E5", soft: "#EEF2FF", text: "#3730A3", border: "#C7D2FE", label: "Finishing Up" },
+  wrapping_up:       { accent: "#4F46E5", soft: "#EEF2FF", text: "#3730A3", border: "#C7D2FE", label: "Wrapping Up" },
+  issue_at_property: { accent: "#EF4444", soft: "#FFF1F2", text: "#BE123C", border: "#FECDD3", label: "Issue at Property" },
+  completed:         { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Completed" },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getTodayDate(): string {
@@ -88,13 +96,29 @@ function getInitials(name: string): string {
   return name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
-// ─── Map server EtaStatus → design TeamState ──────────────────────────────────
-function toTeamState(s: string, delayMinutes: number): TeamState {
-  if (s === "unclear") return "unclear";
-  if (s === "no_answer") return "no_answer";
-  if (s === "on_time" || s === "early") return "on_time";
-  if (s === "running_late") return delayMinutes >= 30 ? "critical" : "late";
-  return "on_time";
+// ─── Map server EtaStatus + jobStatus → design TeamState ─────────────────────
+// etaStatus: result from ETA call ("on_time", "running_late", "unclear", "no_answer", "early", "pending")
+// currentJobStatus: raw DB value from cleaner's app ("on_the_way", "arrived", "in_progress", etc.)
+function toTeamState(etaStatus: string, delayMinutes: number, currentJobStatus?: string | null): TeamState {
+  // issue_at_property always wins
+  if (currentJobStatus === "issue_at_property") return "issue_at_property";
+
+  // ETA call gave a real result — use it
+  if (etaStatus === "unclear")  return "unclear";
+  if (etaStatus === "no_answer") return "no_answer";
+  if (etaStatus === "on_time" || etaStatus === "early") return "on_time";
+  if (etaStatus === "running_late") return delayMinutes >= 30 ? "critical" : "late";
+
+  // etaStatus is "pending" — derive from job status
+  if (currentJobStatus === "arrived")      return "arrived";
+  if (currentJobStatus === "in_progress")  return "in_progress";
+  if (currentJobStatus === "finishing_up") return "finishing_up";
+  if (currentJobStatus === "wrapping_up")  return "wrapping_up";
+  if (currentJobStatus === "completed")    return "completed";
+  if (currentJobStatus === "on_the_way")   return "unclear"; // en route, no ETA call yet
+  if (currentJobStatus === "running_late") return delayMinutes >= 30 ? "critical" : "late";
+
+  return "on_time"; // default (assigned, not yet moving)
 }
 
 // ─── Map server data → design Team shape ──────────────────────────────────────
@@ -144,9 +168,13 @@ function mapTeam(t: {
     } | null;
   }[];
 }): Team {
-  const state = toTeamState(t.etaStatus, t.delayMinutes);
-  const etaStr = t.etaCall?.etaTimeStr ?? formatTime(t.currentJobServiceDateTime);
-  const statusLabel = t.delayMinutes > 0
+  const currentJobStatus = t.currentJobStatus ?? null;
+  const state = toTeamState(t.etaStatus, t.delayMinutes, currentJobStatus);
+  // For at-property statuses, don't show scheduled time as ETA — it's misleading.
+  const atProperty = ["arrived", "in_progress", "finishing_up", "wrapping_up", "completed"].includes(currentJobStatus ?? "");
+  const etaStr = t.etaCall?.etaTimeStr ?? (atProperty ? undefined : formatTime(t.currentJobServiceDateTime));
+  // statusLabel: use delay info when running late, otherwise use the state's label.
+  const statusLabel = t.delayMinutes > 0 && !atProperty
     ? `Running ${t.delayMinutes} min late`
     : stateStyles[state].label;
 
@@ -195,6 +223,8 @@ function mapTeam(t: {
     finishBy: t.jobs[t.jobs.length - 1]?.serviceDateTime
       ? formatTime(t.jobs[t.jobs.length - 1].serviceDateTime)
       : "Unknown",
+    arrivedAt: t.arrivedAt ? formatTime(t.arrivedAt) : undefined,
+    completedAt: t.completedAt ? formatTime(t.completedAt) : undefined,
     jobs,
   };
 }
@@ -307,11 +337,34 @@ function Timeline({ team }: { team: Team }) {
                 {/* Floating white card above the van */}
                 <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
                   <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
-                  {(job.eta || team.eta) && (
+                  {/* Time row: show ETA for on_the_way, arrivedAt for arrived/in_progress, completedAt for completed, nothing for others */}
+                  {(team.state === "unclear" || team.state === "no_answer") && (
                     <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
                   )}
-                  <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "No ETA"}</div>
-                  {team.distance && (
+                  {(team.state === "unclear" || team.state === "no_answer") && (
+                    <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>
+                      {team.state === "unclear" ? (job.eta || team.eta || "Waiting on ETA") : "No Answer"}
+                    </div>
+                  )}
+                  {(team.state === "on_time" || team.state === "late" || team.state === "critical") && (
+                    <>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
+                      <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "—"}</div>
+                    </>
+                  )}
+                  {(team.state === "arrived" || team.state === "in_progress") && team.arrivedAt && (
+                    <>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ARRIVED</div>
+                      <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{team.arrivedAt}</div>
+                    </>
+                  )}
+                  {team.state === "completed" && team.completedAt && (
+                    <>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">COMPLETED</div>
+                      <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{team.completedAt}</div>
+                    </>
+                  )}
+                  {team.distance && (team.state === "on_time" || team.state === "late" || team.state === "critical") && (
                     <div className="mt-0.5 flex items-center justify-center gap-1 text-xs text-slate-500">
                       <CarFront className="h-3.5 w-3.5" />
                       <span>{team.distance}</span>
@@ -460,7 +513,15 @@ function ExpandedCard({ team }: { team: Team }) {
         {/* ETA & Status — verbatim */}
         <section className="rounded-[22px] border p-5" style={{ background: s.soft, borderColor: s.border }}>
           <div className="text-[11px] font-extrabold uppercase tracking-[0.16em]" style={{ color: s.text }}>ETA &amp; status</div>
-          <div className="mt-4 text-[40px] font-black tracking-[-0.05em]" style={{ color: s.text }}>{team.eta || "—"}</div>
+          <div className="mt-4 text-[40px] font-black tracking-[-0.05em]" style={{ color: s.text }}>
+            {(team.state === "arrived" || team.state === "in_progress") && team.arrivedAt
+              ? team.arrivedAt
+              : team.state === "completed" && team.completedAt
+              ? team.completedAt
+              : (team.state === "finishing_up" || team.state === "wrapping_up" || team.state === "issue_at_property")
+              ? "—"
+              : team.eta || "—"}
+          </div>
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border bg-white/70 px-3 py-1.5 text-xs font-bold" style={{ borderColor: s.border, color: s.text }}><Clock3 className="h-3.5 w-3.5" />{team.statusLabel}</div>
           <div className="mt-6 grid grid-cols-2 gap-4 border-t pt-4 text-sm" style={{ borderColor: s.border }}>
             <div><div className="text-xs text-slate-400">Scheduled</div><div className="mt-1 font-bold">{team.jobs.find(j => j.status === "current")?.scheduled || "—"}</div></div>
