@@ -60,6 +60,7 @@ type Team = {
   finishBy?: string;
   arrivedAt?: string;   // formatted time cleaner arrived at current job
   completedAt?: string; // formatted time cleaner completed current job
+  currentJobId?: number;
   jobs: Job[];
 };
 
@@ -226,6 +227,7 @@ function mapTeam(t: {
       : "Unknown",
     arrivedAt: t.arrivedAt ? formatTime(t.arrivedAt) : undefined,
     completedAt: t.completedAt ? formatTime(t.completedAt) : undefined,
+    currentJobId: t.currentJobId,
     jobs,
   };
 }
@@ -519,6 +521,37 @@ function CleanerUpdatePanel({ team }: { team: Team }) {
   );
 }
 
+// ExpandedCardFooter — footer with Request New ETA button
+function ExpandedCardFooter({ team, s }: { team: Team; s: { text: string } }) {
+  const utils = trpc.useUtils();
+  const requestEta = trpc.fieldMgmt.requestEta.useMutation({
+    onSuccess: () => {
+      void utils.fieldMgmt.getTeamEtaSummary.invalidate();
+    },
+  });
+
+  return (
+    <div className="flex items-center justify-between border-t border-slate-100 bg-white px-5 py-3">
+      <div className="text-sm font-semibold" style={{ color: s.text }}>
+        {team.finishBy === "Unknown" ? "Final route completion is still unclear" : `Projected to finish by ${team.finishBy}`}
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => {
+            if (!team.currentJobId) return;
+            requestEta.mutate({ cleanerJobId: team.currentJobId });
+          }}
+          disabled={requestEta.isPending || !team.currentJobId}
+          className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-4 text-sm font-bold text-white shadow-lg shadow-orange-100 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          <Phone className="h-4 w-4" />
+          {requestEta.isPending ? "Calling..." : requestEta.isSuccess ? "Call placed ✓" : "Request New ETA"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ExpandedCard — verbatim from design reference lines 215-238, data from mapped Team
 function ExpandedCard({ team }: { team: Team }) {
   const s = stateStyles[team.state];
@@ -570,14 +603,8 @@ function ExpandedCard({ team }: { team: Team }) {
         </section>
       </div>
 
-      {/* Footer — verbatim */}
-      <div className="flex items-center justify-between border-t border-slate-100 bg-white px-5 py-3">
-        <div className="text-sm font-semibold" style={{ color: s.text }}>{team.finishBy === "Unknown" ? "Final route completion is still unclear" : `Projected to finish by ${team.finishBy}`}</div>
-        <div className="flex items-center gap-2">
-          <button className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-4 text-sm font-bold"><Phone className="h-4 w-4" /> Call cleaner</button>
-          <button className="inline-flex h-10 items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-rose-500 px-4 text-sm font-bold text-white shadow-lg shadow-orange-100"><Send className="h-4 w-4" /> Send update</button>
-        </div>
-      </div>
+      {/* Footer */}
+      <ExpandedCardFooter team={team} s={s} />
     </article>
   );
 }

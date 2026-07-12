@@ -2508,11 +2508,12 @@ export async function placeEtaCall(params: {
   cleanerFirstName: string;
   customerFirstName: string;
   scheduledTimeET: string; // e.g. "1:00 PM"
+  bypassStepLock?: boolean;
 }): Promise<{ success: boolean; vapiCallId?: string; reason?: string }> {
   if (!FIELD_MGMT_ENABLED) return { success: false, reason: "Field management kill switch is off" };
   if (!ENV.vapiPrivateKey) return { success: false, reason: "VAPI_PRIVATE_KEY not configured" };
 
-  const { cleanerJobId, step, cleanerPhone, cleanerFirstName, customerFirstName, scheduledTimeET } = params;
+  const { cleanerJobId, step, cleanerPhone, cleanerFirstName, customerFirstName, scheduledTimeET, bypassStepLock } = params;
 
   // ── Self-call protection ──────────────────────────────────────────────────
   const normalizedTarget = normalizePhoneLegacy(cleanerPhone.trim());
@@ -2531,7 +2532,7 @@ export async function placeEtaCall(params: {
     .from(stepLocks)
     .where(and(eq(stepLocks.cleanerJobId, cleanerJobId), eq(stepLocks.step, step)))
     .limit(1);
-  if (existingLock.length > 0) {
+  if (existingLock.length > 0 && !bypassStepLock) {
     console.log(`[EtaEngine] Step ${step} already claimed for job ${cleanerJobId} — skipping`);
     return { success: false, reason: "Step already claimed" };
   }

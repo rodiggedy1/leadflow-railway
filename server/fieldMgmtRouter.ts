@@ -31,6 +31,7 @@ import {
   recordStep,
   placeNoCheckinEscalationCall,
   placeNoCheckinEscalationCallWithReason,
+  placeEtaCall,
 } from "./fieldMgmtEngine";
 
 // ── Test override phone ───────────────────────────────────────────────────────
@@ -1700,6 +1701,54 @@ export const fieldMgmtRouter = router({
       });
 
       return result;
+    }),
+
+  /**
+   * Manually trigger an ETA call for the current job of a team.
+   * Bypasses step locks since this is an intentional manual request.
+   */
+  requestEta: agentProcedure
+    .input(z.object({ cleanerJobId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Fetch job + cleaner info
+      const [row] = await db
+        .select({
+          id: cleanerJobs.id,
+          customerName: cleanerJobs.customerName,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          cleanerPhone: cleanerProfiles.phone,
+          cleanerName: cleanerJobs.cleanerName,
+        })
+        .from(cleanerJobs)
+        .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+        .where(eq(cleanerJobs.id, input.cleanerJobId))
+        .limit(1);
+
+      if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
+      if (!row.cleanerPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "No phone number for cleaner" });
+
+      const cleanerFirstName = (row.cleanerName ?? "Team").split(" ")[0];
+      const customerFirstName = (row.customerName ?? "the customer").split(" ")[0];
+      const scheduledTimeET = row.serviceDateTime ? formatTimeET(row.serviceDateTime) : "your scheduled time";
+
+      const result = await placeEtaCall({
+        cleanerJobId: input.cleanerJobId,
+        step: "eta_call_1",
+        cleanerPhone: row.cleanerPhone,
+        cleanerFirstName,
+        customerFirstName,
+        scheduledTimeET,
+        bypassStepLock: true,
+      });
+
+      if (!result.success) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.reason ?? "ETA call failed" });
+      }
+
+      return { success: true, vapiCallId: result.vapiCallId };
     }),
 
   /**
