@@ -272,71 +272,74 @@ function Timeline({ team }: { team: Team }) {
   const currentIndex = Math.max(0, team.jobs.findIndex((j) => j.status === "current"));
   const progress = team.jobs.length <= 1 ? 0 : (currentIndex / (team.jobs.length - 1)) * 100;
   const jobCount = team.jobs.length;
+  const colStyle: React.CSSProperties = { flex: "1 1 0", minWidth: 140 };
 
   return (
-    <div className="relative min-w-0 flex-1 px-4 py-2">
-      {/* Single flex row — each column is a stop */}
-      <div className="relative flex items-end justify-between gap-6">
-
-        {/* Track line — runs behind everything, positioned at the van/dot level */}
-        <div className="pointer-events-none absolute inset-x-0" style={{ bottom: 72 }}>
-          {/* Grey background */}
-          <div className="absolute inset-x-0 h-[3px] rounded-full bg-slate-200" />
-          {/* Green completed portion */}
-          <div
-            className="absolute left-0 h-[3px] rounded-full"
-            style={{ width: `${Math.max(progress, 2)}%`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }}
-          />
-        </div>
-
+    <div className="min-w-0 flex-1 px-4">
+      {/* ROW 1: Houses / van card */}
+      <div className="flex justify-between gap-6">
         {team.jobs.map((job, idx) => {
           const current = job.status === "current";
           const done = job.status === "completed";
-          const pct = jobCount <= 1 ? 50 : (idx / (jobCount - 1)) * 100;
-
-          if (current) {
-            return (
-              <div key={job.id} className="relative z-20 flex flex-col items-center" style={{ flex: "1 1 0", minWidth: 150 }}>
-                {/* Floating white card above the van */}
-                <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
-                  <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
-                  <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "Checking…"}</div>
-                  {team.distance && (
-                    <div className="mt-0.5 flex items-center justify-center gap-1 text-xs text-slate-500">
-                      <CarFront className="h-3.5 w-3.5" />
-                      <span>{team.distance}</span>
-                    </div>
-                  )}
-                  <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
-                </div>
-                {/* Van image — no circle, no border, no box */}
-                <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
-                {/* Time + status below — no dot */}
-                <div style={{ marginTop: 12 }} className="text-sm font-extrabold text-slate-800">{job.eta || team.eta || "Checking…"}</div>
-                <div className="mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</div>
-              </div>
-            );
-          }
-
           return (
-            <div key={job.id} className="relative z-10 flex flex-col items-center" style={{ flex: "1 1 0", minWidth: 150 }}>
-              {/* House image */}
-              <HouseIcon idx={idx} completed={done} muted={!done} />
-              {/* Dot on track */}
-              <div className="relative z-10 mt-1">
-                {done ? (
-                  <span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white shadow">
-                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                  </span>
-                ) : (
-                  <span className="block h-3 w-3 rounded-full border-2 border-slate-300 bg-white" />
-                )}
+            <div key={job.id} className="flex flex-col items-center" style={colStyle}>
+              {current ? (
+                <>
+                  <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
+                    <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
+                    <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "Checking…"}</div>
+                    {team.distance && (
+                      <div className="mt-0.5 flex items-center justify-center gap-1 text-xs text-slate-500">
+                        <CarFront className="h-3.5 w-3.5" /><span>{team.distance}</span>
+                      </div>
+                    )}
+                    <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
+                  </div>
+                  <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" />
+                </>
+              ) : (
+                <HouseIcon idx={idx} completed={done} muted={!done} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ROW 2: Track line + dots — explicit height so labels always sit below */}
+      <div className="relative mx-2 mt-2" style={{ height: 28 }}>
+        <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-slate-200" />
+        <div className="absolute left-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
+          style={{ width: `${Math.max(progress, 2)}%`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }} />
+        {team.jobs.map((job, idx) => {
+          const done = job.status === "completed";
+          const current = job.status === "current";
+          const pct = jobCount <= 1 ? 50 : (idx / (jobCount - 1)) * 100;
+          return (
+            <div key={job.id} className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2" style={{ left: `${pct}%` }}>
+              {done
+                ? <span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white shadow"><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>
+                : current
+                  ? <span className="block h-4 w-4 rounded-full border-[3px] bg-white" style={{ borderColor: s.accent }} />
+                  : <span className="block h-3 w-3 rounded-full border-2 border-slate-300 bg-white" />}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ROW 3: Labels — always below the track row */}
+      <div className="mt-3 flex justify-between gap-6">
+        {team.jobs.map((job, idx) => {
+          const current = job.status === "current";
+          const done = job.status === "completed";
+          return (
+            <div key={job.id} className="flex flex-col items-center text-center" style={colStyle}>
+              <div className="text-sm font-extrabold text-slate-800">
+                {current ? (job.eta || team.eta || "Checking…") : job.scheduled}
               </div>
-              {/* Time + status below */}
-              <div style={{ marginTop: 12 }} className="text-sm font-extrabold text-slate-800">{job.scheduled}</div>
-              <div style={{ marginTop: 2 }} className={`text-[11px] font-semibold ${done ? "text-emerald-500" : "text-slate-400"}`}>
-                {done ? "Completed" : "Upcoming"}
-              </div>
+              {current
+                ? <div className="mt-1 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</div>
+                : <div className={`mt-0.5 text-[11px] font-semibold ${done ? "text-emerald-500" : "text-slate-400"}`}>{done ? "Completed" : "Upcoming"}</div>
+              }
             </div>
           );
         })}
