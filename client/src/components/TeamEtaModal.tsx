@@ -207,9 +207,9 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
   // Displayed ETA call — from selected job if one is clicked, otherwise from current job
   const displayedEtaCall = selectedJob?.etaCall ?? team.etaCall;
-  const displayedJobStatus = selectedJob?.jobStatus ?? team.currentJobStatus;
-  const displayedArrivedAt = selectedJob?.arrivedAt ?? team.arrivedAt;
-  const displayedCompletedAt = selectedJob?.completedAt ?? team.completedAt;
+  const displayedJobStatus = selectedJob !== null ? (selectedJob?.jobStatus ?? null) : team.currentJobStatus;
+  const displayedArrivedAt = selectedJob !== null ? (selectedJob?.arrivedAt ?? null) : team.arrivedAt;
+  const displayedCompletedAt = selectedJob !== null ? (selectedJob?.completedAt ?? null) : team.completedAt;
   const displayedCustomerName = selectedJob?.customerName ?? null;
 
   // Cleaner statement from the displayed call
