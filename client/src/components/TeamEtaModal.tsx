@@ -433,10 +433,13 @@ function Timeline({ team }: { team: Team }) {
                 )}
               </div>
               {/* Time + status below */}
-              <div className="mt-4 text-sm font-extrabold text-slate-800">{done && job.completedAt ? job.completedAt : job.scheduled}</div>
+              <div className="mt-4 text-sm font-extrabold text-slate-800">{job.scheduled}</div>
               <div className={`text-[11px] font-semibold ${done ? "text-emerald-500" : "text-slate-400"}`}>
                 {done ? "Completed" : "Upcoming"}
               </div>
+              {done && job.completedAt && (
+                <div className="text-[11px] font-semibold text-slate-500">{job.completedAt}</div>
+              )}
             </div>
           );
         })}
