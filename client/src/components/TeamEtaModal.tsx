@@ -293,11 +293,9 @@ function Timeline({ team }: { team: Team }) {
                   )}
                   <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
                 </div>
-                {/* Van image — no circle, no border */}
-                <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain drop-shadow-md" />
-                {/* Dot on track */}
-                <div className="mt-[-4px] h-4 w-4 rounded-full border-[3px] bg-white" style={{ borderColor: s.accent }} />
-                {/* Time + status below */}
+                {/* Van image — no circle, no border, no box */}
+                <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
+                {/* Time + status below — no dot */}
                 <div className="mt-1 text-sm font-extrabold text-slate-800">{job.eta || team.eta || "Checking…"}</div>
                 <div className="mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</div>
               </div>
