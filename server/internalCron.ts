@@ -179,6 +179,12 @@ export function startInternalCron(): void {
     return;
   }
   _cronStarted = true;
+
+  // ── Kill switch: set CRON_DISABLED=true in Railway env vars to stop all cron jobs ──
+  if (process.env.CRON_DISABLED === "true") {
+    console.warn("[InternalCron] CRON_DISABLED=true — all cron jobs are OFF");
+    return;
+  }
   // One-time cleanup: remove all escalation_nudge messages (feature disabled)
   purgeEscalationNudges().catch(() => {});
   // ── Nurture enrollment: every 5 minutes ────────────────────────────────────
