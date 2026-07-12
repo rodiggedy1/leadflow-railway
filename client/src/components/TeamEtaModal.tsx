@@ -100,25 +100,24 @@ function getInitials(name: string): string {
 // etaStatus: result from ETA call ("on_time", "running_late", "unclear", "no_answer", "early", "pending")
 // currentJobStatus: raw DB value from cleaner's app ("on_the_way", "arrived", "in_progress", etc.)
 function toTeamState(etaStatus: string, delayMinutes: number, currentJobStatus?: string | null): TeamState {
-  // issue_at_property always wins
+  // Job status always wins
   if (currentJobStatus === "issue_at_property") return "issue_at_property";
+  if (currentJobStatus === "arrived")           return "arrived";
+  if (currentJobStatus === "in_progress")       return "in_progress";
+  if (currentJobStatus === "finishing_up")      return "finishing_up";
+  if (currentJobStatus === "wrapping_up")       return "wrapping_up";
+  if (currentJobStatus === "completed")         return "completed";
 
-  // ETA call gave a real result — use it
-  if (etaStatus === "unclear")  return "unclear";
-  if (etaStatus === "no_answer") return "no_answer";
+  // ETA call result (only used when cleaner is still on the way)
+  if (etaStatus === "unclear")                          return "unclear";
+  if (etaStatus === "no_answer")                        return "no_answer";
   if (etaStatus === "on_time" || etaStatus === "early") return "on_time";
-  if (etaStatus === "running_late") return delayMinutes >= 30 ? "critical" : "late";
+  if (etaStatus === "running_late")                     return delayMinutes >= 30 ? "critical" : "late";
 
-  // etaStatus is "pending" — derive from job status
-  if (currentJobStatus === "arrived")      return "arrived";
-  if (currentJobStatus === "in_progress")  return "in_progress";
-  if (currentJobStatus === "finishing_up") return "finishing_up";
-  if (currentJobStatus === "wrapping_up")  return "wrapping_up";
-  if (currentJobStatus === "completed")    return "completed";
-  if (currentJobStatus === "on_the_way")   return "unclear"; // en route, no ETA call yet
-  if (currentJobStatus === "running_late") return delayMinutes >= 30 ? "critical" : "late";
+  // on_the_way with no ETA call yet
+  if (currentJobStatus === "on_the_way") return "unclear";
 
-  return "on_time"; // default (assigned, not yet moving)
+  return "on_time";
 }
 
 // ─── Map server data → design Team shape ──────────────────────────────────────
