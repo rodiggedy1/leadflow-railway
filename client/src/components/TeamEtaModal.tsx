@@ -41,6 +41,7 @@ type Team = {
   id: string;
   name: string;
   initials: string;
+  avatarUrl: string;
   cleaner: string;
   jobsToday: number;
   state: TeamState;
@@ -173,6 +174,7 @@ function mapTeam(t: {
     id: t.teamName,
     name: t.teamName,
     initials: getInitials(t.teamName),
+    avatarUrl: "", // set after mapping with index
     cleaner: t.cleanerName,
     jobsToday: t.jobs.length,
     state,
@@ -191,6 +193,20 @@ function mapTeam(t: {
 }
 
 // ─── Design-reference sub-components (verbatim JSX) ───────────────────────────
+
+// Team avatar images — 10 Latin women profile pictures
+const AVATAR_IMGS = [
+  "/avatar-1.png",
+  "/avatar-2.png",
+  "/avatar-3.png",
+  "/avatar-4.png",
+  "/avatar-5.png",
+  "/avatar-6.png",
+  "/avatar-7.png",
+  "/avatar-8.png",
+  "/avatar-9.png",
+  "/avatar-10.png",
+];
 
 // House images — user-provided, in order: green, navy, brown, purple
 const HOUSE_IMGS = [
@@ -368,7 +384,7 @@ function ExpandedCard({ team }: { team: Team }) {
       <div className="grid grid-cols-[250px_minmax(0,1fr)_110px] gap-2 border-b border-slate-100 px-5 py-5">
         <div className="relative border-r border-slate-100 pr-5">
           <div className="absolute -left-5 -top-5 h-[calc(100%+40px)] w-1 rounded-r-full" style={{ background: s.accent }} />
-          <div className="flex items-center gap-3"><div className="grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-lg font-extrabold text-slate-600">{team.initials}</div><div><h3 className="text-xl font-extrabold tracking-[-0.03em]">{team.name}</h3><span className="mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs font-bold" style={{ background: s.soft, borderColor: s.border, color: s.text }}>{s.label}</span></div></div>
+          <div className="flex items-center gap-3"><div className="h-16 w-16 overflow-hidden rounded-full border-2 border-slate-200 shadow-sm"><img src={team.avatarUrl} alt={team.name} className="h-full w-full object-cover" /></div><div><h3 className="text-xl font-extrabold tracking-[-0.03em]">{team.name}</h3><span className="mt-1 inline-flex rounded-full border px-2.5 py-1 text-xs font-bold" style={{ background: s.soft, borderColor: s.border, color: s.text }}>{s.label}</span></div></div>
           <div className="mt-5 space-y-2 text-sm text-slate-500"><div className="flex items-center gap-2"><Users className="h-4 w-4" /> {team.jobsToday} jobs today</div><div className="flex items-center gap-2"><CarFront className="h-4 w-4" /> {team.cleaner}</div></div>
         </div>
         <Timeline team={team} />
@@ -417,7 +433,7 @@ function ExpandedCard({ team }: { team: Team }) {
 // CollapsedRow — verbatim from design reference lines 240-243
 function CollapsedRow({ team, onClick }: { team: Team; onClick: () => void }) {
   const s = stateStyles[team.state];
-  return <button onClick={onClick} className="grid w-full grid-cols-[260px_minmax(0,1fr)_90px_36px] items-center gap-4 rounded-[22px] border border-slate-200/80 bg-white px-4 py-3 text-left shadow-[0_7px_22px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 font-extrabold text-slate-600">{team.initials}</div><div><div className="font-extrabold">{team.name}</div><span className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</span></div></div><div className="flex min-w-0 items-center">{team.jobs.map((job, idx)=><React.Fragment key={job.id}><div className="flex min-w-[76px] flex-col items-center">{job.status === "current" ? <div className="grid h-9 w-9 place-items-center rounded-full border-4 bg-white" style={{ borderColor: s.accent }}>{team.state === "unclear" ? <PhoneMissed className="h-4 w-4" style={{ color: s.accent }} /> : <CarFront className="h-4 w-4" style={{ color: s.accent }} />}</div> : <HouseIcon idx={idx} muted={job.status === "upcoming"} completed={job.status === "completed"} />}<div className="mt-1 text-[10px] font-bold text-slate-500">{job.status === "current" ? (job.eta || "Checking") : job.scheduled}</div></div>{idx < team.jobs.length - 1 && <div className="mx-1 h-[2px] min-w-[28px] flex-1 rounded-full" style={{ background: idx < team.jobs.findIndex((j)=>j.status === "current") ? s.accent : "#D9DEE7" }} />}</React.Fragment>)}</div><ConfidenceRing value={team.confidence || 0} color={s.accent} /><ChevronRight className="h-5 w-5 text-slate-400" /></button>;
+  return <button onClick={onClick} className="grid w-full grid-cols-[260px_minmax(0,1fr)_90px_36px] items-center gap-4 rounded-[22px] border border-slate-200/80 bg-white px-4 py-3 text-left shadow-[0_7px_22px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"><div className="flex items-center gap-3"><div className="h-11 w-11 overflow-hidden rounded-full border border-slate-200"><img src={team.avatarUrl} alt={team.name} className="h-full w-full object-cover" /></div><div><div className="font-extrabold">{team.name}</div><span className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</span></div></div><div className="flex min-w-0 items-center">{team.jobs.map((job, idx)=><React.Fragment key={job.id}><div className="flex min-w-[76px] flex-col items-center">{job.status === "current" ? <div className="grid h-9 w-9 place-items-center rounded-full border-4 bg-white" style={{ borderColor: s.accent }}>{team.state === "unclear" ? <PhoneMissed className="h-4 w-4" style={{ color: s.accent }} /> : <CarFront className="h-4 w-4" style={{ color: s.accent }} />}</div> : <HouseIcon idx={idx} muted={job.status === "upcoming"} completed={job.status === "completed"} />}<div className="mt-1 text-[10px] font-bold text-slate-500">{job.status === "current" ? (job.eta || "Checking") : job.scheduled}</div></div>{idx < team.jobs.length - 1 && <div className="mx-1 h-[2px] min-w-[28px] flex-1 rounded-full" style={{ background: idx < team.jobs.findIndex((j)=>j.status === "current") ? s.accent : "#D9DEE7" }} />}</React.Fragment>)}</div><ConfidenceRing value={team.confidence || 0} color={s.accent} /><ChevronRight className="h-5 w-5 text-slate-400" /></button>;
 }
 
 // ─── Main modal — verbatim shell, data from tRPC ──────────────────────────────
@@ -435,7 +451,7 @@ export function TeamEtaModal({ open, onClose }: TeamEtaModalProps) {
     { enabled: open, refetchInterval: open ? 60_000 : false }
   );
 
-  const teams: Team[] = useMemo(() => (rawTeams ?? []).map(mapTeam), [rawTeams]);
+  const teams: Team[] = useMemo(() => (rawTeams ?? []).map((t, i) => ({ ...mapTeam(t), avatarUrl: AVATAR_IMGS[i % AVATAR_IMGS.length] })), [rawTeams]);
   const active = teams.find(t => t.id === activeId) ?? teams[0];
 
   const counts = useMemo(() => ({
@@ -487,7 +503,7 @@ export function TeamEtaModal({ open, onClose }: TeamEtaModalProps) {
               <button className="inline-flex h-10 items-center gap-2 rounded-full bg-slate-950 px-4 text-sm font-bold text-white"><Users className="h-4 w-4" /> All Teams <span className="text-white/60">{teams.length}</span></button>
               {teams.map(team => (
                 <button key={team.id} onClick={() => setActiveId(team.id)} className={`inline-flex h-10 items-center gap-2 rounded-full border px-3 text-sm font-bold transition ${active?.id === team.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}>
-                  <span className={`grid h-6 w-6 place-items-center rounded-full text-[10px] ${active?.id === team.id ? "bg-white/15 text-white" : "bg-slate-100 text-slate-500"}`}>{team.initials}</span>
+                  <span className="h-6 w-6 overflow-hidden rounded-full border border-white/30"><img src={team.avatarUrl} alt={team.name} className="h-full w-full object-cover" /></span>
                   {team.name}
                   <span className={active?.id === team.id ? "text-white/55" : "text-slate-400"}>{team.jobsToday} jobs</span>
                 </button>
