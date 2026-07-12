@@ -79,7 +79,7 @@ const STATUS_CONFIG: Record<EtaStatus, {
   on_time:      { label: "On Time",       badgeBg: "#F0FDF4", badgeText: "#15803D", dot: "#22C55E", accentBar: "linear-gradient(180deg,#4ADE80,#16A34A)", ribbonText: "text-emerald-600", ribbonIcon: "👍" },
   early:        { label: "Arriving Early", badgeBg: "#F0FDF4", badgeText: "#15803D", dot: "#22C55E", accentBar: "linear-gradient(180deg,#4ADE80,#16A34A)", ribbonText: "text-emerald-600", ribbonIcon: "🎉" },
   running_late: { label: "Running Late",  badgeBg: "#FFFBEB", badgeText: "#B45309", dot: "#F59E0B", accentBar: "linear-gradient(180deg,#FCD34D,#D97706)", ribbonText: "text-amber-600",   ribbonIcon: "⏰" },
-  unclear:      { label: "Unclear ETA",   badgeBg: "#F5F3FF", badgeText: "#6D28D9", dot: "#8B5CF6", accentBar: "linear-gradient(180deg,#C4B5FD,#7C3AED)", ribbonText: "text-violet-600",  ribbonIcon: "⚠️" },
+  unclear:      { label: "Unclear ETA",   badgeBg: "#FFF7ED", badgeText: "#C2410C", dot: "#F97316", accentBar: "linear-gradient(180deg,#FDBA74,#EA580C)", ribbonText: "text-orange-600",  ribbonIcon: "⚠️" },
   no_answer:    { label: "No Answer",     badgeBg: "#EFF6FF", badgeText: "#1D4ED8", dot: "#3B82F6", accentBar: "linear-gradient(180deg,#93C5FD,#2563EB)", ribbonText: "text-blue-500",    ribbonIcon: "📵" },
   pending:      { label: "Pending",       badgeBg: "#F8FAFC", badgeText: "#64748B", dot: "#94A3B8", accentBar: "linear-gradient(180deg,#CBD5E1,#94A3B8)", ribbonText: "text-slate-400",   ribbonIcon: "⏳" },
 };
@@ -257,7 +257,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
   const playerColor = useMemo(() => {
     if (team.etaStatus === "on_time" || team.etaStatus === "early") return "#16A34A";
     if (team.etaStatus === "running_late") return "#D97706";
-    if (team.etaStatus === "unclear") return "#7C3AED";
+    if (team.etaStatus === "unclear") return "#EA580C";
     return "#3B82F6";
   }, [team.etaStatus]);
 
@@ -801,7 +801,7 @@ export function TeamEtaModal({ open, onClose }: TeamEtaModalProps) {
               { key: "on_time", count: counts.on_time, label: "On Time / Early", dot: "#22C55E" },
               { key: "running_late", count: counts.running_late, label: "Running Late", dot: "#F59E0B" },
               { key: "significantly_late", count: counts.significantly_late, label: "Significantly Late", dot: "#EF4444" },
-              { key: "unclear", count: counts.unclear, label: "Unclear", dot: "#8B5CF6" },
+              { key: "unclear", count: counts.unclear, label: "Unclear", dot: "#F97316" },
               { key: "no_answer", count: counts.no_answer, label: "No Answer", dot: "#3B82F6" },
             ].map(s => (
               <div key={s.key} className="flex-1 rounded-[16px] bg-white border border-slate-200 p-4 flex items-center gap-3 hover:shadow-sm transition-shadow cursor-pointer">
