@@ -192,12 +192,12 @@ function mapTeam(t: {
 
 // ─── Design-reference sub-components (verbatim JSX) ───────────────────────────
 
-// House image URLs — generated illustrated houses matching design reference
+// House images — user-provided, in order: green, navy, brown, purple
 const HOUSE_IMGS = [
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-completed-Zf64e8vAjaUGGU3mmDbNkP.webp",   // green roof
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-current-QuWoEnyPUjYwgnfmckkmC2.webp",    // navy roof
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-upcoming-1-ZQqomRHYpqrVoMBTBtcNmi.webp", // tan/brown roof
-  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-upcoming-2-UwwoTnynDjyGQE8rAzHdvV.webp", // purple roof
+  "/house-green.png",   // idx 0 — green roof
+  "/house-navy.png",    // idx 1 — navy roof
+  "/house-brown.png",   // idx 2 — brown roof
+  "/house-purple.png",  // idx 3 — purple roof
 ];
 
 function HouseIcon({ idx = 0, muted = false, completed = false }: { idx?: number; muted?: boolean; completed?: boolean }) {
@@ -242,28 +242,47 @@ function ConfidenceRing({ value, color }: { value: number; color: string }) {
   );
 }
 
-// Timeline — verbatim from design reference lines 181-209
+// Timeline — houses sit ABOVE the track line, van circle sits ON it
+// Layout per column (top to bottom):
+//   label (h-8) + time (mb-1) + house/van (h-[76px]) + track line + name + city + pill
+// Track line is positioned at the bottom of the node area (after the house)
 function Timeline({ team }: { team: Team }) {
   const s = stateStyles[team.state];
   const currentIndex = Math.max(0, team.jobs.findIndex((j) => j.status === "current"));
   const progress = team.jobs.length <= 1 ? 0 : (currentIndex / (team.jobs.length - 1)) * 100;
+  // Track sits at: pt-3 (12px) + h-8 label (32px) + mb-1 time (~20px) + h-[76px] node = ~140px from top
+  const trackTop = 140;
   return (
     <div className="relative min-w-0 flex-1 px-5 pb-2 pt-3">
-      <div className="absolute left-[8%] right-[8%] top-[93px] h-[3px] rounded-full bg-slate-200" />
-      <div className="absolute left-[8%] top-[93px] h-[3px] rounded-full" style={{ width: `calc(${Math.max(progress, 5)}% - 8%)`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }} />
+      {/* Full track background */}
+      <div className="absolute left-[8%] right-[8%] h-[3px] rounded-full bg-slate-200" style={{ top: trackTop }} />
+      {/* Completed portion */}
+      <div className="absolute left-[8%] h-[3px] rounded-full" style={{ top: trackTop, width: `calc(${Math.max(progress, 5)}% - 8%)`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }} />
       <div className="relative grid gap-2" style={{ gridTemplateColumns: `repeat(${team.jobs.length}, minmax(110px,1fr))` }}>
         {team.jobs.map((job, idx) => {
           const current = job.status === "current";
           const done = job.status === "completed";
           return (
             <div key={job.id} className="flex min-w-0 flex-col items-center text-center">
-              <div className={`h-8 text-[11px] font-bold uppercase tracking-[0.08em] ${current ? "" : "text-slate-400"}`} style={current ? { color: s.accent } : undefined}>{current ? "Current stop" : done ? "Completed" : "Upcoming"}</div>
-              <div className="mb-1 text-sm font-extrabold" style={current ? { color: s.text, fontSize: 18 } : undefined}>{current ? (job.eta || team.eta || "Checking…") : job.scheduled}</div>
-              <div className="relative z-10 flex h-[76px] items-center justify-center">
-                {current ? <div className="grid h-[72px] w-[72px] place-items-center rounded-full border-[6px] bg-white shadow-[0_0_0_10px_rgba(249,115,22,0.08)]" style={{ borderColor: s.accent }}><VanIcon /></div> : <HouseIcon idx={idx} completed={done} muted={!done} />}
+              {/* Label */}
+              <div className={`h-8 text-[11px] font-bold uppercase tracking-[0.08em] ${current ? "" : "text-slate-400"}`} style={current ? { color: s.accent } : undefined}>
+                {current ? "Current stop" : done ? "Completed" : "Upcoming"}
               </div>
-              <div className="mt-1 truncate text-sm font-bold">{job.customer}</div>
+              {/* Time */}
+              <div className="mb-1 text-sm font-extrabold" style={current ? { color: s.text, fontSize: 18 } : undefined}>
+                {current ? (job.eta || team.eta || "Checking…") : job.scheduled}
+              </div>
+              {/* Node — house sits above the track, van circle sits on it */}
+              <div className="relative z-10 flex h-[76px] items-end justify-center pb-[6px]">
+                {current
+                  ? <div className="grid h-[72px] w-[72px] place-items-center rounded-full border-[6px] bg-white shadow-[0_0_0_10px_rgba(249,115,22,0.08)]" style={{ borderColor: s.accent }}><VanIcon /></div>
+                  : <HouseIcon idx={idx} completed={done} muted={!done} />}
+              </div>
+              {/* Name */}
+              <div className="mt-2 truncate text-sm font-bold">{job.customer}</div>
+              {/* City */}
               <div className="truncate text-[12px] text-slate-500">{job.city}</div>
+              {/* Status pill for current stop */}
               {current && <div className="mt-2 rounded-full px-3 py-1 text-xs font-bold" style={{ background: s.soft, color: s.text }}>{team.distance || team.statusLabel}</div>}
             </div>
           );
