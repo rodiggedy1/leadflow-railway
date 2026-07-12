@@ -49,6 +49,20 @@ interface TeamEtaSummaryItem {
     serviceDateTime: Date | null;
     jobStatus: string;
     delayMinutes: number;
+    arrivedAt: Date | null;
+    completedAt: Date | null;
+    etaCall: {
+      step: string | null;
+      resultType: "success" | "no_answer" | "unclear" | "dispatcher_needed";
+      etaTimeStr: string | null;
+      etaStatus: string | null;
+      cleanerStatement: string | null;
+      clientNotified: boolean;
+      smsSentBody: string | null;
+      recordingUrl: string | null;
+      transcript: string | null;
+      createdAt: Date;
+    } | null;
   }>;
 }
 
@@ -180,12 +194,26 @@ function AudioPlayer({ url, durationSeconds, color }: { url: string; durationSec
 function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
   const [expanded, setExpanded] = useState(false);
   const [txOpen, setTxOpen] = useState(false);
+  // selectedJobId: which job node is selected in the timeline — null means the current job
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
   const cfg = STATUS_CONFIG[team.etaStatus];
 
-  // Cleaner statement comes directly from card metadata
-  const cleanerStatement = team.etaCall?.cleanerStatement ?? null;
-
   const initials = team.cleanerName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  // The job whose ETA details are shown in the expanded section
+  const selectedJob = selectedJobId != null
+    ? team.jobs.find(j => j.id === selectedJobId) ?? null
+    : null;
+
+  // Displayed ETA call — from selected job if one is clicked, otherwise from current job
+  const displayedEtaCall = selectedJob?.etaCall ?? team.etaCall;
+  const displayedJobStatus = selectedJob?.jobStatus ?? team.currentJobStatus;
+  const displayedArrivedAt = selectedJob?.arrivedAt ?? team.arrivedAt;
+  const displayedCompletedAt = selectedJob?.completedAt ?? team.completedAt;
+  const displayedCustomerName = selectedJob?.customerName ?? null;
+
+  // Cleaner statement from the displayed call
+  const cleanerStatement = displayedEtaCall?.cleanerStatement ?? null;
 
   // Determine ribbon message
   const ribbonMsg = useMemo(() => {
@@ -291,8 +319,14 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
               if (isCurrent) {
                 // Van node
+                const isSelected = selectedJobId === job.id;
                 return (
-                  <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos - 10, top: 4, width: 70 }}>
+                  <div
+                    key={job.id}
+                    className="absolute flex flex-col items-center cursor-pointer"
+                    style={{ left: leftPos - 10, top: 4, width: 70 }}
+                    onClick={() => { setSelectedJobId(isSelected ? null : job.id); setExpanded(true); setTxOpen(false); }}
+                  >
                     <div className="text-[11px] font-[750] mb-1 whitespace-nowrap text-center" style={{ color: cfg.badgeText }}>
                       {(() => {
                         const s = team.currentJobStatus;
@@ -310,7 +344,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                         return etaStr ? `ETA ${etaStr}` : "—";
                       })()}
                     </div>
-                    <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white" style={{ borderColor: cfg.dot }}>
+                    <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white transition-shadow" style={{ borderColor: cfg.dot, boxShadow: isSelected ? `0 0 0 3px ${cfg.dot}44` : undefined }}>
                       {(team.etaStatus === "on_time" || team.etaStatus === "early" || team.etaStatus === "running_late") ? (
                         <svg width="30" height="20" viewBox="0 0 56 40" fill="none">
                           <rect x="4" y="10" width="46" height="22" rx="5" fill="white" stroke={cfg.dot} strokeWidth="2"/>
@@ -353,10 +387,16 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
               if (isDone) {
                 // Checkmark node
+                const isSelected = selectedJobId === job.id;
                 return (
-                  <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos, top: 14, width: 50 }}>
+                  <div
+                    key={job.id}
+                    className="absolute flex flex-col items-center cursor-pointer"
+                    style={{ left: leftPos, top: 14, width: 50 }}
+                    onClick={() => { setSelectedJobId(isSelected ? null : job.id); setExpanded(true); setTxOpen(false); }}
+                  >
                     <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#16A34A" }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center transition-shadow" style={{ background: "#16A34A", boxShadow: isSelected ? "0 0 0 3px #16A34A44" : undefined }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     </div>
                     <div className="mt-1 text-center">
@@ -368,10 +408,16 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
               }
 
               // Future house node
+              const isSelected = selectedJobId === job.id;
               return (
-                <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos, top: 14, width: 50 }}>
+                <div
+                  key={job.id}
+                  className="absolute flex flex-col items-center cursor-pointer"
+                  style={{ left: leftPos, top: 14, width: 50 }}
+                  onClick={() => { setSelectedJobId(isSelected ? null : job.id); setExpanded(true); setTxOpen(false); }}
+                >
                   <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
-                  <div className="w-9 h-9 rounded-full border-2 border-slate-200 bg-white flex items-center justify-center">
+                  <div className="w-9 h-9 rounded-full border-2 bg-white flex items-center justify-center transition-shadow" style={{ borderColor: isSelected ? "#94A3B8" : "#E2E8F0", boxShadow: isSelected ? "0 0 0 3px #94A3B844" : undefined }}>
                     <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
                       <polygon points="24,6 44,22 4,22" fill="#D1FAE5" stroke="#A7F3D0" strokeWidth="2"/>
                       <rect x="10" y="22" width="28" height="18" rx="2" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="1.5"/>
@@ -397,9 +443,9 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
         </div>
         <button
           className="text-[11px] font-[700] text-slate-500 flex items-center gap-1 hover:text-slate-800 transition-colors"
-          onClick={() => setExpanded(v => !v)}
+          onClick={() => { setExpanded(v => !v); if (expanded) setSelectedJobId(null); }}
         >
-          {expanded ? "Close" : "Open Timeline"}
+          {expanded ? "Close" : (selectedJobId ? "ETA Details ▾" : "ETA Details ▾")}
           <svg
             className="transition-transform"
             style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)" }}
@@ -415,7 +461,19 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
         <div className="border-t border-slate-100 px-5 py-4 bg-white">
           {/* Context block — issue modal style */}
           <div className="rounded-[14px] p-4 mb-4" style={{ background: "linear-gradient(135deg,#fef9f0,#fef3e2)", border: "1px solid #fde8c0" }}>
-            <p className="text-[9px] font-[800] tracking-[.15em] uppercase text-orange-500 mb-3">ETA Call Result</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[9px] font-[800] tracking-[.15em] uppercase text-orange-500">
+                {selectedJob ? `ETA Call — ${selectedJob.customerName}` : "ETA Call Result"}
+              </p>
+              {selectedJob && (
+                <button
+                  className="text-[10px] text-slate-400 hover:text-slate-700 font-[600] transition-colors"
+                  onClick={() => setSelectedJobId(null)}
+                >
+                  ← Current job
+                </button>
+              )}
+            </div>
             <div className="rounded-xl overflow-hidden border border-orange-100" style={{ background: "rgba(255,255,255,0.7)" }}>
               {/* Cleaner row */}
               <div className="flex items-center gap-3 px-4 py-2.5 border-b border-orange-100/60">
@@ -432,8 +490,21 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                 </div>
               </div>
 
+              {/* ETA time + status badge (success only) */}
+              {displayedEtaCall?.resultType === "success" && displayedEtaCall.etaTimeStr && (
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-orange-100/60">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={cfg.badgeText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                  <span className="text-[15px] font-[800] tabular-nums" style={{ color: cfg.badgeText }}>{displayedEtaCall.etaTimeStr}</span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: cfg.badgeBg, color: cfg.badgeText, border: `1px solid ${cfg.dot}44` }}>
+                    {cfg.label}
+                  </span>
+                </div>
+              )}
+
               {/* Cleaner statement */}
-              {team.etaCall && (
+              {displayedEtaCall && (
                 <div className="flex items-start gap-3 px-4 py-2.5 border-b border-orange-100/60" style={{ background: `${cfg.badgeBg}66` }}>
                   <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: `${cfg.badgeBg}` }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cfg.badgeText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -442,9 +513,9 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   </div>
                   <div>
                     <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: cfg.badgeText }}>
-                      {team.etaCall.resultType === "no_answer" || team.etaCall.resultType === "dispatcher_needed" ? "Call Outcome" : "Cleaner Said"}
+                      {displayedEtaCall.resultType === "no_answer" || displayedEtaCall.resultType === "dispatcher_needed" ? "Call Outcome" : "Cleaner Said"}
                     </p>
-                    {team.etaCall.resultType === "no_answer" || team.etaCall.resultType === "dispatcher_needed" ? (
+                    {displayedEtaCall.resultType === "no_answer" || displayedEtaCall.resultType === "dispatcher_needed" ? (
                       <p className="text-[12px] font-[600] text-slate-500">Call was not answered</p>
                     ) : cleanerStatement ? (
                       <p className="text-[12px] font-[600] text-slate-700 italic">"{cleanerStatement}"</p>
@@ -455,21 +526,48 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                 </div>
               )}
 
+              {/* Current job status row */}
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-orange-100/60">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "#F1F5F9" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5 text-slate-400">Current Job Status</p>
+                  {(() => {
+                    const s = displayedJobStatus;
+                    const arrivedStr = displayedArrivedAt ? ` · arrived ${formatTime(new Date(displayedArrivedAt))}` : "";
+                    const completedStr = displayedCompletedAt ? ` at ${formatTime(new Date(displayedCompletedAt))}` : "";
+                    if (s === "completed") return <p className="text-[12px] font-[700] text-emerald-700">✅ Job completed{completedStr}</p>;
+                    if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return <p className="text-[12px] font-[700] text-emerald-600">• In Progress{arrivedStr}</p>;
+                    if (s === "arrived") return <p className="text-[12px] font-[700] text-emerald-600">• Arrived{arrivedStr}</p>;
+                    if (s === "on_the_way") return <p className="text-[12px] font-[600] text-amber-600">• On the way</p>;
+                    return <p className="text-[12px] font-[600] text-slate-500">• {s ?? "Pending"}</p>;
+                  })()}
+                </div>
+              </div>
+
               {/* Client notification row */}
               <div className="flex items-center gap-3 px-4 py-2.5">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: team.etaCall?.smsSentBody ? cfg.badgeBg : "#F1F5F9" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={team.etaCall?.smsSentBody ? cfg.badgeText : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: displayedEtaCall?.smsSentBody ? cfg.badgeBg : "#F1F5F9" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={displayedEtaCall?.smsSentBody ? cfg.badgeText : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.25 7.76 15.57 6.68 13.6"/>
                     <path d="M2 2l20 20"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: team.etaCall?.smsSentBody ? cfg.badgeText : "#94A3B8" }}>
+                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: displayedEtaCall?.smsSentBody ? cfg.badgeText : "#94A3B8" }}>
                     Client Notified
                   </p>
-                  {team.etaCall?.clientNotified ? (
-                    <p className="text-[12px] font-[700] text-slate-800">✓ SMS sent{team.etaCall.createdAt ? ` at ${formatTime(team.etaCall.createdAt)}` : ""}</p>
-                  ) : team.etaCall ? (
+                  {displayedEtaCall?.clientNotified ? (
+                    <>
+                      <p className="text-[12px] font-[700] text-slate-800">✓ SMS sent{displayedEtaCall.createdAt ? ` at ${formatTime(displayedEtaCall.createdAt)}` : ""}</p>
+                      {displayedEtaCall.smsSentBody && (
+                        <p className="text-[11px] text-slate-400 italic mt-0.5">"{displayedEtaCall.smsSentBody}"</p>
+                      )}
+                    </>
+                  ) : displayedEtaCall ? (
                     <p className="text-[12px] font-[600] text-slate-500">Client not notified</p>
                   ) : (
                     <p className="text-[12px] font-[600] text-slate-500">No ETA call yet</p>
@@ -480,9 +578,9 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
           </div>
 
           {/* Audio player */}
-          {team.etaCall?.recordingUrl ? (
+          {displayedEtaCall?.recordingUrl ? (
             <AudioPlayer
-              url={team.etaCall.recordingUrl}
+              url={displayedEtaCall.recordingUrl}
               durationSeconds={0}
               color={playerColor}
             />
@@ -497,14 +595,14 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
               <div>
                 <div className="text-[11px] font-[700] text-slate-400">No recording available</div>
                 <div className="text-[10px] text-slate-300 mt-0.5">
-                  {(team.etaCall?.resultType === "no_answer" || team.etaCall?.resultType === "dispatcher_needed") ? "Call was not answered" : "Recording will appear after a successful ETA call"}
+                  {(displayedEtaCall?.resultType === "no_answer" || displayedEtaCall?.resultType === "dispatcher_needed") ? "Call was not answered" : "Recording will appear after a successful ETA call"}
                 </div>
               </div>
             </div>
           )}
 
           {/* Transcript */}
-          {team.etaCall?.transcript && (
+          {displayedEtaCall?.transcript && (
             <div className="rounded-xl border border-slate-200 bg-white overflow-hidden mb-3">
               <button
                 className="w-full flex items-center justify-between px-4 py-2.5 text-[11px] font-[700] text-slate-500 hover:bg-slate-50 transition-colors"
@@ -529,7 +627,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
               {txOpen && (
                 <div className="px-4 pb-3 border-t border-slate-100">
                   <div className="space-y-2 pt-3 text-[11px]">
-                    {team.etaCall.transcript.split("\n").filter(Boolean).map((line, i) => {
+                    {displayedEtaCall.transcript.split("\n").filter(Boolean).map((line, i) => {
                       const isSystem = /^(system|assistant):/i.test(line);
                       const isCleaner = /^(cleaner|user|customer):/i.test(line);
                       const text = line.replace(/^(system|assistant|cleaner|user|customer):\s*/i, "");
@@ -545,21 +643,6 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* SMS body */}
-          {team.etaCall?.smsSentBody && (
-            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden mb-3">
-              <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-1.5">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-                <span className="text-[11px] font-[700] text-slate-500">SMS Sent to Client</span>
-              </div>
-              <div className="px-4 py-3">
-                <p className="text-[12px] text-slate-700 italic">"{team.etaCall.smsSentBody}"</p>
-              </div>
             </div>
           )}
 
