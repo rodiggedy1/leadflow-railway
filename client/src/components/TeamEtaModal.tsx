@@ -459,66 +459,48 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-slate-100 px-5 py-4 bg-white">
-          {/* Context block — issue modal style */}
+          {/* Context block — pixel-perfect mockup */}
           <div className="rounded-[14px] p-4 mb-4" style={{ background: "linear-gradient(135deg,#fef9f0,#fef3e2)", border: "1px solid #fde8c0" }}>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[9px] font-[800] tracking-[.15em] uppercase text-orange-500">
-                {selectedJob ? `ETA Call — ${selectedJob.customerName}` : "ETA Call Result"}
-              </p>
+              <p className="text-[9px] font-[800] tracking-[.15em] uppercase" style={{ color: "#F97316" }}>ETA Call Result</p>
               {selectedJob && (
-                <button
-                  className="text-[10px] text-slate-400 hover:text-slate-700 font-[600] transition-colors"
-                  onClick={() => setSelectedJobId(null)}
-                >
-                  ← Current job
-                </button>
+                <button className="text-[10px] text-slate-400 hover:text-slate-700 font-[600] transition-colors" onClick={() => setSelectedJobId(null)}>← Current job</button>
               )}
             </div>
-            <div className="rounded-xl overflow-hidden border border-orange-100" style={{ background: "rgba(255,255,255,0.7)" }}>
-              {/* Cleaner row */}
-              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-orange-100/60">
-                <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-[11px] font-[800] text-slate-600 shrink-0">{initials}</div>
-                <div>
-                  <p className="text-[12px] font-[700] text-slate-900">{team.cleanerName}</p>
-                  {team.cleanerPhone && <p className="text-[10px] text-slate-400 font-mono">{team.cleanerPhone}</p>}
-                </div>
-                <div className="ml-auto">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-[700]" style={{ background: cfg.badgeBg, color: cfg.badgeText }}>
-                    <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: cfg.dot }} />
-                    {cfg.label}
-                  </span>
-                </div>
-              </div>
+            <div className="rounded-[10px] overflow-hidden" style={{ border: "1px solid #fde8c0", background: "rgba(255,255,255,0.7)" }}>
 
-              {/* ETA time + status badge (success only) */}
-              {displayedEtaCall?.resultType === "success" && displayedEtaCall.etaTimeStr && (
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-orange-100/60">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={cfg.badgeText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                  <span className="text-[15px] font-[800] tabular-nums" style={{ color: cfg.badgeText }}>{displayedEtaCall.etaTimeStr}</span>
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ background: cfg.badgeBg, color: cfg.badgeText, border: `1px solid ${cfg.dot}44` }}>
-                    {cfg.label}
-                  </span>
+              {/* ETA time big row */}
+              {displayedEtaCall?.resultType === "success" && displayedEtaCall.etaTimeStr ? (
+                <div className="flex items-center gap-2.5 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
+                  <span className="text-[22px] font-[800] tabular-nums" style={{ color: cfg.badgeText }}>{displayedEtaCall.etaTimeStr}</span>
+                  <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-[700]" style={{ background: cfg.badgeBg, color: cfg.badgeText, border: `1px solid ${cfg.dot}` }}>{cfg.label}</span>
+                  {(selectedJob?.scheduledTime ?? (team.currentJobServiceDateTime ? formatTime(new Date(team.currentJobServiceDateTime)) : null)) && (
+                    <span className="text-[11px] text-slate-400 ml-auto">Sched. {selectedJob?.scheduledTime ?? formatTime(new Date(team.currentJobServiceDateTime!))}</span>
+                  )}
                 </div>
-              )}
+              ) : displayedEtaCall?.resultType === "no_answer" ? (
+                <div className="flex items-center gap-2.5 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
+                  <span className="text-[14px] font-[700] text-slate-500">No answer</span>
+                  <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-[700]" style={{ background: cfg.badgeBg, color: cfg.badgeText, border: `1px solid ${cfg.dot}` }}>{cfg.label}</span>
+                </div>
+              ) : null}
 
-              {/* Cleaner statement */}
+              {/* Cleaner Said row */}
               {displayedEtaCall && (
-                <div className="flex items-start gap-3 px-4 py-2.5 border-b border-orange-100/60" style={{ background: `${cfg.badgeBg}66` }}>
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: `${cfg.badgeBg}` }}>
+                <div className="flex items-start gap-3 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
+                  <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: cfg.badgeBg }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cfg.badgeText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: cfg.badgeText }}>
+                    <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px]" style={{ color: cfg.badgeText }}>
                       {displayedEtaCall.resultType === "no_answer" || displayedEtaCall.resultType === "dispatcher_needed" ? "Call Outcome" : "Cleaner Said"}
                     </p>
                     {displayedEtaCall.resultType === "no_answer" || displayedEtaCall.resultType === "dispatcher_needed" ? (
                       <p className="text-[12px] font-[600] text-slate-500">Call was not answered</p>
                     ) : cleanerStatement ? (
-                      <p className="text-[12px] font-[600] text-slate-700 italic">"{cleanerStatement}"</p>
+                      <p className="text-[12px] font-[600] italic" style={{ color: "#334155" }}>&#34;{cleanerStatement}&#34;</p>
                     ) : (
                       <p className="text-[12px] font-[600] text-slate-500">Transcript unavailable</p>
                     )}
@@ -526,45 +508,57 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                 </div>
               )}
 
-              {/* Current job status row */}
-              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-orange-100/60">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "#F1F5F9" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {/* Current Job Status row */}
+              <div className="flex items-start gap-3 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
+                <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: "#F0FDF4" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#15803D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5 text-slate-400">Current Job Status</p>
+                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px] text-emerald-700">Current Job Status</p>
                   {(() => {
                     const s = displayedJobStatus;
-                    const arrivedStr = displayedArrivedAt ? ` · arrived ${formatTime(new Date(displayedArrivedAt))}` : "";
+                    const arrivedStr = displayedArrivedAt ? ` arrived ${formatTime(new Date(displayedArrivedAt))}` : "";
                     const completedStr = displayedCompletedAt ? ` at ${formatTime(new Date(displayedCompletedAt))}` : "";
-                    if (s === "completed") return <p className="text-[12px] font-[700] text-emerald-700">✅ Job completed{completedStr}</p>;
-                    if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return <p className="text-[12px] font-[700] text-emerald-600">• In Progress{arrivedStr}</p>;
-                    if (s === "arrived") return <p className="text-[12px] font-[700] text-emerald-600">• Arrived{arrivedStr}</p>;
-                    if (s === "on_the_way") return <p className="text-[12px] font-[600] text-amber-600">• On the way</p>;
-                    return <p className="text-[12px] font-[600] text-slate-500">• {s ?? "Pending"}</p>;
+                    if (s === "completed") return (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-[700]" style={{ background: "#F0FDF4", color: "#15803D", border: "1px solid #BBF7D0" }}>● Completed</span>
+                        {completedStr && <span className="text-[11px] text-slate-400">{completedStr}</span>}
+                      </div>
+                    );
+                    if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-[700]" style={{ background: "#F0FDF4", color: "#15803D", border: "1px solid #BBF7D0" }}>● In Progress</span>
+                        {arrivedStr && <span className="text-[11px] text-slate-400">{arrivedStr}</span>}
+                      </div>
+                    );
+                    if (s === "arrived") return (
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-[700]" style={{ background: "#F0FDF4", color: "#15803D", border: "1px solid #BBF7D0" }}>● Arrived</span>
+                        {arrivedStr && <span className="text-[11px] text-slate-400">{arrivedStr}</span>}
+                      </div>
+                    );
+                    if (s === "on_the_way") return <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-[700]" style={{ background: "#FFFBEB", color: "#B45309", border: "1px solid #FDE68A" }}>● On the way</span>;
+                    return <span className="text-[12px] font-[600] text-slate-500">{s ?? "Pending"}</span>;
                   })()}
                 </div>
               </div>
 
-              {/* Client notification row */}
-              <div className="flex items-center gap-3 px-4 py-2.5">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: displayedEtaCall?.smsSentBody ? cfg.badgeBg : "#F1F5F9" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={displayedEtaCall?.smsSentBody ? cfg.badgeText : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07C9.44 17.25 7.76 15.57 6.68 13.6"/>
-                    <path d="M2 2l20 20"/>
+              {/* Client Notified row */}
+              <div className="flex items-start gap-3 px-3.5 py-2.5">
+                <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: displayedEtaCall?.clientNotified ? cfg.badgeBg : "#F1F5F9" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={displayedEtaCall?.clientNotified ? cfg.badgeText : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: displayedEtaCall?.smsSentBody ? cfg.badgeText : "#94A3B8" }}>
-                    Client Notified
-                  </p>
+                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px]" style={{ color: displayedEtaCall?.clientNotified ? cfg.badgeText : "#94A3B8" }}>Client Notified</p>
                   {displayedEtaCall?.clientNotified ? (
                     <>
-                      <p className="text-[12px] font-[700] text-slate-800">✓ SMS sent{displayedEtaCall.createdAt ? ` at ${formatTime(displayedEtaCall.createdAt)}` : ""}</p>
+                      <p className="text-[12px] font-[700]" style={{ color: "#334155" }}>✓ SMS sent{displayedEtaCall.createdAt ? ` at ${formatTime(displayedEtaCall.createdAt)}` : ""}</p>
                       {displayedEtaCall.smsSentBody && (
-                        <p className="text-[11px] text-slate-400 italic mt-0.5">"{displayedEtaCall.smsSentBody}"</p>
+                        <p className="text-[11px] italic mt-[2px]" style={{ color: "#94A3B8" }}>&#34;{displayedEtaCall.smsSentBody}&#34;</p>
                       )}
                     </>
                   ) : displayedEtaCall ? (
@@ -574,6 +568,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   )}
                 </div>
               </div>
+
             </div>
           </div>
 
