@@ -312,7 +312,7 @@ function Timeline({ team }: { team: Team }) {
                 {/* Van image — no circle, no border, no box */}
                 <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
                 {/* Time + status below — no dot */}
-                <div className="mt-1 text-sm font-extrabold text-slate-800">{job.eta || team.eta || "Checking…"}</div>
+                <div className="mt-3 text-sm font-extrabold text-slate-800">{job.eta || team.eta || "Checking…"}</div>
                 <div className="mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</div>
               </div>
             );
@@ -333,7 +333,7 @@ function Timeline({ team }: { team: Team }) {
                 )}
               </div>
               {/* Time + status below */}
-              <div className="mt-1 text-sm font-extrabold text-slate-800">{job.scheduled}</div>
+              <div className="mt-3 text-sm font-extrabold text-slate-800">{job.scheduled}</div>
               <div className={`text-[11px] font-semibold ${done ? "text-emerald-500" : "text-slate-400"}`}>
                 {done ? "Completed" : "Upcoming"}
               </div>
