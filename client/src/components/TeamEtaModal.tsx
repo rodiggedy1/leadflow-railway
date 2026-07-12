@@ -32,6 +32,7 @@ type Job = {
   id: string;
   customer: string;
   city: string;
+  address: string;
   scheduled: string;
   eta?: string;
   status: JobStatus;
@@ -163,6 +164,7 @@ function mapTeam(t: {
     return {
       id: String(j.id),
       customer: j.customerName ?? "—",
+      address: j.jobAddress ?? "—",
       city: j.jobAddress?.split(",").slice(-2, -1)[0]?.trim() ?? j.jobAddress ?? "—",
       scheduled: formatTime(j.serviceDateTime),
       eta: j.etaCall?.etaTimeStr ?? undefined,
@@ -309,8 +311,15 @@ function Timeline({ team }: { team: Team }) {
                   )}
                   <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
                 </div>
-                {/* Van image — no circle, no border, no box */}
-                <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
+                {/* Van image with hover tooltip */}
+                <div className="group relative">
+                  <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-2 text-center text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                    <div className="font-bold">{job.customer}</div>
+                    <div className="mt-0.5 text-slate-300">{job.address}</div>
+                    <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                  </div>
+                </div>
                 {/* Time + status below — no dot */}
                 <div className="mt-4 text-sm font-extrabold text-slate-800">{job.eta || team.eta || "Checking…"}</div>
                 <div className="mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</div>
@@ -320,8 +329,15 @@ function Timeline({ team }: { team: Team }) {
 
           return (
             <div key={job.id} className="relative z-10 flex flex-col items-center" style={{ flex: "1 1 0", minWidth: 150 }}>
-              {/* House image */}
-              <HouseIcon idx={idx} completed={done} muted={!done} />
+              {/* House image with hover tooltip */}
+              <div className="group relative">
+                <HouseIcon idx={idx} completed={done} muted={!done} />
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-2 text-center text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
+                  <div className="font-bold">{job.customer}</div>
+                  <div className="mt-0.5 text-slate-300">{job.address}</div>
+                  <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                </div>
+              </div>
               {/* Dot on track */}
               <div className="relative z-10 mt-1">
                 {done ? (
