@@ -302,8 +302,10 @@ function Timeline({ team }: { team: Team }) {
                 {/* Floating white card above the van */}
                 <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
                   <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
-                  <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "Checking…"}</div>
+                  {(job.eta || team.eta) && (
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
+                  )}
+                  <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "No ETA"}</div>
                   {team.distance && (
                     <div className="mt-0.5 flex items-center justify-center gap-1 text-xs text-slate-500">
                       <CarFront className="h-3.5 w-3.5" />
@@ -311,7 +313,7 @@ function Timeline({ team }: { team: Team }) {
                     </div>
                   )}
                   <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
-                  {job.scheduled && (
+                  {(job.eta || team.eta) && job.scheduled && (
                     <div className="mt-2 border-t border-slate-100 pt-1.5 text-[11px] text-slate-400">Scheduled: {job.scheduled}</div>
                   )}
                 </div>
@@ -324,8 +326,8 @@ function Timeline({ team }: { team: Team }) {
                     <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
                   </div>
                 </div>
-                {/* Time + status below — no dot */}
-                <div className="mt-4 text-sm font-extrabold text-slate-800">{job.eta || team.eta || "Checking…"}</div>
+                {/* Scheduled time below the line — always shows scheduled, not ETA */}
+                <div className="mt-4 text-sm font-extrabold text-slate-800">{job.scheduled}</div>
                 <div className="mt-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</div>
               </div>
             );
