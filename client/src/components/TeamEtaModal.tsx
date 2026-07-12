@@ -391,7 +391,7 @@ function Timeline({ team }: { team: Team }) {
                         }[team.state] ?? "/house-navy.png"}
                         alt="property"
                         className="h-16 w-auto object-contain animate-[etaFloat_2.4s_ease-in-out_infinite] drop-shadow-md"
-                        style={{ background: "transparent" }}
+                        style={{ background: "transparent", mixBlendMode: "multiply" }}
                       />
                     )
                     : <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
