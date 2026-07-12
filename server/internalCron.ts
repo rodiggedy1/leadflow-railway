@@ -457,33 +457,81 @@ export function startInternalCron(): void {
   // GATED: FIELD_MGMT_ENABLED must be true in fieldMgmtEngine.ts
   cron.schedule("0 */5 6-22 * * *", async () => {
     if (!FIELD_MGMT_ENABLED) return;
-    try {
-      const [reminders, clientPreJob, nudges, exceptions, noshow, checkinCalls, postStart] = await Promise.all([
-        runPreJobReminders(),
-        runClientPreJobNotifications(),
-        runMidJobNudges(),
-        runExceptionHandling(),
-        runNoShowEscalation(),
-        runCheckinCalls(),
-        runPostStartEscalation(),
-      ]);
-      const summary = [
-        `reminders: ${reminders.sent}/${reminders.checked}`,
-        `clientPreJob: ${clientPreJob.sent}/${clientPreJob.checked}`,
-        `nudges: ${nudges.sent}/${nudges.checked}`,
-        `exceptions: ${exceptions.sent}/${exceptions.checked}`,
-        `noshow: ${noshow.sent}/${noshow.checked}`,
-        `checkinCalls: ${checkinCalls.called}/${checkinCalls.checked}`,
-        `postStart: ${postStart.acted}/${postStart.checked}`,
-      ].join(", ");
-      const didWork = reminders.sent + clientPreJob.sent + nudges.sent + exceptions.sent + noshow.sent + checkinCalls.called + postStart.acted > 0;
-      if (didWork) console.log(`[InternalCron] FieldMgmt — ${summary}`);
-      await recordHeartbeat("field-mgmt", summary, didWork);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] FieldMgmt cron failed:", msg);
-      await recordHeartbeat("field-mgmt", `error: ${msg}`, false);
+    const tickStart = Date.now();
+
+    // Run all tasks independently — one failure must not block or fail the others.
+    // Promise.allSettled guarantees all settle regardless of individual rejections.
+    type TaskResult =
+      | { sent: number; checked: number }
+      | { called: number; checked: number }
+      | { acted: number; checked: number };
+
+    async function runTask<T extends TaskResult>(
+      name: string,
+      fn: () => Promise<T>
+    ): Promise<T | null> {
+      const t0 = Date.now();
+      try {
+        const result = await fn();
+        const ms = Date.now() - t0;
+        const work = 'sent' in result ? result.sent : 'called' in result ? result.called : result.acted;
+        if (work > 0) console.log(`[FieldMgmt/${name}] ${JSON.stringify(result)} (${ms}ms)`);
+        return result;
+      } catch (err) {
+        const ms = Date.now() - t0;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[FieldMgmt/${name}] FAILED after ${ms}ms: ${msg}`);
+        // Record a sub-task error heartbeat so the watchdog can detect per-task failures
+        await recordHeartbeat(`field-mgmt/${name}`, `error: ${msg}`, false).catch(() => {});
+        return null;
+      }
     }
+
+    const [remindersR, clientPreJobR, nudgesR, exceptionsR, noshowR, checkinCallsR, postStartR] =
+      await Promise.allSettled([
+        runTask('reminders',    runPreJobReminders),
+        runTask('clientPreJob', runClientPreJobNotifications),
+        runTask('nudges',       runMidJobNudges),
+        runTask('exceptions',   runExceptionHandling),
+        runTask('noshow',       runNoShowEscalation),
+        runTask('checkinCalls', runCheckinCalls),
+        runTask('postStart',    runPostStartEscalation),
+      ]);
+
+    const reminders    = remindersR.status    === 'fulfilled' ? remindersR.value    : null;
+    const clientPreJob = clientPreJobR.status === 'fulfilled' ? clientPreJobR.value : null;
+    const nudges       = nudgesR.status       === 'fulfilled' ? nudgesR.value       : null;
+    const exceptions   = exceptionsR.status   === 'fulfilled' ? exceptionsR.value   : null;
+    const noshow       = noshowR.status       === 'fulfilled' ? noshowR.value       : null;
+    const checkinCalls = checkinCallsR.status === 'fulfilled' ? checkinCallsR.value : null;
+    const postStart    = postStartR.status    === 'fulfilled' ? postStartR.value    : null;
+
+    const fmt = (r: TaskResult | null, key: 'sent' | 'called' | 'acted') =>
+      r ? `${(r as any)[key]}/${r.checked}` : 'ERR';
+
+    const summary = [
+      `reminders: ${fmt(reminders, 'sent')}`,
+      `clientPreJob: ${fmt(clientPreJob, 'sent')}`,
+      `nudges: ${fmt(nudges, 'sent')}`,
+      `exceptions: ${fmt(exceptions, 'sent')}`,
+      `noshow: ${fmt(noshow, 'sent')}`,
+      `checkinCalls: ${fmt(checkinCalls, 'called')}`,
+      `postStart: ${fmt(postStart, 'acted')}`,
+    ].join(", ");
+
+    const totalWork =
+      (reminders?.sent ?? 0) + (clientPreJob?.sent ?? 0) + (nudges?.sent ?? 0) +
+      (exceptions?.sent ?? 0) + (noshow?.sent ?? 0) +
+      ((checkinCalls as any)?.called ?? 0) + ((postStart as any)?.acted ?? 0);
+    const hasErrors = [remindersR, clientPreJobR, nudgesR, exceptionsR, noshowR, checkinCallsR, postStartR]
+      .some(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value === null));
+
+    const tickMs = Date.now() - tickStart;
+    if (totalWork > 0 || hasErrors) {
+      console.log(`[InternalCron] FieldMgmt — ${summary} (${tickMs}ms)${hasErrors ? ' [some tasks errored]' : ''}`);
+    }
+    const heartbeatSummary = hasErrors ? `partial_error: ${summary}` : summary;
+    await recordHeartbeat("field-mgmt", heartbeatSummary, totalWork > 0);
   }, { timezone: "America/New_York" });
 
   // ── Unclaimed lead escalation: DISABLED per user request ────────────────────
@@ -822,6 +870,119 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
+  // ── Field-Mgmt + ETA watchdog: every 5 minutes ─────────────────────────────
+  // Monitors field-mgmt (5-min cron) and eta-call-trigger (2-min cron) separately.
+  // Posts a stale alert to Command Chat if either heartbeat is older than its threshold.
+  // Posts a recovery message once healthy ticks resume.
+  // Deduplicates: one alert per incident, one recovery per recovery.
+  if (FIELD_MGMT_ENABLED) {
+    // Track last-alerted state per job so we can send a recovery message
+    const watchdogState: Record<string, { alertedAt: number; recovered: boolean }> = {};
+
+    async function checkCronWatchdog(
+      db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+      jobName: string,
+      staleThresholdMs: number,
+      quickAction: string,
+      label: string
+    ) {
+      const [lastRow] = await db
+        .select({ ranAt: cronHeartbeats.ranAt, resultSummary: cronHeartbeats.resultSummary })
+        .from(cronHeartbeats)
+        .where(eq(cronHeartbeats.jobName, jobName))
+        .orderBy(desc(cronHeartbeats.ranAt))
+        .limit(1);
+
+      const lastRanAt = lastRow?.ranAt ? new Date(lastRow.ranAt).getTime() : 0;
+      const minutesSince = Math.floor((Date.now() - lastRanAt) / 60_000);
+      const isStale = Date.now() - lastRanAt > staleThresholdMs;
+      const state = watchdogState[jobName] ?? { alertedAt: 0, recovered: true };
+
+      if (!isStale) {
+        // Healthy — if we previously alerted, post a recovery message once
+        if (state.alertedAt > 0 && !state.recovered) {
+          const lastRunStr = new Date(lastRanAt).toLocaleTimeString("en-US", {
+            hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York"
+          });
+          await db.insert(opsChatMessages).values({
+            channel: "command",
+            authorName: "System",
+            authorRole: "system",
+            body: `✅ ${label} recovered — last successful run: ${lastRunStr}`,
+            quickAction: quickAction as any,
+            metadata: JSON.stringify({ jobName, recovered: true, lastRunStr }),
+          } as any);
+          const { broadcastOpsUpdate } = await import("./sseBroadcast");
+          broadcastOpsUpdate("new_message");
+          console.log(`[InternalCron] FieldMgmtWatchdog — ${jobName} RECOVERED (last run ${minutesSince}m ago)`);
+          watchdogState[jobName] = { alertedAt: state.alertedAt, recovered: true };
+        }
+        await recordHeartbeat(`${jobName}-watchdog`, `ok: ${minutesSince}m ago`, false);
+        return;
+      }
+
+      // Stale — check if we already posted an active alert (dedup within 30 min)
+      const DEDUP_MS = 30 * 60 * 1000;
+      const recentAlert = await db
+        .select({ id: opsChatMessages.id })
+        .from(opsChatMessages)
+        .where(and(
+          eq(opsChatMessages.quickAction as any, quickAction),
+          gte(opsChatMessages.createdAt, new Date(Date.now() - DEDUP_MS))
+        ))
+        .limit(1);
+
+      if (recentAlert.length > 0) {
+        await recordHeartbeat(`${jobName}-watchdog`, `stale (${minutesSince}m) — alert already active`, false);
+        return;
+      }
+
+      // Post the stale alert
+      const lastRunStr = lastRanAt > 0
+        ? new Date(lastRanAt).toLocaleTimeString("en-US", {
+            hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York"
+          })
+        : "never";
+      const lastError = lastRow?.resultSummary?.startsWith("error:") ? lastRow.resultSummary : null;
+      const errorNote = lastError ? ` Last error: ${lastError.replace(/^error:\s*/, "")}` : "";
+
+      await db.insert(opsChatMessages).values({
+        channel: "command",
+        authorName: "System",
+        authorRole: "system",
+        body: `🚨 ${label} has not run in ${minutesSince} minutes (last run: ${lastRunStr}).${errorNote} ETA calls and field management may be stalled.`,
+        quickAction: quickAction as any,
+        metadata: JSON.stringify({ jobName, minutesSince, lastRunStr, lastError }),
+      } as any);
+      const { broadcastOpsUpdate } = await import("./sseBroadcast");
+      broadcastOpsUpdate("new_message");
+      try {
+        const { notifyOwner } = await import("./_core/notification");
+        await notifyOwner({
+          title: `🚨 ${label} stalled`,
+          content: `Has not run in ${minutesSince} minutes (last: ${lastRunStr}).${errorNote}`,
+        });
+      } catch { /* non-fatal */ }
+      console.warn(`[InternalCron] FieldMgmtWatchdog — ${jobName} STALE: ${minutesSince}m ago. Alert posted.`);
+      watchdogState[jobName] = { alertedAt: Date.now(), recovered: false };
+      await recordHeartbeat(`${jobName}-watchdog`, `ALERT: stale ${minutesSince}m (${lastRunStr})`, true);
+    }
+
+    cron.schedule("0 */5 6-22 * * *", async () => {
+      try {
+        const db = await getDb();
+        if (!db) return;
+        // field-mgmt: stale if no heartbeat in 10 minutes (fires every 5 min)
+        await checkCronWatchdog(db, "field-mgmt", 10 * 60 * 1000, "field_mgmt_watchdog", "Field Management cron");
+        // eta-call-trigger: stale if no heartbeat in 6 minutes (fires every 2 min)
+        await checkCronWatchdog(db, "eta-call-trigger", 6 * 60 * 1000, "eta_trigger_watchdog", "ETA Call Trigger");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[InternalCron] FieldMgmtWatchdog failed:", msg);
+      }
+    }, { timezone: "America/New_York" });
+  }
+
   // ── Daily 7 AM ET: ops summary card ────────────────────────────────────────
   // Posts the daily ops summary to Command Chat (confirmed / unconfirmed / unassigned).
   // Fires immediately when all cleaners confirm; this 7 AM cron is the fallback.
@@ -925,11 +1086,19 @@ export function startInternalCron(): void {
   // (retry) 3 minutes after eta_call_1 completed with no answer.
   if (FIELD_MGMT_ENABLED) {
     cron.schedule("*/2 * * * *", async () => {
+      const t0 = Date.now();
       try {
-        await runEtaCallTrigger();
+        const result = await runEtaCallTrigger();
+        const ms = Date.now() - t0;
+        // Record a success heartbeat every tick so the watchdog can detect staleness
+        const summary = result
+          ? `fired: ${(result as any).fired ?? 0}, checked: ${(result as any).checked ?? 0} (${ms}ms)`
+          : `ok (${ms}ms)`;
+        await recordHeartbeat("eta-call-trigger", summary, !!(result && (result as any).fired > 0));
       } catch (err) {
+        const ms = Date.now() - t0;
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[InternalCron] EtaCallTrigger failed:", msg);
+        console.error(`[InternalCron] EtaCallTrigger failed after ${ms}ms:`, msg);
         await recordHeartbeat("eta-call-trigger", `error: ${msg}`, false);
       }
     }, { timezone: "America/New_York" });

@@ -351,12 +351,67 @@ async function startServer() {
     }
   });
 
-  // Health check for Railway — includes commit SHA for deployment verification
-  app.get("/api/health", (_req, res) => res.json({
-    ok: true,
-    commit: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.COMMIT_SHA || "unknown",
-    time: new Date().toISOString(),
-  }));
+  // Health check for Railway — checks cron heartbeat freshness in addition to web server liveness.
+  // Returns status: "ok" | "degraded" | "unhealthy" so Railway or an external uptime monitor
+  // can detect a stalled cron without relying on the internal watchdog (which can't fire if the
+  // entire process is down or the DB is unreachable).
+  app.get("/api/health", async (_req, res) => {
+    const commit = process.env.RAILWAY_GIT_COMMIT_SHA || process.env.COMMIT_SHA || "unknown";
+    const now = new Date().toISOString();
+
+    // Only check cron health during field-mgmt operating hours (6 AM – 10 PM ET)
+    const etHour = new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" });
+    const inOperatingHours = parseInt(etHour, 10) >= 6 && parseInt(etHour, 10) < 22;
+
+    if (!inOperatingHours) {
+      return res.json({ status: "ok", commit, time: now, cron: "outside-operating-hours" });
+    }
+
+    try {
+      const { getDb } = await import("../db");
+      const { cronHeartbeats } = await import("../../drizzle/schema");
+      const { eq, desc } = await import("drizzle-orm");
+      const db = await getDb();
+      if (!db) {
+        return res.status(503).json({ status: "unhealthy", reason: "db_unavailable", commit, time: now });
+      }
+
+      const checks: Record<string, { staleMs: number; label: string }> = {
+        "field-mgmt":       { staleMs: 10 * 60 * 1000, label: "Field Management cron" },
+        "eta-call-trigger": { staleMs:  6 * 60 * 1000, label: "ETA Call Trigger" },
+      };
+
+      const results: Record<string, { status: string; lastRanAt: string | null; minutesSince: number }> = {};
+      let worstStatus: "ok" | "degraded" | "unhealthy" = "ok";
+
+      for (const [jobName, { staleMs, label }] of Object.entries(checks)) {
+        const [row] = await db
+          .select({ ranAt: cronHeartbeats.ranAt })
+          .from(cronHeartbeats)
+          .where(eq(cronHeartbeats.jobName, jobName))
+          .orderBy(desc(cronHeartbeats.ranAt))
+          .limit(1);
+        const lastRanAt = row?.ranAt ? new Date(row.ranAt).getTime() : 0;
+        const minutesSince = Math.floor((Date.now() - lastRanAt) / 60_000);
+        const isStale = Date.now() - lastRanAt > staleMs;
+        const jobStatus = isStale ? (minutesSince > 30 ? "unhealthy" : "degraded") : "ok";
+        if (jobStatus === "unhealthy" && worstStatus !== "unhealthy") worstStatus = "unhealthy";
+        else if (jobStatus === "degraded" && worstStatus === "ok") worstStatus = "degraded";
+        results[jobName] = {
+          status: jobStatus,
+          lastRanAt: row?.ranAt ? new Date(row.ranAt).toISOString() : null,
+          minutesSince,
+        };
+      }
+
+      const httpStatus = worstStatus === "unhealthy" ? 503 : worstStatus === "degraded" ? 200 : 200;
+      return res.status(httpStatus).json({ status: worstStatus, commit, time: now, cron: results });
+    } catch (err) {
+      // If the health check itself fails, report degraded (web server is up, cron status unknown)
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(200).json({ status: "degraded", reason: `health_check_error: ${msg}`, commit, time: now });
+    }
+  });
 
   // TEMPORARY debug endpoint — remove after login is confirmed working
   app.get("/api/debug-login", async (_req, res) => {
