@@ -511,6 +511,23 @@ export function registerCronRoutes(app: Express): void {
   });
 
   // ── Debug: dump cleaner_status cards ───────────────────────────────────────────────
+  app.get("/api/cron/heartbeat-status", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret || req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
+      const rows = await db.execute(sql.raw(`
+        SELECT job_name, ran_at, result_summary
+        FROM cron_heartbeats
+        WHERE job_name IN ('field-mgmt', 'eta-call-trigger', 'today-sync-jobs', 'sync-watchdog')
+        ORDER BY ran_at DESC
+        LIMIT 20
+      `));
+      res.json(rows[0]);
+    } catch (err) { res.status(500).json({ error: String(err) }); }
+  });
+
   app.get("/api/cron/debug-cleaner-status", async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;
     if (!secret || req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
