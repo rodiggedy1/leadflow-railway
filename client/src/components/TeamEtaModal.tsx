@@ -192,17 +192,23 @@ function mapTeam(t: {
 
 // ─── Design-reference sub-components (verbatim JSX) ───────────────────────────
 
-function HouseIcon({ roof = "#8FB7E7", muted = false, completed = false }: { roof?: string; muted?: boolean; completed?: boolean }) {
+// House image URLs — generated illustrated houses matching design reference
+const HOUSE_IMGS = [
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-completed-Zf64e8vAjaUGGU3mmDbNkP.webp",   // green roof
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-current-QuWoEnyPUjYwgnfmckkmC2.webp",    // navy roof
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-upcoming-1-ZQqomRHYpqrVoMBTBtcNmi.webp", // tan/brown roof
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663254023424/CAeRhAUjAZoEuxNGm5QbPr/house-upcoming-2-UwwoTnynDjyGQE8rAzHdvV.webp", // purple roof
+];
+
+function HouseIcon({ idx = 0, muted = false, completed = false }: { idx?: number; muted?: boolean; completed?: boolean }) {
+  const src = HOUSE_IMGS[idx % HOUSE_IMGS.length];
   return (
     <div className="relative">
-      <svg viewBox="0 0 64 64" className={`h-12 w-12 drop-shadow-sm ${muted ? "opacity-40 grayscale-[30%]" : ""}`}>
-        <path d="M8 31 32 12l24 19v25H8Z" fill="#FFFDF8" stroke="#334155" strokeWidth="2.2" />
-        <path d="M5 32 32 9l27 23-4 5L32 17 9 37Z" fill={roof} stroke="#334155" strokeWidth="2.2" />
-        <rect x="27" y="37" width="11" height="19" rx="1.5" fill="#F2C6A0" stroke="#334155" strokeWidth="2" />
-        <rect x="13" y="37" width="9" height="9" rx="1" fill="#DDF3FF" stroke="#334155" strokeWidth="1.7" />
-        <rect x="43" y="37" width="9" height="9" rx="1" fill="#DDF3FF" stroke="#334155" strokeWidth="1.7" />
-        <path d="M10 56h44" stroke="#80B98E" strokeWidth="3" strokeLinecap="round" />
-      </svg>
+      <img
+        src={src}
+        alt="house"
+        className={`h-14 w-14 object-contain drop-shadow-sm ${muted ? "opacity-40 grayscale-[30%]" : ""}`}
+      />
       {completed && <span className="absolute -bottom-1 -left-1 grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white shadow"><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>}
     </div>
   );
@@ -254,7 +260,7 @@ function Timeline({ team }: { team: Team }) {
               <div className={`h-8 text-[11px] font-bold uppercase tracking-[0.08em] ${current ? "" : "text-slate-400"}`} style={current ? { color: s.accent } : undefined}>{current ? "Current stop" : done ? "Completed" : "Upcoming"}</div>
               <div className="mb-1 text-sm font-extrabold" style={current ? { color: s.text, fontSize: 18 } : undefined}>{current ? (job.eta || team.eta || "Checking…") : job.scheduled}</div>
               <div className="relative z-10 flex h-[76px] items-center justify-center">
-                {current ? <div className="grid h-[72px] w-[72px] place-items-center rounded-full border-[6px] bg-white shadow-[0_0_0_10px_rgba(249,115,22,0.08)]" style={{ borderColor: s.accent }}><VanIcon /></div> : <HouseIcon completed={done} muted={!done} roof={["#80D8A6", "#8FB7E7", "#F6B27B", "#B9A7F8", "#F4C56B"][idx % 5]} />}
+                {current ? <div className="grid h-[72px] w-[72px] place-items-center rounded-full border-[6px] bg-white shadow-[0_0_0_10px_rgba(249,115,22,0.08)]" style={{ borderColor: s.accent }}><VanIcon /></div> : <HouseIcon idx={idx} completed={done} muted={!done} />}
               </div>
               <div className="mt-1 truncate text-sm font-bold">{job.customer}</div>
               <div className="truncate text-[12px] text-slate-500">{job.city}</div>
@@ -355,7 +361,7 @@ function ExpandedCard({ team }: { team: Team }) {
 // CollapsedRow — verbatim from design reference lines 240-243
 function CollapsedRow({ team, onClick }: { team: Team; onClick: () => void }) {
   const s = stateStyles[team.state];
-  return <button onClick={onClick} className="grid w-full grid-cols-[260px_minmax(0,1fr)_90px_36px] items-center gap-4 rounded-[22px] border border-slate-200/80 bg-white px-4 py-3 text-left shadow-[0_7px_22px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 font-extrabold text-slate-600">{team.initials}</div><div><div className="font-extrabold">{team.name}</div><span className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</span></div></div><div className="flex min-w-0 items-center">{team.jobs.map((job, idx)=><React.Fragment key={job.id}><div className="flex min-w-[76px] flex-col items-center">{job.status === "current" ? <div className="grid h-9 w-9 place-items-center rounded-full border-4 bg-white" style={{ borderColor: s.accent }}>{team.state === "unclear" ? <PhoneMissed className="h-4 w-4" style={{ color: s.accent }} /> : <CarFront className="h-4 w-4" style={{ color: s.accent }} />}</div> : <HouseIcon muted={job.status === "upcoming"} completed={job.status === "completed"} />}<div className="mt-1 text-[10px] font-bold text-slate-500">{job.status === "current" ? (job.eta || "Checking") : job.scheduled}</div></div>{idx < team.jobs.length - 1 && <div className="mx-1 h-[2px] min-w-[28px] flex-1 rounded-full" style={{ background: idx < team.jobs.findIndex((j)=>j.status === "current") ? s.accent : "#D9DEE7" }} />}</React.Fragment>)}</div><ConfidenceRing value={team.confidence || 0} color={s.accent} /><ChevronRight className="h-5 w-5 text-slate-400" /></button>;
+  return <button onClick={onClick} className="grid w-full grid-cols-[260px_minmax(0,1fr)_90px_36px] items-center gap-4 rounded-[22px] border border-slate-200/80 bg-white px-4 py-3 text-left shadow-[0_7px_22px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]"><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-full bg-slate-100 font-extrabold text-slate-600">{team.initials}</div><div><div className="font-extrabold">{team.name}</div><span className="mt-1 inline-flex rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: s.soft, color: s.text }}>{team.statusLabel}</span></div></div><div className="flex min-w-0 items-center">{team.jobs.map((job, idx)=><React.Fragment key={job.id}><div className="flex min-w-[76px] flex-col items-center">{job.status === "current" ? <div className="grid h-9 w-9 place-items-center rounded-full border-4 bg-white" style={{ borderColor: s.accent }}>{team.state === "unclear" ? <PhoneMissed className="h-4 w-4" style={{ color: s.accent }} /> : <CarFront className="h-4 w-4" style={{ color: s.accent }} />}</div> : <HouseIcon idx={idx} muted={job.status === "upcoming"} completed={job.status === "completed"} />}<div className="mt-1 text-[10px] font-bold text-slate-500">{job.status === "current" ? (job.eta || "Checking") : job.scheduled}</div></div>{idx < team.jobs.length - 1 && <div className="mx-1 h-[2px] min-w-[28px] flex-1 rounded-full" style={{ background: idx < team.jobs.findIndex((j)=>j.status === "current") ? s.accent : "#D9DEE7" }} />}</React.Fragment>)}</div><ConfidenceRing value={team.confidence || 0} color={s.accent} /><ChevronRight className="h-5 w-5 text-slate-400" /></button>;
 }
 
 // ─── Main modal — verbatim shell, data from tRPC ──────────────────────────────
