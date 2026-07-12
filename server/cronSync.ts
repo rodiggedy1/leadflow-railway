@@ -518,10 +518,10 @@ export function registerCronRoutes(app: Express): void {
       const db = await getDb();
       if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
       const rows = await db.execute(sql.raw(`
-        SELECT job_name, ran_at, result_summary
+        SELECT jobName, ranAt, resultSummary
         FROM cron_heartbeats
-        WHERE job_name IN ('field-mgmt', 'eta-call-trigger', 'today-sync-jobs', 'sync-watchdog')
-        ORDER BY ran_at DESC
+        WHERE jobName IN ('field-mgmt', 'eta-call-trigger', 'today-sync-jobs', 'sync-watchdog')
+        ORDER BY ranAt DESC
         LIMIT 20
       `));
       res.json(rows[0]);
