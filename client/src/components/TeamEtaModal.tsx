@@ -304,9 +304,6 @@ function Timeline({ team }: { team: Team }) {
                   <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
                   <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "Checking…"}</div>
-                  {job.scheduled && (
-                    <div className="mt-0.5 text-[11px] text-slate-400">Scheduled: {job.scheduled}</div>
-                  )}
                   {team.distance && (
                     <div className="mt-0.5 flex items-center justify-center gap-1 text-xs text-slate-500">
                       <CarFront className="h-3.5 w-3.5" />
@@ -314,6 +311,9 @@ function Timeline({ team }: { team: Team }) {
                     </div>
                   )}
                   <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
+                  {job.scheduled && (
+                    <div className="mt-2 border-t border-slate-100 pt-1.5 text-[11px] text-slate-400">Scheduled: {job.scheduled}</div>
+                  )}
                 </div>
                 {/* Van image with hover tooltip */}
                 <div className="group relative">
