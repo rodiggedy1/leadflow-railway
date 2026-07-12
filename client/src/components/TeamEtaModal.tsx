@@ -306,7 +306,7 @@ function Timeline({ team }: { team: Team }) {
       </div>
 
       {/* ROW 2: Track line + dots — explicit height so labels always sit below */}
-      <div className="relative mx-2 mt-2" style={{ height: 28 }}>
+      <div className="relative mx-2" style={{ height: 28 }}>
         <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-slate-200" />
         <div className="absolute left-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
           style={{ width: `${Math.max(progress, 2)}%`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }} />
