@@ -215,6 +215,20 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
   // Cleaner statement from the displayed call
   const cleanerStatement = displayedEtaCall?.cleanerStatement ?? null;
 
+  // cfg for the expanded section — based on the displayed job's etaCall status (normalized)
+  const normalizeEtaStatus = (s: string | null | undefined): EtaStatus => {
+    if (s === "late" || s === "running_late") return "running_late";
+    if (s === "on_time") return "on_time";
+    if (s === "early") return "early";
+    if (s === "no_answer") return "no_answer";
+    if (s === "unclear") return "unclear";
+    return "pending";
+  };
+  const displayedEtaStatus = displayedEtaCall
+    ? normalizeEtaStatus(displayedEtaCall.etaStatus)
+    : team.etaStatus;
+  const displayedCfg = STATUS_CONFIG[displayedEtaStatus];
+
   // Determine ribbon message
   const ribbonMsg = useMemo(() => {
     const s = team.currentJobStatus;
@@ -472,8 +486,8 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
               {/* ETA time big row */}
               {displayedEtaCall?.resultType === "success" && displayedEtaCall.etaTimeStr ? (
                 <div className="flex items-center gap-2.5 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
-                  <span className="text-[22px] font-[800] tabular-nums" style={{ color: cfg.badgeText }}>{displayedEtaCall.etaTimeStr}</span>
-                  <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-[700]" style={{ background: cfg.badgeBg, color: cfg.badgeText, border: `1px solid ${cfg.dot}` }}>{cfg.label}</span>
+                  <span className="text-[22px] font-[800] tabular-nums" style={{ color: displayedCfg.badgeText }}>{displayedEtaCall.etaTimeStr}</span>
+                  <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-[700]" style={{ background: displayedCfg.badgeBg, color: displayedCfg.badgeText, border: `1px solid ${displayedCfg.dot}` }}>{displayedCfg.label}</span>
                   {(selectedJob?.scheduledTime ?? (team.currentJobServiceDateTime ? formatTime(new Date(team.currentJobServiceDateTime)) : null)) && (
                     <span className="text-[11px] text-slate-400 ml-auto">Sched. {selectedJob?.scheduledTime ?? formatTime(new Date(team.currentJobServiceDateTime!))}</span>
                   )}
@@ -481,20 +495,20 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
               ) : displayedEtaCall?.resultType === "no_answer" ? (
                 <div className="flex items-center gap-2.5 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
                   <span className="text-[14px] font-[700] text-slate-500">No answer</span>
-                  <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-[700]" style={{ background: cfg.badgeBg, color: cfg.badgeText, border: `1px solid ${cfg.dot}` }}>{cfg.label}</span>
+                  <span className="inline-flex items-center px-2.5 py-[3px] rounded-full text-[11px] font-[700]" style={{ background: displayedCfg.badgeBg, color: displayedCfg.badgeText, border: `1px solid ${displayedCfg.dot}` }}>{displayedCfg.label}</span>
                 </div>
               ) : null}
 
               {/* Cleaner Said row */}
               {displayedEtaCall && (
                 <div className="flex items-start gap-3 px-3.5 py-2.5" style={{ borderBottom: "1px solid rgba(253,232,192,0.5)" }}>
-                  <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: cfg.badgeBg }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={cfg.badgeText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: displayedCfg.badgeBg }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={displayedCfg.badgeText} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
                   </div>
                   <div>
-                    <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px]" style={{ color: cfg.badgeText }}>
+                    <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px]" style={{ color: displayedCfg.badgeText }}>
                       {displayedEtaCall.resultType === "no_answer" || displayedEtaCall.resultType === "dispatcher_needed" ? "Call Outcome" : "Cleaner Said"}
                     </p>
                     {displayedEtaCall.resultType === "no_answer" || displayedEtaCall.resultType === "dispatcher_needed" ? (
@@ -547,13 +561,13 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
               {/* Client Notified row */}
               <div className="flex items-start gap-3 px-3.5 py-2.5">
-                <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: displayedEtaCall?.clientNotified ? cfg.badgeBg : "#F1F5F9" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={displayedEtaCall?.clientNotified ? cfg.badgeText : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <div className="w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: displayedEtaCall?.clientNotified ? displayedCfg.badgeBg : "#F1F5F9" }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={displayedEtaCall?.clientNotified ? displayedCfg.badgeText : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07"/>
                   </svg>
                 </div>
                 <div>
-                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px]" style={{ color: displayedEtaCall?.clientNotified ? cfg.badgeText : "#94A3B8" }}>Client Notified</p>
+                  <p className="text-[9px] font-[700] uppercase tracking-[.12em] mb-[2px]" style={{ color: displayedEtaCall?.clientNotified ? displayedCfg.badgeText : "#94A3B8" }}>Client Notified</p>
                   {displayedEtaCall?.clientNotified ? (
                     <>
                       <p className="text-[12px] font-[700]" style={{ color: "#334155" }}>✓ SMS sent{displayedEtaCall.createdAt ? ` at ${formatTime(displayedEtaCall.createdAt)}` : ""}</p>
