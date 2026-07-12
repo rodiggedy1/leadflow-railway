@@ -464,10 +464,10 @@ function AudioPlayer({ url }: { url: string | null }) {
   return (
     <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-indigo-100 bg-white px-3 py-3">
       <button onClick={toggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-200">
-        <Play className="ml-0.5 h-5 w-5 fill-current" />
+        {playing ? <span className="flex gap-[3px]"><span className="h-4 w-[3px] rounded-full bg-white" /><span className="h-4 w-[3px] rounded-full bg-white" /></span> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
       </button>
       <div className="flex h-10 flex-1 items-center gap-[3px]">
-        {[5,11,17,10,20,26,18,31,22,14,27,34,20,12,25,18,30,13,22,10].map((h,i)=><span key={i} className="w-[3px] rounded-full bg-gradient-to-t from-indigo-200 to-indigo-400" style={{height:h}} />)}
+        {[5,11,17,10,20,26,18,31,22,14,27,34,20,12,25,18,30,13,22,10].map((h,i)=><span key={i} className="w-[3px] rounded-full bg-gradient-to-t from-indigo-200 to-indigo-400" style={{height:h, transformOrigin:'bottom', animation: playing ? `audioWave ${0.6 + (i % 5) * 0.1}s ease-in-out ${(i * 0.05).toFixed(2)}s infinite` : 'none'}} />)}
       </div>
       <span className="text-xs font-bold text-slate-400">0:11</span>
     </div>
@@ -618,7 +618,7 @@ export function TeamEtaModal({ open, onClose }: TeamEtaModalProps) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       {/* Verbatim from design reference lines 256-266 */}
-      <style>{`@keyframes etaFloat{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(-2px) translateX(2px)}}`}</style>
+      <style>{`@keyframes etaFloat{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(-2px) translateX(2px)}}@keyframes audioWave{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1.0)}}`}</style>
       <div className="mx-auto flex h-[calc(100vh-40px)] max-w-[1540px] flex-col overflow-hidden rounded-[30px] border border-white/80 bg-[#F7F9FC]/95 shadow-[0_34px_100px_rgba(15,23,42,0.22)] backdrop-blur-xl" style={{ background: "radial-gradient(circle at top left,#EAF1FF 0%,#F7F9FC 35%,#EEF2F7 100%)" }}>
 
         {/* Header — verbatim */}
