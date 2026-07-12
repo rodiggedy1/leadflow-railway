@@ -1730,9 +1730,13 @@ export const fieldMgmtRouter = router({
       if (!row) throw new TRPCError({ code: "NOT_FOUND", message: "Job not found" });
       if (!row.cleanerPhone) throw new TRPCError({ code: "BAD_REQUEST", message: "No phone number for cleaner" });
 
-      const cleanerFirstName = (row.cleanerName ?? "Team").split(" ")[0];
-      const customerFirstName = (row.customerName ?? "the customer").split(" ")[0];
-      const scheduledTimeET = row.serviceDateTime ? formatTimeET(new Date(row.serviceDateTime)) : "your scheduled time";
+      const cleanerFirstName = (row.cleanerName ?? "there").split(" ")[0];
+      const customerFirstName = (row.customerName ?? "your customer").split(" ")[0];
+
+      if (!row.serviceDateTime) throw new TRPCError({ code: "BAD_REQUEST", message: "Job has no service date/time" });
+      const serviceTime = parseServiceDateTime(row.serviceDateTime);
+      if (!serviceTime) throw new TRPCError({ code: "BAD_REQUEST", message: "Could not parse service date/time" });
+      const scheduledTimeET = formatTimeET(serviceTime);
 
       const result = await placeEtaCall({
         cleanerJobId: input.cleanerJobId,
