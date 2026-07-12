@@ -157,11 +157,10 @@ function ConfidenceRing({ value, color }: { value: number; color: string }) {
   );
 }
 
-// Timeline — matches design reference exactly:
-// - Van sits ON the track between nodes (not inside a big circle)
-// - Completed nodes show house + green check
-// - Upcoming nodes show muted house
-// - Van floats above the track at the current position
+// Timeline — copied verbatim from design reference (team-eta-react/TeamEtaModal.tsx lines 181-209)
+// Track at top-[93px]. Van in a 72x72 bordered circle sitting ON the track.
+// Label (Current stop / Completed / Upcoming) above, time below label, node in center, name/city below.
+// Status pill below name for current stop only.
 function Timeline({ team }: { team: TeamEtaSummaryItem }) {
   const s = STATE_STYLES[team.etaStatus];
   const jobs = team.jobs;
@@ -172,9 +171,9 @@ function Timeline({ team }: { team: TeamEtaSummaryItem }) {
 
   return (
     <div className="relative min-w-0 flex-1 px-5 pb-2 pt-3">
-      {/* Track */}
+      {/* Full track background */}
       <div className="absolute left-[8%] right-[8%] top-[93px] h-[3px] rounded-full bg-slate-200" />
-      {/* Completed portion */}
+      {/* Completed portion — solid green→accent gradient */}
       <div
         className="absolute left-[8%] top-[93px] h-[3px] rounded-full"
         style={{
@@ -187,84 +186,73 @@ function Timeline({ team }: { team: TeamEtaSummaryItem }) {
         style={{ gridTemplateColumns: `repeat(${jobs.length}, minmax(110px,1fr))` }}
       >
         {jobs.map((job, idx) => {
-          const isCurrent = idx === currentIdx;
-          const isDone = job.jobStatus === "completed" || job.jobStatus === "cancelled" || idx < currentIdx;
-          const isUpcoming = !isCurrent && !isDone;
-
-          // Label above node
-          let topLabel: string;
-          if (isCurrent) {
-            topLabel = "Current Stop";
-          } else if (isDone) {
-            topLabel = "Completed";
-          } else {
-            topLabel = "Upcoming";
-          }
-
-          // Time display (below label, above node)
-          let timeDisplay: string;
-          if (isCurrent) {
-            timeDisplay = team.etaCall?.etaTimeStr ?? formatTime(team.currentJobServiceDateTime);
-          } else {
-            // Upcoming: show ETA if available, else scheduled time
-            timeDisplay = job.etaCall?.etaTimeStr
-              ? `ETA ${job.etaCall.etaTimeStr}`
-              : formatTime(job.serviceDateTime);
-          }
+          const current = idx === currentIdx;
+          const done = job.jobStatus === "completed" || job.jobStatus === "cancelled" || idx < currentIdx;
+          const etaTime = current
+            ? (team.etaCall?.etaTimeStr ?? formatTime(team.currentJobServiceDateTime))
+            : (job.etaCall?.etaTimeStr ?? formatTime(job.serviceDateTime));
+          const distanceLabel = current && team.delayMinutes > 0 ? `${team.delayMinutes} min away` : null;
+          const statusPill = current
+            ? (team.delayMinutes > 0 ? `Running ${team.delayMinutes} min late` : (team.etaCall?.etaTimeStr ? "On time" : s.label))
+            : null;
 
           return (
             <div key={job.id} className="flex min-w-0 flex-col items-center text-center">
               {/* Top label */}
               <div
-                className={`h-8 text-[11px] font-bold uppercase tracking-[0.08em] ${isCurrent ? "" : "text-slate-400"}`}
-                style={isCurrent ? { color: s.accent } : undefined}
+                className={`h-8 text-[11px] font-bold uppercase tracking-[0.08em] ${current ? "" : "text-slate-400"}`}
+                style={current ? { color: s.accent } : undefined}
               >
-                {topLabel}
+                {current ? "Current stop" : done ? "Completed" : "Upcoming"}
               </div>
-
               {/* Time */}
               <div
-                className="mb-1 font-extrabold"
-                style={isCurrent ? { color: s.text, fontSize: 18 } : { fontSize: 14, color: "#94A3B8" }}
+                className="mb-1 text-sm font-extrabold"
+                style={current ? { color: s.text, fontSize: 18 } : undefined}
               >
-                {timeDisplay}
+                {etaTime}
               </div>
-
-              {/* Node — van sits ON the track, not in a big circle */}
+              {/* Node */}
               <div className="relative z-10 flex h-[76px] items-center justify-center">
-                {isCurrent ? (
-                  <VanIcon />
+                {current ? (
+                  // Van inside bordered circle — exactly as design reference
+                  <div
+                    className="grid h-[72px] w-[72px] place-items-center rounded-full border-[6px] bg-white shadow-[0_0_0_10px_rgba(249,115,22,0.08)]"
+                    style={{ borderColor: s.accent }}
+                  >
+                    <VanIcon />
+                  </div>
                 ) : (
                   <HouseIcon
-                    completed={isDone}
-                    muted={isUpcoming}
+                    completed={done}
+                    muted={!done}
                     roof={ROOF_COLORS[idx % ROOF_COLORS.length]}
                   />
                 )}
               </div>
-
               {/* Customer name */}
-              <div className="mt-1 truncate text-sm font-bold">
-                {job.customerName ?? "—"}
-              </div>
-
-              {/* City from address */}
+              <div className="mt-1 truncate text-sm font-bold">{job.customerName ?? "—"}</div>
+              {/* City */}
               <div className="truncate text-[12px] text-slate-500">
                 {job.jobAddress?.split(",").slice(-2, -1)[0]?.trim() ?? job.jobAddress ?? ""}
               </div>
-
-              {/* Status pill for current — shows distance/delay */}
-              {isCurrent && (
-                <div
-                  className="mt-2 rounded-full px-3 py-1 text-xs font-bold"
-                  style={{ background: s.soft, color: s.text }}
-                >
-                  {team.delayMinutes > 0
-                    ? `Running ${team.delayMinutes} min late`
-                    : team.etaCall?.etaTimeStr
-                    ? "On time"
-                    : s.label}
-                </div>
+              {/* Distance + status pill — current only */}
+              {current && (
+                <>
+                  {distanceLabel && (
+                    <div className="mt-1 flex items-center gap-1 text-[12px] font-semibold text-slate-500">
+                      <CarFront className="h-3.5 w-3.5" />{distanceLabel}
+                    </div>
+                  )}
+                  {statusPill && (
+                    <div
+                      className="mt-1 rounded-full px-3 py-1 text-xs font-bold"
+                      style={{ background: s.soft, color: s.text }}
+                    >
+                      {statusPill}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           );
