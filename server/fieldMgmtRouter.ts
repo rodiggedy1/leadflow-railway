@@ -19,7 +19,7 @@
  */
 
 import { z } from "zod";
-import { eq, asc, desc, gte, lte, gt, inArray, notInArray, and, ne } from "drizzle-orm";
+import { eq, asc, desc, gte, lte, gt, inArray, notInArray, and, ne, sql } from "drizzle-orm";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
@@ -1531,7 +1531,7 @@ export const fieldMgmtRouter = router({
       // 2. Fetch latest eta_call_result card from opsChatMessages — single source of truth
       // (same data the ETA call result card in Command Chat reads)
       const jobIds = jobs.map(j => j.id);
-      const etaCardRows = await db
+      const etaCardRows = jobIds.length > 0 ? await db
         .select({
           cleanerJobId: opsChatMessages.cleanerJobId,
           metadata: opsChatMessages.metadata,
@@ -1542,7 +1542,7 @@ export const fieldMgmtRouter = router({
           inArray(opsChatMessages.cleanerJobId as any, jobIds),
           eq(opsChatMessages.quickAction as any, "eta_call_result")
         ))
-        .orderBy(desc(opsChatMessages.createdAt));
+        .orderBy(desc(opsChatMessages.createdAt)) : [];
 
       // Map latest eta_call_result card per job — parse metadata JSON
       type EtaCardMeta = {
@@ -1672,15 +1672,32 @@ export const fieldMgmtRouter = router({
             transcript: etaCard.meta.transcript ?? null,
             createdAt: etaCard.createdAt,
           } : null,
-          jobs: team.jobs.map(j => ({
-            id: j.id,
-            customerName: j.customerName,
-            customerPhone: j.customerPhone,
-            jobAddress: j.jobAddress,
-            serviceDateTime: j.serviceDateTime,
-            jobStatus: j.jobStatus,
-            delayMinutes: j.delayMinutes ?? 0,
-          })),
+          jobs: team.jobs.map(j => {
+            const jobCard = latestEtaCardByJob.get(j.id) ?? null;
+            return {
+              id: j.id,
+              customerName: j.customerName,
+              customerPhone: j.customerPhone,
+              jobAddress: j.jobAddress,
+              serviceDateTime: j.serviceDateTime,
+              jobStatus: j.jobStatus,
+              delayMinutes: j.delayMinutes ?? 0,
+              arrivedAt: arrivedAtByJob.get(j.id) ?? null,
+              completedAt: completedAtByJob.get(j.id) ?? null,
+              etaCall: jobCard ? {
+                step: jobCard.meta.step ?? null,
+                resultType: jobCard.meta.resultType,
+                etaTimeStr: jobCard.meta.etaTimeStr ?? null,
+                etaStatus: jobCard.meta.etaStatus ?? null,
+                cleanerStatement: jobCard.meta.cleanerStatement ?? null,
+                clientNotified: jobCard.meta.clientNotified,
+                smsSentBody: jobCard.meta.clientSmsBody ?? null,
+                recordingUrl: jobCard.meta.recordingUrl ?? null,
+                transcript: jobCard.meta.transcript ?? null,
+                createdAt: jobCard.createdAt,
+              } : null,
+            };
+          }),
         };
       });
 
