@@ -554,11 +554,8 @@ async function buildAndSendTestStep(
       ].join("\n");
       break;
 
-    case "checkin_call_attempt_1":
-    case "checkin_call_attempt_2":
-    case "checkin_call_attempt_3": {
+    case "checkin_call_attempt_1": {
       // VAPI call — not an SMS. Place the actual call to TEST_PHONE.
-      const attemptNum = step === "checkin_call_attempt_1" ? 1 : step === "checkin_call_attempt_2" ? 2 : 3;
       const callResult = await placeNoCheckinEscalationCallWithReason({
         cleanerName: job.cleanerName ?? "Test Cleaner",
         customerName: job.customerName ?? "Test Client",
@@ -570,7 +567,7 @@ async function buildAndSendTestStep(
       });
       return {
         success: callResult.success,
-        smsSent: `[VAPI Call] T-${58 - (attemptNum - 1) * 2}min check-in call attempt ${attemptNum} → ${TEST_PHONE}`,
+        smsSent: `[VAPI Call] T-58min check-in call → ${TEST_PHONE}`,
         recipientPhone: TEST_PHONE,
         errorDetail: callResult.success ? undefined : (callResult.reason ?? "VAPI call failed"),
       };

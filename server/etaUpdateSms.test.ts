@@ -96,7 +96,7 @@ describe("ETA update SMS — unique step names", () => {
   it("step names do not collide with reserved step names", () => {
     const reservedSteps = [
       "client_pre_job", "client_on_the_way", "client_running_late",
-      "completion", "checkin_call_attempt_1", "checkin_call_t30_attempt_1",
+      "completion", "checkin_call_attempt_1",
     ];
     const etaStep = `eta_update_${Date.now()}`;
     expect(reservedSteps).not.toContain(etaStep);

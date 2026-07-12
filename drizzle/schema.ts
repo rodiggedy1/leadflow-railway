@@ -1496,14 +1496,8 @@ export const fieldMgmtSteps = [
   "exception_call",
   "noshow_alert",
   "noshow_call",
-  // T-58min VAPI check-in call attempts (3 attempts, 2 min apart)
+  // T-58min VAPI check-in call — fires exactly once per job (step_locks dedup)
   "checkin_call_attempt_1",
-  "checkin_call_attempt_2",
-  "checkin_call_attempt_3",
-  // T-30min VAPI check-in call attempts (3 attempts, 2 min apart — second chance)
-  "checkin_call_t30_attempt_1",
-  "checkin_call_t30_attempt_2",
-  "checkin_call_t30_attempt_3",
   // Post-start escalation steps
   "post_start_call_1",
   "post_start_cs_alert",
@@ -1537,9 +1531,10 @@ export const fieldMgmtLog = mysqlTable("field_mgmt_log", {
   firedAt: timestamp("firedAt").defaultNow().notNull(),
 });
 // NOTE: The unique index uniq_field_mgmt_job_step was intentionally DROPPED from the DB.
-// field_mgmt_log is an append-only audit log — steps like checkin_call_t30_attempt_N
-// and client_running_late_{ts} must be allowed to fire multiple times per job.
-// Dedup is handled in code via tryClaimStep (SELECT before INSERT), not at the DB level.
+// field_mgmt_log is an append-only audit log — steps like client_running_late_{ts}
+// and eta_update_{ts} must be allowed to fire multiple times per job.
+// Dedup for one-shot steps (e.g. checkin_call_attempt_1) is handled via tryClaimStep
+// (INSERT IGNORE on step_locks UNIQUE(cleanerJobId, step)), not at the DB level.
 
 export type FieldMgmtLog = typeof fieldMgmtLog.$inferSelect;
 export type InsertFieldMgmtLog = typeof fieldMgmtLog.$inferInsert;
