@@ -302,7 +302,11 @@ function Timeline({ team }: { team: Team }) {
                 {/* Floating white card above the van */}
                 <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
                   <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
                   <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>{job.eta || team.eta || "Checking…"}</div>
+                  {job.scheduled && (
+                    <div className="mt-0.5 text-[11px] text-slate-400">Scheduled: {job.scheduled}</div>
+                  )}
                   {team.distance && (
                     <div className="mt-0.5 flex items-center justify-center gap-1 text-xs text-slate-500">
                       <CarFront className="h-3.5 w-3.5" />
