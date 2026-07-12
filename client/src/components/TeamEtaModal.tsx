@@ -28,14 +28,17 @@ interface TeamEtaSummaryItem {
   currentJobServiceDateTime: Date | null;
   currentJobStatus: string;
   arrivedAt: Date | null;
+  completedAt: Date | null;
   etaCall: {
-    id: number;
-    step: string;
-    outcome: string;
-    transcript: string | null;
-    recordingUrl: string | null;
-    durationSeconds: number;
+    step: string | null;
+    resultType: "success" | "no_answer" | "unclear" | "dispatcher_needed";
+    etaTimeStr: string | null;
+    etaStatus: string | null;
+    cleanerStatement: string | null;
+    clientNotified: boolean;
     smsSentBody: string | null;
+    recordingUrl: string | null;
+    transcript: string | null;
     createdAt: Date;
   } | null;
   jobs: Array<{
@@ -179,16 +182,8 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
   const [txOpen, setTxOpen] = useState(false);
   const cfg = STATUS_CONFIG[team.etaStatus];
 
-  // Derive cleaner statement from transcript
-  const cleanerStatement = useMemo(() => {
-    if (!team.etaCall?.transcript) return null;
-    const lines = team.etaCall.transcript.split("\n");
-    const cleanerLine = lines.find(l => l.toLowerCase().includes("cleaner:") || l.toLowerCase().includes("user:") || l.toLowerCase().includes("assistant:") === false);
-    if (cleanerLine) {
-      return cleanerLine.replace(/^(cleaner|user|assistant|customer):\s*/i, "").trim();
-    }
-    return null;
-  }, [team.etaCall?.transcript]);
+  // Cleaner statement comes directly from card metadata
+  const cleanerStatement = team.etaCall?.cleanerStatement ?? null;
 
   const initials = team.cleanerName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
@@ -197,16 +192,17 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
     const s = team.currentJobStatus;
     // Arrived / on-site statuses take priority over ETA call status
     const arrivedDisplay = team.arrivedAt ? ` · arrived ${formatTime(new Date(team.arrivedAt))}` : "";
+    const completedDisplay = team.completedAt ? ` at ${formatTime(new Date(team.completedAt))}` : "";
+    if (s === "completed") return `Job completed${completedDisplay}`;
     if (s === "in_progress") return `Cleaning in progress${arrivedDisplay}`;
     if (s === "finishing_up") return `Finishing up${arrivedDisplay}`;
     if (s === "wrapping_up") return `Wrapping up${arrivedDisplay}`;
     if (s === "arrived") return `Team has arrived${arrivedDisplay}`;
-    if (s === "completed") return "Job completed";
     // Only show ETA time if we actually have one from a call — never show scheduled time as ETA
-    const etaDisplay = team.etaTimestamp ? formatTime(new Date(team.etaTimestamp)) : null;
+    const etaDisplay = team.etaCall?.etaTimeStr ?? (team.etaTimestamp ? formatTime(new Date(team.etaTimestamp)) : null);
     if (team.etaStatus === "on_time") return etaDisplay ? `On track · ETA ${etaDisplay}` : "On track";
     if (team.etaStatus === "early") return etaDisplay ? `Arriving early · ETA ${etaDisplay}` : "Arriving early";
-    if (team.etaStatus === "running_late") return `Running ~${team.delayMinutes} min behind schedule`;
+    if (team.etaStatus === "running_late") return etaDisplay ? `Running late · ETA ${etaDisplay}` : "Running late";
     if (team.etaStatus === "no_answer") {
       const attempt = team.etaCall?.step === "eta_call_2" ? "2nd" : "1st";
       return `${attempt} call not answered — retry pending`;
@@ -266,19 +262,6 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
         {/* Timeline */}
         <div className="flex-1 px-5 py-4 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
-          {/* Column headers */}
-          <div className="flex items-start mb-2.5" style={{ minWidth: 480 }}>
-            <div className="w-[100px] shrink-0 text-center">
-              <span className="text-[9px] font-[700] uppercase tracking-[.14em] text-slate-400">Completed</span>
-            </div>
-            <div className="w-[120px] shrink-0 text-center">
-              <span className={cn("text-[9px] font-[700] uppercase tracking-[.14em]", cfg.ribbonText)}>Current</span>
-            </div>
-            <div className="w-[100px] shrink-0 text-center">
-              <span className="text-[9px] font-[700] uppercase tracking-[.14em] text-slate-400">Up Next</span>
-            </div>
-          </div>
-
           {/* Nodes — ALL jobs shown */}
           <div className="relative" style={{ minWidth: Math.max(480, team.jobs.length * 110), height: 96 }}>
             {/* Connector lines */}
@@ -311,9 +294,21 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                 return (
                   <div key={job.id} className="absolute flex flex-col items-center" style={{ left: leftPos - 10, top: 4, width: 70 }}>
                     <div className="text-[11px] font-[750] mb-1 whitespace-nowrap text-center" style={{ color: cfg.badgeText }}>
-                      {team.etaStatus === "pending" || team.etaStatus === "no_answer" ? "ETA Pending" :
-                       team.etaStatus === "unclear" ? "ETA Unclear" :
-                       team.etaTimestamp ? `${formatTime(new Date(team.etaTimestamp))} ETA` : "—"}
+                      {(() => {
+                        const s = team.currentJobStatus;
+                        // If arrived/cleaning/completed — show arrived time
+                        if (s === "arrived" || s === "in_progress" || s === "finishing_up" || s === "wrapping_up") {
+                          return team.arrivedAt ? `Arrived ${formatTime(new Date(team.arrivedAt))}` : "Arrived";
+                        }
+                        if (s === "completed") {
+                          return team.completedAt ? `Done ${formatTime(new Date(team.completedAt))}` : "Completed";
+                        }
+                        // On the way — show ETA from card
+                        const etaStr = team.etaCall?.etaTimeStr ?? (team.etaTimestamp ? formatTime(new Date(team.etaTimestamp)) : null);
+                        if (team.etaStatus === "pending" || team.etaStatus === "no_answer") return "ETA Pending";
+                        if (team.etaStatus === "unclear") return "ETA Unclear";
+                        return etaStr ? `ETA ${etaStr}` : "—";
+                      })()}
                     </div>
                     <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white" style={{ borderColor: cfg.dot }}>
                       {(team.etaStatus === "on_time" || team.etaStatus === "early" || team.etaStatus === "running_late") ? (
@@ -343,10 +338,10 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                     <div className="mt-1 text-center">
                       {(() => {
                         const s = team.currentJobStatus;
-                        if (team.etaStatus === "running_late" && team.delayMinutes > 0) return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>{team.delayMinutes} min late</div>;
+                        if (s === "completed") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Completed</div>;
                         if (s === "in_progress" || s === "finishing_up" || s === "wrapping_up") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Cleaning</div>;
                         if (s === "arrived") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>Arrived</div>;
-                        if (s === "on_the_way" || s === "running_late" || team.etaStatus === "on_time" || team.etaStatus === "early") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
+                        if (s === "on_the_way" || team.etaStatus === "on_time" || team.etaStatus === "early" || team.etaStatus === "running_late") return <div className="text-[10px] font-[700]" style={{ color: cfg.badgeText }}>On the way</div>;
                         return null;
                       })()}
                       <div className="text-[10px] font-[700] text-slate-700 truncate max-w-[70px]">{firstName} {lastInitial}.</div>
@@ -447,9 +442,9 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   </div>
                   <div>
                     <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: cfg.badgeText }}>
-                      {team.etaCall.outcome === "no_answer" ? "Call Outcome" : "Cleaner Said"}
+                      {team.etaCall.resultType === "no_answer" || team.etaCall.resultType === "dispatcher_needed" ? "Call Outcome" : "Cleaner Said"}
                     </p>
-                    {team.etaCall.outcome === "no_answer" ? (
+                    {team.etaCall.resultType === "no_answer" || team.etaCall.resultType === "dispatcher_needed" ? (
                       <p className="text-[12px] font-[600] text-slate-500">Call was not answered</p>
                     ) : cleanerStatement ? (
                       <p className="text-[12px] font-[600] text-slate-700 italic">"{cleanerStatement}"</p>
@@ -472,10 +467,12 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   <p className="text-[9px] font-[700] uppercase tracking-[.12em] leading-none mb-0.5" style={{ color: team.etaCall?.smsSentBody ? cfg.badgeText : "#94A3B8" }}>
                     Client Notified
                   </p>
-                  {team.etaCall?.smsSentBody ? (
+                  {team.etaCall?.clientNotified ? (
                     <p className="text-[12px] font-[700] text-slate-800">✓ SMS sent{team.etaCall.createdAt ? ` at ${formatTime(team.etaCall.createdAt)}` : ""}</p>
+                  ) : team.etaCall ? (
+                    <p className="text-[12px] font-[600] text-slate-500">Client not notified</p>
                   ) : (
-                    <p className="text-[12px] font-[600] text-slate-500">Pending ETA confirmation</p>
+                    <p className="text-[12px] font-[600] text-slate-500">No ETA call yet</p>
                   )}
                 </div>
               </div>
@@ -486,7 +483,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
           {team.etaCall?.recordingUrl ? (
             <AudioPlayer
               url={team.etaCall.recordingUrl}
-              durationSeconds={team.etaCall.durationSeconds}
+              durationSeconds={0}
               color={playerColor}
             />
           ) : (
@@ -500,7 +497,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
               <div>
                 <div className="text-[11px] font-[700] text-slate-400">No recording available</div>
                 <div className="text-[10px] text-slate-300 mt-0.5">
-                  {team.etaCall?.outcome === "no_answer" ? "Call was not answered" : "Recording will appear after a successful ETA call"}
+                  {(team.etaCall?.resultType === "no_answer" || team.etaCall?.resultType === "dispatcher_needed") ? "Call was not answered" : "Recording will appear after a successful ETA call"}
                 </div>
               </div>
             </div>

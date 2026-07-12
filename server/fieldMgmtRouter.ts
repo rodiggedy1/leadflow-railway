@@ -1528,53 +1528,70 @@ export const fieldMgmtRouter = router({
 
       if (jobs.length === 0) return [];
 
-      // 2. Fetch all ETA calls for these jobs
+      // 2. Fetch latest eta_call_result card from opsChatMessages — single source of truth
+      // (same data the ETA call result card in Command Chat reads)
       const jobIds = jobs.map(j => j.id);
-      const etaCalls = await db
+      const etaCardRows = await db
         .select({
-          id: fieldMgmtCalls.id,
-          cleanerJobId: fieldMgmtCalls.cleanerJobId,
-          step: fieldMgmtCalls.step,
-          outcome: fieldMgmtCalls.outcome,
-          transcript: fieldMgmtCalls.transcript,
-          recordingUrl: fieldMgmtCalls.recordingUrl,
-          durationSeconds: fieldMgmtCalls.durationSeconds,
-          smsFollowupBody: fieldMgmtCalls.smsFollowupBody,
-          createdAt: fieldMgmtCalls.createdAt,
+          cleanerJobId: opsChatMessages.cleanerJobId,
+          metadata: opsChatMessages.metadata,
+          createdAt: opsChatMessages.createdAt,
         })
-        .from(fieldMgmtCalls)
+        .from(opsChatMessages)
         .where(and(
-          inArray(fieldMgmtCalls.cleanerJobId, jobIds),
-          inArray(fieldMgmtCalls.step, ["eta_call_1", "eta_call_2"])
+          inArray(opsChatMessages.cleanerJobId as any, jobIds),
+          eq(opsChatMessages.quickAction as any, "eta_call_result")
         ))
-        .orderBy(desc(fieldMgmtCalls.createdAt));
+        .orderBy(desc(opsChatMessages.createdAt));
 
-      // Map latest ETA call per job
-      const latestEtaCallByJob = new Map<number, typeof etaCalls[0]>();
-      for (const call of etaCalls) {
-        if (!latestEtaCallByJob.has(call.cleanerJobId)) {
-          latestEtaCallByJob.set(call.cleanerJobId, call);
-        }
+      // Map latest eta_call_result card per job — parse metadata JSON
+      type EtaCardMeta = {
+        step: string | null;
+        resultType: "success" | "no_answer" | "unclear" | "dispatcher_needed";
+        etaTimeStr: string | null;
+        etaStatus: string | null; // "on_time" | "late" | "early" | "unclear"
+        cleanerStatement: string | null;
+        clientNotified: boolean;
+        clientSmsBody: string | null;
+        recordingUrl: string | null;
+        transcript: string | null;
+        vapiCallId: string | null;
+        scheduledTime: string | null;
+      };
+      const latestEtaCardByJob = new Map<number, { meta: EtaCardMeta; createdAt: Date }>();
+      for (const row of etaCardRows) {
+        const jobId = row.cleanerJobId as number | null;
+        if (!jobId) continue;
+        if (latestEtaCardByJob.has(jobId)) continue; // already have latest
+        try {
+          const meta = JSON.parse(row.metadata ?? "{}") as EtaCardMeta;
+          latestEtaCardByJob.set(jobId, { meta, createdAt: row.createdAt });
+        } catch { /* ignore malformed */ }
       }
 
-      // 2b. Fetch arrived timestamps from jobStatusHistory
-      const arrivedRows = await db
+      // 2b. Fetch arrived + completed timestamps from jobStatusHistory
+      const statusHistoryRows = await db
         .select({
           cleanerJobId: jobStatusHistory.cleanerJobId,
+          status: jobStatusHistory.status,
           changedAt: jobStatusHistory.changedAt,
         })
         .from(jobStatusHistory)
         .where(and(
           inArray(jobStatusHistory.cleanerJobId, jobIds),
-          eq(jobStatusHistory.status, "arrived")
+          inArray(jobStatusHistory.status as any, ["arrived", "completed"])
         ))
         .orderBy(asc(jobStatusHistory.changedAt));
 
-      // Map first arrived timestamp per job
+      // Map first arrived and first completed timestamp per job
       const arrivedAtByJob = new Map<number, Date>();
-      for (const row of arrivedRows) {
-        if (!arrivedAtByJob.has(row.cleanerJobId)) {
+      const completedAtByJob = new Map<number, Date>();
+      for (const row of statusHistoryRows) {
+        if (row.status === "arrived" && !arrivedAtByJob.has(row.cleanerJobId)) {
           arrivedAtByJob.set(row.cleanerJobId, row.changedAt);
+        }
+        if (row.status === "completed" && !completedAtByJob.has(row.cleanerJobId)) {
+          completedAtByJob.set(row.cleanerJobId, row.changedAt);
         }
       }
 
@@ -1607,20 +1624,22 @@ export const fieldMgmtRouter = router({
           (j.jobStatus as string) !== "completed" && (j.jobStatus as string) !== "cancelled"
         ) ?? team.jobs[team.jobs.length - 1];
 
-        const etaCall = latestEtaCallByJob.get(currentJob.id) ?? null;
+        const etaCard = latestEtaCardByJob.get(currentJob.id) ?? null;
 
-        // Derive etaStatus from the ETA call outcome only — job status never overrides this
+        // Derive etaStatus from the card metadata — single source of truth
         let etaStatus: "on_time" | "running_late" | "early" | "unclear" | "no_answer" | "pending" = "pending";
-        if (etaCall) {
-          if (etaCall.outcome === "no_answer") {
+        if (etaCard) {
+          const { resultType, etaStatus: cardEtaStatus } = etaCard.meta;
+          if (resultType === "no_answer" || resultType === "dispatcher_needed") {
             etaStatus = "no_answer";
-          } else if (etaCall.outcome === "answered") {
-            const delay = currentJob.delayMinutes ?? 0;
-            if (delay <= -5) etaStatus = "early";
-            else if (delay <= 10) etaStatus = "on_time";
-            else etaStatus = "running_late";
-          } else {
+          } else if (resultType === "unclear") {
             etaStatus = "unclear";
+          } else if (resultType === "success") {
+            // card etaStatus: "on_time" | "late" | "early" | "unclear"
+            if (cardEtaStatus === "late") etaStatus = "running_late";
+            else if (cardEtaStatus === "early") etaStatus = "early";
+            else if (cardEtaStatus === "on_time") etaStatus = "on_time";
+            else etaStatus = "unclear";
           }
         } else if (currentJob.etaCallFiredAt) {
           etaStatus = "unclear";
@@ -1640,15 +1659,18 @@ export const fieldMgmtRouter = router({
           currentJobServiceDateTime: currentJob.serviceDateTime,
           currentJobStatus: currentJob.jobStatus,
           arrivedAt: arrivedAtByJob.get(currentJob.id) ?? null,
-          etaCall: etaCall ? {
-            id: etaCall.id,
-            step: etaCall.step,
-            outcome: etaCall.outcome,
-            transcript: etaCall.transcript ?? null,
-            recordingUrl: etaCall.recordingUrl ?? null,
-            durationSeconds: etaCall.durationSeconds,
-            smsSentBody: etaCall.smsFollowupBody ?? null,
-            createdAt: etaCall.createdAt,
+          completedAt: completedAtByJob.get(currentJob.id) ?? null,
+          etaCall: etaCard ? {
+            step: etaCard.meta.step ?? null,
+            resultType: etaCard.meta.resultType,
+            etaTimeStr: etaCard.meta.etaTimeStr ?? null,
+            etaStatus: etaCard.meta.etaStatus ?? null,
+            cleanerStatement: etaCard.meta.cleanerStatement ?? null,
+            clientNotified: etaCard.meta.clientNotified,
+            smsSentBody: etaCard.meta.clientSmsBody ?? null,
+            recordingUrl: etaCard.meta.recordingUrl ?? null,
+            transcript: etaCard.meta.transcript ?? null,
+            createdAt: etaCard.createdAt,
           } : null,
           jobs: team.jobs.map(j => ({
             id: j.id,
