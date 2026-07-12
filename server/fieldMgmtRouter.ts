@@ -1732,7 +1732,7 @@ export const fieldMgmtRouter = router({
 
       const cleanerFirstName = (row.cleanerName ?? "Team").split(" ")[0];
       const customerFirstName = (row.customerName ?? "the customer").split(" ")[0];
-      const scheduledTimeET = row.serviceDateTime ? formatTimeET(row.serviceDateTime) : "your scheduled time";
+      const scheduledTimeET = row.serviceDateTime ? formatTimeET(new Date(row.serviceDateTime)) : "your scheduled time";
 
       const result = await placeEtaCall({
         cleanerJobId: input.cleanerJobId,
