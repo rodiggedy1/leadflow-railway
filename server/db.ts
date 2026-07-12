@@ -23,7 +23,15 @@ export async function getDb() {
       // preventing a 4-hour offset that occurs when the production container's system
       // timezone (America/New_York) causes mysql2 to format dates as local time strings
       // which MySQL then stores as-is, making them 4 hours ahead of actual UTC.
-      _db = drizzle(process.env.DATABASE_URL, { connection: { timezone: 'Z' } } as any);
+      _db = drizzle(process.env.DATABASE_URL, {
+        connection: {
+          timezone: 'Z',
+          connectTimeout: 10_000,   // 10s to establish connection
+          // mysql2 pool-level query timeout (ms) — aborts any query that hangs
+          // beyond this limit so a single stuck query can't block the event loop
+          queryTimeout: 30_000,    // 30s per query max
+        },
+      } as any);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
