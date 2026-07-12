@@ -376,9 +376,19 @@ function Timeline({ team }: { team: Team }) {
                   <div className="mt-1 text-xs font-bold" style={{ color: s.text }}>{team.statusLabel}</div>
 
                 </div>
-                {/* Van image with hover tooltip */}
+                {/* Van or house icon depending on job status */}
                 <div className="group relative">
-                  <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
+                  {["arrived", "in_progress", "finishing_up", "wrapping_up", "completed", "issue_at_property"].includes(team.state)
+                    ? (
+                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ background: s.soft, border: `2px solid ${s.border}` }}>
+                        <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke={s.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z" />
+                          <path d="M9 21V12h6v9" />
+                        </svg>
+                      </div>
+                    )
+                    : <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
+                  }
                   <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-xl bg-slate-900 px-3 py-2 text-center text-xs text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100">
                     <div className="font-bold">{job.customer}</div>
                     <div className="mt-0.5 text-slate-300">{job.address}</div>
