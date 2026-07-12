@@ -203,13 +203,18 @@ const HOUSE_IMGS = [
 function HouseIcon({ idx = 0, muted = false, completed = false }: { idx?: number; muted?: boolean; completed?: boolean }) {
   const src = HOUSE_IMGS[idx % HOUSE_IMGS.length];
   return (
-    <div className="relative">
+    <div className="relative inline-flex">
       <img
         src={src}
         alt="house"
-        className={`h-14 w-14 object-contain drop-shadow-sm ${muted ? "opacity-40 grayscale-[30%]" : ""}`}
+        style={{ background: "transparent" }}
+        className={`h-20 w-20 object-contain ${muted ? "opacity-50 grayscale-[20%]" : ""}`}
       />
-      {completed && <span className="absolute -bottom-1 -left-1 grid h-5 w-5 place-items-center rounded-full bg-emerald-500 text-white shadow"><Check className="h-3.5 w-3.5" strokeWidth={3} /></span>}
+      {completed && (
+        <span className="absolute -bottom-1 -left-1 grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white shadow-md">
+          <Check className="h-4 w-4" strokeWidth={3} />
+        </span>
+      )}
     </div>
   );
 }
@@ -242,48 +247,88 @@ function ConfidenceRing({ value, color }: { value: number; color: string }) {
   );
 }
 
-// Timeline — houses sit ABOVE the track line, van circle sits ON it
-// Layout per column (top to bottom):
-//   label (h-8) + time (mb-1) + house/van (h-[76px]) + track line + name + city + pill
-// Track line is positioned at the bottom of the node area (after the house)
+// Timeline layout (per column, top to bottom):
+//   house/van image (above track)
+//   track line with dot/checkmark on it
+//   time text below track
+//   status label (Completed / Upcoming / status pill for current)
 function Timeline({ team }: { team: Team }) {
   const s = stateStyles[team.state];
   const currentIndex = Math.max(0, team.jobs.findIndex((j) => j.status === "current"));
   const progress = team.jobs.length <= 1 ? 0 : (currentIndex / (team.jobs.length - 1)) * 100;
-  // Track sits at: pt-3 (12px) + h-8 label (32px) + mb-1 time (~20px) + h-[76px] node = ~140px from top
-  const trackTop = 140;
   return (
-    <div className="relative min-w-0 flex-1 px-5 pb-2 pt-3">
-      {/* Full track background */}
-      <div className="absolute left-[8%] right-[8%] h-[3px] rounded-full bg-slate-200" style={{ top: trackTop }} />
-      {/* Completed portion */}
-      <div className="absolute left-[8%] h-[3px] rounded-full" style={{ top: trackTop, width: `calc(${Math.max(progress, 5)}% - 8%)`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }} />
-      <div className="relative grid gap-2" style={{ gridTemplateColumns: `repeat(${team.jobs.length}, minmax(110px,1fr))` }}>
+    <div className="relative min-w-0 flex-1 px-4 py-4">
+      {/* Houses row */}
+      <div className="relative grid" style={{ gridTemplateColumns: `repeat(${team.jobs.length}, minmax(100px,1fr))` }}>
         {team.jobs.map((job, idx) => {
           const current = job.status === "current";
           const done = job.status === "completed";
           return (
-            <div key={job.id} className="flex min-w-0 flex-col items-center text-center">
-              {/* Label */}
-              <div className={`h-8 text-[11px] font-bold uppercase tracking-[0.08em] ${current ? "" : "text-slate-400"}`} style={current ? { color: s.accent } : undefined}>
-                {current ? "Current stop" : done ? "Completed" : "Upcoming"}
-              </div>
-              {/* Time */}
-              <div className="mb-1 text-sm font-extrabold" style={current ? { color: s.text, fontSize: 18 } : undefined}>
-                {current ? (job.eta || team.eta || "Checking…") : job.scheduled}
-              </div>
-              {/* Node — house sits above the track, van circle sits on it */}
-              <div className="relative z-10 flex h-[76px] items-end justify-center pb-[6px]">
+            <div key={job.id} className="flex flex-col items-center">
+              {/* House or van — no background, no border box */}
+              <div className="flex h-24 items-end justify-center">
                 {current
                   ? <div className="grid h-[72px] w-[72px] place-items-center rounded-full border-[6px] bg-white shadow-[0_0_0_10px_rgba(249,115,22,0.08)]" style={{ borderColor: s.accent }}><VanIcon /></div>
                   : <HouseIcon idx={idx} completed={done} muted={!done} />}
               </div>
-              {/* Name */}
-              <div className="mt-2 truncate text-sm font-bold">{job.customer}</div>
-              {/* City */}
-              <div className="truncate text-[12px] text-slate-500">{job.city}</div>
-              {/* Status pill for current stop */}
-              {current && <div className="mt-2 rounded-full px-3 py-1 text-xs font-bold" style={{ background: s.soft, color: s.text }}>{team.distance || team.statusLabel}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Track row — full-width line with dots */}
+      <div className="relative mx-[5%] my-1 h-8">
+        {/* Grey background track */}
+        <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-slate-200" />
+        {/* Green completed portion */}
+        <div
+          className="absolute left-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full"
+          style={{ width: `${Math.max(progress, 3)}%`, background: `linear-gradient(90deg,#22C55E,${s.accent})` }}
+        />
+        {/* Dots on the track */}
+        {team.jobs.map((job, idx) => {
+          const current = job.status === "current";
+          const done = job.status === "completed";
+          const pct = team.jobs.length <= 1 ? 50 : (idx / (team.jobs.length - 1)) * 100;
+          return (
+            <div
+              key={job.id}
+              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+              style={{ left: `${pct}%` }}
+            >
+              {done ? (
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white shadow">
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                </span>
+              ) : current ? (
+                <span className="grid h-4 w-4 place-items-center rounded-full border-[3px] bg-white" style={{ borderColor: s.accent }} />
+              ) : (
+                <span className="h-3 w-3 rounded-full border-2 border-slate-300 bg-white block" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Labels row — time + status below track */}
+      <div className="relative grid" style={{ gridTemplateColumns: `repeat(${team.jobs.length}, minmax(100px,1fr))` }}>
+        {team.jobs.map((job, idx) => {
+          const current = job.status === "current";
+          const done = job.status === "completed";
+          return (
+            <div key={job.id} className="flex flex-col items-center text-center">
+              <div className="text-sm font-extrabold text-slate-800">
+                {current ? (job.eta || team.eta || "Checking…") : job.scheduled}
+              </div>
+              {current ? (
+                <div className="mt-1 rounded-full px-3 py-0.5 text-xs font-bold" style={{ background: s.soft, color: s.text }}>
+                  {team.statusLabel}
+                </div>
+              ) : (
+                <div className={`text-xs font-semibold ${done ? "text-emerald-500" : "text-slate-400"}`}>
+                  {done ? "Completed" : "Upcoming"}
+                </div>
+              )}
             </div>
           );
         })}
