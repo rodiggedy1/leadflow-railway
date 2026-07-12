@@ -423,6 +423,12 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
 
               // Future house node
               const isSelected = selectedJobId === job.id;
+              const houseTopLabel = job.etaCall?.etaTimeStr
+                ? `ETA ${job.etaCall.etaTimeStr}`
+                : formatTime(job.serviceDateTime);
+              const houseTopColor = job.etaCall?.etaTimeStr
+                ? (job.etaCall.etaStatus === "late" || job.etaCall.etaStatus === "running_late" ? "#B45309" : "#15803D")
+                : undefined;
               return (
                 <div
                   key={job.id}
@@ -430,7 +436,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   style={{ left: leftPos, top: 14, width: 50 }}
                   onClick={() => { setSelectedJobId(isSelected ? null : job.id); setExpanded(true); setTxOpen(false); }}
                 >
-                  <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
+                  <div className="text-[10px] font-[600] mb-1.5 whitespace-nowrap text-center" style={{ color: houseTopColor ?? "#94A3B8", fontWeight: job.etaCall?.etaTimeStr ? 750 : 600 }}>{houseTopLabel}</div>
                   <div className="w-9 h-9 rounded-full border-2 bg-white flex items-center justify-center transition-all" style={{ borderColor: isSelected ? "#94A3B8" : "#E2E8F0", transform: isSelected ? "scale(1.18)" : undefined, boxShadow: isSelected ? "0 0 0 4px #94A3B8, 0 0 0 7px #94A3B833" : undefined }}>
                     <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
                       <polygon points="24,6 44,22 4,22" fill="#D1FAE5" stroke="#A7F3D0" strokeWidth="2"/>
