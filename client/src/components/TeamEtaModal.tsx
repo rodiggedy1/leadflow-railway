@@ -67,7 +67,7 @@ const stateStyles: Record<TeamState, { accent: string; soft: string; text: strin
   on_time:           { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Cruising" },
   late:              { accent: "#F97316", soft: "#FFF7ED", text: "#C2410C", border: "#FED7AA", label: "Running Behind" },
   critical:          { accent: "#EF4444", soft: "#FFF1F2", text: "#BE123C", border: "#FECDD3", label: "Needs Attention" },
-  unclear:           { accent: "#7C5CFC", soft: "#F7F5FF", text: "#5B3FD6", border: "#DDD6FE", label: "Waiting on ETA" },
+  unclear:           { accent: "#7C5CFC", soft: "#F7F5FF", text: "#5B3FD6", border: "#DDD6FE", label: "On the Way" },
   no_answer:         { accent: "#3B82F6", soft: "#F2F7FF", text: "#1D4ED8", border: "#BFDBFE", label: "No Answer" },
   arrived:           { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Arrived" },
   in_progress:       { accent: "#7C3AED", soft: "#F5F3FF", text: "#5B21B6", border: "#DDD6FE", label: "In Progress" },
@@ -338,13 +338,17 @@ function Timeline({ team }: { team: Team }) {
                 <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
                   <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
                   {/* Time row: show ETA for on_the_way, arrivedAt for arrived/in_progress, completedAt for completed, nothing for others */}
-                  {(team.state === "unclear" || team.state === "no_answer") && (
-                    <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
+                  {team.state === "unclear" && (
+                    <>
+                      <div className="text-3xl font-extrabold leading-tight mt-1" style={{ color: s.text }}>On the Way</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-0.5">Waiting for ETA</div>
+                    </>
                   )}
-                  {(team.state === "unclear" || team.state === "no_answer") && (
-                    <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>
-                      {team.state === "unclear" ? (job.eta || team.eta || "Waiting on ETA") : "No Answer"}
-                    </div>
+                  {team.state === "no_answer" && (
+                    <>
+                      <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-1">ETA</div>
+                      <div className="text-3xl font-extrabold leading-tight" style={{ color: s.text }}>No Answer</div>
+                    </>
                   )}
                   {(team.state === "on_time" || team.state === "late" || team.state === "critical") && (
                     <>
@@ -520,8 +524,13 @@ function ExpandedCard({ team }: { team: Team }) {
               ? team.completedAt
               : (team.state === "finishing_up" || team.state === "wrapping_up" || team.state === "issue_at_property")
               ? "—"
+              : team.state === "unclear"
+              ? "On the Way"
               : team.eta || "—"}
           </div>
+          {team.state === "unclear" && (
+            <div className="text-xs text-slate-400 mt-0.5">Waiting for ETA</div>
+          )}
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border bg-white/70 px-3 py-1.5 text-xs font-bold" style={{ borderColor: s.border, color: s.text }}><Clock3 className="h-3.5 w-3.5" />{team.statusLabel}</div>
           <div className="mt-6 grid grid-cols-2 gap-4 border-t pt-4 text-sm" style={{ borderColor: s.border }}>
             <div><div className="text-xs text-slate-400">Scheduled</div><div className="mt-1 font-bold">{team.jobs.find(j => j.status === "current")?.scheduled || "—"}</div></div>
