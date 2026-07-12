@@ -224,7 +224,7 @@ function HouseIcon({ idx = 0, muted = false, completed = false }: { idx?: number
         src={src}
         alt="house"
         style={{ background: "transparent" }}
-        className={`h-20 w-20 object-contain ${muted ? "opacity-50 grayscale-[20%]" : ""}`}
+        className={`h-24 w-24 object-contain ${muted ? "opacity-50 grayscale-[20%]" : ""}`}
       />
       {completed && (
         <span className="absolute -bottom-1 -left-1 grid h-6 w-6 place-items-center rounded-full bg-emerald-500 text-white shadow-md">
@@ -274,9 +274,9 @@ function Timeline({ team }: { team: Team }) {
   const jobCount = team.jobs.length;
 
   return (
-    <div className="relative min-w-0 flex-1 px-6 py-2">
+    <div className="relative min-w-0 flex-1 px-4 py-2">
       {/* Single flex row — each column is a stop */}
-      <div className="relative flex items-end justify-between">
+      <div className="relative flex items-end justify-between gap-6">
 
         {/* Track line — runs behind everything, positioned at the van/dot level */}
         <div className="pointer-events-none absolute inset-x-0" style={{ bottom: 36 }}>
@@ -296,7 +296,7 @@ function Timeline({ team }: { team: Team }) {
 
           if (current) {
             return (
-              <div key={job.id} className="relative z-20 flex flex-col items-center" style={{ flex: "0 0 auto", width: `${100 / jobCount}%` }}>
+              <div key={job.id} className="relative z-20 flex flex-col items-center" style={{ flex: "1 1 0", minWidth: 150 }}>
                 {/* Floating white card above the van */}
                 <div className="mb-2 rounded-2xl border border-orange-100 bg-white px-4 py-2 text-center shadow-[0_8px_32px_rgba(249,115,22,0.15)]">
                   <div className="text-[10px] font-bold uppercase tracking-widest" style={{ color: s.accent }}>Current Stop</div>
@@ -319,7 +319,7 @@ function Timeline({ team }: { team: Team }) {
           }
 
           return (
-            <div key={job.id} className="relative z-10 flex flex-col items-center" style={{ flex: "0 0 auto", width: `${100 / jobCount}%` }}>
+            <div key={job.id} className="relative z-10 flex flex-col items-center" style={{ flex: "1 1 0", minWidth: 150 }}>
               {/* House image */}
               <HouseIcon idx={idx} completed={done} muted={!done} />
               {/* Dot on track */}
