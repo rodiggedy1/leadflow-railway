@@ -358,7 +358,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                         return etaStr ? `ETA ${etaStr}` : "—";
                       })()}
                     </div>
-                    <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white transition-shadow" style={{ borderColor: cfg.dot, boxShadow: isSelected ? `0 0 0 3px ${cfg.dot}44` : undefined }}>
+                    <div className="w-[48px] h-[48px] rounded-full flex items-center justify-center border-2 bg-white transition-all" style={{ borderColor: cfg.dot, transform: isSelected ? "scale(1.18)" : undefined, boxShadow: isSelected ? `0 0 0 4px ${cfg.dot}, 0 0 0 7px ${cfg.dot}33` : undefined }}>
                       {(team.etaStatus === "on_time" || team.etaStatus === "early" || team.etaStatus === "running_late") ? (
                         <svg width="30" height="20" viewBox="0 0 56 40" fill="none">
                           <rect x="4" y="10" width="46" height="22" rx="5" fill="white" stroke={cfg.dot} strokeWidth="2"/>
@@ -410,7 +410,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                     onClick={() => { setSelectedJobId(isSelected ? null : job.id); setExpanded(true); setTxOpen(false); }}
                   >
                     <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center transition-shadow" style={{ background: "#16A34A", boxShadow: isSelected ? "0 0 0 3px #16A34A44" : undefined }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center transition-all" style={{ background: "#16A34A", transform: isSelected ? "scale(1.18)" : undefined, boxShadow: isSelected ? "0 0 0 4px #16A34A, 0 0 0 7px #16A34A33" : undefined }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                     </div>
                     <div className="mt-1 text-center">
@@ -431,7 +431,7 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
                   onClick={() => { setSelectedJobId(isSelected ? null : job.id); setExpanded(true); setTxOpen(false); }}
                 >
                   <div className="text-[10px] font-[600] text-slate-400 mb-1.5 whitespace-nowrap text-center">{formatTime(job.serviceDateTime)}</div>
-                  <div className="w-9 h-9 rounded-full border-2 bg-white flex items-center justify-center transition-shadow" style={{ borderColor: isSelected ? "#94A3B8" : "#E2E8F0", boxShadow: isSelected ? "0 0 0 3px #94A3B844" : undefined }}>
+                  <div className="w-9 h-9 rounded-full border-2 bg-white flex items-center justify-center transition-all" style={{ borderColor: isSelected ? "#94A3B8" : "#E2E8F0", transform: isSelected ? "scale(1.18)" : undefined, boxShadow: isSelected ? "0 0 0 4px #94A3B8, 0 0 0 7px #94A3B833" : undefined }}>
                     <svg width="22" height="22" viewBox="0 0 48 48" fill="none">
                       <polygon points="24,6 44,22 4,22" fill="#D1FAE5" stroke="#A7F3D0" strokeWidth="2"/>
                       <rect x="10" y="22" width="28" height="18" rx="2" fill="#F8FAFC" stroke="#E2E8F0" strokeWidth="1.5"/>
@@ -473,6 +473,29 @@ function TeamCard({ team }: { team: TeamEtaSummaryItem }) {
       {/* Expanded detail */}
       {expanded && (
         <div className="border-t border-slate-100 px-5 py-4 bg-white">
+          {/* Connector line from selected node to expanded section */}
+          {selectedJobId != null && (() => {
+            const jobIdx = team.jobs.findIndex(j => j.id === selectedJobId);
+            const totalJobs = team.jobs.length;
+            const nodeLeft = totalJobs > 1 ? (jobIdx / (totalJobs - 1)) * 100 : 50;
+            const dotColor = team.jobs[jobIdx]?.jobStatus === "completed" ? "#16A34A" : cfg.dot;
+            return (
+              <div className="relative h-5 -mt-1 mb-1 pointer-events-none">
+                <div
+                  className="absolute top-0 w-[2px] rounded-b-full"
+                  style={{
+                    left: `calc(${nodeLeft}% - 1px)`,
+                    height: "100%",
+                    background: `linear-gradient(to bottom, ${dotColor}, ${dotColor}44)`,
+                  }}
+                />
+                <div
+                  className="absolute bottom-0 w-2 h-2 rounded-full"
+                  style={{ left: `calc(${nodeLeft}% - 4px)`, background: dotColor }}
+                />
+              </div>
+            );
+          })()}
           {/* Context block — pixel-perfect mockup */}
           <div className="rounded-[14px] p-4 mb-4" style={{ background: "linear-gradient(135deg,#fef9f0,#fef3e2)", border: "1px solid #fde8c0" }}>
             <div className="flex items-center justify-between mb-3">
