@@ -380,12 +380,19 @@ function Timeline({ team }: { team: Team }) {
                 <div className="group relative">
                   {["arrived", "in_progress", "finishing_up", "wrapping_up", "completed", "issue_at_property"].includes(team.state)
                     ? (
-                      <div className="flex h-16 w-16 items-center justify-center rounded-2xl" style={{ background: s.soft, border: `2px solid ${s.border}` }}>
-                        <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke={s.accent} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5Z" />
-                          <path d="M9 21V12h6v9" />
-                        </svg>
-                      </div>
+                      <img
+                        src={{
+                          arrived:            "/house-green.png",
+                          in_progress:        "/house-purple.png",
+                          finishing_up:       "/house-navy.png",
+                          wrapping_up:        "/house-navy.png",
+                          completed:          "/house-green.png",
+                          issue_at_property:  "/house-brown.png",
+                        }[team.state] ?? "/house-navy.png"}
+                        alt="property"
+                        className="h-16 w-auto object-contain animate-[etaFloat_2.4s_ease-in-out_infinite] drop-shadow-md"
+                        style={{ background: "transparent" }}
+                      />
                     )
                     : <img src="/mib-van.png" alt="van" className="h-16 w-auto object-contain" style={{ background: "transparent" }} />
                   }
