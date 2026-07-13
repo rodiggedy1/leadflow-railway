@@ -2817,12 +2817,6 @@ export async function handleEtaCallEnd(params: {
     return;
   }
 
-  // ── Dedup guard: skip if already processed ────────────────────────────────
-  if (job.etaVerifiedAt) {
-    console.log(`[EtaEngine] etaVerifiedAt already set for job ${cleanerJobId} — skipping duplicate webhook`);
-    return;
-  }
-
   // ── Update cleanerJobs ────────────────────────────────────────────────────
   await db
     .update(cleanerJobs)

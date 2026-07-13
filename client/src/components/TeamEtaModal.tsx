@@ -26,7 +26,7 @@ import {
 import { trpc } from "@/lib/trpc";
 
 // ─── Design-reference types ──────────────────────────────────────────────────
-type TeamState = "on_time" | "late" | "critical" | "unclear" | "no_answer" | "arrived" | "in_progress" | "finishing_up" | "wrapping_up" | "issue_at_property" | "completed";
+type TeamState = "on_time" | "late" | "critical" | "unclear" | "no_answer" | "arrived" | "in_progress" | "finishing_up" | "wrapping_up" | "issue_at_property" | "completed" | "pending";
 type JobStatus = "completed" | "current" | "upcoming";
 
 type Job = {
@@ -69,7 +69,8 @@ const stateStyles: Record<TeamState, { accent: string; soft: string; text: strin
   on_time:           { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Cruising" },
   late:              { accent: "#F97316", soft: "#FFF7ED", text: "#C2410C", border: "#FED7AA", label: "Running Behind" },
   critical:          { accent: "#EF4444", soft: "#FFF1F2", text: "#BE123C", border: "#FECDD3", label: "Needs Attention" },
-  unclear:           { accent: "#7C5CFC", soft: "#F7F5FF", text: "#5B3FD6", border: "#DDD6FE", label: "On the Way" },
+  unclear:           { accent: "#7C5CFC", soft: "#F7F5FF", text: "#5B3FD6", border: "#DDD6FE", label: "Waiting for ETA" },
+  pending:           { accent: "#9CA3AF", soft: "#F9FAFB", text: "#6B7280", border: "#E5E7EB", label: "No Status" },
   no_answer:         { accent: "#3B82F6", soft: "#F2F7FF", text: "#1D4ED8", border: "#BFDBFE", label: "No Answer" },
   arrived:           { accent: "#1FA55B", soft: "#F1FBF5", text: "#147A43", border: "#CDEFD9", label: "Arrived" },
   in_progress:       { accent: "#7C3AED", soft: "#F5F3FF", text: "#5B21B6", border: "#DDD6FE", label: "In Progress" },
@@ -118,6 +119,9 @@ function toTeamState(etaStatus: string, delayMinutes: number, currentJobStatus?:
 
   // on_the_way with no ETA call yet
   if (currentJobStatus === "on_the_way") return "unclear";
+
+  // No status yet — job assigned but nothing has happened
+  if (etaStatus === "pending") return "pending";
 
   return "on_time";
 }
