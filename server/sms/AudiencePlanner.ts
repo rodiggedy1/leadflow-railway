@@ -123,16 +123,16 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
       case "lastBookingDays": {
         const days = Number(rule.value);
         if (rule.op === ">") {
-          conditions.push(`DATEDIFF(NOW(), lastJobDate) > ${days}`);
+          conditions.push(`DATEDIFF(NOW(), effectiveLastJobDate) > ${days}`);
           labels.push(`Last booking ${days}+ days ago`);
         } else if (rule.op === ">=") {
-          conditions.push(`DATEDIFF(NOW(), lastJobDate) >= ${days}`);
+          conditions.push(`DATEDIFF(NOW(), effectiveLastJobDate) >= ${days}`);
           labels.push(`Last booking ${days}+ days ago`);
         } else if (rule.op === "<") {
-          conditions.push(`DATEDIFF(NOW(), lastJobDate) < ${days}`);
+          conditions.push(`DATEDIFF(NOW(), effectiveLastJobDate) < ${days}`);
           labels.push(`Last booking within ${days} days`);
         } else if (rule.op === "<=") {
-          conditions.push(`DATEDIFF(NOW(), lastJobDate) <= ${days}`);
+          conditions.push(`DATEDIFF(NOW(), effectiveLastJobDate) <= ${days}`);
           labels.push(`Last booking within ${days} days`);
         }
         break;
@@ -147,12 +147,12 @@ function buildIncludeWhere(rules: Rule[]): WhereClause {
         const val = String(rule.value);
         if (val === "former-recurring") {
           conditions.push(
-            `(frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), lastJobDate) > 60)`
+            `(frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), effectiveLastJobDate) > 60)`
           );
           labels.push("Former recurring");
         } else if (val === "active-recurring") {
           conditions.push(
-            `(frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), lastJobDate) <= 60)`
+            `(frequency IN (${RECURRING_FREQUENCIES.map((f) => `'${f}'`).join(",")}) AND DATEDIFF(NOW(), effectiveLastJobDate) <= 60)`
           );
           labels.push("Active recurring");
         } else if (val === "one-time") {
@@ -378,6 +378,14 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   const rawQuery = `
     WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    email_latest AS (
+      SELECT
+        LOWER(TRIM(email)) AS emailNorm,
+        MAX(jobDate) AS latestJobDateByEmail
+      FROM completed_jobs
+      WHERE email IS NOT NULL AND TRIM(email) != ''
+      GROUP BY LOWER(TRIM(email))
+    ),
     customer_view AS (
       SELECT
         -- Normalize phone inline (Stage 3 will use stored column)
@@ -398,6 +406,8 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         cj.bathrooms,
         cj.lastBookingPrice,
         cj.jobDate AS lastJobDate,
+        -- Email-based cross-phone latest job date (for effectiveLastJobDate)
+        el.latestJobDateByEmail,
         cj.phoneInvalid,
         cj.status AS jobStatus,
         -- Booking count per normalized phone
@@ -437,9 +447,18 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         END
       )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+      LEFT JOIN email_latest el ON el.emailNorm = LOWER(TRIM(cj.email))
+        AND cj.email IS NOT NULL AND TRIM(cj.email) != ''
     ),
     deduplicated AS (
-      SELECT * FROM customer_view WHERE rn = 1
+      SELECT *,
+        CASE
+          WHEN latestJobDateByEmail IS NULL THEN lastJobDate
+          WHEN lastJobDate IS NULL THEN latestJobDateByEmail
+          ELSE GREATEST(lastJobDate, latestJobDateByEmail)
+        END AS effectiveLastJobDate
+      FROM customer_view
+      WHERE rn = 1
     ),
     -- Apply include rules
     included AS (
@@ -529,6 +548,12 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
   // ── Sample included customers ─────────────────────────────────────────────
   const sampleIncludedQuery = `
     WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    email_latest AS (
+      SELECT LOWER(TRIM(email)) AS emailNorm, MAX(jobDate) AS latestJobDateByEmail
+      FROM completed_jobs
+      WHERE email IS NOT NULL AND TRIM(email) != ''
+      GROUP BY LOWER(TRIM(email))
+    ),
     customer_view AS (
       SELECT
         CASE
@@ -540,7 +565,8 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
           ELSE cj.phone
         END AS phoneNormalized,
         cj.firstName, cj.name, cj.serviceType, cj.frequency,
-        cj.lastBookingPrice, cj.jobDate AS lastJobDate, cj.phoneInvalid, cj.status AS jobStatus,
+        cj.lastBookingPrice, cj.jobDate AS lastJobDate, el.latestJobDateByEmail,
+        cj.phoneInvalid, cj.status AS jobStatus,
         COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
         SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
         AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
@@ -564,12 +590,23 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         END
       )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+      LEFT JOIN email_latest el ON el.emailNorm = LOWER(TRIM(cj.email))
+        AND cj.email IS NOT NULL AND TRIM(cj.email) != ''
+    ),
+    deduplicated AS (
+      SELECT *,
+        CASE
+          WHEN latestJobDateByEmail IS NULL THEN lastJobDate
+          WHEN lastJobDate IS NULL THEN latestJobDateByEmail
+          ELSE GREATEST(lastJobDate, latestJobDateByEmail)
+        END AS effectiveLastJobDate
+      FROM customer_view
+      WHERE rn = 1
     )
     SELECT phoneNormalized, firstName, name, serviceType, frequency,
            lastBookingPrice, lastJobDate, bookingCount, lifetimeRevenue, avgTicket, maxRating
-    FROM customer_view
-    WHERE rn = 1
-      AND phoneInvalid = 0
+    FROM deduplicated
+    WHERE phoneInvalid = 0
       AND isOptedOut = 0
       AND hasComplaint = 0
       AND ${includeWhere.sql}
@@ -616,6 +653,12 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
   // ── Sample excluded customers ─────────────────────────────────────────────
   const sampleExcludedQuery = `
     WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    email_latest AS (
+      SELECT LOWER(TRIM(email)) AS emailNorm, MAX(jobDate) AS latestJobDateByEmail
+      FROM completed_jobs
+      WHERE email IS NOT NULL AND TRIM(email) != ''
+      GROUP BY LOWER(TRIM(email))
+    ),
     customer_view AS (
       SELECT
         CASE
@@ -627,7 +670,8 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
           ELSE cj.phone
         END AS phoneNormalized,
         cj.firstName, cj.name, cj.serviceType, cj.frequency,
-        cj.lastBookingPrice, cj.jobDate AS lastJobDate, cj.phoneInvalid, cj.status AS jobStatus,
+        cj.lastBookingPrice, cj.jobDate AS lastJobDate, el.latestJobDateByEmail,
+        cj.phoneInvalid, cj.status AS jobStatus,
         cj.bedrooms, cj.bathrooms,
         COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
         SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
@@ -652,8 +696,19 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         END
       )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+      LEFT JOIN email_latest el ON el.emailNorm = LOWER(TRIM(cj.email))
+        AND cj.email IS NOT NULL AND TRIM(cj.email) != ''
     ),
-    deduplicated AS (SELECT * FROM customer_view WHERE rn = 1),
+    deduplicated AS (
+      SELECT *,
+        CASE
+          WHEN latestJobDateByEmail IS NULL THEN lastJobDate
+          WHEN lastJobDate IS NULL THEN latestJobDateByEmail
+          ELSE GREATEST(lastJobDate, latestJobDateByEmail)
+        END AS effectiveLastJobDate
+      FROM customer_view
+      WHERE rn = 1
+    ),
     included_base AS (
       SELECT * FROM deduplicated WHERE phoneInvalid = 0 AND ${includeWhere.sql}
     ),
@@ -700,25 +755,39 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   // ── Frequency breakdown ───────────────────────────────────────────────────
   const freqQuery = `
-    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)}, cv AS (
-      SELECT cj.frequency,
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    email_latest AS (
+      SELECT LOWER(TRIM(email)) AS emailNorm, MAX(jobDate) AS latestJobDateByEmail
+      FROM completed_jobs
+      WHERE email IS NOT NULL AND TRIM(email) != ''
+      GROUP BY LOWER(TRIM(email))
+    ),
+    customer_view AS (
+      SELECT
+        cj.frequency,
+        cj.jobDate AS lastJobDate,
+        el.latestJobDateByEmail,
+        cj.phoneInvalid,
+        cj.lastBookingPrice,
+        cj.serviceType, cj.bedrooms, cj.bathrooms,
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END AS phoneNormalized,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
         MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
         DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
-        cj.phoneInvalid,
-        CASE
-          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
-            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
-          ELSE cj.phone
-        END AS phoneNormalized,
         SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
         AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
         COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
-        MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating,
-        cj.lastBookingPrice, cj.jobDate AS lastJobDate, cj.serviceType, cj.bedrooms, cj.bathrooms
+        MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
       LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
@@ -732,10 +801,22 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         END
       )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+      LEFT JOIN email_latest el ON el.emailNorm = LOWER(TRIM(cj.email))
+        AND cj.email IS NOT NULL AND TRIM(cj.email) != ''
+    ),
+    deduplicated AS (
+      SELECT *,
+        CASE
+          WHEN latestJobDateByEmail IS NULL THEN lastJobDate
+          WHEN lastJobDate IS NULL THEN latestJobDateByEmail
+          ELSE GREATEST(lastJobDate, latestJobDateByEmail)
+        END AS effectiveLastJobDate
+      FROM customer_view
+      WHERE rn = 1
     )
     SELECT COALESCE(frequency, 'Unknown') AS freq, COUNT(*) AS cnt
-    FROM cv
-    WHERE rn = 1 AND phoneInvalid = 0 AND isOptedOut = 0 AND hasComplaint = 0
+    FROM deduplicated
+    WHERE phoneInvalid = 0 AND isOptedOut = 0 AND hasComplaint = 0
       AND (lastSmsDaysAgo IS NULL OR lastSmsDaysAgo > ${recentSmsDays})
       AND ${includeWhere.sql}
     GROUP BY frequency
@@ -751,21 +832,40 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
 
   // ── Service type breakdown ────────────────────────────────────────────────
   const svcQuery = `
-    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)}, cv AS (
-      SELECT cj.serviceType,
+    WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    email_latest AS (
+      SELECT LOWER(TRIM(email)) AS emailNorm, MAX(jobDate) AS latestJobDateByEmail
+      FROM completed_jobs
+      WHERE email IS NOT NULL AND TRIM(email) != ''
+      GROUP BY LOWER(TRIM(email))
+    ),
+    customer_view AS (
+      SELECT
+        cj.serviceType,
+        cj.jobDate AS lastJobDate,
+        el.latestJobDateByEmail,
+        cj.phoneInvalid,
+        cj.lastBookingPrice,
+        cj.bedrooms, cj.bathrooms,
+        cj.frequency,
+        CASE
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 10
+            THEN CONCAT('+1', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          WHEN LENGTH(REGEXP_REPLACE(cj.phone, '[^0-9]', '')) = 11
+            AND LEFT(REGEXP_REPLACE(cj.phone, '[^0-9]', ''), 1) = '1'
+            THEN CONCAT('+', REGEXP_REPLACE(cj.phone, '[^0-9]', ''))
+          ELSE cj.phone
+        END AS phoneNormalized,
         ROW_NUMBER() OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '') ORDER BY cj.jobDate DESC) AS rn,
         MAX(CASE WHEN aoe.status = 'OPTED_OUT' THEN 1 WHEN cj.status = 'OPTED_OUT' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS isOptedOut,
         MAX(CASE WHEN clj.customerComplaint IS NOT NULL AND clj.customerComplaint != '' THEN 1 ELSE 0 END)
           OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS hasComplaint,
         DATEDIFF(NOW(), FROM_UNIXTIME(MAX(scr.lastSentAt) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) / 1000)) AS lastSmsDaysAgo,
-        cj.phoneInvalid,
         SUM(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS lifetimeRevenue,
         AVG(cj.lastBookingPrice) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS avgTicket,
         COUNT(*) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS bookingCount,
-        MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating,
-        cj.lastBookingPrice, cj.jobDate AS lastJobDate, cj.bedrooms, cj.bathrooms,
-        cj.frequency
+        MAX(clj.customerRating) OVER (PARTITION BY REGEXP_REPLACE(cj.phone, '[^0-9]', '')) AS maxRating
       FROM completed_jobs cj
       LEFT JOIN cleaner_jobs clj ON clj.completedJobId = cj.id
       LEFT JOIN recent_campaign_sms scr ON scr.phoneNormalized = (
@@ -779,10 +879,22 @@ export async function planAudience(db: MySql2Database<any>, def: AudienceDefinit
         END
       )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+      LEFT JOIN email_latest el ON el.emailNorm = LOWER(TRIM(cj.email))
+        AND cj.email IS NOT NULL AND TRIM(cj.email) != ''
+    ),
+    deduplicated AS (
+      SELECT *,
+        CASE
+          WHEN latestJobDateByEmail IS NULL THEN lastJobDate
+          WHEN lastJobDate IS NULL THEN latestJobDateByEmail
+          ELSE GREATEST(lastJobDate, latestJobDateByEmail)
+        END AS effectiveLastJobDate
+      FROM customer_view
+      WHERE rn = 1
     )
     SELECT COALESCE(serviceType, 'Unknown') AS svc, COUNT(*) AS cnt
-    FROM cv
-    WHERE rn = 1 AND phoneInvalid = 0 AND isOptedOut = 0 AND hasComplaint = 0
+    FROM deduplicated
+    WHERE phoneInvalid = 0 AND isOptedOut = 0 AND hasComplaint = 0
       AND (lastSmsDaysAgo IS NULL OR lastSmsDaysAgo > ${recentSmsDays})
       AND ${includeWhere.sql}
     GROUP BY serviceType
@@ -876,6 +988,12 @@ export async function planAudienceForFreeze(
 
   const candidateQuery = `
     WITH ${RECENT_CAMPAIGN_SMS_CTE(cutoffMs)},
+    email_latest AS (
+      SELECT LOWER(TRIM(email)) AS emailNorm, MAX(jobDate) AS latestJobDateByEmail
+      FROM completed_jobs
+      WHERE email IS NOT NULL AND TRIM(email) != ''
+      GROUP BY LOWER(TRIM(email))
+    ),
     customer_view AS (
       SELECT
         cj.id AS completedJobId,
@@ -895,6 +1013,7 @@ export async function planAudienceForFreeze(
         cj.frequency,
         cj.lastBookingPrice,
         cj.jobDate AS lastJobDate,
+        el.latestJobDateByEmail,
         cj.bedrooms,
         cj.phoneInvalid,
         cj.status AS jobStatus,
@@ -933,6 +1052,18 @@ export async function planAudienceForFreeze(
         END
       )
       LEFT JOIN always_on_enrollments aoe ON aoe.phone = cj.phone
+      LEFT JOIN email_latest el ON el.emailNorm = LOWER(TRIM(cj.email))
+        AND cj.email IS NOT NULL AND TRIM(cj.email) != ''
+    ),
+    deduplicated AS (
+      SELECT *,
+        CASE
+          WHEN latestJobDateByEmail IS NULL THEN lastJobDate
+          WHEN lastJobDate IS NULL THEN latestJobDateByEmail
+          ELSE GREATEST(lastJobDate, latestJobDateByEmail)
+        END AS effectiveLastJobDate
+      FROM customer_view
+      WHERE rn = 1
     )
     SELECT
       completedJobId,
@@ -952,9 +1083,8 @@ export async function planAudienceForFreeze(
       isOptedOut,
       hasComplaint,
       lastSmsDaysAgo
-    FROM customer_view
-    WHERE rn = 1
-      AND phoneInvalid = 0
+    FROM deduplicated
+    WHERE phoneInvalid = 0
       AND ${includeWhere.sql}
     ORDER BY lastJobDate DESC
   `;
