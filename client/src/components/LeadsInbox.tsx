@@ -195,12 +195,16 @@ const LANE_CONFIG: { id: Lane; label: string; emoji: string }[] = [
 
 interface LeadsInboxProps {
   rail?: React.ReactNode;
+  /** When set, auto-selects the conversation for this session ID on mount */
+  initialSessionId?: number | null;
 }
 
-export default function LeadsInbox({ rail }: LeadsInboxProps) {
+export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) {
   const [activeLane, setActiveLane] = useState<Lane>("needs-me");
   const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  // Track which session we've already resolved so we don't re-resolve on re-renders
+  const resolvedSessionRef = useRef<number | null>(null);
   const [composerText, setComposerText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const journeyRef = useRef<HTMLDivElement>(null);
@@ -240,12 +244,25 @@ export default function LeadsInbox({ rail }: LeadsInboxProps) {
     },
   });
 
-  // Auto-select first lead when workspace loads
+  // Resolve initialSessionId → phone and select it
+  const { data: resolvedPhone } = trpc.leads.getPhoneBySessionId.useQuery(
+    { sessionId: initialSessionId! },
+    { enabled: !!initialSessionId, staleTime: Infinity }
+  );
+
   useEffect(() => {
-    if (!selectedPhone && workspace.length > 0) {
+    if (resolvedPhone && initialSessionId && resolvedSessionRef.current !== initialSessionId) {
+      resolvedSessionRef.current = initialSessionId;
+      setSelectedPhone(resolvedPhone);
+    }
+  }, [resolvedPhone, initialSessionId]);
+
+  // Auto-select first lead when workspace loads (only if no initialSessionId)
+  useEffect(() => {
+    if (!selectedPhone && workspace.length > 0 && !initialSessionId) {
       setSelectedPhone(workspace[0].phone);
     }
-  }, [workspace, selectedPhone]);
+  }, [workspace, selectedPhone, initialSessionId]);
 
   // Scroll to bottom on new timeline events
   useEffect(() => {

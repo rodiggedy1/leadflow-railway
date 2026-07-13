@@ -207,6 +207,8 @@ interface CommandChatProps {
   /** Called when user clicks "CS" in the in-panel tab switcher */
   onSwitchToCS?: () => void;
   onSwitchToCSSession?: (sessionId: number) => void;
+  /** Called when user clicks a lead in the Lead Replies banner — opens LeadsInbox to that conversation */
+  onSwitchToLeadsSession?: (sessionId: number) => void;
   /** Called when user clicks the Lead Ops badge in the header */
   onSwitchToLeadOps?: (sessionId?: number) => void;
   /** Current away status of the calling agent (null = available) */
@@ -3684,7 +3686,7 @@ function KudosModal({
 }
 
 export default function CommandChat({ channelMsgs, channelLoading, callerName, onSendMessage, onJumpToJob, onSendThreadReply, onSwitchToToday, onSwitchToCS,
-  onSwitchToCSSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
+  onSwitchToCSSession, onSwitchToLeadsSession, onSwitchToLeadOps, awayStatus, onSetAwayStatus, senderStatusMap, agentList, isVisible, myNames: myNamesProp }: CommandChatProps) {
   const [composer, setComposer] = useState("");
   // Message quality check
 
@@ -8865,9 +8867,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     form: 'Website', widget: 'Widget', voice: 'Phone',
                   };
                   const src = lead.leadSource ? (sourceLabel[lead.leadSource] ?? lead.leadSource) : 'Direct';
-                  const openLeadsPage = () => {
+                  const openLeadsChat = () => {
                     setLeadRepliesOpen(false);
-                    window.location.href = `/admin/leads?session=${lead.id}`;
+                    if (onSwitchToLeadsSession) {
+                      onSwitchToLeadsSession(lead.id);
+                    }
                   };
                   const openQuickReply = () => {
                     setLeadRepliesOpen(false);
@@ -8893,19 +8897,19 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         sessionId: lead.id,
                       });
                     } else {
-                      openLeadsPage();
+                      openLeadsChat();
                     }
                   };
                   return (
                     <LeadChatHistoryPopover
                       key={lead.id}
                       sessionId={lead.id}
-                      onOpenFull={openLeadsPage}
+                      onOpenFull={openLeadsChat}
                     >
                       <div className="flex items-stretch group hover:bg-slate-50 transition-colors">
-                        {/* Main row — navigates to leads page */}
+                        {/* Main row — opens leads chat to this conversation */}
                         <button
-                          onClick={openLeadsPage}
+                          onClick={openLeadsChat}
                           className="flex-1 text-left px-4 py-3 min-w-0"
                         >
                           <div className="flex items-start gap-3">

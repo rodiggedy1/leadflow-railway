@@ -5127,6 +5127,19 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
       const now = Date.now();
       const results = rows.map(r => {
         const lastInboundAt = r.lastCustomerReplyAt ?? 0;
+        // Parse last user message from history for preview text
+        let lastMessagePreview: string | null = null;
+        try {
+          const history: Array<{ role: string; content: string }> = JSON.parse(r.messageHistory ?? '[]');
+          // Find the last message from the customer
+          for (let i = history.length - 1; i >= 0; i--) {
+            const m = history[i];
+            if ((m.role === 'user' || m.role === 'customer') && typeof m.content === 'string' && m.content.trim()) {
+              lastMessagePreview = m.content.slice(0, 120);
+              break;
+            }
+          }
+        } catch { /* ignore */ }
         return {
           id: r.id,
           leadName: r.leadName ?? 'Unknown',
@@ -5137,6 +5150,7 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
           lastInboundAt,
           isUnread: true,
           ageMs: lastInboundAt ? now - lastInboundAt : 0,
+          lastMessagePreview,
         };
       });
 
@@ -5941,6 +5955,24 @@ Return JSON with exactly these fields:
           .where(eq(conversationSessions.id, canonicalSession.id));
 
         return { success: true, ts };
+      }),
+
+    /**
+     * leads.getPhoneBySessionId — resolves a session ID to a normalized phone.
+     * Used by LeadsInbox to pre-select a conversation when navigating from the banner.
+     */
+    getPhoneBySessionId: publicProcedure
+      .input(z.object({ sessionId: z.number() }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) return null;
+        const rows = await db
+          .select({ leadPhone: conversationSessions.leadPhone })
+          .from(conversationSessions)
+          .where(eq(conversationSessions.id, input.sessionId))
+          .limit(1);
+        if (!rows[0]?.leadPhone) return null;
+        return normalizePhone(rows[0].leadPhone) ?? rows[0].leadPhone;
       }),
   }),
   /**

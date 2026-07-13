@@ -958,6 +958,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
   const [csFilter, setCsFilter] = useState<InboxFilter>("All");
   const [focusLeadSessionId, setFocusLeadSessionId] = useState<number | undefined>(undefined);
   const [focusCsSessionId, setFocusCsSessionId] = useState<number | null>(null);
+  const [focusLeadsInboxSessionId, setFocusLeadsInboxSessionId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "channels" | "cs" | "leadops" | "leads-inbox">(
     initialTabProp ?? ctxInitialTab ?? "channels"
   );
@@ -2817,6 +2818,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
             onSwitchToToday={() => handleSetActiveTab("today")}
             onSwitchToCS={() => handleSetActiveTab("cs")}
             onSwitchToCSSession={(sessionId) => { setCsFilter("All"); setFocusCsSessionId(null); setTimeout(() => setFocusCsSessionId(sessionId), 0); handleSetActiveTab("cs"); }}
+            onSwitchToLeadsSession={(sessionId) => { setFocusLeadsInboxSessionId(null); setTimeout(() => setFocusLeadsInboxSessionId(sessionId), 0); handleSetActiveTab("leads-inbox"); }}
             onSwitchToLeadOps={(sessionId) => { setFocusLeadSessionId(sessionId); handleSetActiveTab("leadops"); }}
             awayStatus={myAwayStatus}
             onSetAwayStatus={(status) => {
@@ -3218,7 +3220,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         {/* VIEW: Leads Inbox */}
         {displayedTab === "leads-inbox" && (
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <LeadsInbox />
+            <LeadsInbox initialSessionId={focusLeadsInboxSessionId} />
           </div>
         )}
         </div>{/* end displayed tab */}
