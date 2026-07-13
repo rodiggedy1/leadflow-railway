@@ -826,7 +826,7 @@ export function registerWebhookRoutes(app: Express) {
         const campaignRecipientRow = await db
           .select({ id: smsCampaignRecipients.id })
           .from(smsCampaignRecipients)
-          .where(and(eq(smsCampaignRecipients.phone, fromPhone), eq(smsCampaignRecipients.status, "SENT")))
+          .where(and(eq(smsCampaignRecipients.phoneNormalized, fromPhone), eq(smsCampaignRecipients.status, "SENT")))
           .limit(1);
         if (campaignRecipientRow.length > 0) {
           console.log(`[Webhook] ${fromPhone} is a campaign recipient — storing inbound, skipping AI reply.`);
