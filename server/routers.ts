@@ -5873,7 +5873,13 @@ Return JSON with exactly these fields:
           id: `call-${r.id}`,
           type: 'call' as const,
           duration: (r as any).duration ?? null,
+          durationSeconds: r.durationSeconds ?? null,
           recordingUrl: r.recordingUrl ?? null,
+          direction: r.direction ?? null,
+          callerPhone: r.callerPhone ?? null,
+          transcript: r.transcript ?? null,
+          callDebrief: r.callDebrief ?? null,
+          status: r.status ?? null,
           ts: r.createdAt instanceof Date ? r.createdAt.getTime() : new Date(r.createdAt as string).getTime(),
         }));
 

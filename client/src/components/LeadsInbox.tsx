@@ -38,6 +38,10 @@ import {
   ArrowUpRight,
   BookOpen,
   Loader2,
+  Play,
+  Pause,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useOpsStream } from "@/hooks/useOpsStream";
@@ -89,7 +93,13 @@ type TimelineCall = {
   id: string;
   type: "call";
   duration: number | null;
+  durationSeconds: number | null;
   recordingUrl: string | null;
+  direction: string | null;
+  callerPhone: string | null;
+  transcript: string | null;
+  callDebrief: string | null;
+  status: string | null;
   ts: number;
 };
 
@@ -208,6 +218,12 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const [composerText, setComposerText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const journeyRef = useRef<HTMLDivElement>(null);
+  // Call recording playback state
+  const [expandedCallIds, setExpandedCallIds] = useState<Set<string>>(new Set());
+  const toggleCallExpanded = (id: string) =>
+    setExpandedCallIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const [playingCallId, setPlayingCallId] = useState<string | null>(null);
+  const callAudioRefs = useRef<Record<string, HTMLAudioElement | null>>({});
 
   // ── Data fetching ──────────────────────────────────────────────────────────
 
@@ -630,30 +646,179 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                     }
 
                     if (event._type === "call") {
+                      const rec = event as TimelineCall & { _type: "call" };
+                      const durationSeconds = rec.durationSeconds ?? rec.duration ?? null;
+                      const durationStr = durationSeconds
+                        ? durationSeconds >= 60
+                          ? `${Math.floor(durationSeconds / 60)}m ${durationSeconds % 60}s`
+                          : `${durationSeconds}s`
+                        : "";
+                      const callTime = new Date(rec.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                      let debriefParsed: { grade?: string; wentWell?: string; improve?: string; nextLine?: string; summary?: string } | null = null;
+                      try { if (rec.callDebrief) debriefParsed = JSON.parse(rec.callDebrief); } catch { /* ignore */ }
+                      const summary = debriefParsed?.summary || debriefParsed?.wentWell || null;
+                      const grade = debriefParsed?.grade?.toUpperCase() ?? null;
+                      const gradeColor: Record<string, string> = { A: "bg-emerald-500", B: "bg-blue-500", C: "bg-amber-500", D: "bg-orange-500", F: "bg-red-500" };
+                      const gradeBg = grade ? (gradeColor[grade] ?? "bg-slate-500") : null;
+                      const hasRecording = !!(rec.recordingUrl && !(rec.recordingUrl).includes("synthetic-backfill"));
+                      type TranscriptTurn = { identifier: string; content: string; start?: number };
+                      let transcriptTurns: TranscriptTurn[] = [];
+                      try { if (rec.transcript) transcriptTurns = JSON.parse(rec.transcript); } catch { /* ignore */ }
+                      const isExpanded = expandedCallIds.has(rec.id);
+                      const isPlaying = playingCallId === rec.id;
+                      const isInbound = rec.direction === "incoming";
+                      const waveHeights = [3,5,8,12,16,20,14,18,22,16,10,14,20,24,18,12,16,20,14,8,12,18,22,16,10,6,10,14,18,12,8,5];
                       return (
                         <motion.div
-                          key={event.id}
+                          key={rec.id}
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ duration: 0.18 }}
-                          className="flex gap-3"
+                          className="flex justify-start"
                         >
-                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 mt-0.5 z-10 bg-blue-100 text-blue-700">
-                            <Phone className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="flex-1 border rounded-[18px] px-4 py-3 bg-blue-50 border-blue-100">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">Call</span>
-                              <span className="text-[10px] font-black tracking-widest uppercase text-slate-400">{formatTs(event.ts)}</span>
+                          <div className="max-w-[72%] min-w-[220px]">
+                            {/* Compact bubble */}
+                            <div
+                              className={`rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 ${
+                                isInbound
+                                  ? "bg-blue-50 border border-blue-100 hover:bg-blue-100"
+                                  : "bg-slate-100 border border-slate-200 hover:bg-slate-200"
+                              }`}
+                              onClick={() => toggleCallExpanded(rec.id)}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                {/* Play/Pause */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!hasRecording) return;
+                                    const audio = callAudioRefs.current[rec.id];
+                                    if (!audio) return;
+                                    if (isPlaying) {
+                                      audio.pause();
+                                      setPlayingCallId(null);
+                                    } else {
+                                      Object.entries(callAudioRefs.current).forEach(([id, el]) => {
+                                        if (id !== rec.id && el) el.pause();
+                                      });
+                                      audio.play();
+                                      setPlayingCallId(rec.id);
+                                    }
+                                  }}
+                                  className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                                    hasRecording
+                                      ? isInbound
+                                        ? "bg-blue-500 hover:bg-blue-600 text-white"
+                                        : "bg-slate-600 hover:bg-slate-700 text-white"
+                                      : "bg-slate-300 text-slate-400 cursor-not-allowed"
+                                  }`}
+                                >
+                                  {isPlaying
+                                    ? <Pause className="h-3.5 w-3.5" />
+                                    : <Play className="h-3.5 w-3.5 ml-0.5" />}
+                                </button>
+                                {/* Waveform */}
+                                <div className="flex items-center gap-[2px] flex-1 h-7">
+                                  {waveHeights.map((h, wi) => (
+                                    <div
+                                      key={wi}
+                                      className={`rounded-full w-[3px] transition-all ${
+                                        isInbound ? "bg-blue-400" : "bg-slate-400"
+                                      }`}
+                                      style={{ height: `${h}px` }}
+                                    />
+                                  ))}
+                                </div>
+                                {/* Duration + chevron */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <span className={`text-[11px] font-medium tabular-nums ${
+                                    isInbound ? "text-blue-600" : "text-slate-500"
+                                  }`}>
+                                    {durationStr || "0:00"}
+                                  </span>
+                                  {isExpanded
+                                    ? <ChevronUp className={`h-3.5 w-3.5 ${isInbound ? "text-blue-400" : "text-slate-400"}`} />
+                                    : <ChevronDown className={`h-3.5 w-3.5 ${isInbound ? "text-blue-400" : "text-slate-400"}`} />}
+                                </div>
+                              </div>
+                              {/* Hidden audio */}
+                              {hasRecording && (
+                                <audio
+                                  ref={(el) => { callAudioRefs.current[rec.id] = el; }}
+                                  src={rec.recordingUrl!}
+                                  onEnded={() => setPlayingCallId(null)}
+                                  onPause={() => { if (playingCallId === rec.id) setPlayingCallId(null); }}
+                                  className="hidden"
+                                />
+                              )}
                             </div>
-                            <p className="text-sm text-slate-600">
-                              {event.duration ? `${Math.floor(event.duration / 60)}m ${event.duration % 60}s` : "Call recorded"}
-                            </p>
-                            {event.recordingUrl && (
-                              <a href={event.recordingUrl} target="_blank" rel="noopener noreferrer" className="text-[12px] text-blue-600 font-black mt-1 inline-block hover:underline">
-                                Listen to recording →
-                              </a>
-                            )}
+                            {/* Expanded detail panel */}
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.18, ease: "easeOut" }}
+                                  className="overflow-hidden"
+                                >
+                                  <div className={`mt-1 rounded-xl border px-3 py-2.5 ${
+                                    isInbound ? "bg-blue-50 border-blue-100" : "bg-slate-50 border-slate-200"
+                                  }`}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Phone className={`h-3 w-3 shrink-0 ${isInbound ? "text-blue-500" : "text-slate-500"}`} />
+                                      <span className="text-xs font-medium text-slate-700">
+                                        {isInbound ? "Inbound" : "Outbound"} call{rec.callerPhone ? ` · ${rec.callerPhone}` : ""}
+                                      </span>
+                                      {rec.status === "no-answer" && (
+                                        <span className="text-[10px] text-red-500 font-medium">No answer</span>
+                                      )}
+                                      {grade && gradeBg && (
+                                        <span className={`ml-auto inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold text-white ${gradeBg}`}>
+                                          {grade}
+                                        </span>
+                                      )}
+                                      <span className="ml-auto text-[10px] text-slate-400">{callTime}</span>
+                                    </div>
+                                    {summary && (
+                                      <p className="text-xs text-slate-600 leading-relaxed mb-2 border-t border-slate-100 pt-2">{summary}</p>
+                                    )}
+                                    {!hasRecording && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-2 py-0.5 mb-1.5">
+                                        <Phone className="h-2.5 w-2.5" /> No recording
+                                      </span>
+                                    )}
+                                    {transcriptTurns.length > 0 && (
+                                      <details className="mt-1">
+                                        <summary className={`cursor-pointer text-[10px] font-semibold uppercase tracking-widest select-none ${
+                                          isInbound ? "text-blue-600 hover:text-blue-800" : "text-violet-600 hover:text-violet-800"
+                                        }`}>
+                                          ▶ Transcript ({transcriptTurns.length} turns)
+                                        </summary>
+                                        <div className="mt-2 space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                          {transcriptTurns.map((turn, ti) => (
+                                            <div key={ti} className="text-xs">
+                                              <span className={`font-semibold mr-1 ${
+                                                turn.identifier?.toLowerCase().includes("agent") || turn.identifier?.toLowerCase().includes("assistant")
+                                                  ? isInbound ? "text-blue-600" : "text-violet-600"
+                                                  : "text-slate-500"
+                                              }`}>
+                                                {turn.identifier}:
+                                              </span>
+                                              <span className="text-slate-600">{turn.content}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </details>
+                                    )}
+                                    {!summary && !hasRecording && transcriptTurns.length === 0 && (
+                                      <p className="text-xs text-slate-400 italic">No details available yet</p>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                            <p className="text-[10px] text-slate-400 mt-1 ml-1">{callTime}</p>
                           </div>
                         </motion.div>
                       );
