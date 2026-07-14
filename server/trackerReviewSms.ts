@@ -11,6 +11,7 @@ import { getDb } from "./db";
 import { cleanerJobs } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { sendSms } from "./openphone";
+import { ENV } from "./_core/env";
 import { randomBytes } from "crypto";
 
 const BASE_URL = "https://quote.maidinblack.com";
@@ -68,7 +69,7 @@ export async function sendCompletionReviewSms(cleanerJobId: number): Promise<voi
     `Leave a 5-star Google review and we'll add a $50 tip to ${teamDisplay}:\n` +
     `${trackerUrl}`;
 
-  const result = await sendSms({ to: job.customerPhone, content: message });
+  const result = await sendSms({ to: job.customerPhone, content: message, fromNumberId: ENV.openPhoneCsNumberId });
 
   if (result.success) {
     console.log(`[TrackerReviewSms] Sent review SMS to ${job.customerPhone} for job ${cleanerJobId}`);
