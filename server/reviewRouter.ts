@@ -22,6 +22,7 @@ import {
   cleanerJobs,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
+import { ENV } from "./_core/env";
 import { notifyOwner } from "./_core/notification";
 import { getTemplate } from "./messageTemplateRouter";
 
@@ -177,7 +178,7 @@ export async function sendPendingReviewSms(): Promise<number> {
     const sessionId = (sessionInsert as any).insertId as number;
 
     // Send the SMS
-    const smsResult = await sendSms({ to: job.phone, content: message });
+    const smsResult = await sendSms({ to: job.phone, content: message, fromNumberId: ENV.openPhoneCsNumberId });
 
     if (smsResult.success) {
       await db

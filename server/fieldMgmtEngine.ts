@@ -1339,7 +1339,7 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
   const claimed = await tryClaimStep({ cleanerJobId, step: "client_pre_job", smsSent: msg, recipientPhone: clientPhone });
   if (!claimed) return;
 
-  const result = await sendSms({ to: clientPhone, content: msg });
+  const result = await sendSms({ to: clientPhone, content: msg, fromNumberId: ENV.openPhoneCsNumberId });
 
   if (result.success) {
     console.log(`[FieldMgmt] Client pre-job SMS sent to ${clientPhone} for job ${cleanerJobId}`);
@@ -1467,6 +1467,8 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
  * Called from the stale_eta cron in internalCron.ts.
  */
 export async function sendClientEtaApproachingSms(cleanerJobId: number): Promise<void> {
+  // Disabled — ETA approaching SMS removed from client notification flow
+  return;
   if (!FIELD_MGMT_ENABLED) return;
   const db = await getDb();
   if (!db) return;
@@ -2879,7 +2881,7 @@ export async function handleEtaCallEnd(params: {
     return;
   }
 
-  const smsResult = await sendSms({ to: customerPhone, content: smsBody });
+  const smsResult = await sendSms({ to: customerPhone, content: smsBody, fromNumberId: ENV.openPhoneCsNumberId });
   const smsSentOk = smsResult.success;
   if (smsSentOk) {
     console.log(`[EtaEngine] ETA SMS sent to ${customerPhone} for job ${cleanerJobId} (${status}, ETA: ${etaTimeStr})`);
