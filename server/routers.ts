@@ -5677,12 +5677,15 @@ Return JSON with exactly these fields:
           let lastMessage: string | null = null;
           let lastMessageAt: number | null = null;
           let unreadCount = 0;
+          let historyLastRole: string | null = null;
           try {
             const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(s.messageHistory ?? '[]');
             if (history.length > 0) {
               const last = history[history.length - 1];
               lastMessage = typeof last.content === 'string' ? last.content.slice(0, 120) : null;
               lastMessageAt = last.ts ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : null);
+              // Normalize: treat 'customer' as 'user' so clients check one value
+              historyLastRole = (last.role === 'customer') ? 'user' : last.role;
             }
             // Count unread: messages from customer after lastReadAt
             const lastReadAt = (s.lastReadAt as number | null) ?? 0;
@@ -5708,7 +5711,7 @@ Return JSON with exactly these fields:
             assignedAgentName: s.assignedAgentName ?? null,
             leadSource: s.leadSource ?? null,
             createdAt: s.createdAt,
-            lastMessageRole: s.lastMessageRole ?? null,
+            lastMessageRole: historyLastRole ?? (s.lastMessageRole === 'customer' ? 'user' : s.lastMessageRole) ?? null,
           };
         });
 
