@@ -2840,7 +2840,7 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
     let history: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }> = [];
     try { history = JSON.parse((session.messageHistory as string) ?? "[]"); } catch { history = []; }
 
-    // Build set of already-synced OpenPhone message IDs (strict dedup only — no fuzzy matching)
+    // Build set of already-synced OpenPhone message IDs (step 1: exact ID dedup)
     const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
 
     for (const m of uniqueMessages) {
@@ -2851,8 +2851,32 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
       const role = isInbound ? "user" : "assistant";
       const senderName = isInbound ? undefined : ((m.userId && opUserMap[m.userId]) ? opUserMap[m.userId] : "OpenPhone");
 
-      // Skip if already synced by exact OpenPhone message ID
+      // Step 1: Skip if already synced by exact OpenPhone message ID
       if (msgId && syncedIds.has(msgId)) continue;
+
+      // Step 2: If this OpenPhone message has an ID, look for an AI-written entry
+      // (no opMsgId) with the same role + content within a 2-second window.
+      // If exactly one match is found: enrich it with the opMsgId (do not append).
+      // If zero or multiple matches: append normally and log the ambiguity.
+      if (msgId) {
+        const WINDOW_MS = 2000;
+        const candidates = history.filter((h: any) =>
+          !h.opMsgId &&
+          h.role === role &&
+          h.content === text &&
+          Math.abs((h.ts ?? 0) - msgTs) <= WINDOW_MS
+        );
+        if (candidates.length === 1) {
+          // Enrich the existing entry — attach provider ID, preserve original ts
+          candidates[0].opMsgId = msgId;
+          syncedIds.add(msgId);
+          added++; // counts as a write since we mutated history
+          continue;
+        }
+        if (candidates.length > 1) {
+          console.warn(`[Sync] Ambiguous content match for msgId=${msgId} in session ${sessionId} — ${candidates.length} candidates. Appending.`);
+        }
+      }
 
       const entry: any = { role, content: text, ts: msgTs, opMsgId: msgId };
       if (senderName) entry.senderName = senderName;
