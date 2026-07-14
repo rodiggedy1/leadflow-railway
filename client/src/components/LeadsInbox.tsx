@@ -380,12 +380,27 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation();
   const announceBookingMutation = trpc.opsChat.announceBooking.useMutation();
   const markUnbookedMutation = trpc.agents.markUnbooked.useMutation({
+    onMutate: async ({ sessionId }) => {
+      await utils.leads.listWorkspace.cancel();
+      const prev = utils.leads.listWorkspace.getData();
+      utils.leads.listWorkspace.setData(undefined, (old) =>
+        old?.map((s) =>
+          s.sessionId === sessionId
+            ? { ...s, isBooked: false, bookedAmount: null, stage: 'FOLLOW_UP' }
+            : s
+        )
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) utils.leads.listWorkspace.setData(undefined, ctx.prev);
+      toast.error("Failed to remove booking");
+    },
     onSuccess: () => {
       utils.leads.listWorkspace.invalidate();
       utils.leads.stats?.invalidate?.();
       toast.success("Booking removed — lead reopened");
     },
-    onError: (err) => toast.error(err.message),
   });
 
   async function handleMarkBooked() {
