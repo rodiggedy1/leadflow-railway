@@ -524,22 +524,6 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
         {/* Lanes */}
         <div className="grid grid-cols-2 gap-2 px-4 pb-3 shrink-0">
-          {/* Follow-up big chip — same card style as lane chips */}
-          <button
-            onClick={() => setActiveFilter(activeFilter === "follow-up" ? "all" : "follow-up")}
-            className={cn(
-              "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all col-span-2",
-              activeFilter === "follow-up"
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
-            )}
-          >
-            <span className="text-base">🔔</span>{" "}
-            Follow-up Scheduled
-            <span className={cn("block font-semibold text-[11px] mt-0.5", activeFilter === "follow-up" ? "text-white/70" : "text-slate-500")}>
-              {workspace.filter(l => l.stage === "FOLLOW_UP_SCHEDULED").length} leads
-            </span>
-          </button>
           {LANE_CONFIG.map((lane) => (
             <button
               key={lane.id}
@@ -558,6 +542,22 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               </span>
             </button>
           ))}
+          {/* Follow-up — sits in the empty slot next to Resolved */}
+          <button
+            onClick={() => setActiveFilter(activeFilter === "follow-up" ? "all" : "follow-up")}
+            className={cn(
+              "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all",
+              activeFilter === "follow-up"
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+            )}
+          >
+            <span className="text-base">🔔</span>{" "}
+            Follow-up
+            <span className={cn("block font-semibold text-[11px] mt-0.5", activeFilter === "follow-up" ? "text-white/70" : "text-slate-500")}>
+              {workspace.filter(l => l.stage === "FOLLOW_UP_SCHEDULED").length} leads
+            </span>
+          </button>
         </div>
 
         {/* Filters */}
@@ -707,15 +707,15 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   {getInitials(selectedSummary.customerName, selectedSummary.phone)}
                 </div>
                 <div>
-                  <h2 className="font-black text-lg text-slate-900 leading-tight">
+                  <h2 className="font-black text-lg text-slate-900 leading-tight flex items-center gap-2">
                     {selectedSummary.customerName ?? selectedSummary.phone}
+                    {selectedSummary.stage === "FOLLOW_UP_SCHEDULED" && (
+                      <span className="text-xs font-black px-2 py-0.5 rounded-full bg-slate-900 text-white">
+                        🔔 Follow-up
+                      </span>
+                    )}
                   </h2>
                   <div className="flex items-center gap-2 flex-wrap">
-                  {selectedSummary.stage === "FOLLOW_UP_SCHEDULED" && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-slate-900 text-white">
-                      🔔 Follow-up scheduled
-                    </span>
-                  )}
                   <p className="text-[13px] text-slate-500">
                     {(() => {
                       // Show the most recent campaign name that drove this conversation
