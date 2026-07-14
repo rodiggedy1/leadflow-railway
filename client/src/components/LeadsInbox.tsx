@@ -1117,7 +1117,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                               {formatTs(msg.ts)}
                             </span>
                           </div>
-                          <p className={cn("text-sm leading-relaxed", isAgent ? "text-white" : "text-slate-600")}>
+                          <p className={cn("text-sm leading-relaxed whitespace-pre-wrap", isAgent ? "text-white" : "text-slate-600")}>
                             {msg.content}
                           </p>
                           {msg.mediaUrls && msg.mediaUrls.length > 0 && (
