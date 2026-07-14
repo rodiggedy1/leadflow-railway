@@ -5708,6 +5708,7 @@ Return JSON with exactly these fields:
             assignedAgentName: s.assignedAgentName ?? null,
             leadSource: s.leadSource ?? null,
             createdAt: s.createdAt,
+            lastMessageRole: s.lastMessageRole ?? null,
           };
         });
 
