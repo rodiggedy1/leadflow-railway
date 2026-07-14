@@ -797,6 +797,13 @@ export function registerWebhookRoutes(app: Express) {
       // Must happen BEFORE the AI reply is appended — otherwise last role becomes 'assistant' and the tray misses it.
       const { broadcastOpsUpdate: bcastInbound } = await import("./sseBroadcast");
       bcastInbound("lead_update");
+
+      // Sync any outbound messages sent from any company OpenPhone number directly
+      // from the app (OpenPhone doesn't fire webhooks for outbound messages).
+      syncAllOutboundMessages(fromPhone, session.id).catch(err =>
+        console.warn("[Webhook] syncAllOutboundMessages error:", err)
+      );
+
       // Log the inbound reply as an activity event
       logActivity({
         eventType: "lead_reply",
@@ -2413,8 +2420,8 @@ async function handleCsInboundMessage(msg: any) {
     scoreAndCacheStatusById(resolvedSessionId, isCleaner).catch(err =>
       console.warn("[CS] scoreAndCacheStatusById error:", err)
     );
-    syncCsOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
-      console.warn("[CS] syncCsOutboundMessages error:", err)
+    syncAllOutboundMessages(fromPhone, resolvedSessionId).catch(err =>
+      console.warn("[CS] syncAllOutboundMessages error:", err)
     );
   }
 }
@@ -2742,54 +2749,41 @@ async function handleCsOutboundMessage(msg: any) {
 }
 
 /**
- * syncCsOutboundMessages — fetches recent messages from OpenPhone API for a given
- * CS conversation and mirrors any outbound (agent-sent) messages that aren't already
- * in the session history. Called after each inbound message since OpenPhone doesn't
- * fire webhooks for outbound messages sent from the app.
+ * syncAllOutboundMessages — fetches recent messages from ALL authorized company
+ * OpenPhone numbers for a given conversation and mirrors any outbound (agent-sent)
+ * messages that aren't already in the session history.
+ *
+ * Called after each inbound message since OpenPhone doesn't fire webhooks for
+ * outbound messages sent directly from the OpenPhone app.
+ *
+ * Queries main, CS, and Bark numbers separately (API requires one phoneNumberId
+ * per request), merges results, deduplicates strictly by OpenPhone message ID,
+ * sorts chronologically, and writes once inside a transaction with FOR UPDATE
+ * to prevent concurrent inbound events from overwriting each other.
  */
-export async function syncCsOutboundMessages(leadPhone: string, sessionId: number): Promise<void> {
+export async function syncAllOutboundMessages(leadPhone: string, sessionId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  const apiKey = process.env.OPENPHONE_API_KEY;
-  const csNumberId = process.env.OPENPHONE_CS_PHONE_NUMBER_ID;
-  if (!apiKey || !csNumberId) {
-    console.warn("[CS Sync] Missing OPENPHONE_API_KEY or OPENPHONE_CS_PHONE_NUMBER_ID");
+  const apiKey = ENV.openPhoneApiKey;
+  if (!apiKey) {
+    console.warn("[Sync] Missing OPENPHONE_API_KEY — skipping outbound sync");
     return;
   }
 
-  // Fetch last 50 messages for this conversation from OpenPhone, with 1 retry on failure
-  let messages: any[] = [];
-  const fetchWithRetry = async (attempt: number): Promise<void> => {
-    try {
-      const url = `https://api.openphone.com/v1/messages?phoneNumberId=${encodeURIComponent(csNumberId)}&participants=${encodeURIComponent(leadPhone)}&maxResults=50`;
-      const res = await fetch(url, {
-        headers: { Authorization: apiKey, "Content-Type": "application/json" },
-      });
-      if (!res.ok) {
-        if (attempt < 2) {
-          console.warn(`[CS Sync] OpenPhone API ${res.status} for ${leadPhone} — retrying in 2s`);
-          await new Promise(r => setTimeout(r, 2000));
-          return fetchWithRetry(attempt + 1);
-        }
-        console.warn(`[CS Sync] OpenPhone API ${res.status} for ${leadPhone} after ${attempt} attempts — giving up`);
-        return;
-      }
-      const json = await res.json() as any;
-      messages = json?.data ?? [];
-    } catch (err) {
-      if (attempt < 2) {
-        console.warn(`[CS Sync] Fetch error for ${leadPhone} — retrying in 2s:`, err);
-        await new Promise(r => setTimeout(r, 2000));
-        return fetchWithRetry(attempt + 1);
-      }
-      console.warn(`[CS Sync] Fetch error for ${leadPhone} after ${attempt} attempts — giving up:`, err);
-    }
-  };
-  await fetchWithRetry(1);
+  // All authorized company OpenPhone number IDs.
+  // Add new numbers here when provisioned — each is queried separately.
+  const outboundPhoneNumberIds = [
+    ENV.openPhoneNumberId,
+    ENV.openPhoneCsNumberId,
+    ENV.openPhoneBarkNumberId,
+  ].filter(Boolean);
 
-  if (messages.length === 0) return;
+  if (outboundPhoneNumberIds.length === 0) {
+    console.warn("[Sync] No OPENPHONE_*_PHONE_NUMBER_ID env vars set — skipping outbound sync");
+    return;
+  }
 
-  // Build userId → name map from OpenPhone users API (best-effort, cached per call)
+  // Build userId → name map once, shared across all number fetches.
   const opUserMap: Record<string, string> = {};
   try {
     const usersRes = await fetch("https://api.openphone.com/v1/users", {
@@ -2803,64 +2797,108 @@ export async function syncCsOutboundMessages(leadPhone: string, sessionId: numbe
     }
   } catch { /* ignore — fall back to "OpenPhone" */ }
 
-  // Load current session history
-  const [session] = await db
-    .select({ messageHistory: conversationSessions.messageHistory })
-    .from(conversationSessions)
-    .where(eq(conversationSessions.id, sessionId))
-    .limit(1);
-  if (!session) return;
+  // Fetch messages from each number separately and collect into one array.
+  const allMessages: any[] = [];
+  for (const phoneNumberId of outboundPhoneNumberIds) {
+    const fetchForNumber = async (attempt: number): Promise<void> => {
+      try {
+        const url = `https://api.openphone.com/v1/messages?phoneNumberId=${encodeURIComponent(phoneNumberId)}&participants=${encodeURIComponent(leadPhone)}&maxResults=50`;
+        const res = await fetch(url, {
+          headers: { Authorization: apiKey, "Content-Type": "application/json" },
+        });
+        if (!res.ok) {
+          if (attempt < 2) {
+            console.warn(`[Sync] OpenPhone API ${res.status} for ${leadPhone} / ${phoneNumberId} — retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            return fetchForNumber(attempt + 1);
+          }
+          console.warn(`[Sync] OpenPhone API ${res.status} for ${leadPhone} / ${phoneNumberId} after ${attempt} attempts — skipping this number`);
+          return;
+        }
+        const json = await res.json() as any;
+        allMessages.push(...(json?.data ?? []));
+      } catch (err) {
+        if (attempt < 2) {
+          console.warn(`[Sync] Fetch error for ${leadPhone} / ${phoneNumberId} — retrying in 2s:`, err);
+          await new Promise(r => setTimeout(r, 2000));
+          return fetchForNumber(attempt + 1);
+        }
+        console.warn(`[Sync] Fetch error for ${leadPhone} / ${phoneNumberId} after ${attempt} attempts — skipping this number:`, err);
+      }
+    };
+    await fetchForNumber(1);
+  }
 
-  let history: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }> = [];
-  try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
+  if (allMessages.length === 0) return;
 
-  // Build set of already-synced OpenPhone message IDs
-  const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
+  // Deduplicate by OpenPhone message ID across all numbers before touching the DB.
+  const seenMsgIds = new Set<string>();
+  const uniqueMessages = allMessages.filter(m => {
+    const id: string = m.id ?? "";
+    if (!id) return true;
+    if (seenMsgIds.has(id)) return false;
+    seenMsgIds.add(id);
+    return true;
+  });
 
+  // Use a transaction with FOR UPDATE to prevent concurrent inbound webhooks from
+  // reading stale history between our SELECT and UPDATE.
   let added = 0;
-  for (const m of messages) {
-    const text: string = m.text ?? m.body ?? "";
-    // Allow empty text for media-only messages (photos)
-    const msgId: string = m.id ?? "";
-    const msgTs = m.createdAt ? new Date(m.createdAt).getTime() : 0;
-    const isInbound = m.direction === "incoming";
-    const role = isInbound ? "user" : "assistant";
-    const senderName = isInbound ? undefined : ((m.userId && opUserMap[m.userId]) ? opUserMap[m.userId] : "OpenPhone");
+  await (db as any).transaction(async (tx: typeof db) => {
+    const [session] = await (tx as any)
+      .select({ messageHistory: conversationSessions.messageHistory })
+      .from(conversationSessions)
+      .where(eq(conversationSessions.id, sessionId))
+      .for("update")
+      .limit(1);
+    if (!session) return;
 
-    // Skip if already synced by ID
-    if (msgId && syncedIds.has(msgId)) continue;
+    let history: Array<{ role: string; content: string; ts?: number; senderName?: string; opMsgId?: string }> = [];
+    try { history = JSON.parse((session.messageHistory as string) ?? "[]"); } catch { history = []; }
 
-    // Skip if identical non-empty content within 15s (dedup for messages already stored via webhook)
-    if (text.trim()) {
-      const isDup = history.some(
-        (h: any) => h.role === role && h.content === text && Math.abs((h.ts ?? 0) - msgTs) < 15_000
-      );
-      if (isDup) continue;
+    // Build set of already-synced OpenPhone message IDs (strict dedup only — no fuzzy matching)
+    const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
+
+    for (const m of uniqueMessages) {
+      const text: string = m.text ?? m.body ?? "";
+      const msgId: string = m.id ?? "";
+      const msgTs = m.createdAt ? new Date(m.createdAt).getTime() : 0;
+      const isInbound = m.direction === "incoming";
+      const role = isInbound ? "user" : "assistant";
+      const senderName = isInbound ? undefined : ((m.userId && opUserMap[m.userId]) ? opUserMap[m.userId] : "OpenPhone");
+
+      // Skip if already synced by exact OpenPhone message ID
+      if (msgId && syncedIds.has(msgId)) continue;
+
+      const entry: any = { role, content: text, ts: msgTs, opMsgId: msgId };
+      if (senderName) entry.senderName = senderName;
+      history.push(entry);
+      syncedIds.add(msgId);
+      added++;
     }
 
-    const entry: any = { role, content: text, ts: msgTs, opMsgId: msgId };
-    if (senderName) entry.senderName = senderName;
-    history.push(entry);
-    added++;
-  }
+    if (added === 0) return;
+
+    // Sort chronologically before writing
+    history.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
+
+    await (tx as any)
+      .update(conversationSessions)
+      .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
+      .where(eq(conversationSessions.id, sessionId));
+  });
 
   if (added === 0) return;
 
-  // Sort by ts to maintain chronological order
-  history.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
+  console.log(`[Sync] Synced ${added} message(s) from OpenPhone for session ${sessionId} (${leadPhone})`);
 
-
-  await db
-    .update(conversationSessions)
-    .set({ messageHistory: JSON.stringify(history), updatedAt: new Date() } as any)
-    .where(eq(conversationSessions.id, sessionId));
-
-  console.log(`[CS Sync] Synced ${added} message(s) from OpenPhone for session ${sessionId} (${leadPhone})`);
-
-  // Broadcast SSE so CS inbox updates instantly
+  // Broadcast SSE so the inbox updates instantly
   const { broadcastOpsUpdate: broadcastOpsUpdate2 } = await import("./sseBroadcast");
   broadcastOpsUpdate2("lead_update");
 }
+
+/** @deprecated Use syncAllOutboundMessages instead */
+export const syncCsOutboundMessages = syncAllOutboundMessages;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // handleCallAnswered / handleCallCompleted
