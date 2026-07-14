@@ -41,6 +41,7 @@ import { normalizePhone } from "./routers";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
+import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcRevenue(row: {
@@ -1928,6 +1929,7 @@ Respond in JSON with this exact schema:
         const personalizedScript = input.script.replace(/\{\{name\}\}/g, name);
         try {
           const smsResult = await sendSms({ to: target.phone, content: personalizedScript });
+          const sentAt = Date.now();
           if (!smsResult.success) {
             // sendSms returns { success: false } on API errors — count as failed
             failed++;
@@ -1935,9 +1937,11 @@ Respond in JSON with this exact schema:
           } else {
             sent++;
             sentPhones.push(target.phone);
-            // Only create a session for phone-only targets (lapsed past customers).
-            // Session-based funnel leads already have an active session — no need to create one.
             if (target.isPhoneOnly) {
+              // Phone-only targets (lapsed past customers): create a new session and
+              // write the campaign message directly into messageHistory at insert time.
+              // The helper is not called here because the session does not exist yet;
+              // the message is embedded in the INSERT so there is no race window.
               try {
                 // Look up the last booking price + service type from completed_jobs for this phone
                 const [priceRow] = await db
@@ -1958,7 +1962,12 @@ Respond in JSON with this exact schema:
                   stage: "REACTIVATION",
                   // Tag with the specific campaign so the leads page shows the source
                   leadSource: `campaign:${input.campaignId}`,
-                  messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: Date.now() }]),
+                  messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: sentAt, source: "command_center", openPhoneId: smsResult.messageId ?? null }]),
+                  lastMessageRole: "assistant",
+                  lastMessageText: personalizedScript.slice(0, 255),
+                  lastMessageTs: sentAt,
+                  lastReadAt: sentAt,
+                  messageCount: 1,
                   aiMode: 1,
                   isBooked: 0,
                   reactivationLastPrice: priceRow?.lastBookingPrice ?? null,
@@ -1967,6 +1976,20 @@ Respond in JSON with this exact schema:
               } catch (sessionErr) {
                 // Non-fatal: session creation failure should not block the send count
                 console.error(`[fireCampaign] Failed to create session for ${target.phone}:`, sessionErr);
+              }
+            } else if (target.sourceId) {
+              // Session-based funnel leads: append to the existing session via the helper.
+              if (smsResult.messageId) {
+                await appendOutboundCampaignMessageToSession({
+                  db: db as any,
+                  sessionId: target.sourceId,
+                  message: personalizedScript,
+                  sentAt,
+                  source: "command_center",
+                  openPhoneMessageId: smsResult.messageId,
+                });
+              } else {
+                console.warn(`[fireCampaign] SMS sent to ${target.phone} (session ${target.sourceId}) but no messageId returned — skipping history append`);
               }
             }
           }
