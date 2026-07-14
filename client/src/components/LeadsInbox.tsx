@@ -301,8 +301,8 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // Resolved leads only appear in the resolved lane — never in active lanes
     if (lane === "resolved" && activeLane !== "resolved") return false;
     if (activeLane === "resolved" && lane !== "resolved") return false;
-    if (activeLane !== "all" && activeLane !== "resolved" && activeLane !== "needs-me" && lane !== activeLane) return false;
-    if (activeLane === "needs-me" && lane !== "needs-me") return false;
+    // "all" shows every non-resolved lead; specific lanes filter by lane
+    if (activeLane !== "all" && activeLane !== "resolved" && lane !== activeLane) return false;
     if (activeFilter === "unread" && lead.unreadCount === 0) return false;
     if (activeFilter === "campaign-reply") {
       const src = lead.leadSource ?? "";
