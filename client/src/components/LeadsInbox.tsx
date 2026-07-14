@@ -323,7 +323,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // booked filter applies across all lanes
     if (activeFilter === "booked" && !lead.isBooked) return false;
     if (activeFilter === "follow-up" && lead.stage !== "FOLLOW_UP_SCHEDULED") return false;
-    if (activeFilter === "unread" && lead.lastMessageRole !== "user") return false;
+    if (activeFilter === "unread" && (lead.lastMessageRole !== "user" || lead.unreadCount === 0)) return false;
     if (activeFilter === "campaign-reply") {
       const src = lead.leadSource ?? "";
       if (!src.startsWith("campaign:") && !src.startsWith("always-on") && src !== "reactivation") return false;
@@ -348,7 +348,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     "resolved": workspace.filter((l) => stageToLane(l.stage) === "resolved").length,
   };
 
-  const unreadCount = workspace.filter((l) => l.lastMessageRole === "user" && l.stage !== "RESOLVED").length;
+  const unreadCount = workspace.filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED").length;
 
   // Timeline events merged and sorted
   const timelineEvents: TimelineEvent[] = timeline
@@ -359,7 +359,9 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const [resolvingPhone, setResolvingPhone] = useState<string | null>(null);
 
   const resolveLeadChat = trpc.leads.resolveLeadChat.useMutation({
-    onMutate: ({ phone, resolve }) => {
+    onMutate: async ({ phone, resolve }) => {
+      await utils.leads.listWorkspace.cancel();
+      const prev = utils.leads.listWorkspace.getData();
       // Optimistic: immediately update isResolved + stage in workspace cache
       utils.leads.listWorkspace.setData(undefined, (old) => {
         if (!old) return old;
@@ -369,6 +371,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
             : w
         );
       });
+      return { prev };
     },
     onSuccess: (_data, { phone, resolve }) => {
       setResolvingPhone(phone);
@@ -379,9 +382,9 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
         utils.leads.listWorkspace.invalidate();
       }, 800);
     },
-    onError: () => {
-      // Roll back optimistic update on error
-      utils.leads.listWorkspace.invalidate();
+    onError: (_err, _vars, ctx) => {
+      // Roll back to snapshot captured in onMutate
+      if (ctx?.prev) utils.leads.listWorkspace.setData(undefined, ctx.prev);
     },
   });
 
@@ -435,6 +438,23 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     },
   });
 
+  const markReadMutation = trpc.leads.markRead.useMutation({
+    onMutate: async ({ sessionId }) => {
+      await utils.leads.listWorkspace.cancel();
+      const prev = utils.leads.listWorkspace.getData();
+      // Optimistically set unreadCount to 0 so dot and filter update immediately
+      utils.leads.listWorkspace.setData(undefined, (old) =>
+        old?.map((s) =>
+          s.sessionId === sessionId ? { ...s, unreadCount: 0 } : s
+        )
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) utils.leads.listWorkspace.setData(undefined, ctx.prev);
+    },
+  });
+
   async function handleMarkBooked() {
     if (!selectedSummary || isBooking) return;
     const sessionId = selectedSummary.sessionId;
@@ -473,6 +493,11 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   function handlePickLead(phone: string) {
     setSelectedPhone(phone);
     setComposerText("");
+    // Mark as read if there are unread messages
+    const lead = workspace.find((l) => l.phone === phone);
+    if (lead && lead.unreadCount > 0) {
+      markReadMutation.mutate({ sessionId: lead.sessionId });
+    }
   }
 
   function handleSend() {
@@ -631,7 +656,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   <div className="flex justify-between items-start mb-1">
                     <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
                       {displayName}
-                      {lead.lastMessageRole === "user" && (
+                      {lead.lastMessageRole === "user" && lead.unreadCount > 0 && (
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
                       )}
                     </span>

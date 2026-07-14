@@ -1484,13 +1484,13 @@ export const appRouter = router({
     markRead: publicProcedure
       .input(z.object({ sessionId: z.number().int().positive() }))
       .mutation(async ({ input }) => {
-        // No agent auth required — this is a read-receipt stamp, not a sensitive write.
-        // Previously called getAgentSessionFromCtx() which threw for non-agent users,
-        // leaving lastReadAt = NULL and causing persistent unread notifications.
+        // Stamp lastReadAt = now (milliseconds) so unreadCount recalculates to 0 on next fetch.
         const db = await getDb();
         if (!db) return { success: false };
-                // lastReadAt is intentionally NOT updated here.
-        // Opening the drawer is not "handled" — only a human reply or explicit resolve clears the notification.
+        await db
+          .update(conversationSessions)
+          .set({ lastReadAt: Date.now() } as any)
+          .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };
       }),
     /**
