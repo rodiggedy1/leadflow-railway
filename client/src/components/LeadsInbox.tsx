@@ -544,7 +544,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
           ))}
           {/* Follow-up — sits in the empty slot next to Resolved */}
           <button
-            onClick={() => setActiveFilter(activeFilter === "follow-up" ? "all" : "follow-up")}
+            onClick={() => { const next = activeFilter === "follow-up" ? "all" : "follow-up"; setActiveFilter(next); setActiveLane("all"); }}
             className={cn(
               "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all",
               activeFilter === "follow-up"
