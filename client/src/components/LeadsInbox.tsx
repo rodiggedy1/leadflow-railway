@@ -48,7 +48,7 @@ import { useOpsStream } from "@/hooks/useOpsStream";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Lane = "all" | "needs-me" | "ready-to-book" | "needs-price" | "reactivation";
+type Lane = "all" | "needs-me" | "ready-to-book" | "needs-price" | "reactivation" | "resolved";
 type LeadFilter = "all" | "unread" | "campaign-reply";
 
 type LeadTag = {
@@ -64,6 +64,7 @@ type WorkspaceSummary = {
   lastMessageAt: number | null;
   unreadCount: number;
   stage: string | null;
+  isResolved: boolean;
   needsAttention: boolean;
   assignedAgentName: string | null;
   leadSource: string | null;
@@ -167,6 +168,7 @@ function sourceToTag(source: string | null): LeadTag | null {
 function stageToLane(stage: string | null): Lane {
   if (!stage) return "needs-me";
   const s = stage.toLowerCase();
+  if (s === "resolved") return "resolved";
   if (s.includes("quote") || s.includes("price")) return "needs-price";
   if (s.includes("book") || s.includes("scheduled")) return "ready-to-book";
   if (s.includes("reactivat") || s.includes("rebooking")) return "reactivation";
@@ -199,6 +201,7 @@ const LANE_CONFIG: { id: Lane; label: string; emoji: string }[] = [
   { id: "ready-to-book", label: "Ready to Book", emoji: "📅" },
   { id: "needs-price", label: "Needs Price", emoji: "💸" },
   { id: "reactivation", label: "Reactivation", emoji: "🔁" },
+  { id: "resolved", label: "Resolved", emoji: "✅" },
 ];
 
 // ── Main Component ────────────────────────────────────────────────────────────
@@ -295,7 +298,11 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   // Filter list by lane + filter chip + search
   const filteredLeads = workspace.filter((lead) => {
     const lane = stageToLane(lead.stage);
-    if (activeLane !== "needs-me" && lane !== activeLane) return false; // "needs-me" is default/all for now
+    // Resolved leads only appear in the resolved lane — never in active lanes
+    if (lane === "resolved" && activeLane !== "resolved") return false;
+    if (activeLane === "resolved" && lane !== "resolved") return false;
+    if (activeLane !== "all" && activeLane !== "resolved" && activeLane !== "needs-me" && lane !== activeLane) return false;
+    if (activeLane === "needs-me" && lane !== "needs-me") return false;
     if (activeFilter === "unread" && lead.unreadCount === 0) return false;
     if (activeFilter === "campaign-reply") {
       const src = lead.leadSource ?? "";
@@ -313,11 +320,12 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
   // Lane counts
   const laneCounts: Record<Lane, number> = {
-    "all": workspace.length,
+    "all": workspace.filter((l) => stageToLane(l.stage) !== "resolved").length,
     "needs-me": workspace.filter((l) => stageToLane(l.stage) === "needs-me").length,
     "ready-to-book": workspace.filter((l) => stageToLane(l.stage) === "ready-to-book").length,
     "needs-price": workspace.filter((l) => stageToLane(l.stage) === "needs-price").length,
     "reactivation": workspace.filter((l) => stageToLane(l.stage) === "reactivation").length,
+    "resolved": workspace.filter((l) => stageToLane(l.stage) === "resolved").length,
   };
 
   const unreadCount = workspace.reduce((sum, l) => sum + l.unreadCount, 0);
@@ -326,6 +334,36 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const timelineEvents: TimelineEvent[] = timeline
     ? buildTimeline(timeline.messages, timeline.campaigns, timeline.calls)
     : [];
+
+  // ── Resolve / Reopen ─────────────────────────────────────────────────────
+  const [resolvingPhone, setResolvingPhone] = useState<string | null>(null);
+
+  const resolveLeadChat = trpc.leads.resolveLeadChat.useMutation({
+    onMutate: ({ phone, resolve }) => {
+      // Optimistic: immediately update isResolved + stage in workspace cache
+      utils.leads.listWorkspace.setData(undefined, (old) => {
+        if (!old) return old;
+        return old.map((w) =>
+          w.phone === phone
+            ? { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' }
+            : w
+        );
+      });
+    },
+    onSuccess: (_data, { phone, resolve }) => {
+      setResolvingPhone(phone);
+      window.setTimeout(() => {
+        setResolvingPhone(null);
+        // If we just resolved the selected lead, deselect it after animation
+        if (resolve && selectedPhone === phone) setSelectedPhone(null);
+        utils.leads.listWorkspace.invalidate();
+      }, 800);
+    },
+    onError: () => {
+      // Roll back optimistic update on error
+      utils.leads.listWorkspace.invalidate();
+    },
+  });
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -462,10 +500,13 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   onClick={() => handlePickLead(lead.phone)}
                   className={cn(
                     "w-full text-left p-4 rounded-[20px] border transition-all",
+                    resolvingPhone === lead.phone && "opacity-0 scale-95 pointer-events-none",
+                    lead.isResolved && resolvingPhone !== lead.phone && "opacity-60",
                     selectedPhone === lead.phone
                       ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
                       : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
                   )}
+                  style={{ transition: "opacity 0.4s, transform 0.4s" }}
                 >
                   <div className="flex justify-between items-start mb-1">
                     <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
@@ -490,6 +531,11 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                         )}
                       >
                         {tag.label}
+                      </span>
+                    )}
+                    {lead.isResolved && (
+                      <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-black border", TAG_STYLES.green)}>
+                        ✓ Resolved
                       </span>
                     )}
                     {lead.needsAttention && (
@@ -577,7 +623,17 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 >
                   <RefreshCw className="w-4 h-4" />
                 </button>
-                <button className="w-10 h-10 border border-slate-200 rounded-[14px] bg-white flex items-center justify-center text-slate-500 hover:bg-slate-50 transition">
+                <button
+                  title={selectedSummary.isResolved ? 'Reopen conversation' : 'Resolve conversation'}
+                  disabled={resolveLeadChat.isPending}
+                  onClick={() => resolveLeadChat.mutate({ phone: selectedSummary.phone, resolve: !selectedSummary.isResolved })}
+                  className={cn(
+                    "w-10 h-10 border rounded-[14px] flex items-center justify-center transition",
+                    selectedSummary.isResolved
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-600 hover:bg-emerald-100"
+                      : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                  )}
+                >
                   <CheckCircle2 className="w-4 h-4" />
                 </button>
               </div>

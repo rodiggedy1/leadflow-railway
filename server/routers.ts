@@ -5700,6 +5700,7 @@ Return JSON with exactly these fields:
             lastMessageAt,
             unreadCount,
             stage: s.stage,
+            isResolved: s.stage === 'RESOLVED',
             needsAttention: !!(s as any).flagged,
             assignedAgentName: s.assignedAgentName ?? null,
             leadSource: s.leadSource ?? null,
@@ -5979,6 +5980,41 @@ Return JSON with exactly these fields:
           .limit(1);
         if (!rows[0]?.leadPhone) return null;
         return normalizePhone(rows[0].leadPhone) ?? rows[0].leadPhone;
+      }),
+
+    /**
+     * leads.resolveLeadChat — toggles the RESOLVED stage on the canonical session for a phone.
+     * - resolve=true  → sets stage to RESOLVED
+     * - resolve=false → sets stage to UNHANDLED (reopens the conversation)
+     * Never blocks inbound messages — RESOLVED is purely a UI state.
+     */
+    resolveLeadChat: publicProcedure
+      .input(z.object({ phone: z.string().min(7), resolve: z.boolean() }))
+      .mutation(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+        const norm = normalizePhone(input.phone);
+        const digits = input.phone.replace(/[^\d]/g, '').slice(-10);
+        // Find the canonical (most recent non-review/non-hiring) session for this phone
+        const sessions = await db
+          .select({ id: conversationSessions.id })
+          .from(conversationSessions)
+          .where(or(
+            norm ? eq(conversationSessions.leadPhone, norm) : sql`0`,
+            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') LIKE ${`%${digits}`}`
+          ))
+          .orderBy(desc(conversationSessions.createdAt))
+          .limit(1);
+        if (!sessions[0]) throw new Error('No session found for phone');
+        const newStage = input.resolve ? 'RESOLVED' : 'UNHANDLED';
+        await db
+          .update(conversationSessions)
+          .set({ stage: newStage as any })
+          .where(eq(conversationSessions.id, sessions[0].id));
+        // Broadcast so all connected clients update immediately
+        const { broadcastOpsUpdate } = await import('./sseBroadcast');
+        broadcastOpsUpdate('lead_update');
+        return { success: true, stage: newStage };
       }),
   }),
   /**
