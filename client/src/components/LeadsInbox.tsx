@@ -527,7 +527,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
           {LANE_CONFIG.map((lane) => (
             <button
               key={lane.id}
-              onClick={() => { setActiveLane(lane.id); if (lane.id === "all") setActiveFilter("all"); }}
+              onClick={() => { setActiveLane(lane.id); setActiveFilter("all"); }}
               className={cn(
                 "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all",
                 activeLane === lane.id
@@ -572,7 +572,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
           ).map((f) => (
             <button
               key={f.id}
-              onClick={() => setActiveFilter(f.id)}
+              onClick={() => { setActiveFilter(f.id); if (f.id === "all") setActiveLane("all"); }}
               className={cn(
                 "border rounded-full px-3 py-1.5 text-[12px] font-black whitespace-nowrap transition-all",
                 activeFilter === f.id
