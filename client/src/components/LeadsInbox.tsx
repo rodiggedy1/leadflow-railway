@@ -59,12 +59,15 @@ type LeadTag = {
 // Shape returned by listWorkspace
 type WorkspaceSummary = {
   phone: string;
+  sessionId: number;
   customerName: string | null;
   lastMessage: string | null;
   lastMessageAt: number | null;
   unreadCount: number;
   stage: string | null;
   isResolved: boolean;
+  isBooked: boolean;
+  bookedAmount: number | null;
   needsAttention: boolean;
   assignedAgentName: string | null;
   leadSource: string | null;
@@ -367,6 +370,36 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
       utils.leads.listWorkspace.invalidate();
     },
   });
+
+  // Mark as booked
+  const [showBookModal, setShowBookModal] = React.useState(false);
+  const [bookAmountInput, setBookAmountInput] = React.useState("");
+  const markBookedMutation = trpc.agents.markBooked.useMutation({
+    onSuccess: () => {
+      utils.leads.listWorkspace.invalidate();
+      utils.leads.stats?.invalidate?.();
+      toast.success("Lead marked as booked!");
+      setShowBookModal(false);
+      setBookAmountInput("");
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation({
+    onError: (err) => toast.error(err.message),
+  });
+
+  function handleMarkBooked() {
+    if (!selectedSummary) return;
+    const sessionId = selectedSummary.sessionId;
+    const amount = bookAmountInput ? parseInt(bookAmountInput.replace(/[^0-9]/g, ""), 10) : null;
+    markBookedMutation.mutate({ sessionId }, {
+      onSuccess: () => {
+        if (amount !== null && !isNaN(amount)) {
+          setBookedAmountMutation.mutate({ sessionId, bookedAmount: amount });
+        }
+      },
+    });
+  }
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -1045,8 +1078,15 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                     : "Start a conversation with this lead."}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
-                  <button className="col-span-2 border-0 rounded-[14px] py-2.5 font-black text-sm text-white transition hover:opacity-90" style={{ background: "#ff6b1a" }}>
-                    Reply now
+                  <button
+                    className="col-span-2 border-0 rounded-[14px] py-2.5 font-black text-sm text-white transition hover:opacity-90"
+                    style={{ background: selectedSummary?.isBooked ? "#16a34a" : "#ff6b1a" }}
+                    onClick={() => { if (!selectedSummary?.isBooked) setShowBookModal(true); }}
+                    disabled={selectedSummary?.isBooked}
+                  >
+                    {selectedSummary?.isBooked
+                      ? `✓ Booked${selectedSummary.bookedAmount ? ` · $${selectedSummary.bookedAmount}` : ""}`
+                      : "Mark as Booked"}
                   </button>
                   <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
                     Call now
@@ -1055,6 +1095,41 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                     Follow-up
                   </button>
                 </div>
+
+                {/* Mark as Booked modal */}
+                {showBookModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowBookModal(false)}>
+                    <div className="bg-white rounded-2xl p-6 w-72 shadow-xl" onClick={e => e.stopPropagation()}>
+                      <h3 className="font-black text-slate-900 text-base mb-1">Mark as Booked</h3>
+                      <p className="text-slate-500 text-sm mb-4">Enter the booked revenue amount (optional)</p>
+                      <div className="relative mb-4">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          value={bookAmountInput}
+                          onChange={e => setBookAmountInput(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl pl-7 pr-3 py-2.5 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                          autoFocus
+                          onKeyDown={e => { if (e.key === 'Enter') handleMarkBooked(); }}
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          className="flex-1 border border-slate-200 rounded-xl py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 transition"
+                          onClick={() => { setShowBookModal(false); setBookAmountInput(""); }}
+                        >Cancel</button>
+                        <button
+                          className="flex-1 rounded-xl py-2 text-sm font-black text-white transition hover:opacity-90"
+                          style={{ background: "#ff6b1a" }}
+                          onClick={handleMarkBooked}
+                          disabled={markBookedMutation.isPending}
+                        >{markBookedMutation.isPending ? "Saving…" : "Confirm"}</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Lead Snapshot */}

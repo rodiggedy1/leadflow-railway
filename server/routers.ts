@@ -5695,12 +5695,15 @@ Return JSON with exactly these fields:
 
           return {
             phone,                                    // canonical E.164 key
+            sessionId: s.id,                          // canonical session ID for mutations
             customerName: s.leadName ?? null,
             lastMessage,
             lastMessageAt,
             unreadCount,
             stage: s.stage,
             isResolved: s.stage === 'RESOLVED',
+            isBooked: s.isBooked === 1,
+            bookedAmount: s.bookedAmount ?? null,
             needsAttention: !!(s as any).flagged,
             assignedAgentName: s.assignedAgentName ?? null,
             leadSource: s.leadSource ?? null,
