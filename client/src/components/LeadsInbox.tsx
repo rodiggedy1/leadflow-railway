@@ -639,18 +639,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
             </div>
           )}
           <div className="flex flex-col gap-2">
-            {filteredLeads.map((lead, _debugIdx) => {
-              if (_debugIdx === 0) {
-                console.log("lead timestamp debug", {
-                  name: lead.customerName,
-                  phone: lead.phone,
-                  sessionId: lead.sessionId,
-                  conversationSessionId: lead.conversationSessionId,
-                  lastMessageAt: lead.lastMessageAt,
-                  lastMessageAtType: typeof lead.lastMessageAt,
-                  formatted: formatTs(lead.lastMessageAt),
-                });
-              }
+            {filteredLeads.map((lead) => {
               const tag = sourceToTag(lead.leadSource);
               const initials = getInitials(lead.customerName, lead.phone);
               const displayName = lead.customerName ?? lead.phone;
@@ -668,14 +657,14 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   style={{ transition: "opacity 0.4s, transform 0.4s" }}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5 min-w-0 truncate">
                       {displayName}
                       {lead.lastMessageRole === "user" && lead.unreadCount > 0 && (
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
                       )}
                     </span>
-                    <span className="text-[11px] text-red-600 font-black shrink-0 ml-2" style={{background:'yellow',padding:'2px 4px',borderRadius:4}}>
-                      {formatTs(lead.lastMessageAt) || 'NO-TS'}
+                    <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
+                      {formatTs(lead.lastMessageAt)}
                     </span>
                   </div>
                   <p className="text-[13px] text-slate-500 mb-2 line-clamp-1">
