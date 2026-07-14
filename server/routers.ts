@@ -5682,7 +5682,7 @@ Return JSON with exactly these fields:
             if (history.length > 0) {
               const last = history[history.length - 1];
               lastMessage = typeof last.content === 'string' ? last.content.slice(0, 120) : null;
-              lastMessageAt = last.ts ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : (s.updatedAt ? new Date(s.updatedAt).getTime() : null));
+              lastMessageAt = last.ts ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : null);
             }
             // Count unread: messages from customer after lastReadAt
             const lastReadAt = (s.lastReadAt as number | null) ?? 0;
@@ -5692,12 +5692,6 @@ Return JSON with exactly these fields:
               }
             }
           } catch { /* ignore */ }
-          // Final fallback: use DB columns so timestamp always shows on cards
-          if (!lastMessageAt) {
-            lastMessageAt = (s.lastMessageTs && s.lastMessageTs > 0)
-              ? s.lastMessageTs
-              : (s.updatedAt ? new Date(s.updatedAt).getTime() : null);
-          }
 
           return {
             phone,                                    // canonical E.164 key
