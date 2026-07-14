@@ -374,31 +374,43 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   // Mark as booked
   const [showBookModal, setShowBookModal] = React.useState(false);
   const [bookAmountInput, setBookAmountInput] = React.useState("");
-  const markBookedMutation = trpc.agents.markBooked.useMutation({
-    onSuccess: () => {
+  const [isBooking, setIsBooking] = React.useState(false);
+  const { data: agentMe } = trpc.agents.me.useQuery();
+  const markBookedMutation = trpc.agents.markBooked.useMutation();
+  const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation();
+  const announceBookingMutation = trpc.opsChat.announceBooking.useMutation();
+
+  async function handleMarkBooked() {
+    if (!selectedSummary || isBooking) return;
+    const sessionId = selectedSummary.sessionId;
+    const amountRaw = bookAmountInput.trim().replace(/[^0-9.]/g, "");
+    const amount = amountRaw ? Math.round(parseFloat(amountRaw)) : null;
+    setIsBooking(true);
+    try {
+      await markBookedMutation.mutateAsync({ sessionId });
+      if (amount !== null && !isNaN(amount) && amount > 0) {
+        await setBookedAmountMutation.mutateAsync({ sessionId, bookedAmount: amount });
+      }
+      // Announce booking in command channel to trigger celebration
+      const authorName = agentMe?.name ?? "Agent";
+      const personName = selectedSummary.name || selectedSummary.phone;
+      const amountStr = amount !== null && !isNaN(amount) && amount > 0 ? `$${amount}` : undefined;
+      await announceBookingMutation.mutateAsync({
+        channel: "command",
+        personName,
+        amount: amountStr,
+        authorName,
+      });
       utils.leads.listWorkspace.invalidate();
       utils.leads.stats?.invalidate?.();
-      toast.success("Lead marked as booked!");
+      toast.success("Lead marked as booked! 🎉");
       setShowBookModal(false);
       setBookAmountInput("");
-    },
-    onError: (err) => toast.error(err.message),
-  });
-  const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation({
-    onError: (err) => toast.error(err.message),
-  });
-
-  function handleMarkBooked() {
-    if (!selectedSummary) return;
-    const sessionId = selectedSummary.sessionId;
-    const amount = bookAmountInput ? parseInt(bookAmountInput.replace(/[^0-9]/g, ""), 10) : null;
-    markBookedMutation.mutate({ sessionId }, {
-      onSuccess: () => {
-        if (amount !== null && !isNaN(amount)) {
-          setBookedAmountMutation.mutate({ sessionId, bookedAmount: amount });
-        }
-      },
-    });
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to mark as booked");
+    } finally {
+      setIsBooking(false);
+    }
   }
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -1124,8 +1136,8 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                           className="flex-1 rounded-xl py-2 text-sm font-black text-white transition hover:opacity-90"
                           style={{ background: "#ff6b1a" }}
                           onClick={handleMarkBooked}
-                          disabled={markBookedMutation.isPending}
-                        >{markBookedMutation.isPending ? "Saving…" : "Confirm"}</button>
+                          disabled={isBooking}
+                        >{isBooking ? "Saving…" : "Confirm"}</button>
                       </div>
                     </div>
                   </div>
