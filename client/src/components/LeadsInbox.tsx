@@ -639,7 +639,18 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
             </div>
           )}
           <div className="flex flex-col gap-2">
-            {filteredLeads.map((lead) => {
+            {filteredLeads.map((lead, _debugIdx) => {
+              if (_debugIdx === 0) {
+                console.log("lead timestamp debug", {
+                  name: lead.customerName,
+                  phone: lead.phone,
+                  sessionId: lead.sessionId,
+                  conversationSessionId: lead.conversationSessionId,
+                  lastMessageAt: lead.lastMessageAt,
+                  lastMessageAtType: typeof lead.lastMessageAt,
+                  formatted: formatTs(lead.lastMessageAt),
+                });
+              }
               const tag = sourceToTag(lead.leadSource);
               const initials = getInitials(lead.customerName, lead.phone);
               const displayName = lead.customerName ?? lead.phone;
