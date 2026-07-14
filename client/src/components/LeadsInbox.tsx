@@ -738,6 +738,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                       return src || "Direct";
                     })()}
                   </p>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-2">
