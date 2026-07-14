@@ -379,6 +379,14 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const markBookedMutation = trpc.agents.markBooked.useMutation();
   const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation();
   const announceBookingMutation = trpc.opsChat.announceBooking.useMutation();
+  const markUnbookedMutation = trpc.agents.markUnbooked.useMutation({
+    onSuccess: () => {
+      utils.leads.listWorkspace.invalidate();
+      utils.leads.stats?.invalidate?.();
+      toast.success("Booking removed — lead reopened");
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   async function handleMarkBooked() {
     if (!selectedSummary || isBooking) return;
@@ -1093,11 +1101,18 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   <button
                     className="col-span-2 border-0 rounded-[14px] py-2.5 font-black text-sm text-white transition hover:opacity-90"
                     style={{ background: selectedSummary?.isBooked ? "#16a34a" : "#ff6b1a" }}
-                    onClick={() => { if (!selectedSummary?.isBooked) setShowBookModal(true); }}
-                    disabled={selectedSummary?.isBooked}
+                    onClick={() => {
+                      if (!selectedSummary) return;
+                      if (selectedSummary.isBooked) {
+                        markUnbookedMutation.mutate({ sessionId: selectedSummary.sessionId });
+                      } else {
+                        setShowBookModal(true);
+                      }
+                    }}
+                    disabled={markUnbookedMutation.isPending || isBooking}
                   >
                     {selectedSummary?.isBooked
-                      ? `✓ Booked${selectedSummary.bookedAmount ? ` · $${selectedSummary.bookedAmount}` : ""}`
+                      ? (markUnbookedMutation.isPending ? "Removing…" : `✓ Booked${selectedSummary.bookedAmount ? ` · $${selectedSummary.bookedAmount}` : ""} — Undo`)
                       : "Mark as Booked"}
                   </button>
                   <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
