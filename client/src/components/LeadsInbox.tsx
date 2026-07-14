@@ -1269,49 +1269,37 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                     <div>
                       <p className="text-xs font-semibold text-slate-500 mb-2">When?</p>
                       <div className="flex gap-2 flex-wrap">
-                        {[5, 15, 30, 60].map((m) => (
+                        {[
+                          { label: "15 min", mins: 15 },
+                          { label: "30 min", mins: 30 },
+                          { label: "1 hr", mins: 60 },
+                          { label: "2 hrs", mins: 120 },
+                          { label: "4 hrs", mins: 240 },
+                          { label: "Tomorrow", mins: 1440 },
+                          { label: "2 days", mins: 2880 },
+                          { label: "3 days", mins: 4320 },
+                          { label: "1 week", mins: 10080 },
+                        ].map(({ label, mins }) => (
                           <button
-                            key={m}
-                            onClick={() => setFollowUpMinutes(m)}
+                            key={mins}
+                            onClick={() => setFollowUpMinutes(mins)}
                             className={cn(
                               "rounded-full px-4 py-1.5 text-xs font-semibold border transition",
-                              followUpMinutes === m
+                              followUpMinutes === mins
                                 ? "bg-sky-600 text-white border-sky-600"
                                 : "bg-white text-slate-700 border-slate-200 hover:bg-sky-50"
                             )}
                           >
-                            {m < 60 ? `${m} min` : "1 hr"}
+                            {label}
                           </button>
                         ))}
-                        <button
-                          onClick={() => setFollowUpMinutes(-1)}
-                          className={cn(
-                            "rounded-full px-4 py-1.5 text-xs font-semibold border transition",
-                            followUpMinutes === -1
-                              ? "bg-sky-600 text-white border-sky-600"
-                              : "bg-white text-slate-700 border-slate-200 hover:bg-sky-50"
-                          )}
-                        >
-                          Custom
-                        </button>
                       </div>
-                      {followUpMinutes === -1 && (
-                        <Input
-                          className="mt-2 w-28"
-                          type="number"
-                          min={1}
-                          max={480}
-                          placeholder="Minutes"
-                          value={followUpCustom}
-                          onChange={(e) => setFollowUpCustom(e.target.value)}
-                        />
-                      )}
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setShowFollowUpModal(false)}>Cancel</Button>
                       <Button
                         onClick={() => {
-                          const mins = followUpMinutes === -1 ? parseInt(followUpCustom, 10) : followUpMinutes;
+                          const mins = followUpMinutes;
                           if (!mins || mins < 1) return;
                           const triggerAt = Date.now() + mins * 60_000;
                           setReminderMutation.mutate({
@@ -1330,7 +1318,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                             });
                           }
                         }}
-                        disabled={!followUpBody.trim() || setReminderMutation.isPending || (followUpMinutes === -1 && (!followUpCustom || parseInt(followUpCustom, 10) < 1))}
+                        disabled={!followUpBody.trim() || setReminderMutation.isPending}
                         className="bg-sky-600 text-white hover:bg-sky-700"
                       >
                         {setReminderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
