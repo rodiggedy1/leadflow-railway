@@ -6260,7 +6260,7 @@ Return JSON with exactly these fields:
           .set({
             isBooked: 0,
             stage: input.stage,
-            bookedAt: null,
+            bookedAt: sql`NULL`, // use sql`NULL` to ensure SQL NULL is written regardless of driver serialization
           })
           .where(eq(conversationSessions.id, input.sessionId));
         return { success: true };

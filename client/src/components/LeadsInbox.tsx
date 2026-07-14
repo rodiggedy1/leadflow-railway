@@ -44,6 +44,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
