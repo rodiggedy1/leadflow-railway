@@ -261,10 +261,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const { data: timeline, isLoading: timelineLoading } =
     trpc.leads.getTimeline.useQuery(
       { phone: selectedPhone! },
-      { enabled: !!selectedPhone, refetchInterval: 15_000, placeholderData: (prev: any, prevQuery: any) => {
-        const prevPhone = prevQuery?.queryKey?.[1]?.input?.phone;
-        return prevPhone === selectedPhone ? prev : undefined;
-      } }
+      { enabled: !!selectedPhone, refetchInterval: 15_000, placeholderData: (prev: any) => prev }
     );
 
   // Real-time updates via SSE
