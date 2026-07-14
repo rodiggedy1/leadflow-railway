@@ -638,7 +638,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               <p className="text-sm font-semibold">No leads found</p>
             </div>
           )}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 overflow-x-hidden">
             {filteredLeads.map((lead) => {
               const tag = sourceToTag(lead.leadSource);
               const initials = getInitials(lead.customerName, lead.phone);
