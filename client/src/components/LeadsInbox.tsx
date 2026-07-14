@@ -400,6 +400,9 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   const markBookedMutation = trpc.agents.markBooked.useMutation();
   const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation();
   const announceBookingMutation = trpc.opsChat.announceBooking.useMutation();
+  const setFollowUpMutation = trpc.leads.adminSetFollowUp.useMutation({
+    onSuccess: () => utils.leads.listWorkspace.invalidate(),
+  });
   const setReminderMutation = trpc.opsChat.setReminder.useMutation({
     onSuccess: () => {
       toast.success("Follow-up reminder set");
@@ -1310,12 +1313,22 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                         onClick={() => {
                           const mins = followUpMinutes === -1 ? parseInt(followUpCustom, 10) : followUpMinutes;
                           if (!mins || mins < 1) return;
+                          const triggerAt = Date.now() + mins * 60_000;
                           setReminderMutation.mutate({
                             body: followUpBody,
-                            triggerAt: Date.now() + mins * 60_000,
+                            triggerAt,
                             channel: "command",
                             authorName: agentMe?.name ?? "Agent",
                           });
+                          // Also mark the lead as FOLLOW_UP_SCHEDULED
+                          if (selectedSummary) {
+                            const followUpDate = new Date(triggerAt).toISOString().slice(0, 10);
+                            setFollowUpMutation.mutate({
+                              sessionId: selectedSummary.sessionId,
+                              followUpDate,
+                              followUpMessage: followUpBody,
+                            });
+                          }
                         }}
                         disabled={!followUpBody.trim() || setReminderMutation.isPending || (followUpMinutes === -1 && (!followUpCustom || parseInt(followUpCustom, 10) < 1))}
                         className="bg-sky-600 text-white hover:bg-sky-700"
