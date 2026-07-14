@@ -323,12 +323,10 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // booked filter applies across all lanes
     if (activeFilter === "booked" && !lead.isBooked) return false;
     if (activeFilter === "follow-up" && lead.stage !== "FOLLOW_UP_SCHEDULED") return false;
-    if (activeLane !== "all") {
-      if (activeFilter === "unread" && lead.unreadCount === 0) return false;
-      if (activeFilter === "campaign-reply") {
-        const src = lead.leadSource ?? "";
-        if (!src.startsWith("campaign:") && !src.startsWith("always-on") && src !== "reactivation") return false;
-      }
+    if (activeFilter === "unread" && lead.unreadCount === 0) return false;
+    if (activeFilter === "campaign-reply") {
+      const src = lead.leadSource ?? "";
+      if (!src.startsWith("campaign:") && !src.startsWith("always-on") && src !== "reactivation") return false;
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
