@@ -654,7 +654,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                       ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
                       : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
                   )}
-                  style={{ transition: "opacity 0.4s, transform 0.4s" }}
+                  style={{ transition: "opacity 0.4s, transform 0.4s", background: "lime" }}
                 >
                   <div className="flex justify-between items-center gap-2 mb-1 overflow-hidden">
                     <span className="font-black text-sm text-slate-900 flex items-center gap-1.5 min-w-0">
