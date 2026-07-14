@@ -48,6 +48,7 @@ import {
   Bell,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import InsertResponseModal from "@/components/InsertResponseModal";
 import { toast } from "sonner";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -235,6 +236,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   // Track which session we've already resolved so we don't re-resolve on re-renders
   const resolvedSessionRef = useRef<number | null>(null);
   const [composerText, setComposerText] = useState("");
+  const [insertResponseOpen, setInsertResponseOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const journeyRef = useRef<HTMLDivElement>(null);
   // Call recording playback state
@@ -1140,6 +1142,12 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               className="shrink-0 px-5 py-4"
               style={{ borderTop: "1px solid #e7eaf0", background: "#fff" }}
             >
+              <InsertResponseModal
+                open={insertResponseOpen}
+                onClose={() => setInsertResponseOpen(false)}
+                onInsert={(text) => { setComposerText(text); setInsertResponseOpen(false); }}
+                customerFirstName={selectedPhone ? (workspace?.find(w => w.phone === selectedPhone)?.customerName?.split(' ')[0]) : undefined}
+              />
               <div className="flex gap-3">
                 <textarea
                   value={composerText}
@@ -1150,14 +1158,24 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   placeholder="Type a message…"
                   className="flex-1 h-16 border border-slate-200 rounded-[18px] px-4 py-3 text-sm resize-none font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition"
                 />
-                <button
-                  onClick={handleSend}
-                  disabled={sendMsg.isPending || !composerText.trim()}
-                  className="shrink-0 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95 disabled:opacity-50"
-                  style={{ background: "#ff6b1a" }}
-                >
-                  {sendMsg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send →"}
-                </button>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setInsertResponseOpen(true)}
+                    type="button"
+                    className="px-3 h-7 rounded-full text-xs font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 transition flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Responses
+                  </button>
+                  <button
+                    onClick={handleSend}
+                    disabled={sendMsg.isPending || !composerText.trim()}
+                    className="flex-1 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    style={{ background: "#ff6b1a" }}
+                  >
+                    {sendMsg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send →"}
+                  </button>
+                </div>
               </div>
             </div>
           </>
