@@ -13,6 +13,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Search,
   Phone,
@@ -42,6 +45,7 @@ import {
   Pause,
   ChevronDown,
   ChevronUp,
+  Bell,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -50,7 +54,7 @@ import { useOpsStream } from "@/hooks/useOpsStream";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Lane = "all" | "needs-me" | "ready-to-book" | "needs-price" | "reactivation" | "resolved";
-type LeadFilter = "all" | "unread" | "campaign-reply" | "booked";
+type LeadFilter = "all" | "unread" | "campaign-reply" | "booked" | "follow-up";
 
 type LeadTag = {
   label: string;
@@ -310,6 +314,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // Sub-filters: unread and campaign-reply only apply within specific lanes
     // booked filter applies across all lanes
     if (activeFilter === "booked" && !lead.isBooked) return false;
+    if (activeFilter === "follow-up" && lead.stage !== "FOLLOW_UP_SCHEDULED") return false;
     if (activeLane !== "all") {
       if (activeFilter === "unread" && lead.unreadCount === 0) return false;
       if (activeFilter === "campaign-reply") {
@@ -377,11 +382,26 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   // Mark as booked
   const [showBookModal, setShowBookModal] = React.useState(false);
   const [bookAmountInput, setBookAmountInput] = React.useState("");
+  // Follow-up reminder modal state
+  const [showFollowUpModal, setShowFollowUpModal] = React.useState(false);
+  const [followUpBody, setFollowUpBody] = React.useState("");
+  const [followUpMinutes, setFollowUpMinutes] = React.useState<number>(15);
+  const [followUpCustom, setFollowUpCustom] = React.useState("");
   const [isBooking, setIsBooking] = React.useState(false);
   const { data: agentMe } = trpc.agents.me.useQuery();
   const markBookedMutation = trpc.agents.markBooked.useMutation();
   const setBookedAmountMutation = trpc.agents.setBookedAmount.useMutation();
   const announceBookingMutation = trpc.opsChat.announceBooking.useMutation();
+  const setReminderMutation = trpc.opsChat.setReminder.useMutation({
+    onSuccess: () => {
+      toast.success("Follow-up reminder set");
+      setShowFollowUpModal(false);
+      setFollowUpBody("");
+      setFollowUpMinutes(15);
+      setFollowUpCustom("");
+    },
+    onError: (err) => toast.error(err.message || "Failed to set reminder"),
+  });
   const markUnbookedMutation = trpc.agents.markUnbooked.useMutation({
     onMutate: async ({ sessionId }) => {
       await utils.leads.listWorkspace.cancel();
@@ -532,6 +552,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               { id: "unread" as LeadFilter, label: "Unread", count: unreadCount },
               { id: "campaign-reply" as LeadFilter, label: "Campaign reply" },
               { id: "booked" as LeadFilter, label: "Booked", count: workspace.filter(l => l.isBooked && stageToLane(l.stage) !== "resolved").length || undefined },
+              { id: "follow-up" as LeadFilter, label: "Follow-up", count: workspace.filter(l => l.stage === "FOLLOW_UP_SCHEDULED").length || undefined },
             ] as { id: LeadFilter; label: string; count?: number }[]
           ).map((f) => (
             <button
@@ -1142,7 +1163,14 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
                     Call now
                   </button>
-                  <button className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition">
+                  <button
+                    className="border border-white/20 rounded-[14px] py-2 font-black text-xs text-white/80 hover:bg-white/10 transition"
+                    onClick={() => {
+                      if (!selectedSummary) return;
+                      setFollowUpBody(`Follow up with ${selectedSummary.customerName ?? selectedSummary.phone}`);
+                      setShowFollowUpModal(true);
+                    }}
+                  >
                     Follow-up
                   </button>
                 </div>
@@ -1183,7 +1211,88 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 )}
               </div>
 
-              {/* Lead Snapshot */}
+                {/* Follow-up Reminder Modal */}
+                <Dialog open={showFollowUpModal} onOpenChange={setShowFollowUpModal}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <Bell className="h-5 w-5 text-sky-600" />
+                        Set Follow-up Reminder
+                      </DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-slate-500">A reminder card will pop up at the scheduled time.</p>
+                    <Textarea
+                      placeholder="Reminder message…"
+                      value={followUpBody}
+                      onChange={(e) => setFollowUpBody(e.target.value)}
+                      rows={3}
+                      className="resize-none"
+                    />
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 mb-2">When?</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {[5, 15, 30, 60].map((m) => (
+                          <button
+                            key={m}
+                            onClick={() => setFollowUpMinutes(m)}
+                            className={cn(
+                              "rounded-full px-4 py-1.5 text-xs font-semibold border transition",
+                              followUpMinutes === m
+                                ? "bg-sky-600 text-white border-sky-600"
+                                : "bg-white text-slate-700 border-slate-200 hover:bg-sky-50"
+                            )}
+                          >
+                            {m < 60 ? `${m} min` : "1 hr"}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setFollowUpMinutes(-1)}
+                          className={cn(
+                            "rounded-full px-4 py-1.5 text-xs font-semibold border transition",
+                            followUpMinutes === -1
+                              ? "bg-sky-600 text-white border-sky-600"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-sky-50"
+                          )}
+                        >
+                          Custom
+                        </button>
+                      </div>
+                      {followUpMinutes === -1 && (
+                        <Input
+                          className="mt-2 w-28"
+                          type="number"
+                          min={1}
+                          max={480}
+                          placeholder="Minutes"
+                          value={followUpCustom}
+                          onChange={(e) => setFollowUpCustom(e.target.value)}
+                        />
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowFollowUpModal(false)}>Cancel</Button>
+                      <Button
+                        onClick={() => {
+                          const mins = followUpMinutes === -1 ? parseInt(followUpCustom, 10) : followUpMinutes;
+                          if (!mins || mins < 1) return;
+                          setReminderMutation.mutate({
+                            body: followUpBody,
+                            triggerAt: Date.now() + mins * 60_000,
+                            channel: "command",
+                            authorName: agentMe?.name ?? "Agent",
+                          });
+                        }}
+                        disabled={!followUpBody.trim() || setReminderMutation.isPending || (followUpMinutes === -1 && (!followUpCustom || parseInt(followUpCustom, 10) < 1))}
+                        className="bg-sky-600 text-white hover:bg-sky-700"
+                      >
+                        {setReminderMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
+                        Set Reminder
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Lead Snapshot */}
               <p className="text-[10px] font-black tracking-[.22em] uppercase text-slate-400 mb-3">
                 Lead Snapshot
               </p>
