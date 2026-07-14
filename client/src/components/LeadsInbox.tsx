@@ -674,8 +674,8 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
                       )}
                     </span>
-                    <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
-                      {formatTs(lead.lastMessageAt)}
+                    <span className="text-[11px] text-red-600 font-black shrink-0 ml-2" style={{background:'yellow',padding:'2px 4px',borderRadius:4}}>
+                      {formatTs(lead.lastMessageAt) || 'NO-TS'}
                     </span>
                   </div>
                   <p className="text-[13px] text-slate-500 mb-2 line-clamp-1">
