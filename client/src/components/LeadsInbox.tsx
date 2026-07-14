@@ -213,7 +213,7 @@ interface LeadsInboxProps {
 }
 
 export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) {
-  const [activeLane, setActiveLane] = useState<Lane>("needs-me");
+  const [activeLane, setActiveLane] = useState<Lane>("all");
   const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   // Track which session we've already resolved so we don't re-resolve on re-renders
