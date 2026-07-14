@@ -24,7 +24,6 @@ import { getNextAvailableSlots, formatAvailabilityQuestion } from "./availabilit
 import { logActivity } from "./activityLogger";
 import { notifyOwner } from "./_core/notification";
 import { normalizePhone } from "./routers";
-import { ENV } from "./_core/env";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -330,8 +329,8 @@ export async function handleBarkLead(body: BarkZapierPayload): Promise<void> {
 
   const now = Date.now();
   const initialHistory = JSON.stringify([
-    { role: "assistant", content: introSms, ts: now, phoneNumberId: ENV.openPhoneNumberId },
-    { role: "assistant", content: schedulingSms, ts: now + 1, phoneNumberId: ENV.openPhoneNumberId },
+    { role: "assistant", content: introSms, ts: now },
+    { role: "assistant", content: schedulingSms, ts: now + 1 },
   ]);
 
   // Build barkQA summary: include frequency if available

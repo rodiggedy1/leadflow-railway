@@ -42,7 +42,6 @@ import { normalizePhoneLegacy } from "./utils/phone";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
 import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
-import { ENV } from "./_core/env";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcRevenue(row: {
@@ -1963,7 +1962,7 @@ Respond in JSON with this exact schema:
                   stage: "REACTIVATION",
                   // Tag with the specific campaign so the leads page shows the source
                   leadSource: `campaign:${input.campaignId}`,
-                  messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: sentAt, source: "command_center", openPhoneId: smsResult.messageId ?? null, phoneNumberId: ENV.openPhoneNumberId }]),
+                  messageHistory: JSON.stringify([{ role: "assistant", content: personalizedScript, ts: sentAt, source: "command_center", openPhoneId: smsResult.messageId ?? null }]),
                   lastMessageRole: "assistant",
                   lastMessageText: personalizedScript.slice(0, 255),
                   lastMessageTs: sentAt,
@@ -2255,7 +2254,7 @@ Respond in JSON with this exact schema:
             leadName: input.testName ?? "Test",
             stage: "REACTIVATION",
             leadSource: `campaign-test:${input.campaignId ?? "manual"}`,
-            messageHistory: JSON.stringify([{ role: "assistant", content: input.script, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId }]),
+            messageHistory: JSON.stringify([{ role: "assistant", content: input.script, ts: Date.now() }]),
             aiMode: 1,
             isBooked: 0,
           });

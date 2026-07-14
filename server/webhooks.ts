@@ -755,7 +755,7 @@ export function registerWebhookRoutes(app: Express) {
       }
 
       // Append the lead's inbound message to history first (always stored)
-      history.push({ role: "user", content: inboundText, ts: now, phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneNumberId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+      history.push({ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
       const inboundSummary = computeSessionSummary(history);
 
       // ── CRITICAL: Persist the user message to DB IMMEDIATELY ──────────────────────────────────
@@ -1055,8 +1055,9 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           replyMsg = `Thanks for the reply, ${firstName}! I'll have someone from the team follow up with you. 😊`;
           newStage = "UNHANDLED";
         }
-                history.push({ role: "user", content: inboundText, ts: Date.now(), phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneNumberId });
-        history.push({ role: "assistant", content: replyMsg, ts: Date.now(), phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneNumberId });
+        history.push({ role: "user", content: inboundText, ts: Date.now() });
+        history.push({ role: "assistant", content: replyMsg, ts: Date.now() });
+
         await db
           .update(conversationSessions)
           .set({ stage: newStage, messageHistory: JSON.stringify(history) })
@@ -1068,13 +1069,14 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
         console.log(`[Webhook] Review rebooking reply: ${session.stage} → ${newStage}. intent=${rebookingIntent}`);
         return;
       }
+
       // -- INTERVIEW_LINK_SENT / NUDGE: record the reply, no auto-reply SMS --
       if (
         session.stage === "INTERVIEW_LINK_SENT" ||
         session.stage === "INTERVIEW_NUDGE_1" ||
         session.stage === "INTERVIEW_NUDGE_2"
       ) {
-        history.push({ role: "user", content: inboundText, ts: Date.now(), phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneNumberId });
+        history.push({ role: "user", content: inboundText, ts: Date.now() });
         // Keep session open so messages keep appearing in the SMS drawer.
         // Do NOT send any auto-reply.
         await db
@@ -2285,7 +2287,7 @@ async function handleCsInboundMessage(msg: any) {
       console.log(`[CS] Content dedup: identical message already in history for session ${existingSession.id}. Skipping.`);
       return;
     }
-    history.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneCsNumberId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+    history.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
     const csInboundSummary = computeSessionSummary(history);
 
     // Also backfill leadName if it was previously null and we now resolved one.
@@ -2351,7 +2353,7 @@ async function handleCsInboundMessage(msg: any) {
         console.log(`[CS→Hiring] Content dedup: identical message already in hiring session ${hiringSession.id}. Skipping.`);
         return;
       }
-      hiringHistory.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneCsNumberId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
+      hiringHistory.push({ role: "user", content: inboundText, ts: now, opMsgId: messageId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) } as any);
       await db
         .update(conversationSessions)
         .set({ messageHistory: JSON.stringify(hiringHistory), updatedAt: new Date() } as any)
@@ -2359,7 +2361,7 @@ async function handleCsInboundMessage(msg: any) {
       console.log(`[CS→Hiring] Routed inbound from ${fromPhone} to hiring session ${hiringSession.id} instead of creating new cs-inbound`);
     } else {
       // No hiring session — create new cs-inbound session as before
-      const history = [{ role: "user", content: inboundText, ts: now, phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneCsNumberId, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
+      const history = [{ role: "user", content: inboundText, ts: now, ...(mediaUrls.length > 0 ? { media: mediaUrls } : {}) }];
       const [result] = await db
         .insert(conversationSessions)
         .values({
@@ -2715,7 +2717,7 @@ async function handleCsOutboundMessage(msg: any) {
       }
     } catch { /* ignore */ }
   }
-  history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName, opMsgId: messageId, phoneNumberId: msg?.phoneNumberId ?? ENV.openPhoneCsNumberId });
+  history.push({ role: "assistant", content: outboundText, ts: now, senderName: outboundSenderName, opMsgId: messageId });
 
 
   await db
@@ -2780,7 +2782,7 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
   } catch { /* ignore — fall back to "OpenPhone" */ }
 
   // Fetch messages from each number separately and collect into one array.
-  const allMessages: Array<{ msg: any; phoneNumberId: string }> = [];
+  const allMessages: any[] = [];
   for (const phoneNumberId of outboundPhoneNumberIds) {
     const fetchForNumber = async (attempt: number): Promise<void> => {
       try {
@@ -2797,8 +2799,8 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
           console.warn(`[Sync] OpenPhone API ${res.status} for ${leadPhone} / ${phoneNumberId} after ${attempt} attempts — skipping this number`);
           return;
         }
-                const json = await res.json() as any;
-        allMessages.push(...(json?.data ?? []).map((m: any) => ({ msg: m, phoneNumberId })));
+        const json = await res.json() as any;
+        allMessages.push(...(json?.data ?? []));
       } catch (err) {
         if (attempt < 2) {
           console.warn(`[Sync] Fetch error for ${leadPhone} / ${phoneNumberId} — retrying in 2s:`, err);
@@ -2810,10 +2812,12 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
     };
     await fetchForNumber(1);
   }
+
   if (allMessages.length === 0) return;
+
   // Deduplicate by OpenPhone message ID across all numbers before touching the DB.
   const seenMsgIds = new Set<string>();
-  const uniqueMessages = allMessages.filter(({ msg: m }) => {
+  const uniqueMessages = allMessages.filter(m => {
     const id: string = m.id ?? "";
     if (!id) return true;
     if (seenMsgIds.has(id)) return false;
@@ -2837,8 +2841,9 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
     try { history = JSON.parse((session.messageHistory as string) ?? "[]"); } catch { history = []; }
 
     // Build set of already-synced OpenPhone message IDs (step 1: exact ID dedup)
-        const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
-    for (const { msg: m, phoneNumberId: msgPhoneNumberId } of uniqueMessages) {
+    const syncedIds = new Set(history.map((h: any) => h.opMsgId).filter(Boolean));
+
+    for (const m of uniqueMessages) {
       const text: string = m.text ?? m.body ?? "";
       const msgId: string = m.id ?? "";
       const msgTs = m.createdAt ? new Date(m.createdAt).getTime() : 0;
@@ -2862,9 +2867,8 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
           Math.abs((h.ts ?? 0) - msgTs) <= WINDOW_MS
         );
         if (candidates.length === 1) {
-          // Enrich the existing entry — attach provider ID and phoneNumberId, preserve original ts
+          // Enrich the existing entry — attach provider ID, preserve original ts
           candidates[0].opMsgId = msgId;
-          (candidates[0] as any).phoneNumberId = msgPhoneNumberId;
           syncedIds.add(msgId);
           added++; // counts as a write since we mutated history
           continue;
@@ -2874,7 +2878,7 @@ export async function syncAllOutboundMessages(leadPhone: string, sessionId: numb
         }
       }
 
-      const entry: any = { role, content: text, ts: msgTs, opMsgId: msgId, phoneNumberId: msgPhoneNumberId };
+      const entry: any = { role, content: text, ts: msgTs, opMsgId: msgId };
       if (senderName) entry.senderName = senderName;
       history.push(entry);
       syncedIds.add(msgId);
