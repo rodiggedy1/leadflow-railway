@@ -356,31 +356,30 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     : [];
 
   // ── Resolve / Reopen ─────────────────────────────────────────────────────
-  const [resolvingPhone, setResolvingPhone] = useState<string | null>(null);
-
   const resolveLeadChat = trpc.leads.resolveLeadChat.useMutation({
-    onMutate: async ({ phone, resolve }) => {
+    onMutate: async ({ sessionId, resolve }) => {
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
-      // Optimistic: immediately update isResolved + stage in workspace cache
+      // Optimistic: immediately update the exact session by sessionId.
+      // The card disappears from active lanes instantly because stageToLane("RESOLVED") = "resolved".
       utils.leads.listWorkspace.setData(undefined, (old) => {
         if (!old) return old;
         return old.map((w) =>
-          w.phone === phone
+          w.sessionId === sessionId
             ? { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' }
             : w
         );
       });
+      // Deselect immediately if resolving the currently open lead
+      if (resolve) {
+        const target = utils.leads.listWorkspace.getData()?.find(w => w.sessionId === sessionId);
+        if (target && selectedPhone === target.phone) setSelectedPhone(null);
+      }
       return { prev };
     },
-    onSuccess: (_data, { phone, resolve }) => {
-      setResolvingPhone(phone);
-      window.setTimeout(() => {
-        setResolvingPhone(null);
-        // If we just resolved the selected lead, deselect it after animation
-        if (resolve && selectedPhone === phone) setSelectedPhone(null);
-        utils.leads.listWorkspace.invalidate();
-      }, 800);
+    onSuccess: () => {
+      // Refetch to sync server state — no delay so the resolved lane is accurate
+      utils.leads.listWorkspace.invalidate();
     },
     onError: (_err, _vars, ctx) => {
       // Roll back to snapshot captured in onMutate
@@ -645,8 +644,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   onClick={() => handlePickLead(lead.phone)}
                   className={cn(
                     "w-full text-left p-4 rounded-[20px] border transition-all",
-                    resolvingPhone === lead.phone && "opacity-0 scale-95 pointer-events-none",
-                    lead.isResolved && resolvingPhone !== lead.phone && "opacity-60",
+                    lead.isResolved && "opacity-60",
                     selectedPhone === lead.phone
                       ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
                       : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
@@ -788,7 +786,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 <button
                   title={selectedSummary.isResolved ? 'Reopen conversation' : 'Resolve conversation'}
                   disabled={resolveLeadChat.isPending}
-                  onClick={() => resolveLeadChat.mutate({ phone: selectedSummary.phone, resolve: !selectedSummary.isResolved })}
+                  onClick={() => resolveLeadChat.mutate({ sessionId: selectedSummary.sessionId, resolve: !selectedSummary.isResolved })}
                   className={cn(
                     "w-10 h-10 border rounded-[14px] flex items-center justify-center transition",
                     selectedSummary.isResolved

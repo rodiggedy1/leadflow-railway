@@ -5990,34 +5990,26 @@ Return JSON with exactly these fields:
       }),
 
     /**
-     * leads.resolveLeadChat — toggles the RESOLVED stage on the canonical session for a phone.
+     * leads.resolveLeadChat — toggles the RESOLVED stage on the exact session by sessionId.
      * - resolve=true  → sets stage to RESOLVED
      * - resolve=false → sets stage to UNHANDLED (reopens the conversation)
+     * Uses the sessionId returned by listWorkspace so the exact displayed session is updated,
+     * never a different session for the same phone.
      * Never blocks inbound messages — RESOLVED is purely a UI state.
      */
     resolveLeadChat: publicProcedure
-      .input(z.object({ phone: z.string().min(7), resolve: z.boolean() }))
+      .input(z.object({ sessionId: z.number().int(), resolve: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error('Database unavailable');
-        const norm = normalizePhone(input.phone);
-        const digits = input.phone.replace(/[^\d]/g, '').slice(-10);
-        // Find the canonical (most recent non-review/non-hiring) session for this phone
-        const sessions = await db
-          .select({ id: conversationSessions.id })
-          .from(conversationSessions)
-          .where(or(
-            norm ? eq(conversationSessions.leadPhone, norm) : sql`0`,
-            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') LIKE ${`%${digits}`}`
-          ))
-          .orderBy(desc(conversationSessions.createdAt))
-          .limit(1);
-        if (!sessions[0]) throw new Error('No session found for phone');
         const newStage = input.resolve ? 'RESOLVED' : 'UNHANDLED';
-        await db
+        const result = await db
           .update(conversationSessions)
           .set({ stage: newStage as any })
-          .where(eq(conversationSessions.id, sessions[0].id));
+          .where(eq(conversationSessions.id, input.sessionId));
+        // Verify the row was actually updated — throws if sessionId is invalid
+        const affectedRows = (result as any)?.[0]?.affectedRows ?? (result as any)?.rowsAffected ?? 0;
+        if (affectedRows === 0) throw new Error(`No session found for id ${input.sessionId}`);
         // Broadcast so all connected clients update immediately
         const { broadcastOpsUpdate } = await import('./sseBroadcast');
         broadcastOpsUpdate('lead_update');
