@@ -303,10 +303,13 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     if (activeLane === "resolved" && lane !== "resolved") return false;
     // "all" shows every non-resolved lead; specific lanes filter by lane
     if (activeLane !== "all" && activeLane !== "resolved" && lane !== activeLane) return false;
-    if (activeFilter === "unread" && lead.unreadCount === 0) return false;
-    if (activeFilter === "campaign-reply") {
-      const src = lead.leadSource ?? "";
-      if (!src.startsWith("campaign:") && !src.startsWith("always-on") && src !== "reactivation") return false;
+    // Sub-filters (unread, campaign-reply) are ignored when All is active
+    if (activeLane !== "all") {
+      if (activeFilter === "unread" && lead.unreadCount === 0) return false;
+      if (activeFilter === "campaign-reply") {
+        const src = lead.leadSource ?? "";
+        if (!src.startsWith("campaign:") && !src.startsWith("always-on") && src !== "reactivation") return false;
+      }
     }
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -433,7 +436,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
           {LANE_CONFIG.map((lane) => (
             <button
               key={lane.id}
-              onClick={() => setActiveLane(lane.id)}
+              onClick={() => { setActiveLane(lane.id); if (lane.id === "all") setActiveFilter("all"); }}
               className={cn(
                 "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all",
                 activeLane === lane.id
