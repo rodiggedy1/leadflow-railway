@@ -956,8 +956,8 @@ export async function handleThumbtackEmail(
 
     const now = Date.now();
     initialHistory = JSON.stringify([
-      { role: "assistant", content: introSms, ts: now },
-      { role: "assistant", content: schedulingSms, ts: now + 1 },
+      { role: "assistant", content: introSms, ts: now, phoneNumberId: ENV.openPhoneNumberId },
+      { role: "assistant", content: schedulingSms, ts: now + 1, phoneNumberId: ENV.openPhoneNumberId },
     ]);
   }
 
@@ -1143,8 +1143,8 @@ export async function handleFormSubmissionEmail(
 
   const now = Date.now();
   const initialHistory = JSON.stringify([
-    { role: "assistant", content: introSms, ts: now },
-    { role: "assistant", content: schedulingSms, ts: now + 1 },
+    { role: "assistant", content: introSms, ts: now, phoneNumberId: ENV.openPhoneNumberId },
+    { role: "assistant", content: schedulingSms, ts: now + 1, phoneNumberId: ENV.openPhoneNumberId },
   ]);
 
   const emailSummary = [
@@ -1309,7 +1309,7 @@ export async function handleCallNotificationEmail(
   // Create session
   const now = Date.now();
   const initialHistory = JSON.stringify([
-    { role: "assistant", content: introSms, ts: now },
+    { role: "assistant", content: introSms, ts: now, phoneNumberId: ENV.openPhoneNumberId },
   ]);
 
   try {

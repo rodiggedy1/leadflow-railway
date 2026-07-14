@@ -14,6 +14,7 @@
 
 import { conversationSessions, nurtureEnrollments } from "../drizzle/schema";
 import { eq, and, lte, gte, isNull, isNotNull, ne, lt, inArray, notInArray } from "drizzle-orm";
+import { ENV } from "./_core/env";
 import { sql } from "drizzle-orm";
 import { getDb } from "./db";
 import { normalizePhone, isValidUSPhone } from "./routers";
@@ -438,6 +439,7 @@ export async function runNurtureSend(): Promise<{
           ts: Date.now(),
           source: "nurture",
           nurtureStep: enrollment.nextStep,
+          phoneNumberId: ENV.openPhoneNumberId,
         });
         await db
           .update(conversationSessions)

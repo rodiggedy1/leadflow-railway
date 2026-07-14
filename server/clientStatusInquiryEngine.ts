@@ -241,8 +241,8 @@ export async function tryHandleClientStatusInquiry(params: {
     leadSource: "client_status_inquiry",
     aiMode: 1,
     messageHistory: JSON.stringify([
-      { role: "user", content: inboundText, ts: Date.now() },
-      { role: "assistant", content: ackText, ts: Date.now() },
+      { role: "user", content: inboundText, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId },
+      { role: "assistant", content: ackText, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId },
     ]),
   });
   const sessionId = (sessionInsert as any).insertId as number;

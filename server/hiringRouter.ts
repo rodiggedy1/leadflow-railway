@@ -11,6 +11,7 @@ import { invokeLLM } from "./_core/llm";
 import { publicProcedure, agentProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { sendSms } from "./openphone";
+import { ENV } from "./_core/env";
 
 export const hiringRouter = router({
     /**
@@ -145,7 +146,7 @@ export const hiringRouter = router({
               stage: "INTERVIEW_LINK_SENT" as any,
               leadSource: "hiring_interview",
               aiMode: 1,
-              messageHistory: JSON.stringify([{ role: "assistant", content: smsText, ts: Date.now() }]),
+              messageHistory: JSON.stringify([{ role: "assistant", content: smsText, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId }]),
             });
             const sessionId = (sessionInsert as any).insertId as number;
 
@@ -173,7 +174,7 @@ export const hiringRouter = router({
                 const nudge1 = `Hey ${firstName} — Jade from Maids in Black here! Your interview link is still waiting 👇\n${interviewLink}\nTakes 5 min and helps us move you forward faster.`;
                 await sendSms({ to: e164Phone, content: nudge1 });
                 await db.update(conversationSessions)
-                  .set({ stage: "INTERVIEW_NUDGE_1" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge1, ts: Date.now() }]) })
+                  .set({ stage: "INTERVIEW_NUDGE_1" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge1, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId }]) })
                   .where(eq(conversationSessions.id, sessionId));
                 console.log(`[Hiring SMS] 2-hour nudge sent to ${e164Phone}, candidate ${candidateId}`);
               } catch (err: any) {
@@ -192,7 +193,7 @@ export const hiringRouter = router({
                 const nudge2 = `Good morning ${firstName} — Jade from Maids in Black here 👋 We're still reviewing applications today — your interview spot is open:\n${interviewLink}\nThis is the last reminder — complete it to stay in the running!`;
                 await sendSms({ to: e164Phone, content: nudge2 });
                 await db.update(conversationSessions)
-                  .set({ stage: "INTERVIEW_NUDGE_2" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge2, ts: Date.now() }]) })
+                  .set({ stage: "INTERVIEW_NUDGE_2" as any, messageHistory: JSON.stringify([{ role: "assistant", content: nudge2, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId }]) })
                   .where(eq(conversationSessions.id, sessionId));
                 console.log(`[Hiring SMS] Next-morning nudge sent to ${e164Phone}, candidate ${candidateId}`);
               } catch (err: any) {
@@ -482,7 +483,7 @@ export const hiringRouter = router({
                     stage: "INTERVIEW_LINK_SENT" as any,
                     leadSource: "hiring_interview" as any,
                     aiMode: 0,
-                    messageHistory: JSON.stringify([{ role: "assistant", content: smsText, ts: now, senderName: "Jade" }]),
+                    messageHistory: JSON.stringify([{ role: "assistant", content: smsText, ts: now, senderName: "Jade", phoneNumberId: "PN0wVLcpCq" }]),
                   });
                 }
               } else {
@@ -622,7 +623,7 @@ export const hiringRouter = router({
         // Append outbound message
         const now = Date.now();
         const agentName = (ctx as any).agent?.agentName ?? "Agent";
-        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentName });
+        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentName, phoneNumberId: "PN0wVLcpCq" });
         await db
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history) })

@@ -274,7 +274,7 @@ export async function runScheduleConfirmSend(targetDate?: string): Promise<Sched
         leadSource: "schedule_confirm",
         aiMode: 1,
         messageHistory: JSON.stringify([
-          { role: "assistant", content: smsBody, ts: Date.now() },
+          { role: "assistant", content: smsBody, ts: Date.now(), phoneNumberId: ENV.openPhoneCsNumberId },
         ]),
       });
       sessionId = (ins as any).insertId as number;

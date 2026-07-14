@@ -26,6 +26,7 @@ import { personalizeMessage } from "./alwaysOnSend";
 import { sendSms } from "./openphone";
 import { conversationSessions } from "../drizzle/schema";
 import { TRPCError } from "@trpc/server";
+import { ENV } from "./_core/env";
 
 export const alwaysOnRouter = router({
   /**
@@ -209,7 +210,7 @@ export const alwaysOnRouter = router({
         reactivationLastPrice: lastPrice,
         reactivationDiscountPct: discountPct,
         messageHistory: JSON.stringify([
-          { role: "assistant", content: renderedMessage, ts: Date.now() },
+          { role: "assistant", content: renderedMessage, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId },
         ]),
         aiMode: 1,
         isBooked: 0,

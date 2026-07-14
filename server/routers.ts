@@ -1314,10 +1314,10 @@ export const appRouter = router({
         isVoiceCommand: z.boolean().optional(), // Set true when triggered from voice command card
       }))
       .mutation(async ({ input, ctx }) => {
-        const agentSession = await getAgentSessionFromCtx(ctx);
+                const agentSession = await getAgentSessionFromCtx(ctx);
         const db = await getDb();
         if (!db) throw new Error("Database unavailable");
-
+        const { ENV } = await import('./_core/env');
         // ── Atomic in-process dedup lock ─────────────────────────────────────────
         // The old guard (read history → check duplicate → write) had a race condition:
         // two concurrent calls both read history before either writes, both find no
@@ -1345,7 +1345,7 @@ export const appRouter = router({
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { history = []; }
 
         const now = Date.now();
-        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName });
+        history.push({ role: "assistant", content: input.message, ts: now, senderName: agentSession.agentName, phoneNumberId: input.fromNumberId ?? ENV.openPhoneNumberId } as any);
         const summary = computeSessionSummary(history);
 
         // Save to DB first, then send SMS.
@@ -5828,7 +5828,13 @@ Return JSON with exactly these fields:
           s.stage !== 'INTERVIEW_NUDGE_2'
         ) ?? reversedSessions[0];
 
-        // 2. Merge all messages from all sessions into one timeline
+                // 2. Merge all messages from all sessions into one timeline
+        // Filter rule (per-message):
+        //   New messages (phoneNumberId present): show only if phoneNumberId === openPhoneNumberId
+        //   Legacy messages (no phoneNumberId): exclude cs-inbound and cs-inbound-cleaner sessions
+        const { ENV: timelineEnv } = await import('./_core/env');
+        const leadsNumberId = timelineEnv.openPhoneNumberId;
+        const CS_INBOUND_SOURCES = new Set(['cs-inbound', 'cs-inbound-cleaner']);
         const messages: Array<{
           id: string;
           role: 'user' | 'assistant' | 'system';
@@ -5837,13 +5843,20 @@ Return JSON with exactly these fields:
           mediaUrls?: string[];
           sessionSource?: string;
         }> = [];
-
         for (const session of sessions) {
           try {
-            const history: Array<{ role: string; content: string; ts?: number; mediaUrls?: string[] }> =
+            const history: Array<{ role: string; content: string; ts?: number; mediaUrls?: string[]; phoneNumberId?: string }> =
               JSON.parse(session.messageHistory ?? '[]');
             for (const msg of history) {
               if (!msg.content || !msg.ts) continue;
+              // Per-message phone number filter
+              if (msg.phoneNumberId) {
+                // New message: filter by actual phone number identity
+                if (msg.phoneNumberId !== leadsNumberId) continue;
+              } else {
+                // Legacy message: use session leadSource as fallback
+                if (CS_INBOUND_SOURCES.has(session.leadSource ?? '')) continue;
+              }
               messages.push({
                 id: `s${session.id}-${msg.ts}`,
                 role: (msg.role === 'user' || msg.role === 'customer') ? 'user' : msg.role === 'assistant' ? 'assistant' : 'system',
@@ -6030,13 +6043,12 @@ Return JSON with exactly these fields:
         let history: Array<{ role: string; content: string; ts: number }> = [];
         try { history = JSON.parse(canonicalSession.messageHistory ?? '[]'); } catch { history = []; }
         const ts = Date.now();
-        history.push({ role: 'assistant', content: input.message, ts });
-
+                const { ENV: envWS } = await import('./_core/env');
+        history.push({ role: 'assistant', content: input.message, ts, phoneNumberId: envWS.openPhoneNumberId } as any);
         await db
           .update(conversationSessions)
           .set({ messageHistory: JSON.stringify(history), lastReadAt: ts } as any)
           .where(eq(conversationSessions.id, canonicalSession.id));
-
         return { success: true, ts };
       }),
 

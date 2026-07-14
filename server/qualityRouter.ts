@@ -38,6 +38,7 @@ import {
   scheduleAssignments,
 } from "../drizzle/schema";
 import { sendSms } from "./openphone";
+import { ENV } from "./_core/env";
 import { storagePut, generateThumbnail } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { logActivity } from "./activityLogger";
@@ -365,7 +366,7 @@ export async function sendApprovedRatingSms(): Promise<{
       stage: "QUALITY_RATING_REQUESTED",
       leadSource: "quality_rating",
       messageHistory: JSON.stringify([
-        { role: "assistant", content: pending.smsText, ts: Date.now() },
+        { role: "assistant", content: pending.smsText, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId },
       ]),
     });
     const sessionId = (sessionInsert as any).insertId as number;

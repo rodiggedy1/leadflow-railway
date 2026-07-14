@@ -172,7 +172,7 @@ export async function sendPendingReviewSms(): Promise<number> {
         leadName: job.name ?? firstName,
         stage: "REVIEW_REQUESTED",
         leadSource: "review",
-        messageHistory: JSON.stringify([{ role: "assistant", content: message, ts: Date.now() }]),
+        messageHistory: JSON.stringify([{ role: "assistant", content: message, ts: Date.now(), phoneNumberId: ENV.openPhoneCsNumberId }]),
       });
 
     const sessionId = (sessionInsert as any).insertId as number;
@@ -858,7 +858,7 @@ export const reviewRouter = router({
         stage: "REVIEW_REQUESTED",
         leadSource: "review-test",
         messageHistory: JSON.stringify([
-          { role: "assistant", content: message, ts: Date.now() },
+          { role: "assistant", content: message, ts: Date.now(), phoneNumberId: ENV.openPhoneNumberId },
         ]),
         aiMode: 1,
         isBooked: 0,
