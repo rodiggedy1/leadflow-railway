@@ -524,6 +524,22 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
         {/* Lanes */}
         <div className="grid grid-cols-2 gap-2 px-4 pb-3 shrink-0">
+          {/* Follow-up big chip — same card style as lane chips */}
+          <button
+            onClick={() => setActiveFilter(activeFilter === "follow-up" ? "all" : "follow-up")}
+            className={cn(
+              "border rounded-[18px] p-3 text-left font-black text-sm cursor-pointer transition-all col-span-2",
+              activeFilter === "follow-up"
+                ? "bg-slate-900 text-white border-slate-900"
+                : "bg-white border-slate-200 text-slate-700 hover:border-slate-300"
+            )}
+          >
+            <span className="text-base">🔔</span>{" "}
+            Follow-up Scheduled
+            <span className={cn("block font-semibold text-[11px] mt-0.5", activeFilter === "follow-up" ? "text-white/70" : "text-slate-500")}>
+              {workspace.filter(l => l.stage === "FOLLOW_UP_SCHEDULED").length} leads
+            </span>
+          </button>
           {LANE_CONFIG.map((lane) => (
             <button
               key={lane.id}
@@ -552,7 +568,6 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               { id: "unread" as LeadFilter, label: "Unread", count: unreadCount },
               { id: "campaign-reply" as LeadFilter, label: "Campaign reply" },
               { id: "booked" as LeadFilter, label: "Booked", count: workspace.filter(l => l.isBooked && stageToLane(l.stage) !== "resolved").length || undefined },
-              { id: "follow-up" as LeadFilter, label: "Follow-up", count: workspace.filter(l => l.stage === "FOLLOW_UP_SCHEDULED").length || undefined },
             ] as { id: LeadFilter; label: string; count?: number }[]
           ).map((f) => (
             <button
@@ -629,6 +644,11 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                         {tag.label}
                       </span>
                     )}
+                    {lead.stage === "FOLLOW_UP_SCHEDULED" && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-black border bg-slate-900 text-white border-slate-900">
+                        🔔 Follow-up
+                      </span>
+                    )}
                     {lead.isBooked && (
                       <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-black border", TAG_STYLES.green)}>
                         ✓ Booked{lead.bookedAmount ? ` · $${lead.bookedAmount}` : ""}
@@ -690,6 +710,12 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   <h2 className="font-black text-lg text-slate-900 leading-tight">
                     {selectedSummary.customerName ?? selectedSummary.phone}
                   </h2>
+                  <div className="flex items-center gap-2 flex-wrap">
+                  {selectedSummary.stage === "FOLLOW_UP_SCHEDULED" && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-black bg-slate-900 text-white">
+                      🔔 Follow-up scheduled
+                    </span>
+                  )}
                   <p className="text-[13px] text-slate-500">
                     {(() => {
                       // Show the most recent campaign name that drove this conversation
