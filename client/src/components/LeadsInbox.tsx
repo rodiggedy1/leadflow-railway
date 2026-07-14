@@ -1120,12 +1120,8 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                               {formatTs(msg.ts)}
                             </span>
                           </div>
-                          <p className={cn("text-sm leading-relaxed whitespace-pre-wrap break-all", isAgent ? "text-white" : "text-slate-600")}>
-                            {msg.content.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
-                              /^https?:\/\//.test(part)
-                                ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className={cn("underline", isAgent ? "text-blue-300" : "text-blue-600")}>{part}</a>
-                                : part
-                            )}
+                          <p className={cn("text-sm leading-relaxed whitespace-pre-wrap", isAgent ? "text-white" : "text-slate-600")}>
+                            {msg.content}
                           </p>
                           {msg.mediaUrls && msg.mediaUrls.length > 0 && (
                             <div className="flex gap-2 mt-2 flex-wrap">
