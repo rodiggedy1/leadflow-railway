@@ -348,7 +348,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     "resolved": workspace.filter((l) => stageToLane(l.stage) === "resolved").length,
   };
 
-  const unreadCount = workspace.reduce((sum, l) => sum + l.unreadCount, 0);
+  const unreadCount = workspace.filter((l) => l.lastMessageRole === "user" && l.stage !== "RESOLVED").length;
 
   // Timeline events merged and sorted
   const timelineEvents: TimelineEvent[] = timeline
@@ -631,7 +631,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   <div className="flex justify-between items-start mb-1">
                     <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
                       {displayName}
-                      {lead.unreadCount > 0 && (
+                      {lead.lastMessageRole === "user" && (
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
                       )}
                     </span>
