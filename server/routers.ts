@@ -5663,34 +5663,57 @@ Return JSON with exactly these fields:
           .limit(2000);
 
         // Group by normalized phone — one entry per customer.
-        // The most recent session (first in the ordered list) is the canonical one.
+        // The most recent session (first in the ordered list) is the canonical action session.
+        // A separate pass finds the best conversation session (has history, highest conversationSortTs).
         const byPhone = new Map<string, typeof sessions[0]>();
+        // convByPhone: best conversation session per phone (has message history, highest conversationSortTs)
+        const convByPhone = new Map<string, { session: typeof sessions[0]; convSortTs: number }>();
+
         for (const s of sessions) {
           if (!s.leadPhone) continue;
           const norm = normalizePhone(s.leadPhone) ?? s.leadPhone.replace(/[^\d]/g, '').slice(-10);
+
+          // Action session: first (newest canonicalSortTs) wins
           if (!byPhone.has(norm)) {
             byPhone.set(norm, s);
           }
+
+          // Conversation session: session with history that has the highest conversationSortTs
+          let history: Array<{ role: string; content: string; ts?: number }> = [];
+          try { history = JSON.parse(s.messageHistory ?? '[]'); } catch { /* ignore */ }
+          if (history.length > 0) {
+            const createdAtMs = s.createdAt ? (new Date(s.createdAt).getTime()) : 0;
+            const parsedLastTs = history[history.length - 1]?.ts ?? null;
+            const convSortTs = parsedLastTs ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : null) ?? s.lastCustomerMessageTs ?? createdAtMs;
+            const existing = convByPhone.get(norm);
+            if (!existing || convSortTs > existing.convSortTs) {
+              convByPhone.set(norm, { session: s, convSortTs });
+            }
+          }
         }
 
-        // Build summary rows — no session IDs in the output.
+        // Build summary rows
         const summaries = Array.from(byPhone.entries()).map(([phone, s]) => {
-          // Parse last message
+          // Conversation session: use the best history session, fall back to action session
+          const convEntry = convByPhone.get(phone);
+          const conv = convEntry?.session ?? s;
+
+          // Parse conversation fields from the conversation session
           let lastMessage: string | null = null;
           let lastMessageAt: number | null = null;
           let unreadCount = 0;
           let historyLastRole: string | null = null;
           try {
-            const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(s.messageHistory ?? '[]');
+            const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(conv.messageHistory ?? '[]');
             if (history.length > 0) {
               const last = history[history.length - 1];
               lastMessage = typeof last.content === 'string' ? last.content.slice(0, 120) : null;
-              lastMessageAt = last.ts ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : null);
+              lastMessageAt = last.ts ?? (conv.lastMessageTs && conv.lastMessageTs > 0 ? conv.lastMessageTs : null);
               // Normalize: treat 'customer' as 'user' so clients check one value
               historyLastRole = (last.role === 'customer') ? 'user' : last.role;
             }
-            // Count unread: messages from customer after lastReadAt
-            const lastReadAt = (s.lastReadAt as number | null) ?? 0;
+            // Count unread: messages from customer after lastReadAt on the conversation session
+            const lastReadAt = (conv.lastReadAt as number | null) ?? 0;
             for (const m of history) {
               if ((m.role === 'user' || m.role === 'customer') && m.ts && m.ts > lastReadAt) {
                 unreadCount++;
@@ -5700,7 +5723,8 @@ Return JSON with exactly these fields:
 
           return {
             phone,                                    // canonical E.164 key
-            sessionId: s.id,                          // canonical session ID for mutations
+            sessionId: s.id,                          // action session — booking/stage/resolve mutations use this
+            conversationSessionId: conv.id,           // conversation session — markRead uses this
             customerName: s.leadName ?? null,
             lastMessage,
             lastMessageAt,
@@ -5713,7 +5737,7 @@ Return JSON with exactly these fields:
             assignedAgentName: s.assignedAgentName ?? null,
             leadSource: s.leadSource ?? null,
             createdAt: s.createdAt,
-            lastMessageRole: historyLastRole ?? (s.lastMessageRole === 'customer' ? 'user' : s.lastMessageRole) ?? null,
+            lastMessageRole: historyLastRole ?? (conv.lastMessageRole === 'customer' ? 'user' : conv.lastMessageRole) ?? null,
           };
         });
 

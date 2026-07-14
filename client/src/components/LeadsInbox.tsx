@@ -65,10 +65,12 @@ type LeadTag = {
 // Shape returned by listWorkspace
 type WorkspaceSummary = {
   phone: string;
-  sessionId: number;
+  sessionId: number;               // action session — booking/stage/resolve mutations
+  conversationSessionId: number;   // conversation session — markRead uses this
   customerName: string | null;
   lastMessage: string | null;
   lastMessageAt: number | null;
+  lastMessageRole: string | null;
   unreadCount: number;
   stage: string | null;
   isResolved: boolean;
@@ -497,7 +499,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // Mark as read if there are unread messages
     const lead = workspace.find((l) => l.phone === phone);
     if (lead && lead.unreadCount > 0) {
-      markReadMutation.mutate({ sessionId: lead.sessionId });
+      markReadMutation.mutate({ sessionId: lead.conversationSessionId });
     }
   }
 
