@@ -144,8 +144,9 @@ function MomentumBar({ value }: { value: number }) {
 }
 
 function formatTs(ts: number | null | undefined): string {
-  if (!ts) return "";
-  const d = new Date(ts);
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const d = new Date(n);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);

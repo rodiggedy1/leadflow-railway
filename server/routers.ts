@@ -5641,10 +5641,18 @@ Return JSON with exactly these fields:
         // Used consistently for all joins so +1302..., 302..., and formatted numbers match.
         const phoneNorm = sql.raw(`REGEXP_REPLACE(leadPhone, '[^0-9]', '')`);
 
+        // Defensive timestamp normalizer — coerces string/bigint values from DB or JSON to number | null.
+        const normalizeTimestamp = (value: unknown): number | null => {
+          if (value == null) return null;
+          const n = Number(value);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        };
+
         // Pull all sessions that qualify under leads.list source filter.
         // For mode=active we only surface sessions with actual customer engagement.
+        const NON_LEAD_SOURCES_FOR_ACTION = NON_LEAD_SOURCES; // cs-inbound excluded from action sessions
         const sourceFilter = sql.raw(`(
-          (leadSource IS NULL OR leadSource NOT IN (${NON_LEAD_SOURCES.map(s => `'${s}'`).join(', ')}))
+          (leadSource IS NULL OR leadSource NOT IN (${NON_LEAD_SOURCES_FOR_ACTION.map(s => `'${s}'`).join(', ')}))
           AND (leadSource IS NULL OR leadSource != 'review')
           AND (
             leadSource IS NULL
@@ -5655,6 +5663,27 @@ Return JSON with exactly these fields:
           )
         )`);
 
+        // Broader filter for conversation-session candidates: same as sourceFilter but
+        // includes cs-inbound and cs-inbound-cleaner so their message history can supply
+        // lastMessage/lastMessageAt/lastMessageRole/unreadCount for the workspace card.
+        // These sessions never become the action session.
+        const convSourceFilter = sql.raw(`(
+          (
+            leadSource IS NULL
+            OR leadSource NOT IN ('schedule_confirm','hiring_interview','hiring','review')
+          )
+          AND (leadSource IS NULL OR leadSource != 'review')
+          AND (
+            leadSource IS NULL
+            OR (leadSource NOT LIKE 'always-on%' AND leadSource NOT LIKE 'campaign:%' AND leadSource NOT IN ('reactivation','command-center','review_rebooking'))
+            OR ((leadSource LIKE 'always-on%' OR leadSource LIKE 'campaign:%' OR leadSource IN ('reactivation','command-center'))
+                AND JSON_SEARCH(messageHistory, 'one', 'user', NULL, '$[*].role') IS NOT NULL)
+            OR (leadSource = 'review_rebooking' AND JSON_SEARCH(messageHistory, 'one', 'user', NULL, '$[*].role') IS NOT NULL)
+            OR leadSource IN ('cs-inbound', 'cs-inbound-cleaner')
+          )
+          AND JSON_LENGTH(messageHistory) > 0
+        )`);
+
         const sessions = await db
           .select()
           .from(conversationSessions)
@@ -5662,29 +5691,43 @@ Return JSON with exactly these fields:
           .orderBy(desc(sql`COALESCE(${conversationSessions.lastCustomerMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
           .limit(2000);
 
+        // Second query: broader pool for conversation session candidates (includes cs-inbound).
+        // Only sessions with non-empty message history are fetched.
+        const convCandidates = await db
+          .select()
+          .from(conversationSessions)
+          .where(convSourceFilter)
+          .orderBy(desc(sql`COALESCE(${conversationSessions.lastMessageTs}, ${conversationSessions.lastCustomerMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
+          .limit(4000);
+
         // Group by normalized phone — one entry per customer.
         // The most recent session (first in the ordered list) is the canonical action session.
         // A separate pass finds the best conversation session (has history, highest conversationSortTs).
         const byPhone = new Map<string, typeof sessions[0]>();
         // convByPhone: best conversation session per phone (has message history, highest conversationSortTs)
-        const convByPhone = new Map<string, { session: typeof sessions[0]; convSortTs: number }>();
+        const convByPhone = new Map<string, { session: typeof convCandidates[0]; convSortTs: number }>();
 
         for (const s of sessions) {
           if (!s.leadPhone) continue;
           const norm = normalizePhone(s.leadPhone) ?? s.leadPhone.replace(/[^\d]/g, '').slice(-10);
-
           // Action session: first (newest canonicalSortTs) wins
           if (!byPhone.has(norm)) {
             byPhone.set(norm, s);
           }
+        }
 
-          // Conversation session: session with history that has the highest conversationSortTs
+        // Build convByPhone from the broader candidate pool
+        for (const s of convCandidates) {
+          if (!s.leadPhone) continue;
+          const norm = normalizePhone(s.leadPhone) ?? s.leadPhone.replace(/[^\d]/g, '').slice(-10);
+          // Only consider phones that have an action session (avoids surfacing CS-only conversations)
+          if (!byPhone.has(norm)) continue;
           let history: Array<{ role: string; content: string; ts?: number }> = [];
           try { history = JSON.parse(s.messageHistory ?? '[]'); } catch { /* ignore */ }
           if (history.length > 0) {
             const createdAtMs = s.createdAt ? (new Date(s.createdAt).getTime()) : 0;
-            const parsedLastTs = history[history.length - 1]?.ts ?? null;
-            const convSortTs = parsedLastTs ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : null) ?? s.lastCustomerMessageTs ?? createdAtMs;
+            const parsedLastTs = normalizeTimestamp(history[history.length - 1]?.ts);
+            const convSortTs = parsedLastTs ?? normalizeTimestamp(s.lastMessageTs) ?? normalizeTimestamp(s.lastCustomerMessageTs) ?? createdAtMs;
             const existing = convByPhone.get(norm);
             if (!existing || convSortTs > existing.convSortTs) {
               convByPhone.set(norm, { session: s, convSortTs });
@@ -5708,7 +5751,7 @@ Return JSON with exactly these fields:
             if (history.length > 0) {
               const last = history[history.length - 1];
               lastMessage = typeof last.content === 'string' ? last.content.slice(0, 120) : null;
-              lastMessageAt = last.ts ?? (conv.lastMessageTs && conv.lastMessageTs > 0 ? conv.lastMessageTs : null);
+              lastMessageAt = normalizeTimestamp(last.ts) ?? normalizeTimestamp(conv.lastMessageTs);
               // Normalize: treat 'customer' as 'user' so clients check one value
               historyLastRole = (last.role === 'customer') ? 'user' : last.role;
             }
