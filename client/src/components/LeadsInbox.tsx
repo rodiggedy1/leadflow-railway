@@ -50,7 +50,7 @@ import { useOpsStream } from "@/hooks/useOpsStream";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Lane = "all" | "needs-me" | "ready-to-book" | "needs-price" | "reactivation" | "resolved";
-type LeadFilter = "all" | "unread" | "campaign-reply";
+type LeadFilter = "all" | "unread" | "campaign-reply" | "booked";
 
 type LeadTag = {
   label: string;
@@ -307,7 +307,9 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     if (activeLane === "resolved" && lane !== "resolved") return false;
     // "all" shows every non-resolved lead; specific lanes filter by lane
     if (activeLane !== "all" && activeLane !== "resolved" && lane !== activeLane) return false;
-    // Sub-filters (unread, campaign-reply) are ignored when All is active
+    // Sub-filters: unread and campaign-reply only apply within specific lanes
+    // booked filter applies across all lanes
+    if (activeFilter === "booked" && !lead.isBooked) return false;
     if (activeLane !== "all") {
       if (activeFilter === "unread" && lead.unreadCount === 0) return false;
       if (activeFilter === "campaign-reply") {
@@ -529,6 +531,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               { id: "all" as LeadFilter, label: "All" },
               { id: "unread" as LeadFilter, label: "Unread", count: unreadCount },
               { id: "campaign-reply" as LeadFilter, label: "Campaign reply" },
+              { id: "booked" as LeadFilter, label: "Booked", count: workspace.filter(l => l.isBooked && stageToLane(l.stage) !== "resolved").length || undefined },
             ] as { id: LeadFilter; label: string; count?: number }[]
           ).map((f) => (
             <button
@@ -603,6 +606,11 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                         )}
                       >
                         {tag.label}
+                      </span>
+                    )}
+                    {lead.isBooked && (
+                      <span className={cn("px-2 py-0.5 rounded-full text-[11px] font-black border", TAG_STYLES.green)}>
+                        ✓ Booked{lead.bookedAmount ? ` · $${lead.bookedAmount}` : ""}
                       </span>
                     )}
                     {lead.isResolved && (
