@@ -658,7 +658,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 >
                   <div className="flex justify-between items-center gap-2 mb-1 overflow-hidden">
                     <span className="font-black text-sm text-slate-900 flex items-center gap-1.5 min-w-0">
-                      <span className="truncate">{displayName}</span>
+                      <span className="truncate min-w-0">{displayName}</span>
                       {lead.lastMessageRole === "user" && lead.unreadCount > 0 && (
                         <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block shrink-0" />
                       )}
