@@ -6249,7 +6249,7 @@ Return JSON with exactly these fields:
     markUnbooked: publicProcedure
       .input(z.object({
         sessionId: z.number().int().positive(),
-        stage: z.enum(["FOLLOW_UP", "AVAILABILITY", "QUOTE_SENT", "LOST"]).default("FOLLOW_UP"),
+        stage: z.enum(["UNHANDLED", "AVAILABILITY", "QUOTE_SENT", "LOST"]).default("UNHANDLED"),
       }))
       .mutation(async ({ input, ctx }) => {
         await getAgentSessionFromCtx(ctx); // require agent auth

@@ -387,7 +387,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
       utils.leads.listWorkspace.setData(undefined, (old) =>
         old?.map((s) =>
           s.sessionId === sessionId
-            ? { ...s, isBooked: false, bookedAmount: null, stage: 'FOLLOW_UP' }
+            ? { ...s, isBooked: false, bookedAmount: null, stage: 'UNHANDLED' }
             : s
         )
       );
