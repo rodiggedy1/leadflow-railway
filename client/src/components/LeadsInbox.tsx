@@ -656,14 +656,14 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   )}
                   style={{ transition: "opacity 0.4s, transform 0.4s" }}
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5 min-w-0 truncate">
-                      {displayName}
+                  <div className="flex justify-between items-center gap-2 mb-1 overflow-hidden">
+                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5 min-w-0">
+                      <span className="truncate">{displayName}</span>
                       {lead.lastMessageRole === "user" && lead.unreadCount > 0 && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block shrink-0" />
                       )}
                     </span>
-                    <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
+                    <span className="text-[11px] text-slate-400 font-bold shrink-0 whitespace-nowrap">
                       {formatTs(lead.lastMessageAt)}
                     </span>
                   </div>
