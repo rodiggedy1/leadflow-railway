@@ -425,24 +425,21 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Tracker link SMS: 8 AM ET daily ────────────────────────────────────────
-  // DISABLED: SMS sending is paused while the tracker page is being tested.
-  // To re-enable, uncomment the cron.schedule block below.
-  //
-  // cron.schedule("0 0 8 * * *", async () => {
-  //   console.log("[InternalCron] Running TrackerLinkSend...");
-  //   try {
-  //     const result = await sendTrackerLinksForToday();
-  //     const summary = `date: ${result.date}, sent: ${result.sent}, skipped: ${result.skipped}, errors: ${result.errors.length}`;
-  //     console.log(`[InternalCron] TrackerLinkSend — ${summary}`);
-  //     await recordHeartbeat("tracker-link-send", summary, result.sent > 0);
-  //   } catch (err) {
-  //     const msg = err instanceof Error ? err.message : String(err);
-  //     console.error("[InternalCron] TrackerLinkSend failed:", msg);
-  //     await recordHeartbeat("tracker-link-send", `error: ${msg}`, false);
-  //   }
-  // }, { timezone: "America/New_York" });
-  console.log("[InternalCron] TrackerLinkSend: DISABLED (testing mode)");
+  // ── Tracker link SMS: 8 AM ET daily — sends tracking link to clients from CS number ──
+  cron.schedule("0 0 8 * * *", async () => {
+    console.log("[InternalCron] Running TrackerLinkSend...");
+    try {
+      const result = await sendTrackerLinksForToday();
+      const summary = `date: ${result.date}, sent: ${result.sent}, skipped: ${result.skipped}, errors: ${result.errors.length}`;
+      console.log(`[InternalCron] TrackerLinkSend — ${summary}`);
+      await recordHeartbeat("tracker-link-send", summary, result.sent > 0);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[InternalCron] TrackerLinkSend failed:", msg);
+      await recordHeartbeat("tracker-link-send", `error: ${msg}`, false);
+    }
+  }, { timezone: "America/New_York" });
+  console.log("[InternalCron] TrackerLinkSend: ENABLED (8 AM ET daily, CS number)");
 
   // ── AI Insights cache warm-up: DISABLED (AI Center page hidden, saving LLM tokens) ──
   // cron.schedule("0 0,30 * * * *", async () => { ... }, { timezone: "America/New_York" });

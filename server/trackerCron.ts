@@ -14,6 +14,7 @@ import { cleanerJobs } from "../drizzle/schema";
 import { and, eq, isNull } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
+import { ENV } from "./_core/env";
 
 function generateToken(): string {
   return randomBytes(24).toString("base64url");
@@ -80,7 +81,7 @@ export async function sendTrackerLinksForToday(dateOverride?: string): Promise<{
     const firstName = job.customerName?.split(" ")[0] ?? "there";
     const message = `Hi ${firstName}! Your Maids in Black team is confirmed for today. Track your clean in real time: ${trackerUrl} 🧹`;
 
-    const result = await sendSms({ to: job.customerPhone, content: message }).catch(
+    const result = await sendSms({ to: job.customerPhone, content: message, fromNumberId: ENV.openPhoneCsNumberId }).catch(
       (err: unknown) => ({ success: false, error: String(err) })
     );
 
