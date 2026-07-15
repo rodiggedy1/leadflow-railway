@@ -376,6 +376,60 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
   const unreadCount = workspace.filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED").length;
 
+  // ── DIAG: Export contributing unread rows once per workspace change ────────────────────
+  const unreadDiagRef = useRef(false);
+  useEffect(() => {
+    if (workspace.length === 0) return;
+    // Log once per workspace load (reset on next full refetch)
+    if (unreadDiagRef.current) return;
+    unreadDiagRef.current = true;
+    const contributing = workspace
+      .filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED")
+      .map((l) => ({
+        customerName: l.customerName,
+        sessionId: l.sessionId,
+        conversationSessionId: l.conversationSessionId,
+        stage: l.stage,
+        lastMessageRole: l.lastMessageRole,
+        unreadCount: l.unreadCount,
+        lastMessageAt: l.lastMessageAt,
+        phone: l.phone,
+      }));
+    console.log("[unread-diag] contributing rows (from workspace cache)", {
+      total: contributing.length,
+      rows: contributing,
+    });
+  }, [workspace]);
+
+  // ── DIAG: Cross-check workspace unreadCount against server raw session data ──────────────────
+  const debugUnreadRows = trpc.leads.debugUnreadRows.useQuery(undefined, {
+    enabled: workspace.length > 0,
+    staleTime: Infinity, // fetch once only
+    retry: false,
+  });
+  const serverDiagRef = useRef(false);
+  useEffect(() => {
+    if (!debugUnreadRows.data || serverDiagRef.current) return;
+    serverDiagRef.current = true;
+    const serverRows = debugUnreadRows.data;
+    // Cross-check: find rows that appear in server data but NOT in workspace contributing rows
+    const workspaceContributing = workspace
+      .filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED");
+    const workspaceConvIds = new Set(workspaceContributing.map(l => l.conversationSessionId));
+    const serverOnlyRows = serverRows.filter(r => !workspaceConvIds.has(r.sessionId));
+    // Cross-check: rows in workspace that are NOT in server data (stale workspace unreadCount?)
+    const serverIds = new Set(serverRows.map(r => r.sessionId));
+    const workspaceOnlyRows = workspaceContributing.filter(l => !serverIds.has(l.conversationSessionId));
+    console.log("[unread-diag] server raw debugUnreadRows", {
+      serverTotal: serverRows.length,
+      workspaceTotal: workspaceContributing.length,
+      serverOnlyCount: serverOnlyRows.length,
+      workspaceOnlyCount: workspaceOnlyRows.length,
+      serverOnlyRows: serverOnlyRows.slice(0, 20), // first 20 discrepancies
+      workspaceOnlyRows: workspaceOnlyRows.slice(0, 20),
+    });
+  }, [debugUnreadRows.data, workspace]);
+
   // ── T5: Log every time workspace settles (cache update) ─────────────────────────
   // This fires on every render where workspace reference changes (optimistic + refetch).
   const resolveDebugSessionRef = useRef<number | null>(null);
