@@ -365,15 +365,28 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     onMutate: async ({ sessionId, resolve }) => {
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
+      console.log("resolve debug", {
+        passedSessionId: sessionId,
+        workspaceIds: (prev ?? []).map((w) => ({
+          sessionId: w.sessionId,
+          conversationSessionId: w.conversationSessionId,
+          phone: w.phone,
+          stage: w.stage,
+          unreadCount: w.unreadCount,
+        })),
+      });
       // Optimistic: immediately update the exact session by sessionId.
       // The card disappears from active lanes instantly because stageToLane("RESOLVED") = "resolved".
+      let matched = false;
       utils.leads.listWorkspace.setData(undefined, (old) => {
         if (!old) return old;
-        return old.map((w) =>
-          w.sessionId === sessionId
-            ? { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' }
-            : w
-        );
+        const next = old.map((w) => {
+          if (w.sessionId !== sessionId) return w;
+          matched = true;
+          return { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' };
+        });
+        console.log("resolve optimistic match", { sessionId, matched });
+        return next;
       });
       // Deselect immediately if resolving the currently open lead
       if (resolve) {
