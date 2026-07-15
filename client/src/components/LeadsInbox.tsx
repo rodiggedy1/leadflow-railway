@@ -623,12 +623,12 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
         optimisticWillMatch: wrongMatchRow?.sessionId === sessionId,
       });
 
-      // Optimistically set unreadCount to 0 so dot and filter update immediately
-      // NOTE: This currently matches on s.sessionId (action session) but the passed
-      // sessionId is conversationSessionId — so this map will silently miss for most rows.
+      // Optimistically set unreadCount to 0 so dot and filter update immediately.
+      // FIX: Match on conversationSessionId (what was passed) not sessionId (action session).
+      // These are different fields for 142/143 unread rows — the old match silently missed all of them.
       utils.leads.listWorkspace.setData(undefined, (old) =>
         old?.map((s) =>
-          s.sessionId === sessionId ? { ...s, unreadCount: 0 } : s
+          s.conversationSessionId === sessionId ? { ...s, unreadCount: 0 } : s
         )
       );
       return { prev };
