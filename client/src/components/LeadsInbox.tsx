@@ -266,13 +266,34 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
   // Real-time updates via SSE
   const handleLeadUpdate = useCallback(() => {
-    utils.leads.listWorkspace.invalidate();
+    // ── T2: SSE lead_update received ───────────────────────────────────────────
+    const cacheAtSse = utils.leads.listWorkspace.getData();
+    const chipCountAtSse = (cacheAtSse ?? []).filter(
+      (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
+    ).length;
+    console.log("[resolve-seq] T2 SSE-lead_update (LeadsInbox handler)", {
+      ts: performance.now().toFixed(2),
+      chipCountAtSse,
+      willInvalidateListWorkspace: true,
+    });
+    utils.leads.listWorkspace.invalidate().then(() => {
+      // ── T3: Refetch completed ─────────────────────────────────────────────
+      // Note: invalidate() resolves when the refetch completes and cache is updated.
+      const cacheAfterRefetch = utils.leads.listWorkspace.getData();
+      const chipCountAfterRefetch = (cacheAfterRefetch ?? []).filter(
+        (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
+      ).length;
+      console.log("[resolve-seq] T3 refetch-complete (LeadsInbox)", {
+        ts: performance.now().toFixed(2),
+        chipCountAfterRefetch,
+      });
+    });
     if (selectedPhone) {
       utils.leads.getTimeline.invalidate({ phone: selectedPhone });
     }
   }, [utils, selectedPhone]);
 
-  useOpsStream({ onLeadUpdate: handleLeadUpdate });
+  useOpsStream({ onLeadUpdate: handleLeadUpdate }, { label: "LeadsInbox" });
 
   // Send message mutation
   const sendMsg = trpc.leads.sendWorkspaceMessage.useMutation({
@@ -355,6 +376,21 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
   const unreadCount = workspace.filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED").length;
 
+  // ── T5: Log every time workspace settles (cache update) ─────────────────────────
+  // This fires on every render where workspace reference changes (optimistic + refetch).
+  const resolveDebugSessionRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (resolveDebugSessionRef.current == null) return; // only log after a resolve is in-flight
+    const target = workspace.find(w => w.sessionId === resolveDebugSessionRef.current);
+    console.log("[resolve-seq] T5 workspace-settled", {
+      ts: performance.now().toFixed(2),
+      trackedSessionId: resolveDebugSessionRef.current,
+      finalStage: target?.stage ?? "(not found)",
+      finalUnreadCount: target?.unreadCount ?? "(not found)",
+      finalChipCount: unreadCount,
+    });
+  }, [workspace]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Timeline events merged and sorted
   const timelineEvents: TimelineEvent[] = timeline
     ? buildTimeline(timeline.messages, timeline.campaigns, timeline.calls)
@@ -365,16 +401,21 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     onMutate: async ({ sessionId, resolve }) => {
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
-      console.log("resolve debug", {
-        passedSessionId: sessionId,
-        workspaceIds: (prev ?? []).map((w) => ({
-          sessionId: w.sessionId,
-          conversationSessionId: w.conversationSessionId,
-          phone: w.phone,
-          stage: w.stage,
-          unreadCount: w.unreadCount,
-        })),
+
+      // ── T1: Before optimistic update ─────────────────────────────────────
+      const targetBefore = (prev ?? []).find(w => w.sessionId === sessionId);
+      const chipCountBefore = (prev ?? []).filter(
+        (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
+      ).length;
+      console.log("[resolve-seq] T1 before-optimistic", {
+        ts: performance.now().toFixed(2),
+        sessionId,
+        resolve,
+        targetStage: targetBefore?.stage ?? "(not found)",
+        targetUnreadCount: targetBefore?.unreadCount ?? "(not found)",
+        chipCountBefore,
       });
+
       // Optimistic: immediately update the exact session by sessionId.
       // The card disappears from active lanes instantly because stageToLane("RESOLVED") = "resolved".
       let matched = false;
@@ -385,9 +426,22 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
           matched = true;
           return { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' };
         });
-        console.log("resolve optimistic match", { sessionId, matched });
+        // ── T1b: After optimistic setData ──────────────────────────────────
+        const targetAfter = next.find(w => w.sessionId === sessionId);
+        const chipCountAfter = next.filter(
+          (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
+        ).length;
+        console.log("[resolve-seq] T1b after-optimistic", {
+          ts: performance.now().toFixed(2),
+          sessionId,
+          matched,
+          targetStageAfter: targetAfter?.stage ?? "(not found)",
+          targetUnreadCountAfter: targetAfter?.unreadCount ?? "(not found)",
+          chipCountAfter,
+        });
         return next;
       });
+
       // Deselect immediately if resolving the currently open lead
       if (resolve) {
         const target = utils.leads.listWorkspace.getData()?.find(w => w.sessionId === sessionId);
@@ -395,7 +449,20 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
       }
       return { prev };
     },
-    onSuccess: () => {
+    onSuccess: (data, { sessionId }) => {
+      // ── T4: Mutation success ──────────────────────────────────────────────
+      const currentCache = utils.leads.listWorkspace.getData();
+      const targetInCache = currentCache?.find(w => w.sessionId === sessionId);
+      const chipCountAtSuccess = (currentCache ?? []).filter(
+        (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
+      ).length;
+      console.log("[resolve-seq] T4 mutation-success", {
+        ts: performance.now().toFixed(2),
+        sessionId,
+        serverReturnedStage: (data as any)?.stage ?? "(no stage in response)",
+        cacheStageAtSuccess: targetInCache?.stage ?? "(not found)",
+        chipCountAtSuccess,
+      });
       // Refetch to sync server state — no delay so the resolved lane is accurate
       utils.leads.listWorkspace.invalidate();
     },
@@ -804,7 +871,10 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 <button
                   title={selectedSummary.isResolved ? 'Reopen conversation' : 'Resolve conversation'}
                   disabled={resolveLeadChat.isPending}
-                  onClick={() => resolveLeadChat.mutate({ sessionId: selectedSummary.sessionId, resolve: !selectedSummary.isResolved })}
+                  onClick={() => {
+                    resolveDebugSessionRef.current = selectedSummary.sessionId;
+                    resolveLeadChat.mutate({ sessionId: selectedSummary.sessionId, resolve: !selectedSummary.isResolved });
+                  }}
                   className={cn(
                     "w-10 h-10 border rounded-[14px] flex items-center justify-center transition",
                     selectedSummary.isResolved

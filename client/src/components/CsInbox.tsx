@@ -314,7 +314,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         setActiveFilter("All");
       }
     },
-  });
+  }, { label: "CsInbox" });
 
   const { data: csData, refetch: refetchInbox, isError: csDataIsError } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
     refetchOnWindowFocus: false,

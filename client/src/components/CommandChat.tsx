@@ -3921,7 +3921,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       utils.tasks.getDue.invalidate();
       setTaskRefetchTick(t => t + 1);
     },
-  });
+  }, { label: "CommandChat" });
 
   // Fetch message IDs that triggered super-alerts (for ⚡ badge rendering)
   // MUST be declared here (early) because the message render loop at line ~924 uses superAlertMsgSet

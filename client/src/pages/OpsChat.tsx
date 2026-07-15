@@ -1589,7 +1589,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
      onAgentStatus: () => {
       utils.opsChat.getAgentStatusList.invalidate();
     },
-  }, { enabled: isAuthenticated });
+  }, { enabled: isAuthenticated, label: "OpsChat" });
   // markRead mutation — called when opening a channel or job thread
   const markRead = trpc.opsChat.markRead.useMutation({
     onSuccess: () => refetchUnread(),

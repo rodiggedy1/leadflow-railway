@@ -645,7 +645,7 @@ export default function LeadOps({ focusSessionId, rail }: { focusSessionId?: num
       utils.leads.listForLeadOps.invalidate();
       utils.leads.getTeamActivity.invalidate();
     },
-  });
+  }, { label: "LeadOps" });
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
