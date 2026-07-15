@@ -2860,6 +2860,31 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                if (msg.quickAction === "sms_to_client") {
+                  const meta = (() => { try { return JSON.parse(msg.metadata ?? "{}"); } catch { return {}; } })();
+                  const { customerName, phone, agentName, body } = meta as { customerName?: string; phone?: string; agentName?: string; body?: string };
+                  return (
+                    <div key={msg.id} className="flex justify-start mb-3">
+                      <div className="max-w-[80%]">
+                        <div className="rounded-2xl overflow-hidden shadow-sm border border-blue-200">
+                          {/* Header */}
+                          <div className="flex items-center gap-2 px-3 py-2" style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)" }}>
+                            <Smartphone className="h-3.5 w-3.5 text-blue-200 shrink-0" />
+                            <span className="text-xs font-bold text-white">SMS to {customerName ?? "Client"}</span>
+                            {phone && <span className="text-[10px] text-blue-200">{phone}</span>}
+                            <span className="ml-auto text-[10px] text-blue-300 bg-blue-900/30 px-1.5 py-0.5 rounded-full">sent</span>
+                          </div>
+                          {/* Body */}
+                          <div className="px-3 py-2.5 bg-blue-50">
+                            <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{body ?? msg.body}</p>
+                          </div>
+                        </div>
+                        <p className="mt-1 text-[11px] text-slate-400 px-1">sent by {agentName ?? msg.from}</p>
+                      </div>
+                    </div>
+                  );
+                }
+
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
@@ -3706,9 +3731,22 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     { query: customerMentionQuery ?? "" },
     { enabled: (customerMentionQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
-  // Map of name → phone for @[Name] token format (populated on mention selection)
+    // Map of name → phone for @[Name] token format (populated on mention selection)
   const mentionPhoneMapRef = useRef<Record<string, string>>({});
-
+  // ── SMS mode (triggered by @customer selection) ──────────────────────────
+  const [smsTarget, setSmsTarget] = useState<{ name: string; phone: string } | null>(null);
+  const [smsDraft, setSmsDraft] = useState("");
+  const smsDraftRef = useRef<HTMLTextAreaElement>(null);
+  const sendClientSmsMutation = trpc.opsChat.sendClientSmsFromCommand.useMutation({
+    onSuccess: () => {
+      setSmsDraft("");
+      setSmsTarget(null);
+      toast.success("SMS sent");
+    },
+    onError: (err) => {
+      toast.error(`SMS failed: ${err.message}`);
+    },
+  });
   // ── Issues tab state ─────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [rightTab, setRightTab] = useState<"leads" | "followups">("leads");
@@ -7330,20 +7368,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          // Store phone in token for reliable lookup across sessions
-                          mentionPhoneMapRef.current[c.name] = c.phone;
-                          // Seed chip cache so team data is instant on render
-                          utils.opsChat.searchCustomers.setData({ query: c.phone }, { customers: [c] });
-                          const token = `@[${c.name}|${c.phone}]`;
-                          const before = composer.slice(0, mentionStart);
-                          const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
-                          setComposer(before + token + " " + after);
+                          // Enter SMS mode instead of inserting a token
+                          setSmsTarget({ name: c.name, phone: c.phone });
                           setCustomerMentionQuery(null);
-                          requestAnimationFrame(() => {
-                            const pos = (before + token + " ").length;
-                            composerRef.current?.focus();
-                            composerRef.current?.setSelectionRange(pos, pos);
-                          });
+                          // Clear the @ trigger from the composer
+                          const before = composer.slice(0, mentionStart);
+                          setComposer(before);
+                          requestAnimationFrame(() => smsDraftRef.current?.focus());
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
                       >
@@ -7703,6 +7734,67 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>{/* end relative wrapper for @mention dropdown */}
         </div>
         </div>{/* end relative composer wrapper */}
+        {/* ── SMS mode overlay ── shown when smsTarget is set */}
+        {smsTarget !== null && (
+          <div className="px-5 py-4" style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #3b82f6 100%)" }}>
+            {/* Recipient bar */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-blue-200 shrink-0" />
+                <span className="text-sm font-semibold text-white">
+                  Texting {smsTarget.name}
+                </span>
+                <span className="text-xs text-blue-200">{smsTarget.phone}</span>
+                <span className="text-xs text-blue-300 bg-blue-900/40 px-2 py-0.5 rounded-full">SMS from Command Chat</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setSmsTarget(null); setSmsDraft(""); }}
+                className="flex items-center gap-1 text-xs text-blue-200 hover:text-white transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+                Exit SMS
+              </button>
+            </div>
+            {/* SMS textarea */}
+            <textarea
+              ref={smsDraftRef}
+              value={smsDraft}
+              onChange={(e) => setSmsDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (smsDraft.trim() && !sendClientSmsMutation.isPending) {
+                    sendClientSmsMutation.mutate({ phone: smsTarget.phone, customerName: smsTarget.name, body: smsDraft.trim(), agentName: callerName });
+                  }
+                }
+              }}
+              placeholder={`Type your SMS to ${smsTarget.name}… (Enter to send)`}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-blue-400/40 bg-white/10 text-white placeholder:text-blue-300 text-sm px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-white/30 mb-3"
+            />
+            {/* Send button */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                disabled={!smsDraft.trim() || sendClientSmsMutation.isPending}
+                onClick={() => {
+                  if (smsDraft.trim() && !sendClientSmsMutation.isPending) {
+                    sendClientSmsMutation.mutate({ phone: smsTarget.phone, customerName: smsTarget.name, body: smsDraft.trim(), agentName: callerName });
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-blue-700 font-semibold text-sm hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {sendClientSmsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                Send SMS
+              </button>
+            </div>
+          </div>
+        )}
         </div>{/* end white card */}
       </div>
       {/* ── Right drag handle ── */}
