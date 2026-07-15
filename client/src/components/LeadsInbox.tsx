@@ -48,6 +48,7 @@ import {
   Bell,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import InsertResponseModal from "@/components/InsertResponseModal";
 import { toast } from "sonner";
 import { useOpsStream } from "@/hooks/useOpsStream";
 
@@ -64,10 +65,12 @@ type LeadTag = {
 // Shape returned by listWorkspace
 type WorkspaceSummary = {
   phone: string;
-  sessionId: number;
+  sessionId: number;               // action session — booking/stage/resolve mutations
+  conversationSessionId: number;   // conversation session — markRead uses this
   customerName: string | null;
   lastMessage: string | null;
   lastMessageAt: number | null;
+  lastMessageRole: string | null;
   unreadCount: number;
   stage: string | null;
   isResolved: boolean;
@@ -141,8 +144,9 @@ function MomentumBar({ value }: { value: number }) {
 }
 
 function formatTs(ts: number | null | undefined): string {
-  if (!ts) return "";
-  const d = new Date(ts);
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const d = new Date(n);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -235,6 +239,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
   // Track which session we've already resolved so we don't re-resolve on re-renders
   const resolvedSessionRef = useRef<number | null>(null);
   const [composerText, setComposerText] = useState("");
+  const [insertResponseOpen, setInsertResponseOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const journeyRef = useRef<HTMLDivElement>(null);
   // Call recording playback state
@@ -356,31 +361,43 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     : [];
 
   // ── Resolve / Reopen ─────────────────────────────────────────────────────
-  const [resolvingPhone, setResolvingPhone] = useState<string | null>(null);
-
   const resolveLeadChat = trpc.leads.resolveLeadChat.useMutation({
-    onMutate: async ({ phone, resolve }) => {
+    onMutate: async ({ sessionId, resolve }) => {
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
-      // Optimistic: immediately update isResolved + stage in workspace cache
+      console.log("resolve debug", {
+        passedSessionId: sessionId,
+        workspaceIds: (prev ?? []).map((w) => ({
+          sessionId: w.sessionId,
+          conversationSessionId: w.conversationSessionId,
+          phone: w.phone,
+          stage: w.stage,
+          unreadCount: w.unreadCount,
+        })),
+      });
+      // Optimistic: immediately update the exact session by sessionId.
+      // The card disappears from active lanes instantly because stageToLane("RESOLVED") = "resolved".
+      let matched = false;
       utils.leads.listWorkspace.setData(undefined, (old) => {
         if (!old) return old;
-        return old.map((w) =>
-          w.phone === phone
-            ? { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' }
-            : w
-        );
+        const next = old.map((w) => {
+          if (w.sessionId !== sessionId) return w;
+          matched = true;
+          return { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' };
+        });
+        console.log("resolve optimistic match", { sessionId, matched });
+        return next;
       });
+      // Deselect immediately if resolving the currently open lead
+      if (resolve) {
+        const target = utils.leads.listWorkspace.getData()?.find(w => w.sessionId === sessionId);
+        if (target && selectedPhone === target.phone) setSelectedPhone(null);
+      }
       return { prev };
     },
-    onSuccess: (_data, { phone, resolve }) => {
-      setResolvingPhone(phone);
-      window.setTimeout(() => {
-        setResolvingPhone(null);
-        // If we just resolved the selected lead, deselect it after animation
-        if (resolve && selectedPhone === phone) setSelectedPhone(null);
-        utils.leads.listWorkspace.invalidate();
-      }, 800);
+    onSuccess: () => {
+      // Refetch to sync server state — no delay so the resolved lane is accurate
+      utils.leads.listWorkspace.invalidate();
     },
     onError: (_err, _vars, ctx) => {
       // Roll back to snapshot captured in onMutate
@@ -496,7 +513,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // Mark as read if there are unread messages
     const lead = workspace.find((l) => l.phone === phone);
     if (lead && lead.unreadCount > 0) {
-      markReadMutation.mutate({ sessionId: lead.sessionId });
+      markReadMutation.mutate({ sessionId: lead.conversationSessionId });
     }
   }
 
@@ -634,7 +651,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               <p className="text-sm font-semibold">No leads found</p>
             </div>
           )}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 overflow-x-hidden">
             {filteredLeads.map((lead) => {
               const tag = sourceToTag(lead.leadSource);
               const initials = getInitials(lead.customerName, lead.phone);
@@ -645,22 +662,21 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   onClick={() => handlePickLead(lead.phone)}
                   className={cn(
                     "w-full text-left p-4 rounded-[20px] border transition-all",
-                    resolvingPhone === lead.phone && "opacity-0 scale-95 pointer-events-none",
-                    lead.isResolved && resolvingPhone !== lead.phone && "opacity-60",
+                    lead.isResolved && "opacity-60",
                     selectedPhone === lead.phone
                       ? "bg-white border-l-4 border-l-orange-400 border-orange-200 shadow-md"
                       : "bg-transparent border-transparent hover:bg-white hover:border-slate-200 hover:shadow-sm"
                   )}
                   style={{ transition: "opacity 0.4s, transform 0.4s" }}
                 >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5">
-                      {displayName}
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <span className="font-black text-sm text-slate-900 flex items-center gap-1.5 min-w-0 shrink truncate">
+                      <span className="truncate min-w-0">{displayName}</span>
                       {lead.lastMessageRole === "user" && lead.unreadCount > 0 && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500 inline-block shrink-0" />
                       )}
                     </span>
-                    <span className="text-[11px] text-slate-400 font-bold shrink-0 ml-2">
+                    <span className="text-[11px] text-slate-400 font-bold shrink-0 whitespace-nowrap ml-2">
                       {formatTs(lead.lastMessageAt)}
                     </span>
                   </div>
@@ -788,7 +804,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 <button
                   title={selectedSummary.isResolved ? 'Reopen conversation' : 'Resolve conversation'}
                   disabled={resolveLeadChat.isPending}
-                  onClick={() => resolveLeadChat.mutate({ phone: selectedSummary.phone, resolve: !selectedSummary.isResolved })}
+                  onClick={() => resolveLeadChat.mutate({ sessionId: selectedSummary.sessionId, resolve: !selectedSummary.isResolved })}
                   className={cn(
                     "w-10 h-10 border rounded-[14px] flex items-center justify-center transition",
                     selectedSummary.isResolved
@@ -1117,7 +1133,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                               {formatTs(msg.ts)}
                             </span>
                           </div>
-                          <p className={cn("text-sm leading-relaxed", isAgent ? "text-white" : "text-slate-600")}>
+                          <p className={cn("text-sm leading-relaxed whitespace-pre-wrap", isAgent ? "text-white" : "text-slate-600")}>
                             {msg.content}
                           </p>
                           {msg.mediaUrls && msg.mediaUrls.length > 0 && (
@@ -1142,6 +1158,12 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
               className="shrink-0 px-5 py-4"
               style={{ borderTop: "1px solid #e7eaf0", background: "#fff" }}
             >
+              <InsertResponseModal
+                open={insertResponseOpen}
+                onClose={() => setInsertResponseOpen(false)}
+                onInsert={(text) => { setComposerText(text); setInsertResponseOpen(false); }}
+                customerFirstName={selectedPhone ? (workspace?.find(w => w.phone === selectedPhone)?.customerName?.split(' ')[0]) : undefined}
+              />
               <div className="flex gap-3">
                 <textarea
                   value={composerText}
@@ -1152,14 +1174,24 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                   placeholder="Type a message…"
                   className="flex-1 h-16 border border-slate-200 rounded-[18px] px-4 py-3 text-sm resize-none font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 transition"
                 />
-                <button
-                  onClick={handleSend}
-                  disabled={sendMsg.isPending || !composerText.trim()}
-                  className="shrink-0 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95 disabled:opacity-50"
-                  style={{ background: "#ff6b1a" }}
-                >
-                  {sendMsg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send →"}
-                </button>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    onClick={() => setInsertResponseOpen(true)}
+                    type="button"
+                    className="px-3 h-7 rounded-full text-xs font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 transition flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    Responses
+                  </button>
+                  <button
+                    onClick={handleSend}
+                    disabled={sendMsg.isPending || !composerText.trim()}
+                    className="flex-1 px-5 rounded-full font-black text-sm text-white transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+                    style={{ background: "#ff6b1a" }}
+                  >
+                    {sendMsg.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send →"}
+                  </button>
+                </div>
               </div>
             </div>
           </>

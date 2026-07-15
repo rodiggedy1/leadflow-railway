@@ -866,9 +866,152 @@ function SmsTemplateCard({
   );
 }
 
+// ── Response Templates Tab ───────────────────────────────────────────────────
+function ResponseTemplatesTab() {
+  const utils = trpc.useUtils();
+  const { data: templates = [], isLoading } = trpc.responseTemplates.list.useQuery();
+  const createMutation = trpc.responseTemplates.create.useMutation({ onSuccess: () => { utils.responseTemplates.list.invalidate(); setEditModal(null); toast.success("Template created"); } });
+  const updateMutation = trpc.responseTemplates.update.useMutation({ onSuccess: () => { utils.responseTemplates.list.invalidate(); setEditModal(null); toast.success("Template saved"); } });
+  const deleteMutation = trpc.responseTemplates.delete.useMutation({ onSuccess: () => { utils.responseTemplates.list.invalidate(); toast.success("Template deleted"); } });
+
+  type EditState = { id?: number; title: string; category: string; description: string; message: string; sortOrder: number };
+  const [editModal, setEditModal] = useState<EditState | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  const categories = Array.from(new Set(templates.map((t) => t.category))).sort();
+
+  function openNew() {
+    setEditModal({ title: "", category: "", description: "", message: "", sortOrder: 0 });
+  }
+  function openEdit(t: typeof templates[0]) {
+    setEditModal({ id: t.id, title: t.title, category: t.category, description: t.description, message: t.message, sortOrder: t.sortOrder });
+  }
+  function handleSave() {
+    if (!editModal) return;
+    if (editModal.id) {
+      updateMutation.mutate({ id: editModal.id, title: editModal.title, category: editModal.category, description: editModal.description, message: editModal.message, sortOrder: editModal.sortOrder });
+    } else {
+      createMutation.mutate({ title: editModal.title, category: editModal.category, description: editModal.description, message: editModal.message, sortOrder: editModal.sortOrder });
+    }
+  }
+
+  const grouped = categories.reduce<Record<string, typeof templates>>((acc, cat) => {
+    acc[cat] = templates.filter((t) => t.category === cat);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-6">
+      <Card className="border border-gray-200 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-500" />
+                Response Templates
+              </CardTitle>
+              <CardDescription className="text-xs text-gray-500 mt-1">
+                Shared templates used in both the Lead Chat and CS Inbox composers. Admins only.
+              </CardDescription>
+            </div>
+            <Button size="sm" onClick={openNew} className="flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" /> New Template
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+          ) : templates.length === 0 ? (
+            <div className="text-center py-12 text-slate-400 text-sm">No templates yet. Click "New Template" to add one.</div>
+          ) : (
+            <div className="space-y-6">
+              {categories.map((cat) => (
+                <div key={cat}>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">{cat}</div>
+                  <div className="space-y-2">
+                    {grouped[cat].map((t) => (
+                      <div key={t.id} className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50 transition">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-sm text-slate-900">{t.title}</div>
+                          {t.description && <div className="text-xs text-slate-500 mt-0.5">{t.description}</div>}
+                          <div className="text-xs text-slate-400 mt-1 line-clamp-2">{t.message}</div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(t)}><Pencil className="w-3.5 h-3.5" /></Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-600" onClick={() => setDeleteConfirm(t.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit / Create Modal */}
+      <Dialog open={!!editModal} onOpenChange={(o) => { if (!o) setEditModal(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{editModal?.id ? "Edit Template" : "New Template"}</DialogTitle></DialogHeader>
+          {editModal && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">Title</Label>
+                  <Input value={editModal.title} onChange={(e) => setEditModal({ ...editModal, title: e.target.value })} placeholder="e.g. Booking Confirmation" />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold mb-1 block">Category</Label>
+                  <Input value={editModal.category} onChange={(e) => setEditModal({ ...editModal, category: e.target.value })} placeholder="e.g. Scheduling" list="category-suggestions" />
+                  <datalist id="category-suggestions">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold mb-1 block">Description <span className="font-normal text-slate-400">(short subtitle)</span></Label>
+                <Input value={editModal.description} onChange={(e) => setEditModal({ ...editModal, description: e.target.value })} placeholder="e.g. Confirm the appointment" />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold mb-1 block">Message</Label>
+                <Textarea value={editModal.message} onChange={(e) => setEditModal({ ...editModal, message: e.target.value })} rows={6} placeholder="Use {first_name} for the customer's first name" className="font-mono text-sm" />
+                <p className="text-xs text-slate-400 mt-1">Use <code className="bg-slate-100 px-1 rounded">{'{first_name}'}</code> as a placeholder — it's replaced with the customer's name when inserted.</p>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold mb-1 block">Sort Order</Label>
+                <Input type="number" value={editModal.sortOrder} onChange={(e) => setEditModal({ ...editModal, sortOrder: parseInt(e.target.value) || 0 })} className="w-24" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditModal(null)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending}>
+              {(createMutation.isPending || updateMutation.isPending) ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <Dialog open={deleteConfirm !== null} onOpenChange={(o) => { if (!o) setDeleteConfirm(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Delete Template?</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-600">This cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={() => { if (deleteConfirm !== null) { deleteMutation.mutate({ id: deleteConfirm }); setDeleteConfirm(null); } }} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
-type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general" | "pay";
+type SettingsTab = "form" | "widget" | "email" | "reactivation" | "general" | "pay" | "responses";
 
 export default function SettingsPage() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
@@ -1010,6 +1153,7 @@ export default function SettingsPage() {
     { id: "reactivation", label: "Reactivation", icon: <RefreshCw className="w-4 h-4" /> },
     { id: "general", label: "General", icon: <Settings className="w-4 h-4" /> },
     { id: "pay", label: "Pay Rules", icon: <DollarSign className="w-4 h-4" /> },
+    { id: "responses", label: "Responses", icon: <Sparkles className="w-4 h-4" /> },
   ];
 
   return (
@@ -1932,6 +2076,8 @@ export default function SettingsPage() {
                 <AppVersionCard />
               </div>
             )}
+          {/* ── Responses Tab ────────────────────────────────────────────── */}
+            {activeTab === "responses" && <ResponseTemplatesTab />}
           </>
         )}
       </div>

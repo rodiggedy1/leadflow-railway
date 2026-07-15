@@ -627,6 +627,60 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // ── One-shot: backfill outbound messages from all company OpenPhone numbers ──────────
+  app.post("/api/cron/backfill-outbound-sync", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
+    if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
+
+      const { conversationSessions } = await import("../drizzle/schema");
+      const { notInArray: notIn, isNotNull, desc: descOp } = await import("drizzle-orm");
+      const { syncAllOutboundMessages } = await import("./webhooks");
+
+      // Skip terminal/hiring/review stages that don't need outbound sync
+      const SKIP_STAGES = [
+        "DONE", "RESOLVED", "LOST",
+        "REVIEW_DONE", "QUALITY_RATING_DONE", "REVIEW_REBOOKING_DONE",
+        "INTERVIEW_LINK_DONE", "SCHEDULE_CONFIRM_DONE", "CLIENT_STATUS_INQUIRY_DONE",
+        "INTERVIEW_LINK_SENT", "INTERVIEW_NUDGE_1", "INTERVIEW_NUDGE_2", "HIRING_OUTBOUND",
+      ];
+
+      const sessions = await db
+        .select({ id: conversationSessions.id, leadPhone: conversationSessions.leadPhone })
+        .from(conversationSessions)
+        .where(
+          and(
+            isNotNull(conversationSessions.leadPhone),
+            notIn(conversationSessions.stage as any, SKIP_STAGES)
+          )
+        )
+        .orderBy(descOp(conversationSessions.updatedAt))
+        .limit(500);
+
+      let synced = 0;
+      let errors = 0;
+      for (const s of sessions) {
+        if (!s.leadPhone) continue;
+        try {
+          await syncAllOutboundMessages(s.leadPhone, s.id);
+          synced++;
+        } catch (err) {
+          errors++;
+          console.warn(`[backfill-outbound-sync] Error for session ${s.id}:`, err);
+        }
+        // 200ms delay to avoid hammering OpenPhone API
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      res.json({ ok: true, synced, errors, total: sessions.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // ── One-shot: backfill cleanerJobId on existing cleaner_status cards ────────────────
   app.post("/api/cron/backfill-cleaner-job-id", async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;

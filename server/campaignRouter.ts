@@ -16,6 +16,7 @@ import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { getTemplate } from "./messageTemplateRouter";
 import { normalizePhoneLegacy as normalizePhone } from "./utils/phone";
+import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -782,7 +783,8 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
       "[Discount]": String(discountPct),
     });
 
-    await sendSms({ to: contact.phone, content: message });
+    const smsResult = await sendSms({ to: contact.phone, content: message });
+    const sentAt = Date.now();
 
     // Create a conversation session so inbound replies are routed correctly
     const [sessionResult] = await db.insert(conversationSessions).values({
@@ -800,16 +802,30 @@ export async function sendNextBatch(campaignId: number): Promise<void> {
 
     await db
       .update(reactivationContacts)
-      .set({ status: "SENT", sentAt: new Date(), sessionId })
+      .set({ status: "SENT", sentAt: new Date(sentAt), sessionId })
       .where(eq(reactivationContacts.id, contact.id));
 
     await db
       .update(reactivationCampaigns)
       .set({
         sentCount: sql`${reactivationCampaigns.sentCount} + 1`,
-        lastSentAt: new Date(),
+        lastSentAt: new Date(sentAt),
       })
       .where(eq(reactivationCampaigns.id, campaignId));
+
+    // Append campaign message to the new session so lastMessageRole = "assistant"
+    if (smsResult.success && smsResult.messageId) {
+      await appendOutboundCampaignMessageToSession({
+        db: db as any,
+        sessionId,
+        message,
+        sentAt,
+        source: "reactivation",
+        openPhoneMessageId: smsResult.messageId,
+      });
+    } else if (smsResult.success && !smsResult.messageId) {
+      console.warn(`[Campaign ${campaignId}] SMS sent to ${contact.phone} but no messageId returned — skipping history append`);
+    }
 
     console.log(`[Campaign ${campaignId}] Sent to ${contact.phone} (${contact.name}). Next in 12s.`);
   } catch (err) {

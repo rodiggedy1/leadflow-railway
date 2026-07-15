@@ -2878,7 +2878,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                               transition={{ delay: Math.min(i * 0.02, 0.3) }}
                               style={{background:'linear-gradient(180deg,#1B2333 0%,#111827 100%)',borderRadius:'22px',padding:'16px 20px',boxShadow:'0 8px 24px rgba(15,23,42,.10)'}}
                             >
-                              {message.text && <div style={{fontSize:'15px',fontWeight:500,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere'}}>{linkifyText(message.text, false)}</div>}
+                              {message.text && <div style={{fontSize:'15px',fontWeight:500,color:'white',lineHeight:1.55,wordBreak:'break-word',overflowWrap:'anywhere',whiteSpace:'pre-wrap'}}>{linkifyText(message.text, false)}</div>}
                               {message.media && message.media.length > 0 && (
                                 <div className="mt-2 flex flex-wrap gap-2">
                                   {message.media.map((url, mi) => (

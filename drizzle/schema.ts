@@ -3616,3 +3616,17 @@ export const smsCampaignSendLog = mysqlTable("sms_campaign_send_log", {
 
 export type SmsCampaignSendLog = typeof smsCampaignSendLog.$inferSelect;
 export type InsertSmsCampaignSendLog = typeof smsCampaignSendLog.$inferInsert;
+
+// ── Response Templates ────────────────────────────────────────────────────────
+export const responseTemplates = mysqlTable("response_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  description: varchar("description", { length: 500 }).notNull().default(""),
+  message: text("message").notNull(),
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ResponseTemplate = typeof responseTemplates.$inferSelect;
+export type InsertResponseTemplate = typeof responseTemplates.$inferInsert;

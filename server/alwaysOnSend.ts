@@ -16,6 +16,7 @@ import { getDb } from "./db";
 import { alwaysOnGroups, alwaysOnEnrollments, conversationSessions, completedJobs, type AlwaysOnGroupType } from "../drizzle/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { sendSms } from "./openphone";
+import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
 
 // ─── TCPA compliance helpers ──────────────────────────────────────────────────
 
@@ -220,12 +221,15 @@ export async function sendAlwaysOnBatch(
 
       let success = false;
       let openPhoneMessageId: string | undefined;
+      let sentAt: number = 0;
 
       if (dryRun) {
         console.log(`[AlwaysOn][DryRun] Would send to ${enrollment.phone}: "${message.slice(0, 60)}..."`);
         success = true;
+        sentAt = Date.now();
       } else {
         const sendResult = await sendSms({ to: enrollment.phone, content: message });
+        sentAt = Date.now();
         success = sendResult.success;
         openPhoneMessageId = sendResult.messageId;
         if (!success) {
@@ -275,11 +279,25 @@ export async function sendAlwaysOnBatch(
           .update(alwaysOnEnrollments)
           .set({
             status: "SENT",
-            sentAt: new Date(),
+            sentAt: new Date(sentAt),
             openPhoneMessageId: openPhoneMessageId ?? null,
             sessionId: sessionId ?? undefined,
           })
           .where(eq(alwaysOnEnrollments.id, enrollment.id));
+
+        // Append campaign message to the new session so lastMessageRole = "assistant"
+        if (sessionId && openPhoneMessageId) {
+          await appendOutboundCampaignMessageToSession({
+            db: db as any,
+            sessionId,
+            message,
+            sentAt,
+            source: "always_on",
+            openPhoneMessageId,
+          });
+        } else if (sessionId && !openPhoneMessageId) {
+          console.warn(`[AlwaysOn] SMS sent to ${enrollment.phone} but no messageId returned — skipping history append`);
+        }
 
         result.sent++;
       } else {

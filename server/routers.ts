@@ -53,6 +53,7 @@ import { stripeRouter } from "./stripeRouter";
 import { tasksRouter } from "./tasksRouter";
 import { NON_LEAD_SOURCES } from '../shared/leadSources';
 import { computeSessionSummary } from './sessionSummary';
+import { responseTemplatesRouter } from './responseTemplatesRouter';
 import { normalizePhoneLegacy as normalizePhone, isValidUSPhone, extractUSDigits } from './utils/phone';
 // CS_SUPPORT_NUMBER: customer service line that receives new lead alerts
 const CS_SUPPORT_NUMBER = "+12028885362";
@@ -99,6 +100,7 @@ export const appRouter = router({
   callMatrix: callMatrixRouter,
   stripe: stripeRouter,
   tasks: tasksRouter,
+  responseTemplates: responseTemplatesRouter,
 
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
@@ -5639,10 +5641,18 @@ Return JSON with exactly these fields:
         // Used consistently for all joins so +1302..., 302..., and formatted numbers match.
         const phoneNorm = sql.raw(`REGEXP_REPLACE(leadPhone, '[^0-9]', '')`);
 
+        // Defensive timestamp normalizer — coerces string/bigint values from DB or JSON to number | null.
+        const normalizeTimestamp = (value: unknown): number | null => {
+          if (value == null) return null;
+          const n = Number(value);
+          return Number.isFinite(n) && n > 0 ? n : null;
+        };
+
         // Pull all sessions that qualify under leads.list source filter.
         // For mode=active we only surface sessions with actual customer engagement.
+        const NON_LEAD_SOURCES_FOR_ACTION = NON_LEAD_SOURCES; // cs-inbound excluded from action sessions
         const sourceFilter = sql.raw(`(
-          (leadSource IS NULL OR leadSource NOT IN (${NON_LEAD_SOURCES.map(s => `'${s}'`).join(', ')}))
+          (leadSource IS NULL OR leadSource NOT IN (${NON_LEAD_SOURCES_FOR_ACTION.map(s => `'${s}'`).join(', ')}))
           AND (leadSource IS NULL OR leadSource != 'review')
           AND (
             leadSource IS NULL
@@ -5653,6 +5663,27 @@ Return JSON with exactly these fields:
           )
         )`);
 
+        // Broader filter for conversation-session candidates: same as sourceFilter but
+        // includes cs-inbound and cs-inbound-cleaner so their message history can supply
+        // lastMessage/lastMessageAt/lastMessageRole/unreadCount for the workspace card.
+        // These sessions never become the action session.
+        const convSourceFilter = sql.raw(`(
+          (
+            leadSource IS NULL
+            OR leadSource NOT IN ('schedule_confirm','hiring_interview','hiring','review')
+          )
+          AND (leadSource IS NULL OR leadSource != 'review')
+          AND (
+            leadSource IS NULL
+            OR (leadSource NOT LIKE 'always-on%' AND leadSource NOT LIKE 'campaign:%' AND leadSource NOT IN ('reactivation','command-center','review_rebooking'))
+            OR ((leadSource LIKE 'always-on%' OR leadSource LIKE 'campaign:%' OR leadSource IN ('reactivation','command-center'))
+                AND JSON_SEARCH(messageHistory, 'one', 'user', NULL, '$[*].role') IS NOT NULL)
+            OR (leadSource = 'review_rebooking' AND JSON_SEARCH(messageHistory, 'one', 'user', NULL, '$[*].role') IS NOT NULL)
+            OR leadSource IN ('cs-inbound', 'cs-inbound-cleaner')
+          )
+          AND JSON_LENGTH(messageHistory) > 0
+        )`);
+
         const sessions = await db
           .select()
           .from(conversationSessions)
@@ -5660,35 +5691,72 @@ Return JSON with exactly these fields:
           .orderBy(desc(sql`COALESCE(${conversationSessions.lastCustomerMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
           .limit(2000);
 
+        // Second query: broader pool for conversation session candidates (includes cs-inbound).
+        // Only sessions with non-empty message history are fetched.
+        const convCandidates = await db
+          .select()
+          .from(conversationSessions)
+          .where(convSourceFilter)
+          .orderBy(desc(sql`COALESCE(${conversationSessions.lastMessageTs}, ${conversationSessions.lastCustomerMessageTs}, UNIX_TIMESTAMP(${conversationSessions.createdAt}) * 1000)`))
+          .limit(4000);
+
         // Group by normalized phone — one entry per customer.
-        // The most recent session (first in the ordered list) is the canonical one.
+        // The most recent session (first in the ordered list) is the canonical action session.
+        // A separate pass finds the best conversation session (has history, highest conversationSortTs).
         const byPhone = new Map<string, typeof sessions[0]>();
+        // convByPhone: best conversation session per phone (has message history, highest conversationSortTs)
+        const convByPhone = new Map<string, { session: typeof convCandidates[0]; convSortTs: number }>();
+
         for (const s of sessions) {
           if (!s.leadPhone) continue;
           const norm = normalizePhone(s.leadPhone) ?? s.leadPhone.replace(/[^\d]/g, '').slice(-10);
+          // Action session: first (newest canonicalSortTs) wins
           if (!byPhone.has(norm)) {
             byPhone.set(norm, s);
           }
         }
 
-        // Build summary rows — no session IDs in the output.
+        // Build convByPhone from the broader candidate pool
+        for (const s of convCandidates) {
+          if (!s.leadPhone) continue;
+          const norm = normalizePhone(s.leadPhone) ?? s.leadPhone.replace(/[^\d]/g, '').slice(-10);
+          // Only consider phones that have an action session (avoids surfacing CS-only conversations)
+          if (!byPhone.has(norm)) continue;
+          let history: Array<{ role: string; content: string; ts?: number }> = [];
+          try { history = JSON.parse(s.messageHistory ?? '[]'); } catch { /* ignore */ }
+          if (history.length > 0) {
+            const createdAtMs = s.createdAt ? (new Date(s.createdAt).getTime()) : 0;
+            const parsedLastTs = normalizeTimestamp(history[history.length - 1]?.ts);
+            const convSortTs = parsedLastTs ?? normalizeTimestamp(s.lastMessageTs) ?? normalizeTimestamp(s.lastCustomerMessageTs) ?? createdAtMs;
+            const existing = convByPhone.get(norm);
+            if (!existing || convSortTs > existing.convSortTs) {
+              convByPhone.set(norm, { session: s, convSortTs });
+            }
+          }
+        }
+
+        // Build summary rows
         const summaries = Array.from(byPhone.entries()).map(([phone, s]) => {
-          // Parse last message
+          // Conversation session: use the best history session, fall back to action session
+          const convEntry = convByPhone.get(phone);
+          const conv = convEntry?.session ?? s;
+
+          // Parse conversation fields from the conversation session
           let lastMessage: string | null = null;
           let lastMessageAt: number | null = null;
           let unreadCount = 0;
           let historyLastRole: string | null = null;
           try {
-            const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(s.messageHistory ?? '[]');
+            const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(conv.messageHistory ?? '[]');
             if (history.length > 0) {
               const last = history[history.length - 1];
               lastMessage = typeof last.content === 'string' ? last.content.slice(0, 120) : null;
-              lastMessageAt = last.ts ?? (s.lastMessageTs && s.lastMessageTs > 0 ? s.lastMessageTs : null);
+              lastMessageAt = normalizeTimestamp(last.ts) ?? normalizeTimestamp(conv.lastMessageTs);
               // Normalize: treat 'customer' as 'user' so clients check one value
               historyLastRole = (last.role === 'customer') ? 'user' : last.role;
             }
-            // Count unread: messages from customer after lastReadAt
-            const lastReadAt = (s.lastReadAt as number | null) ?? 0;
+            // Count unread: messages from customer after lastReadAt on the conversation session
+            const lastReadAt = (conv.lastReadAt as number | null) ?? 0;
             for (const m of history) {
               if ((m.role === 'user' || m.role === 'customer') && m.ts && m.ts > lastReadAt) {
                 unreadCount++;
@@ -5698,7 +5766,8 @@ Return JSON with exactly these fields:
 
           return {
             phone,                                    // canonical E.164 key
-            sessionId: s.id,                          // canonical session ID for mutations
+            sessionId: s.id,                          // action session — booking/stage/resolve mutations use this
+            conversationSessionId: conv.id,           // conversation session — markRead uses this
             customerName: s.leadName ?? null,
             lastMessage,
             lastMessageAt,
@@ -5711,7 +5780,7 @@ Return JSON with exactly these fields:
             assignedAgentName: s.assignedAgentName ?? null,
             leadSource: s.leadSource ?? null,
             createdAt: s.createdAt,
-            lastMessageRole: historyLastRole ?? (s.lastMessageRole === 'customer' ? 'user' : s.lastMessageRole) ?? null,
+            lastMessageRole: historyLastRole ?? (conv.lastMessageRole === 'customer' ? 'user' : conv.lastMessageRole) ?? null,
           };
         });
 
@@ -5990,34 +6059,26 @@ Return JSON with exactly these fields:
       }),
 
     /**
-     * leads.resolveLeadChat — toggles the RESOLVED stage on the canonical session for a phone.
+     * leads.resolveLeadChat — toggles the RESOLVED stage on the exact session by sessionId.
      * - resolve=true  → sets stage to RESOLVED
      * - resolve=false → sets stage to UNHANDLED (reopens the conversation)
+     * Uses the sessionId returned by listWorkspace so the exact displayed session is updated,
+     * never a different session for the same phone.
      * Never blocks inbound messages — RESOLVED is purely a UI state.
      */
     resolveLeadChat: publicProcedure
-      .input(z.object({ phone: z.string().min(7), resolve: z.boolean() }))
+      .input(z.object({ sessionId: z.number().int(), resolve: z.boolean() }))
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new Error('Database unavailable');
-        const norm = normalizePhone(input.phone);
-        const digits = input.phone.replace(/[^\d]/g, '').slice(-10);
-        // Find the canonical (most recent non-review/non-hiring) session for this phone
-        const sessions = await db
-          .select({ id: conversationSessions.id })
-          .from(conversationSessions)
-          .where(or(
-            norm ? eq(conversationSessions.leadPhone, norm) : sql`0`,
-            sql`REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', '') LIKE ${`%${digits}`}`
-          ))
-          .orderBy(desc(conversationSessions.createdAt))
-          .limit(1);
-        if (!sessions[0]) throw new Error('No session found for phone');
         const newStage = input.resolve ? 'RESOLVED' : 'UNHANDLED';
-        await db
+        const result = await db
           .update(conversationSessions)
           .set({ stage: newStage as any })
-          .where(eq(conversationSessions.id, sessions[0].id));
+          .where(eq(conversationSessions.id, input.sessionId));
+        // Verify the row was actually updated — throws if sessionId is invalid
+        const affectedRows = (result as any)?.[0]?.affectedRows ?? (result as any)?.rowsAffected ?? 0;
+        if (affectedRows === 0) throw new Error(`No session found for id ${input.sessionId}`);
         // Broadcast so all connected clients update immediately
         const { broadcastOpsUpdate } = await import('./sseBroadcast');
         broadcastOpsUpdate('lead_update');

@@ -981,17 +981,15 @@ function CardAuthInner({
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px", color: "white", fontWeight: 950, fontSize: "18px" }}>
-            <div
+            <img
+              src="/MIB_logo_final.png"
+              alt="Maids in Black"
               style={{
                 width: "42px", height: "42px", borderRadius: "15px",
-                background: "rgba(255,255,255,.92)", color: T.ink,
-                display: "grid", placeItems: "center",
                 boxShadow: "0 18px 40px rgba(0,0,0,.2)",
-                fontSize: "20px",
+                objectFit: "cover",
               }}
-            >
-              🏠
-            </div>
+            />
             Maids in Black
           </div>
           <div
