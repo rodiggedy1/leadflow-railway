@@ -107,11 +107,6 @@ export function useOpsStream(
               cbRef.current.onJobUpdate?.(event.jobId);
               break;
             case "lead_update":
-              console.log(`[LeadAlert][${labelRef.current}] lead_update received`, {
-                ts: performance.now().toFixed(2),
-                label: labelRef.current,
-                hasOnLeadUpdate: !!cbRef.current.onLeadUpdate,
-              });
               cbRef.current.onLeadUpdate?.();
               break;
             case "reaction_update":

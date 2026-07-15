@@ -266,28 +266,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
   // Real-time updates via SSE
   const handleLeadUpdate = useCallback(() => {
-    // ── T2: SSE lead_update received ───────────────────────────────────────────
-    const cacheAtSse = utils.leads.listWorkspace.getData();
-    const chipCountAtSse = (cacheAtSse ?? []).filter(
-      (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
-    ).length;
-    console.log("[resolve-seq] T2 SSE-lead_update (LeadsInbox handler)", {
-      ts: performance.now().toFixed(2),
-      chipCountAtSse,
-      willInvalidateListWorkspace: true,
-    });
-    utils.leads.listWorkspace.invalidate().then(() => {
-      // ── T3: Refetch completed ─────────────────────────────────────────────
-      // Note: invalidate() resolves when the refetch completes and cache is updated.
-      const cacheAfterRefetch = utils.leads.listWorkspace.getData();
-      const chipCountAfterRefetch = (cacheAfterRefetch ?? []).filter(
-        (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
-      ).length;
-      console.log("[resolve-seq] T3 refetch-complete (LeadsInbox)", {
-        ts: performance.now().toFixed(2),
-        chipCountAfterRefetch,
-      });
-    });
+    utils.leads.listWorkspace.invalidate();
     if (selectedPhone) {
       utils.leads.getTimeline.invalidate({ phone: selectedPhone });
     }
@@ -376,99 +355,6 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
 
   const unreadCount = workspace.filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED").length;
 
-  // ── DIAG: Export contributing unread rows once per workspace change ────────────────────
-  const unreadDiagRef = useRef(false);
-  useEffect(() => {
-    if (workspace.length === 0) return;
-    // Log once per workspace load (reset on next full refetch)
-    if (unreadDiagRef.current) return;
-    unreadDiagRef.current = true;
-    const contributing = workspace
-      .filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED")
-      .map((l) => ({
-        customerName: l.customerName,
-        sessionId: l.sessionId,
-        conversationSessionId: l.conversationSessionId,
-        stage: l.stage,
-        lastMessageRole: l.lastMessageRole,
-        unreadCount: l.unreadCount,
-        lastMessageAt: l.lastMessageAt,
-        phone: l.phone,
-      }));
-    console.log("[unread-diag] contributing rows (from workspace cache)", {
-      total: contributing.length,
-      rows: contributing,
-    });
-  }, [workspace]);
-
-  // ── AUDIT: Log identity mismatch for all contributing unread rows (once per load) ───────────────
-  const identityAuditRef = useRef(false);
-  useEffect(() => {
-    if (workspace.length === 0 || identityAuditRef.current) return;
-    identityAuditRef.current = true;
-    const auditRows = workspace
-      .filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED")
-      .map((l) => ({
-        name: l.customerName,
-        actionSessionId: l.sessionId,
-        conversationSessionId: l.conversationSessionId,
-        sameId: l.sessionId === l.conversationSessionId,
-        unreadCount: l.unreadCount,
-      }));
-    const mismatchCount = auditRows.filter(r => !r.sameId).length;
-    const matchCount = auditRows.filter(r => r.sameId).length;
-    console.log("[markRead-audit] identity audit for all contributing unread rows", {
-      total: auditRows.length,
-      mismatchCount,
-      matchCount,
-      rows: auditRows,
-    });
-  }, [workspace]);
-
-  // ── DIAG: Cross-check workspace unreadCount against server raw session data ──────────────────
-  const debugUnreadRows = trpc.leads.debugUnreadRows.useQuery(undefined, {
-    enabled: workspace.length > 0,
-    staleTime: Infinity, // fetch once only
-    retry: false,
-  });
-  const serverDiagRef = useRef(false);
-  useEffect(() => {
-    if (!debugUnreadRows.data || serverDiagRef.current) return;
-    serverDiagRef.current = true;
-    const serverRows = debugUnreadRows.data;
-    // Cross-check: find rows that appear in server data but NOT in workspace contributing rows
-    const workspaceContributing = workspace
-      .filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED");
-    const workspaceConvIds = new Set(workspaceContributing.map(l => l.conversationSessionId));
-    const serverOnlyRows = serverRows.filter(r => !workspaceConvIds.has(r.sessionId));
-    // Cross-check: rows in workspace that are NOT in server data (stale workspace unreadCount?)
-    const serverIds = new Set(serverRows.map(r => r.sessionId));
-    const workspaceOnlyRows = workspaceContributing.filter(l => !serverIds.has(l.conversationSessionId));
-    console.log("[unread-diag] server raw debugUnreadRows", {
-      serverTotal: serverRows.length,
-      workspaceTotal: workspaceContributing.length,
-      serverOnlyCount: serverOnlyRows.length,
-      workspaceOnlyCount: workspaceOnlyRows.length,
-      serverOnlyRows: serverOnlyRows.slice(0, 20), // first 20 discrepancies
-      workspaceOnlyRows: workspaceOnlyRows.slice(0, 20),
-    });
-  }, [debugUnreadRows.data, workspace]);
-
-  // ── T5: Log every time workspace settles (cache update) ─────────────────────────
-  // This fires on every render where workspace reference changes (optimistic + refetch).
-  const resolveDebugSessionRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (resolveDebugSessionRef.current == null) return; // only log after a resolve is in-flight
-    const target = workspace.find(w => w.sessionId === resolveDebugSessionRef.current);
-    console.log("[resolve-seq] T5 workspace-settled", {
-      ts: performance.now().toFixed(2),
-      trackedSessionId: resolveDebugSessionRef.current,
-      finalStage: target?.stage ?? "(not found)",
-      finalUnreadCount: target?.unreadCount ?? "(not found)",
-      finalChipCount: unreadCount,
-    });
-  }, [workspace]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Timeline events merged and sorted
   const timelineEvents: TimelineEvent[] = timeline
     ? buildTimeline(timeline.messages, timeline.campaigns, timeline.calls)
@@ -480,44 +366,14 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
 
-      // ── T1: Before optimistic update ─────────────────────────────────────
-      const targetBefore = (prev ?? []).find(w => w.sessionId === sessionId);
-      const chipCountBefore = (prev ?? []).filter(
-        (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
-      ).length;
-      console.log("[resolve-seq] T1 before-optimistic", {
-        ts: performance.now().toFixed(2),
-        sessionId,
-        resolve,
-        targetStage: targetBefore?.stage ?? "(not found)",
-        targetUnreadCount: targetBefore?.unreadCount ?? "(not found)",
-        chipCountBefore,
-      });
-
       // Optimistic: immediately update the exact session by sessionId.
       // The card disappears from active lanes instantly because stageToLane("RESOLVED") = "resolved".
-      let matched = false;
       utils.leads.listWorkspace.setData(undefined, (old) => {
         if (!old) return old;
-        const next = old.map((w) => {
+        return old.map((w) => {
           if (w.sessionId !== sessionId) return w;
-          matched = true;
           return { ...w, isResolved: resolve, stage: resolve ? 'RESOLVED' : 'UNHANDLED' };
         });
-        // ── T1b: After optimistic setData ──────────────────────────────────
-        const targetAfter = next.find(w => w.sessionId === sessionId);
-        const chipCountAfter = next.filter(
-          (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
-        ).length;
-        console.log("[resolve-seq] T1b after-optimistic", {
-          ts: performance.now().toFixed(2),
-          sessionId,
-          matched,
-          targetStageAfter: targetAfter?.stage ?? "(not found)",
-          targetUnreadCountAfter: targetAfter?.unreadCount ?? "(not found)",
-          chipCountAfter,
-        });
-        return next;
       });
 
       // Deselect immediately if resolving the currently open lead
@@ -527,20 +383,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
       }
       return { prev };
     },
-    onSuccess: (data, { sessionId }) => {
-      // ── T4: Mutation success ──────────────────────────────────────────────
-      const currentCache = utils.leads.listWorkspace.getData();
-      const targetInCache = currentCache?.find(w => w.sessionId === sessionId);
-      const chipCountAtSuccess = (currentCache ?? []).filter(
-        (l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED"
-      ).length;
-      console.log("[resolve-seq] T4 mutation-success", {
-        ts: performance.now().toFixed(2),
-        sessionId,
-        serverReturnedStage: (data as any)?.stage ?? "(no stage in response)",
-        cacheStageAtSuccess: targetInCache?.stage ?? "(not found)",
-        chipCountAtSuccess,
-      });
+    onSuccess: () => {
       // Refetch to sync server state — no delay so the resolved lane is accurate
       utils.leads.listWorkspace.invalidate();
     },
@@ -604,28 +447,8 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     onMutate: async ({ sessionId }) => {
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
-
-      // ── AUDIT: Verify which field the optimistic match uses vs what was passed ────────────────────
-      const targetRow = (prev ?? []).find(s => s.conversationSessionId === sessionId);
-      const wrongMatchRow = (prev ?? []).find(s => s.sessionId === sessionId);
-      console.log("[markRead-audit] onMutate identity check", {
-        passedSessionId: sessionId,
-        matchOnConversationSessionId: !!targetRow,
-        matchOnActionSessionId: !!wrongMatchRow,
-        targetRow: targetRow ? {
-          actionSessionId: targetRow.sessionId,
-          conversationSessionId: targetRow.conversationSessionId,
-          sameId: targetRow.sessionId === targetRow.conversationSessionId,
-          unreadCountBefore: targetRow.unreadCount,
-          stage: targetRow.stage,
-          customerName: targetRow.customerName,
-        } : null,
-        optimisticWillMatch: wrongMatchRow?.sessionId === sessionId,
-      });
-
       // Optimistically set unreadCount to 0 so dot and filter update immediately.
-      // FIX: Match on conversationSessionId (what was passed) not sessionId (action session).
-      // These are different fields for 142/143 unread rows — the old match silently missed all of them.
+      // Match on conversationSessionId (what was passed) — not sessionId (action session).
       utils.leads.listWorkspace.setData(undefined, (old) =>
         old?.map((s) =>
           s.conversationSessionId === sessionId ? { ...s, unreadCount: 0 } : s
@@ -679,15 +502,6 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // Mark as read if there are unread messages
     const lead = workspace.find((l) => l.phone === phone);
     if (lead && lead.unreadCount > 0) {
-      // ── AUDIT: Log identity before calling markRead ───────────────────────
-      console.log("[markRead-audit] handlePickLead calling markRead", {
-        customerName: lead.customerName,
-        actionSessionId: lead.sessionId,
-        conversationSessionId: lead.conversationSessionId,
-        sameId: lead.sessionId === lead.conversationSessionId,
-        unreadCountBefore: lead.unreadCount,
-        passingToMutation: lead.conversationSessionId,
-      });
       markReadMutation.mutate({ sessionId: lead.conversationSessionId });
     }
   }
@@ -979,10 +793,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                 <button
                   title={selectedSummary.isResolved ? 'Reopen conversation' : 'Resolve conversation'}
                   disabled={resolveLeadChat.isPending}
-                  onClick={() => {
-                    resolveDebugSessionRef.current = selectedSummary.sessionId;
-                    resolveLeadChat.mutate({ sessionId: selectedSummary.sessionId, resolve: !selectedSummary.isResolved });
-                  }}
+                  onClick={() => resolveLeadChat.mutate({ sessionId: selectedSummary.sessionId, resolve: !selectedSummary.isResolved })}
                   className={cn(
                     "w-10 h-10 border rounded-[14px] flex items-center justify-center transition",
                     selectedSummary.isResolved
