@@ -2723,7 +2723,7 @@ export async function handleEtaCallEnd(params: {
         quickAction: "eta_call_result",
       } as any);
       const { broadcastOpsUpdate } = await import("./sseBroadcast");
-      broadcastOpsUpdate("new_message");
+      broadcastOpsUpdate("new_message", { channel: "command" });
     } catch (e) {
       console.error(`[EtaEngine] Failed to post ETA result card for job ${cleanerJobId}:`, e);
     }
