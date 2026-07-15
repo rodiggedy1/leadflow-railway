@@ -1570,6 +1570,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
         utils.opsChat.getChannelCounts.invalidate();
         utils.opsChat.getUnreadCounts.invalidate();
         utils.opsChat.getDmUnreadCounts.invalidate();
+        // ETA modal reads getTeamEtaSummary — invalidate immediately when command channel posts
+        if (channel === "command") {
+          utils.fieldMgmt.getTeamEtaSummary.invalidate();
+        }
       }
     },
     onJobUpdate: (jobId) => {
