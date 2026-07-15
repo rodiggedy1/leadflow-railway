@@ -171,7 +171,7 @@ function GlobalOpsChat() {
     throwOnError: false,
   });
   // Invalidate immediately when any lead_update SSE fires (agent reply or resolve)
-  useOpsStream({ onLeadUpdate: () => utils.leads.getUnansweredCsCount.invalidate() }, { enabled: isEligible });
+  useOpsStream({ onLeadUpdate: () => utils.leads.getUnansweredCsCount.invalidate() }, { enabled: isEligible, label: "App/GlobalOpsChat" });
   const csCount = csData?.count ?? 0;
   const csUrgent = csData?.urgentCount ?? 0;
   const csWarning = csData?.warningCount ?? 0;

@@ -53,12 +53,14 @@ const MAX_RETRY_MS = 60_000;
 
 export function useOpsStream(
   callbacks: OpsStreamCallbacks,
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean; label?: string }
 ) {
   const cbRef = useRef(callbacks);
   cbRef.current = callbacks; // always up-to-date without re-running the effect
 
   const enabled = options?.enabled ?? true;
+  const labelRef = useRef(options?.label ?? "(unlabeled)");
+  labelRef.current = options?.label ?? "(unlabeled)";
 
   useEffect(() => {
     if (!enabled) return; // do not connect until authenticated
@@ -105,7 +107,11 @@ export function useOpsStream(
               cbRef.current.onJobUpdate?.(event.jobId);
               break;
             case "lead_update":
-              console.log("[LeadAlert] useOpsStream received lead_update — calling onLeadUpdate");
+              console.log(`[LeadAlert][${labelRef.current}] lead_update received`, {
+                ts: performance.now().toFixed(2),
+                label: labelRef.current,
+                hasOnLeadUpdate: !!cbRef.current.onLeadUpdate,
+              });
               cbRef.current.onLeadUpdate?.();
               break;
             case "reaction_update":
