@@ -401,6 +401,30 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     });
   }, [workspace]);
 
+  // ── AUDIT: Log identity mismatch for all contributing unread rows (once per load) ───────────────
+  const identityAuditRef = useRef(false);
+  useEffect(() => {
+    if (workspace.length === 0 || identityAuditRef.current) return;
+    identityAuditRef.current = true;
+    const auditRows = workspace
+      .filter((l) => l.lastMessageRole === "user" && l.unreadCount > 0 && l.stage !== "RESOLVED")
+      .map((l) => ({
+        name: l.customerName,
+        actionSessionId: l.sessionId,
+        conversationSessionId: l.conversationSessionId,
+        sameId: l.sessionId === l.conversationSessionId,
+        unreadCount: l.unreadCount,
+      }));
+    const mismatchCount = auditRows.filter(r => !r.sameId).length;
+    const matchCount = auditRows.filter(r => r.sameId).length;
+    console.log("[markRead-audit] identity audit for all contributing unread rows", {
+      total: auditRows.length,
+      mismatchCount,
+      matchCount,
+      rows: auditRows,
+    });
+  }, [workspace]);
+
   // ── DIAG: Cross-check workspace unreadCount against server raw session data ──────────────────
   const debugUnreadRows = trpc.leads.debugUnreadRows.useQuery(undefined, {
     enabled: workspace.length > 0,
@@ -580,7 +604,28 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     onMutate: async ({ sessionId }) => {
       await utils.leads.listWorkspace.cancel();
       const prev = utils.leads.listWorkspace.getData();
+
+      // ── AUDIT: Verify which field the optimistic match uses vs what was passed ────────────────────
+      const targetRow = (prev ?? []).find(s => s.conversationSessionId === sessionId);
+      const wrongMatchRow = (prev ?? []).find(s => s.sessionId === sessionId);
+      console.log("[markRead-audit] onMutate identity check", {
+        passedSessionId: sessionId,
+        matchOnConversationSessionId: !!targetRow,
+        matchOnActionSessionId: !!wrongMatchRow,
+        targetRow: targetRow ? {
+          actionSessionId: targetRow.sessionId,
+          conversationSessionId: targetRow.conversationSessionId,
+          sameId: targetRow.sessionId === targetRow.conversationSessionId,
+          unreadCountBefore: targetRow.unreadCount,
+          stage: targetRow.stage,
+          customerName: targetRow.customerName,
+        } : null,
+        optimisticWillMatch: wrongMatchRow?.sessionId === sessionId,
+      });
+
       // Optimistically set unreadCount to 0 so dot and filter update immediately
+      // NOTE: This currently matches on s.sessionId (action session) but the passed
+      // sessionId is conversationSessionId — so this map will silently miss for most rows.
       utils.leads.listWorkspace.setData(undefined, (old) =>
         old?.map((s) =>
           s.sessionId === sessionId ? { ...s, unreadCount: 0 } : s
@@ -634,6 +679,15 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
     // Mark as read if there are unread messages
     const lead = workspace.find((l) => l.phone === phone);
     if (lead && lead.unreadCount > 0) {
+      // ── AUDIT: Log identity before calling markRead ───────────────────────
+      console.log("[markRead-audit] handlePickLead calling markRead", {
+        customerName: lead.customerName,
+        actionSessionId: lead.sessionId,
+        conversationSessionId: lead.conversationSessionId,
+        sameId: lead.sessionId === lead.conversationSessionId,
+        unreadCountBefore: lead.unreadCount,
+        passingToMutation: lead.conversationSessionId,
+      });
       markReadMutation.mutate({ sessionId: lead.conversationSessionId });
     }
   }
