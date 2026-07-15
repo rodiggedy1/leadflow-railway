@@ -3737,7 +3737,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [smsTarget, setSmsTarget] = useState<{ name: string; phone: string } | null>(null);
   const [smsDraft, setSmsDraft] = useState("");
   const smsDraftRef = useRef<HTMLTextAreaElement>(null);
-  const sendClientSmsMutation = trpc.opsChat.sendClientSmsFromCommand.useMutation({
+  const sendClientSmsMutation = trpc.opsChat.startCsConversation.useMutation({
     onSuccess: () => {
       setSmsDraft("");
       setSmsTarget(null);
@@ -7765,7 +7765,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   if (smsDraft.trim() && !sendClientSmsMutation.isPending) {
-                    sendClientSmsMutation.mutate({ phone: smsTarget.phone, customerName: smsTarget.name, body: smsDraft.trim(), agentName: callerName });
+                    sendClientSmsMutation.mutate({ phone: smsTarget.phone, firstMessage: smsDraft.trim() });
                   }
                 }
               }}
@@ -7780,7 +7780,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 disabled={!smsDraft.trim() || sendClientSmsMutation.isPending}
                 onClick={() => {
                   if (smsDraft.trim() && !sendClientSmsMutation.isPending) {
-                    sendClientSmsMutation.mutate({ phone: smsTarget.phone, customerName: smsTarget.name, body: smsDraft.trim(), agentName: callerName });
+                    sendClientSmsMutation.mutate({ phone: smsTarget.phone, firstMessage: smsDraft.trim() });
                   }
                 }}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-blue-700 font-semibold text-sm hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
