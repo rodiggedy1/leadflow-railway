@@ -18,7 +18,7 @@
  * to a UTC Date for comparison against Date.now().
  */
 
-import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { getDb, getOrCreateCleanerMagicLink } from "./db";
 import {
@@ -3075,5 +3075,189 @@ export async function runEtaCallTrigger(): Promise<void> {
     }
   } finally {
     _etaTriggerRunning = false;
+  }
+}
+
+// ── ETA Recording Recovery ────────────────────────────────────────────────────
+/**
+ * recoverMissingEtaRecordings — backfills recordingUrl for ETA calls where Vapi
+ * had not finished processing the recording when the end-of-call-report webhook fired.
+ *
+ * Two-phase approach:
+ *   Phase 1: Find field_mgmt_calls rows (eta_call_1/2) with no recordingUrl but a
+ *            completedAt timestamp. Poll Vapi GET /call/{id} and write the URL back.
+ *   Phase 2: Find ops_chat_messages eta_call_result cards whose metadata.recordingUrl
+ *            is still null but the linked field_mgmt_calls row now has a URL. Patch
+ *            the metadata JSON and broadcast one SSE update.
+ *
+ * Safety properties:
+ *   - 90-second grace period: skips calls that completed less than 90s ago (Vapi needs time)
+ *   - 24-hour window: only looks at calls from the last 24 hours
+ *   - Per-row try/catch: one bad row never kills the whole job
+ *   - Max 5 concurrent Vapi requests
+ *   - One SSE broadcast after the entire batch (not per row)
+ *   - Idempotent: WHERE clause skips rows that already have a URL
+ */
+let _etaRecoveryRunning = false;
+
+export async function recoverMissingEtaRecordings(): Promise<void> {
+  if (_etaRecoveryRunning) {
+    console.log("[EtaRecovery] Previous run still in progress — skipping");
+    return;
+  }
+  _etaRecoveryRunning = true;
+  let updatedCards = 0;
+
+  try {
+    const db = await getDb();
+    if (!db) return;
+
+    const now = Date.now();
+    const graceCutoff  = new Date(now - 90 * 1000);          // completed > 90s ago
+    const windowCutoff = new Date(now - 24 * 60 * 60 * 1000); // within last 24h
+
+    // ── Phase 1: Fetch missing recording URLs from Vapi ───────────────────────
+    const missingCalls = await db
+      .select({
+        id:          fieldMgmtCalls.id,
+        vapiCallId:  fieldMgmtCalls.vapiCallId,
+        completedAt: fieldMgmtCalls.completedAt,
+      })
+      .from(fieldMgmtCalls)
+      .where(
+        and(
+          isNotNull(fieldMgmtCalls.vapiCallId),
+          isNull(fieldMgmtCalls.recordingUrl),
+          isNotNull(fieldMgmtCalls.completedAt),
+          lte(fieldMgmtCalls.completedAt, graceCutoff),
+          gte(fieldMgmtCalls.createdAt, windowCutoff),
+          or(
+            eq(fieldMgmtCalls.step, "eta_call_1"),
+            eq(fieldMgmtCalls.step, "eta_call_2"),
+          ),
+        )
+      )
+      .limit(100)
+      .catch((err: unknown) => {
+        console.error("[EtaRecovery] Phase 1 query error:", err);
+        return [] as { id: number; vapiCallId: string | null; completedAt: Date | null }[];
+      });
+
+    if (missingCalls.length === 0) return;
+    console.log(`[EtaRecovery] Phase 1: ${missingCalls.length} calls missing recordingUrl`);
+
+    // Poll Vapi with max 5 concurrent requests
+    const CONCURRENCY = 5;
+    for (let i = 0; i < missingCalls.length; i += CONCURRENCY) {
+      const batch = missingCalls.slice(i, i + CONCURRENCY);
+      await Promise.allSettled(batch.map(async (call) => {
+        if (!call.vapiCallId) return;
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8_000);
+          let vapiData: Record<string, unknown> | null = null;
+          try {
+            const res = await fetch(`${VAPI_API_BASE}/call/${call.vapiCallId}`, {
+              signal: controller.signal,
+              headers: { Authorization: `Bearer ${ENV.vapiPrivateKey}` },
+            });
+            if (res.ok) vapiData = await res.json() as Record<string, unknown>;
+          } finally {
+            clearTimeout(timer);
+          }
+          if (!vapiData) return;
+
+          const artifact = vapiData.artifact as Record<string, unknown> | undefined;
+          const recordingUrl =
+            (artifact?.recordingUrl as string | undefined) ??
+            (vapiData.recordingUrl as string | undefined) ??
+            null;
+
+          if (!recordingUrl || recordingUrl === "rawRecordingUploadDisabled") return;
+
+          await db
+            .update(fieldMgmtCalls)
+            .set({ recordingUrl })
+            .where(eq(fieldMgmtCalls.id, call.id));
+
+          console.log(`[EtaRecovery] Phase 1: updated fieldMgmtCalls id=${call.id} vapiCallId=${call.vapiCallId}`);
+        } catch (err) {
+          console.error(`[EtaRecovery] Phase 1: Vapi fetch failed for vapiCallId=${call.vapiCallId}:`, err);
+        }
+      }));
+    }
+
+    // ── Phase 2: Backfill ops_chat_messages metadata ─────────────────────────
+    // Raw SQL JOIN because Drizzle doesn't support JSON_EXTRACT in WHERE cleanly
+    const cardRows = await db.execute(sql`
+      SELECT
+        ocm.id        AS msgId,
+        ocm.metadata  AS metadata,
+        fmc.recordingUrl AS recordingUrl
+      FROM ops_chat_messages ocm
+      JOIN field_mgmt_calls fmc
+        ON JSON_UNQUOTE(JSON_EXTRACT(ocm.metadata, '$.vapiCallId')) = fmc.vapiCallId
+      WHERE ocm.quickAction = 'eta_call_result'
+        AND (
+          JSON_EXTRACT(ocm.metadata, '$.recordingUrl') IS NULL
+          OR JSON_UNQUOTE(JSON_EXTRACT(ocm.metadata, '$.recordingUrl')) = ''
+        )
+        AND fmc.recordingUrl IS NOT NULL
+        AND fmc.recordingUrl != ''
+        AND ocm.createdAt > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+      LIMIT 100
+    `).catch((err: unknown) => {
+      console.error("[EtaRecovery] Phase 2 query error:", err);
+      return { rows: [] };
+    });
+
+    const rows = (cardRows as any).rows ?? (cardRows as any) ?? [];
+    if (!Array.isArray(rows) || rows.length === 0) return;
+
+    console.log(`[EtaRecovery] Phase 2: ${rows.length} cards to backfill`);
+
+    for (const row of rows) {
+      try {
+        const msgId: number = row.msgId ?? row.id;
+        const rawMeta: string = row.metadata ?? "{}";
+        const recordingUrl: string = row.recordingUrl;
+
+        let meta: Record<string, unknown>;
+        try {
+          meta = JSON.parse(rawMeta);
+        } catch (parseErr) {
+          console.error(`[EtaRecovery] Phase 2: malformed metadata for msgId=${msgId}`, parseErr);
+          continue;
+        }
+
+        // Double-check in JS (race safety)
+        if (meta.recordingUrl) continue;
+
+        meta.recordingUrl = recordingUrl;
+
+        await db
+          .update(opsChatMessages)
+          .set({ metadata: JSON.stringify(meta) })
+          .where(eq(opsChatMessages.id, msgId));
+
+        updatedCards++;
+        console.log(`[EtaRecovery] Phase 2: patched msgId=${msgId} with recordingUrl`);
+      } catch (err) {
+        console.error(`[EtaRecovery] Phase 2: error patching msgId=${(row as any).msgId ?? (row as any).id}:`, err);
+      }
+    }
+
+    // One SSE broadcast if anything changed
+    if (updatedCards > 0) {
+      try {
+        const { broadcastOpsUpdate } = await import("./sseBroadcast");
+        broadcastOpsUpdate("new_message", { channel: "command" } as any);
+        console.log(`[EtaRecovery] Broadcast new_message after patching ${updatedCards} card(s)`);
+      } catch (err) {
+        console.error("[EtaRecovery] SSE broadcast failed:", err);
+      }
+    }
+  } finally {
+    _etaRecoveryRunning = false;
   }
 }

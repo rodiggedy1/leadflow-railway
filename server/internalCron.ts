@@ -39,6 +39,7 @@ import {
   runPostStartEscalation,
   sendClientEtaApproachingSms,
   runEtaCallTrigger,
+  recoverMissingEtaRecordings,
 } from "./fieldMgmtEngine";
 import { getDb } from "./db";
 import { syncRuns, cronHeartbeats } from "../drizzle/schema";
@@ -1101,6 +1102,28 @@ export function startInternalCron(): void {
     }, { timezone: "America/New_York" });
   }
 
+  // ── ETA recording recovery: every 2 minutes ──────────────────────────────
+  // Backfills recordingUrl for ETA calls where Vapi had not finished processing
+  // the recording when the end-of-call-report webhook fired.
+  // Phase 1: polls Vapi GET /call/{id} for calls missing a recording URL.
+  // Phase 2: patches the matching ops_chat_messages metadata so the audio
+  //          player in Command Chat and the ETA modal shows the recording.
+  if (FIELD_MGMT_ENABLED) {
+    cron.schedule("*/2 * * * *", async () => {
+      const t0 = Date.now();
+      try {
+        await recoverMissingEtaRecordings();
+        const ms = Date.now() - t0;
+        await recordHeartbeat("eta-recording-recovery", `ok (${ms}ms)`, false);
+      } catch (err) {
+        const ms = Date.now() - t0;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[InternalCron] EtaRecordingRecovery failed after ${ms}ms:`, msg);
+        await recordHeartbeat("eta-recording-recovery", `error: ${msg}`, false);
+      }
+    }, { timezone: "America/New_York" });
+  }
+
   // ── Startup Gmail reconciliation ────────────────────────────────────────────
   // Run once immediately so a deployment doesn't wait up to 12 hours to discover
   // an expired watch. Fire-and-forget — never blocks server startup.
@@ -1129,6 +1152,7 @@ export function startInternalCron(): void {
   console.log("  - GmailWatchReconcile: 6 AM + 6 PM ET daily (+ startup)");
   console.log("  - GmailHealthCheck:   9 AM ET daily");
   console.log(`  - EtaCallTrigger:     every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
+  console.log(`  - EtaRecordingRecovery: every 2 min (ENABLED=${FIELD_MGMT_ENABLED})`);
 }
 
 // ── Gmail watch reconciliation ────────────────────────────────────────────────
