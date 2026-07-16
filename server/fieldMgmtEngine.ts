@@ -2818,18 +2818,17 @@ export async function handleEtaCallEnd(params: {
 
   const etaMs = scheduledMs + estimatedArrivalMinutesOffset * 60 * 1000;
 
-  // ── Validate ETA is on the correct service date and within a reasonable range ──
+  // ── Validate ETA is on the correct service date ──
   const etaDate = new Date(etaMs);
   const etaDateStr = etaDate.toLocaleDateString("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" });
   // jobDate is YYYY-MM-DD — convert to MM/DD/YYYY for comparison
   const [y, m, d] = jobDate.split("-");
   const jobDateFormatted = `${m}/${d}/${y}`;
-  const offsetAbsMin = Math.abs(estimatedArrivalMinutesOffset);
-  if (etaDateStr !== jobDateFormatted || offsetAbsMin > 120) {
+  if (etaDateStr !== jobDateFormatted) {
     console.warn(`[EtaEngine] ETA validation failed for job ${cleanerJobId}: offset=${estimatedArrivalMinutesOffset}min, etaDate=${etaDateStr}, jobDate=${jobDateFormatted}`);
     await postEtaResultCard({
       resultType: "unclear",
-      cleanerStatement: `${cleanerStatement} (offset: ${estimatedArrivalMinutesOffset} min — out of range)`,
+      cleanerStatement: `${cleanerStatement} (offset: ${estimatedArrivalMinutesOffset} min — wrong date)`,
       clientNotified: false,
       scheduledTime: scheduledTimeET ?? jobDate,
     });
