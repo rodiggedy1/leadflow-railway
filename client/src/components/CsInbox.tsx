@@ -243,7 +243,9 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [activeFilterLocal, setActiveFilterLocal] = useState<InboxFilter>("All");
   const activeFilter = filterProp ?? activeFilterLocal;
   const setActiveFilter = setFilterProp ?? setActiveFilterLocal;
-  const [query, setQuery] = useState("");
+  const [clientQuery, setClientQuery] = useState("");
+  const [teamQuery, setTeamQuery] = useState("");
+  const query = clientQuery; // kept for backward compat with filtered useMemo
   const [selectedId, setSelectedId] = useState<number | null>(null);
   // Track the pending focus request in a ref so it can be applied once data loads
   const pendingFocusRef = useRef<number | null>(null);
@@ -416,6 +418,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         })),
         quickActions: [],
         rawName: row.leadName ?? "",
+        searchText: [(row as any).lastMessageText, (row as any).aiSummary, (row as any).internalNotes, (row as any).specialNotes, (row as any).barkQA].filter(Boolean).join(" "),
         jobCount: (row as any).jobCount ?? 0,
         hasTodayJob: (row as any).hasTodayJob ?? false,
         lastMsgTs: (row as any).lastMsgTs,
@@ -567,8 +570,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     // the active tab filter. Tab filters are for browsing; search is for finding.
     if (q) {
       return displayConversations.filter((c) => {
-        const allMsgText = c.messages.map((m) => m.text).join(" ");
-        const hay = [c.name, c.location, c.lastMessage, allMsgText, c.service, c.status, c.queue, c.phone ?? "", c.tags.join(" ")]
+        const hay = [c.name, c.location, c.lastMessage, (c as any).searchText ?? "", c.service, c.status, c.queue, c.phone ?? "", c.tags.join(" ")]
           .join(" ")
           .toLowerCase();
         return hay.includes(q);
@@ -600,7 +602,19 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
 
   // Split filtered into two lanes for the 5-column layout
   const clientConvs = useMemo(() => filtered.filter((c) => c.queue !== "Teams"), [filtered]);
-  const teamConvs = useMemo(() => filtered.filter((c) => c.queue === "Teams"), [filtered]);
+  // Teams lane has its own independent search query
+  const teamFiltered = useMemo(() => {
+    const q = teamQuery.trim().toLowerCase();
+    const allTeams = displayConversations.filter((c) => c.queue === "Teams");
+    if (!q) return allTeams;
+    return allTeams.filter((c) => {
+      const hay = [c.name, c.location, c.lastMessage, (c as any).searchText ?? "", c.service, c.status, c.phone ?? "", c.tags.join(" ")]
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [teamQuery, displayConversations]);
+  const teamConvs = teamFiltered;
 
   // For effectiveSelectedId: prefer client lane first, then team lane
   const effectiveSelectedId = selectedId ?? getInitialCsConversationId(filtered);
@@ -1520,8 +1534,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               <div className="relative" style={{marginTop:'16px'}}>
                 <Search className="h-4 w-4 absolute" style={{left:'20px', top:'50%', transform:'translateY(-50%)', color:'#9aa3b2'}} />
                 <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  value={clientQuery}
+                  onChange={(e) => setClientQuery(e.target.value)}
                   placeholder="Search clients, leads, bookings"
                   style={{height:'36px', borderRadius:'999px', background:'#FAFBFC', border:'1px solid #E6E9EE', paddingLeft:'34px', paddingRight:'12px', fontSize:'13px', fontWeight:600, color:'#101828', boxShadow:'none'}}
                   className="placeholder:text-[#9aa3b2] focus-visible:ring-0"
@@ -1918,8 +1932,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
               <div className="relative" style={{marginBottom:'16px'}}>
                 <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  value={teamQuery}
+                  onChange={(e) => setTeamQuery(e.target.value)}
                   placeholder="Search cleaners, dispatch, field updates"
                   className="pl-9 rounded-full bg-white border border-slate-200 text-slate-900 placeholder:text-slate-300 focus-visible:ring-slate-300 text-[13px] shadow-none"
                   style={{height:'36px'}}
