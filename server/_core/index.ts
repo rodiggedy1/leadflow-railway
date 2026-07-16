@@ -327,7 +327,7 @@ async function startServer() {
   // Raw binary parser for interview video chunks
   app.use("/api/interview/chunk", express.raw({ type: ["video/webm", "video/mp4", "video/*"], limit: "20mb" }));
 
-  // Media proxy — serves R2/S3 images with correct CORS headers so all users can view them
+  // Media proxy — serves R2/S3 audio/images with correct CORS headers so all users can view them
   app.get("/api/media-proxy", async (req, res) => {
     const url = req.query.url as string;
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
@@ -342,6 +342,34 @@ async function startServer() {
       return res.status(403).json({ error: "Forbidden domain" });
     }
     try {
+      // For private R2 buckets (r2.cloudflarestorage.com), use signed S3 fetch
+      if (url.includes("r2.cloudflarestorage.com")) {
+        const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
+        const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+        // Extract bucket and key from URL: https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key...>
+        const parsed = new URL(url);
+        const pathParts = parsed.pathname.replace(/^\//, "").split("/");
+        const bucket = pathParts[0];
+        const key = pathParts.slice(1).join("/");
+        const endpoint = process.env.R2_ENDPOINT;
+        const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+        const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+        if (!endpoint || !accessKeyId || !secretAccessKey) {
+          return res.status(500).json({ error: "R2 credentials not configured" });
+        }
+        const s3 = new S3Client({ region: "auto", endpoint, credentials: { accessKeyId, secretAccessKey }, forcePathStyle: false });
+        const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+        const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+        const upstream = await fetch(signedUrl);
+        if (!upstream.ok) return res.status(upstream.status).end();
+        const ct = upstream.headers.get("content-type") ?? "audio/wav";
+        res.setHeader("Content-Type", ct);
+        res.setHeader("Cache-Control", "private, max-age=3600");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        return res.send(buf);
+      }
+      // For public URLs (.r2.dev, storage.vapi.ai, R2_PUBLIC_URL), plain fetch
       const upstream = await fetch(url);
       if (!upstream.ok) return res.status(upstream.status).end();
       const ct = upstream.headers.get("content-type") ?? "application/octet-stream";
@@ -350,7 +378,8 @@ async function startServer() {
       res.setHeader("Access-Control-Allow-Origin", "*");
       const buf = Buffer.from(await upstream.arrayBuffer());
       return res.send(buf);
-    } catch {
+    } catch (err) {
+      console.error("[media-proxy] error:", err);
       return res.status(502).json({ error: "Upstream fetch failed" });
     }
   });
