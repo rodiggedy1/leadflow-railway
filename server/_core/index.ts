@@ -333,7 +333,7 @@ async function startServer() {
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
     // Only proxy our own R2 bucket — accept r2.dev URLs or the configured public URL
     const r2PublicUrl = (process.env.R2_PUBLIC_URL ?? "").replace(/\/+$/, "");
-    const isR2 = url.includes(".r2.dev/") || url.includes("r2.cloudflarestorage.com") || (r2PublicUrl && url.startsWith(r2PublicUrl));
+    const isR2 = url.includes(".r2.dev/") || (r2PublicUrl && url.startsWith(r2PublicUrl));
     if (!isR2) {
       return res.status(403).json({ error: "Forbidden domain" });
     }
