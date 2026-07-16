@@ -398,7 +398,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
         service: row.leadSource === "cs-inbound-cleaner" ? "Cleaner" : "CS inquiry",
         location: row.leadPhone || "",
         amount: "",
-        lastMessage: lastMsg?.content || "",
+        lastMessage: lastMsg?.content || (row as any).lastMessageText || "",
         wait: waitStr,
         status: "CS line",
         sentiment: undefined,
