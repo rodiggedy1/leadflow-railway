@@ -2861,6 +2861,72 @@ const MessageList = memo(function MessageList({
                     </div>
                   );
                 }
+                if (msg.quickAction === "sms_to_team") {
+                  const meta = (() => { try { return JSON.parse(msg.metadata ?? "{}"); } catch { return {}; } })();
+                  const { teamName, phone, agentName } = meta as { teamName?: string; phone?: string; agentName?: string };
+                  const fmtPhone = (p: string) => p.replace(/[^0-9]/g, "").slice(-10).replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3");
+                  const tName = teamName ?? "Team";
+                  const tInitials = tName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  const tHue = tName.split("").reduce((h: number, c: string) => ((h << 5) + h) ^ c.charCodeAt(0), 5381) % 360;
+                  const senderName = agentName ?? msg.from ?? "";
+                  const senderPhoto = senderPhotoMap[senderName] ?? null;
+                  const senderInitials = senderName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  const senderHue2 = senderName.split("").reduce((h: number, c: string) => ((h << 5) + h) ^ c.charCodeAt(0), 5381) % 360;
+                  const sentTime = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "";
+                  return (
+                    <div key={msg.id} className="flex justify-start mb-4">
+                      {/* sms_to_team card — dark slate + cyan, same opt2 style */}
+                      <div className="inline-flex flex-col rounded-2xl overflow-hidden shadow-lg" style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.07)", minWidth: "320px" }}>
+                        {/* Header: team avatar + name + badge */}
+                        <div className="flex items-stretch" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          {/* Team */}
+                          <div className="flex items-center gap-3 px-4 py-3" style={{ flexShrink: 0 }}>
+                            <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-sm" style={{ background: `hsl(${tHue}, 55%, 52%)`, flexShrink: 0 }}>{tInitials}</div>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-bold text-[15px] text-white leading-none" style={{ whiteSpace: "nowrap" }}>{tName}</span>
+                              {phone && (
+                                <span className="flex items-center gap-1 text-[11px] leading-none" style={{ color: "rgba(255,255,255,0.45)", whiteSpace: "nowrap" }}>
+                                  <Phone className="h-3 w-3" style={{ flexShrink: 0 }} />
+                                  {fmtPhone(phone)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {/* SMS badge */}
+                          <div className="flex flex-col items-center justify-center px-4" style={{ flexShrink: 0 }}>
+                            <span className="inline-flex items-center gap-1.5 font-bold text-[11px] px-3 py-1.5 rounded-full" style={{ background: "rgba(6,182,212,0.12)", border: "1.5px solid rgba(6,182,212,0.35)", color: "#22d3ee", whiteSpace: "nowrap" }}>
+                              <Smartphone className="h-3 w-3" />
+                              SMS sent
+                            </span>
+                            <span className="text-[9px] mt-1" style={{ color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>via OpenPhone</span>
+                          </div>
+                        </div>
+                        {/* SMS body bubble */}
+                        <div className="px-4 py-3">
+                          <div className="rounded-xl px-4 py-3 flex items-end justify-between gap-4" style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)" }}>
+                            <p className="text-[14px] leading-relaxed whitespace-pre-wrap flex-1" style={{ color: "rgba(255,255,255,0.88)" }}>{msg.body}</p>
+                            <div className="flex items-center gap-1" style={{ flexShrink: 0, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>
+                              <span className="text-[10px]">{sentTime}</span>
+                              <CheckCheck className="h-3.5 w-3.5 text-cyan-400" />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Sender footer */}
+                        <div className="flex items-center gap-2.5 px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                          {senderPhoto ? (
+                            <img src={senderPhoto} alt={senderInitials} className="w-7 h-7 rounded-full object-cover" style={{ flexShrink: 0 }} />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px]" style={{ background: `hsl(${senderHue2}, 55%, 52%)`, flexShrink: 0 }}>{senderInitials}</div>
+                          )}
+                          <div className="flex flex-col gap-0.5 pt-3">
+                            <span className="text-[12px] font-semibold leading-none" style={{ color: "rgba(255,255,255,0.7)", whiteSpace: "nowrap" }}>Sent by {senderName}</span>
+                            {sentTime && <span className="text-[10px] leading-none" style={{ color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>{new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at {sentTime}</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 if (msg.quickAction === "sms_to_client") {
                   const meta = (() => { try { return JSON.parse(msg.metadata ?? "{}"); } catch { return {}; } })();
                   const { customerName, phone, agentName, teamName, lastJobDate } = meta as { customerName?: string; phone?: string; agentName?: string; teamName?: string | null; lastJobDate?: string | null };
@@ -3825,6 +3891,27 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       setSmsDraft("");
       setSmsTarget(null);
       toast.success("SMS sent");
+    },
+    onError: (err) => {
+      toast.error(`SMS failed: ${err.message}`);
+    },
+  });
+  // ── SMS mode (triggered by @cleaner/team selection) ─────────────────────
+  const [smsTeamTarget, setSmsTeamTarget] = useState<{ name: string; phone: string } | null>(null);
+  const [smsTeamDraft, setSmsTeamDraft] = useState("");
+  const smsTeamDraftRef = useRef<HTMLTextAreaElement>(null);
+  const sendTeamSmsMutation = trpc.opsChat.startCsConversation.useMutation({
+    onSuccess: (_data, variables) => {
+      const meta = JSON.stringify({
+        teamName: smsTeamTarget?.name ?? "",
+        phone: variables.phone,
+        agentName: callerName,
+        sentAt: Date.now(),
+      });
+      onSendMessage(variables.firstMessage, undefined, undefined, "sms_to_team", meta);
+      setSmsTeamDraft("");
+      setSmsTeamTarget(null);
+      toast.success("SMS sent to team");
     },
     onError: (err) => {
       toast.error(`SMS failed: ${err.message}`);
@@ -7491,18 +7578,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         type="button"
                         onMouseDown={(e) => {
                           e.preventDefault();
-                          // Store phone in token for reliable lookup across sessions
-                          mentionPhoneMapRef.current[c.name] = c.phone;
-                          const token = `@[${c.name}|${c.phone}]`;
+                          // Enter SMS mode for team/cleaner — same treatment as @customer
                           const before = composer.slice(0, mentionStart);
                           const after = composer.slice(composerRef.current?.selectionStart ?? composer.length);
-                          setComposer(before + token + " " + after);
+                          setComposer((before + after).trim());
                           setCustomerMentionQuery(null);
-                          requestAnimationFrame(() => {
-                            const pos = (before + token + " ").length;
-                            composerRef.current?.focus();
-                            composerRef.current?.setSelectionRange(pos, pos);
-                          });
+                          setSmsTeamTarget({ name: c.name, phone: c.phone });
+                          requestAnimationFrame(() => smsTeamDraftRef.current?.focus());
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
                       >
@@ -7873,6 +7955,53 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
+                Send SMS
+              </button>
+            </div>
+          </div>
+        )}
+        {/* ── Team SMS composer overlay (shown when smsTeamTarget is set) ── */}
+        {smsTeamTarget !== null && (
+          <div className="rounded-2xl overflow-hidden shadow-xl mt-2" style={{ background: "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)", border: "1.5px solid rgba(6,182,212,0.3)" }}>
+            {/* Recipient bar */}
+            <div className="flex items-center justify-between px-4 py-2.5" style={{ background: "rgba(6,182,212,0.08)", borderBottom: "1px solid rgba(6,182,212,0.2)" }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <Smartphone className="h-4 w-4 text-cyan-400 shrink-0" />
+                <span className="text-[13px] font-bold text-white truncate">Texting {smsTeamTarget.name}</span>
+                <span className="text-[11px] shrink-0" style={{ color: "rgba(255,255,255,0.4)" }}>· {smsTeamTarget.phone} · SMS from Command Chat</span>
+              </div>
+              <button onClick={() => { setSmsTeamTarget(null); setSmsTeamDraft(""); }} className="text-white/40 hover:text-white/80 transition-colors text-lg leading-none ml-2 shrink-0">×</button>
+            </div>
+            {/* Textarea */}
+            <textarea
+              ref={smsTeamDraftRef}
+              value={smsTeamDraft}
+              onChange={(e) => setSmsTeamDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  if (smsTeamDraft.trim() && !sendTeamSmsMutation.isPending) {
+                    sendTeamSmsMutation.mutate({ phone: smsTeamTarget.phone, firstMessage: smsTeamDraft.trim(), callerName });
+                  }
+                }
+              }}
+              placeholder={`Message ${smsTeamTarget.name}…`}
+              rows={3}
+              className="w-full px-4 py-3 text-[14px] text-white placeholder-white/30 bg-transparent resize-none outline-none"
+            />
+            {/* Send button */}
+            <div className="flex justify-end px-4 pb-3">
+              <button
+                onClick={() => {
+                  if (smsTeamDraft.trim() && !sendTeamSmsMutation.isPending) {
+                    sendTeamSmsMutation.mutate({ phone: smsTeamTarget.phone, firstMessage: smsTeamDraft.trim(), callerName });
+                  }
+                }}
+                disabled={!smsTeamDraft.trim() || sendTeamSmsMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-bold text-white transition-all disabled:opacity-40"
+                style={{ background: "rgba(6,182,212,0.25)", border: "1px solid rgba(6,182,212,0.4)" }}
+              >
+                {sendTeamSmsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                 Send SMS
               </button>
             </div>
