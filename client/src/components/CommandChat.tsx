@@ -30,7 +30,7 @@ import {
   CheckCircle2, XCircle, Sparkles, Copy, ClipboardCheck, ClipboardList, Briefcase, UserPlus,
   CalendarDays, Headphones, Radio, BookOpen, PhoneCall, PhoneOff, PhoneMissed, Search,
   ShieldAlert, CircleCheckBig, ArrowRight, Calculator, RefreshCw, PhoneIncoming, Mail, Bot, Smartphone, RotateCcw,
-  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp } from "lucide-react";
+  DollarSign, Check, User, Calendar, CreditCard, Play, Pause, ChevronUp, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -2862,22 +2862,49 @@ const MessageList = memo(function MessageList({
                 }
                 if (msg.quickAction === "sms_to_client") {
                   const meta = (() => { try { return JSON.parse(msg.metadata ?? "{}"); } catch { return {}; } })();
-                  const { customerName, phone, agentName, body } = meta as { customerName?: string; phone?: string; agentName?: string; body?: string };
+                  const { customerName, phone, agentName, teamName, lastJobDate } = meta as { customerName?: string; phone?: string; agentName?: string; body?: string; teamName?: string | null; lastJobDate?: string | null };
+                  const fmtPhone = (p: string) => p.replace(/^\+1/, "").replace(/(\d{3})(\d{3})(\d{4})/, "($1) $2-$3");
+                  const fmtDate = (d: string | null | undefined) => {
+                    if (!d) return null;
+                    const parts = d.split("-");
+                    if (parts.length === 3) {
+                      const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                      return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                    }
+                    return null;
+                  };
                   return (
                     <div key={msg.id} className="flex justify-start mb-3">
-                      <div className="max-w-[80%]">
+                      <div className="max-w-[85%]">
                         <div className="rounded-2xl overflow-hidden shadow-sm border border-blue-200">
                           {/* Header */}
                           <div className="flex items-center gap-2 px-3 py-2" style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)" }}>
                             <Smartphone className="h-3.5 w-3.5 text-blue-200 shrink-0" />
-                            <span className="text-xs font-bold text-white">SMS to {customerName ?? "Client"}</span>
-                            {phone && <span className="text-[10px] text-blue-200">{phone}</span>}
+                            <span className="text-xs font-bold text-white">SMS → {customerName ?? "Client"}</span>
+                            {phone && <span className="text-[10px] text-blue-200 font-mono">{fmtPhone(phone)}</span>}
                             <span className="ml-auto text-[10px] text-blue-300 bg-blue-900/30 px-1.5 py-0.5 rounded-full">sent</span>
                           </div>
                           {/* Body */}
                           <div className="px-3 py-2.5 bg-blue-50">
-                            <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{body ?? msg.body}</p>
+                            <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">{msg.body}</p>
                           </div>
+                          {/* Footer: team + job date */}
+                          {(teamName || lastJobDate) && (
+                            <div className="flex items-center gap-3 px-3 py-1.5 bg-blue-100/60 border-t border-blue-200">
+                              {teamName && (
+                                <div className="flex items-center gap-1">
+                                  <Users className="h-3 w-3 text-blue-500 shrink-0" />
+                                  <span className="text-[11px] font-semibold text-blue-700">{teamName}</span>
+                                </div>
+                              )}
+                              {lastJobDate && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3 text-blue-400 shrink-0" />
+                                  <span className="text-[11px] text-blue-600">Last job: {fmtDate(lastJobDate)}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <p className="mt-1 text-[11px] text-slate-400 px-1">sent by {agentName ?? msg.from}</p>
                       </div>
@@ -3734,11 +3761,42 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
     // Map of name → phone for @[Name] token format (populated on mention selection)
   const mentionPhoneMapRef = useRef<Record<string, string>>({});
   // ── SMS mode (triggered by @customer selection) ──────────────────────────
-  const [smsTarget, setSmsTarget] = useState<{ name: string; phone: string } | null>(null);
+  const [smsTarget, setSmsTarget] = useState<{ name: string; phone: string; teamName?: string | null; lastJobDate?: string | null } | null>(null);
   const [smsDraft, setSmsDraft] = useState("");
   const smsDraftRef = useRef<HTMLTextAreaElement>(null);
   const sendClientSmsMutation = trpc.opsChat.startCsConversation.useMutation({
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      // Optimistic card: inject sms_to_client card into command channel immediately
+      const tempId = Date.now() * -1;
+      const tempMsg = {
+        id: tempId,
+        ts: Date.now(),
+        from: callerName,
+        role: "office" as const,
+        body: variables.firstMessage,
+        mediaUrl: null,
+        quickAction: "sms_to_client",
+        metadata: JSON.stringify({
+          customerName: smsTarget?.name ?? "",
+          phone: variables.phone,
+          agentName: callerName,
+          teamName: smsTarget?.teamName ?? null,
+          lastJobDate: smsTarget?.lastJobDate ?? null,
+          sentAt: Date.now(),
+        }),
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        cleanerJobId: null,
+        threadParentId: null,
+        threadParentBody: null,
+        threadParentFrom: null,
+        replyCount: 0,
+      };
+      utils.opsChat.listChannelMessages.setData(
+        { channel: "command" },
+        (prev) => prev ? [...prev, tempMsg] : [tempMsg]
+      );
       setSmsDraft("");
       setSmsTarget(null);
       toast.success("SMS sent");
@@ -7369,7 +7427,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         onMouseDown={(e) => {
                           e.preventDefault();
                           // Enter SMS mode instead of inserting a token
-                          setSmsTarget({ name: c.name, phone: c.phone });
+                          setSmsTarget({ name: c.name, phone: c.phone, teamName: c.teamName ?? null, lastJobDate: c.lastJobDate ?? null });
                           setCustomerMentionQuery(null);
                           // Clear the @ trigger from the composer
                           const before = composer.slice(0, mentionStart);
