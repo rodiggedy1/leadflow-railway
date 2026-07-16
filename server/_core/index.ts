@@ -342,32 +342,82 @@ async function startServer() {
       return res.status(403).json({ error: "Forbidden domain" });
     }
     try {
-      // For private R2 buckets (r2.cloudflarestorage.com), use signed S3 fetch
+      // For private R2 buckets (r2.cloudflarestorage.com), stream directly via S3 SDK
       if (url.includes("r2.cloudflarestorage.com")) {
         const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
-        const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-        // Extract bucket and key from URL: https://<accountId>.r2.cloudflarestorage.com/<bucket>/<key...>
+        const { Readable } = await import("node:stream");
+        // Validate hostname — only .r2.cloudflarestorage.com is allowed (prevents open proxy abuse)
         const parsed = new URL(url);
-        const pathParts = parsed.pathname.replace(/^\//, "").split("/");
-        const bucket = pathParts[0];
-        const key = pathParts.slice(1).join("/");
-        const endpoint = process.env.R2_ENDPOINT;
+        if (!parsed.hostname.endsWith(".r2.cloudflarestorage.com")) {
+          return res.status(403).json({ error: "Forbidden: hostname is not a valid R2 endpoint" });
+        }
+        // Build account-level endpoint from the URL itself — never rely on R2_ENDPOINT env var
+        const endpoint = `${parsed.protocol}//${parsed.hostname}`;
+        // Extract bucket (first path segment) and key (remaining decoded path)
+        const pathParts = parsed.pathname.replace(/^\//, "").split("/").filter(Boolean).map(decodeURIComponent);
+        const [bucket, ...keyParts] = pathParts;
+        const key = keyParts.join("/");
+        if (!bucket || !key) {
+          return res.status(400).json({ error: "R2 URL missing bucket or key" });
+        }
         const accessKeyId = process.env.R2_ACCESS_KEY_ID;
         const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-        if (!endpoint || !accessKeyId || !secretAccessKey) {
+        if (!accessKeyId || !secretAccessKey) {
           return res.status(500).json({ error: "R2 credentials not configured" });
         }
-        const s3 = new S3Client({ region: "auto", endpoint, credentials: { accessKeyId, secretAccessKey }, forcePathStyle: false });
-        const command = new GetObjectCommand({ Bucket: bucket, Key: key });
-        const signedUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-        const upstream = await fetch(signedUrl);
-        if (!upstream.ok) return res.status(upstream.status).end();
-        const ct = upstream.headers.get("content-type") ?? "audio/wav";
-        res.setHeader("Content-Type", ct);
-        res.setHeader("Cache-Control", "private, max-age=3600");
+        const s3 = new S3Client({
+          region: "auto",
+          endpoint,
+          credentials: { accessKeyId, secretAccessKey },
+          forcePathStyle: false,
+        });
+        // Pass browser Range header through to R2 for seek support
+        const rangeHeader = typeof req.headers.range === "string" ? req.headers.range : undefined;
+        let r2Object;
+        try {
+          r2Object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key, Range: rangeHeader }));
+        } catch (s3Err: any) {
+          console.error("[media-proxy] R2 GetObject failed", {
+            bucket,
+            key,
+            name: s3Err?.name,
+            message: s3Err?.message,
+            httpStatusCode: s3Err?.$metadata?.httpStatusCode,
+            requestId: s3Err?.$metadata?.requestId,
+          });
+          const httpStatus = s3Err?.$metadata?.httpStatusCode;
+          if (httpStatus === 403) return res.status(502).json({ error: "Server credentials cannot access this recording" });
+          if (httpStatus === 404 || s3Err?.name === "NoSuchKey") return res.status(404).json({ error: "Recording not found" });
+          return res.status(502).json({ error: "Unable to load recording" });
+        }
+        if (!r2Object.Body) return res.status(404).json({ error: "Recording body missing" });
+        // Set response headers
+        res.setHeader("Accept-Ranges", "bytes");
+        res.setHeader("Cache-Control", "private, max-age=300");
         res.setHeader("Access-Control-Allow-Origin", "*");
-        const buf = Buffer.from(await upstream.arrayBuffer());
-        return res.send(buf);
+        res.setHeader("Content-Type", r2Object.ContentType ?? "audio/wav");
+        if (r2Object.ContentLength != null) res.setHeader("Content-Length", r2Object.ContentLength.toString());
+        if (r2Object.ETag) res.setHeader("ETag", r2Object.ETag);
+        if (r2Object.LastModified) res.setHeader("Last-Modified", r2Object.LastModified.toUTCString());
+        if (r2Object.ContentRange) {
+          res.status(206);
+          res.setHeader("Content-Range", r2Object.ContentRange);
+        } else {
+          res.status(200);
+        }
+        // Stream body directly to response
+        if (r2Object.Body instanceof Readable) {
+          r2Object.Body.on("error", (streamErr) => {
+            console.error("[media-proxy] R2 stream error", streamErr);
+            if (!res.headersSent) res.status(502).end();
+            else res.destroy(streamErr);
+          });
+          r2Object.Body.pipe(res);
+          return;
+        }
+        // Fallback for non-Node stream body implementations
+        const bytes = await r2Object.Body.transformToByteArray();
+        return res.end(Buffer.from(bytes));
       }
       // For public URLs (.r2.dev, storage.vapi.ai, R2_PUBLIC_URL), plain fetch
       const upstream = await fetch(url);
