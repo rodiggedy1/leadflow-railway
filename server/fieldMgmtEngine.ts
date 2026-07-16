@@ -2666,7 +2666,13 @@ export async function handleEtaCallEnd(params: {
       const fullCall = await fullCallRes.json() as Record<string, unknown>;
       const fullArtifact = fullCall.artifact as Record<string, unknown> | undefined;
       const fetched = (fullArtifact?.recordingUrl as string | undefined) ?? (fullCall.recordingUrl as string | undefined) ?? null;
-      if (fetched && fetched !== "rawRecordingUploadDisabled") recordingUrl = fetched;
+      if (fetched && fetched !== "rawRecordingUploadDisabled") {
+        // R2 HIPAA bucket URLs are private — wrap through media-proxy so browser can play them.
+        // storage.vapi.ai URLs are public and don't need proxying.
+        recordingUrl = fetched.includes("r2.cloudflarestorage.com")
+          ? `/api/media-proxy?url=${encodeURIComponent(fetched)}`
+          : fetched;
+      }
     }
   } catch (fetchErr) {
     console.warn(`[EtaEngine] handleEtaCallEnd: recording URL fetch failed for ${vapiCallId} (non-fatal):`, fetchErr);
@@ -3247,10 +3253,12 @@ export async function recoverMissingEtaRecordings(): Promise<void> {
           continue;
         }
 
-        // Double-check in JS (race safety)
+                // Double-check in JS (race safety)
         if (meta.recordingUrl) continue;
-
-        meta.recordingUrl = recordingUrl;
+        // Wrap private R2 HIPAA URLs through media-proxy so browser can play them
+        meta.recordingUrl = recordingUrl.includes("r2.cloudflarestorage.com")
+          ? `/api/media-proxy?url=${encodeURIComponent(recordingUrl)}`
+          : recordingUrl;
 
         await db
           .update(opsChatMessages)
