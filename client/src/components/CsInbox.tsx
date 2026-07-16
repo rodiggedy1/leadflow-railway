@@ -567,7 +567,8 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     // the active tab filter. Tab filters are for browsing; search is for finding.
     if (q) {
       return displayConversations.filter((c) => {
-        const hay = [c.name, c.location, c.lastMessage, c.service, c.status, c.queue, c.phone ?? "", c.tags.join(" ")]
+        const allMsgText = c.messages.map((m) => m.text).join(" ");
+        const hay = [c.name, c.location, c.lastMessage, allMsgText, c.service, c.status, c.queue, c.phone ?? "", c.tags.join(" ")]
           .join(" ")
           .toLowerCase();
         return hay.includes(q);
