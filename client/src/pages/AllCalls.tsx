@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 /**
  * AllCalls — /admin/calls
  * Paginated list of every Vapi AI voice call with recording player,
@@ -178,7 +179,7 @@ function CallCard({ call }: { call: VoiceCall }) {
             Listen
           </a>
           <audio
-            src={call.recordingUrl}
+            src={proxyRecordingUrl(call.recordingUrl)!}
             controls
             className="flex-1 h-8 min-w-0"
             style={{ accentColor: "#000000" }}

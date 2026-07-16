@@ -12,7 +12,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 import { X, Bot, Phone, Search, Zap, ChevronDown, ChevronUp, Copy, RefreshCw, PhoneOff, History, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, proxyRecordingUrl } from "@/lib/utils";
 
 // ─── Types (mirrored from AICallMatrix) ───────────────────────────────────────
 type Audience = "customer" | "cleaner";
@@ -202,7 +202,7 @@ function HistoryRowCard({ row, s }: { row: { id: number; calledPhone: string | n
       {row.recordingUrl && (
         <div style={{ background: "#0d1a12", border: "1px solid #1a4a2a", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 11, color: s.muted, flexShrink: 0 }}>Recording</span>
-          <audio controls src={row.recordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+          <audio controls src={proxyRecordingUrl(row.recordingUrl)!} style={{ flex: 1, height: 28, minWidth: 0 }} />
         </div>
       )}
       {row.transcript && (
@@ -949,7 +949,7 @@ export default function AICallPanel({ open, onClose, prefillPhone, prefillName }
               {callRecordingUrl && (
                 <div style={{ marginTop: 8, padding: "10px 12px", background: "#0d1a12", border: "1px solid #285b3a", borderRadius: 12, display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 11, color: s.muted, flexShrink: 0 }}>Recording</span>
-                  <audio controls src={callRecordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+                  <audio controls src={proxyRecordingUrl(callRecordingUrl)!} style={{ flex: 1, height: 28, minWidth: 0 }} />
                 </div>
               )}
               {/* Transcript after completion — exact copy from AICallMatrix */}

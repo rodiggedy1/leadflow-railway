@@ -331,10 +331,14 @@ async function startServer() {
   app.get("/api/media-proxy", async (req, res) => {
     const url = req.query.url as string;
     if (!url || typeof url !== "string") return res.status(400).json({ error: "Missing url" });
-    // Only proxy our own R2 bucket — accept r2.dev URLs or the configured public URL
+    // Proxy our own R2 bucket and Vapi's recording CDN
     const r2PublicUrl = (process.env.R2_PUBLIC_URL ?? "").replace(/\/+$/, "");
-    const isR2 = url.includes(".r2.dev/") || (r2PublicUrl && url.startsWith(r2PublicUrl));
-    if (!isR2) {
+    const isAllowed =
+      url.includes(".r2.dev/") ||
+      url.includes("r2.cloudflarestorage.com") ||
+      url.includes("storage.vapi.ai") ||
+      (r2PublicUrl && url.startsWith(r2PublicUrl));
+    if (!isAllowed) {
       return res.status(403).json({ error: "Forbidden domain" });
     }
     try {

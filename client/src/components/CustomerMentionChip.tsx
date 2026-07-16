@@ -10,7 +10,7 @@ import ReactDOM from "react-dom";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Phone, Mail, MessageSquare, History, Star, Loader2, X, ChevronLeft, Mic, MicOff, Send, RefreshCw, Copy } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, proxyRecordingUrl } from "@/lib/utils";
 import { useCallSession, CallSession, CallStatus, StartCallParams } from "@/hooks/useCallSession";
 import { getCustomerAvatarUrl, getTeamAvatarUrl } from "@/lib/customerAvatar";
 
@@ -1191,7 +1191,7 @@ function AiCallComposer({
 
         {/* Recording */}
         {session?.outcome?.recordingUrl && (
-          <audio controls src={session.outcome?.recordingUrl} className="w-full h-8" />
+          <audio controls src={proxyRecordingUrl(session.outcome?.recordingUrl)!} className="w-full h-8" />
         )}
 
         {/* Transcript */}

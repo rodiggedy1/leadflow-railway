@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 /**
  * AgentDashboard — Personal workspace for each sales agent.
  * Uses email + password auth — no Manus account required.
@@ -918,7 +919,7 @@ export function ConversationDrawer({
                             {rec.recordingUrl && (
                               <audio
                                 controls
-                                src={rec.recordingUrl}
+                                src={proxyRecordingUrl(rec.recordingUrl)!}
                                 className="w-full h-8 mb-2"
                                 style={{ accentColor: "#E8603C" }}
                               />

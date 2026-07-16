@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 /**
  * DayBoard — Visual operations timeline for a single service day.
  *
@@ -1026,7 +1027,7 @@ function DetailPanel({
                         <a href={call.recordingUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs font-medium text-slate-700 shrink-0">
                           <PlayCircle className="w-4 h-4" /> Listen
                         </a>
-                        <audio src={call.recordingUrl} controls className="flex-1 h-7 min-w-0" />
+                        <audio src={proxyRecordingUrl(call.recordingUrl)!} controls className="flex-1 h-7 min-w-0" />
                       </div>
                     )}
                     {call.transcript && (

@@ -84,7 +84,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
+import { cn, proxyRecordingUrl } from "@/lib/utils";
 import { runSmsSanityCheck, type SanityWarning } from "@/lib/smsSanityCheck";
 import { senderHex } from "@/lib/senderColor";
 import { toast } from "sonner";
@@ -2553,7 +2553,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                 {hasRecording && (
                                   <audio
                                     ref={(el) => { callAudioRefs.current[rec.id] = el; }}
-                                    src={rec.recordingUrl as string}
+                                    src={proxyRecordingUrl(rec.recordingUrl)!}
                                     onEnded={() => setPlayingCallId(null)}
                                     onPause={() => { if (playingCallId === rec.id) setPlayingCallId(null); }}
                                     className="hidden"
@@ -2727,7 +2727,7 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
                                 {aiHasRecording && (
                                   <audio
                                     ref={(el) => { aiCallAudioRefs.current[`ai-${aiRec.id}`] = el; }}
-                                    src={aiRec.recordingUrl as string}
+                                    src={proxyRecordingUrl(aiRec.recordingUrl)!}
                                     onEnded={() => setPlayingAiCallId(null)}
                                     onPause={() => { if (playingAiCallId === `ai-${aiRec.id}`) setPlayingAiCallId(null); }}
                                     className="hidden"

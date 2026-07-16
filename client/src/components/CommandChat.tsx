@@ -21,7 +21,7 @@ import { trpc } from "@/lib/trpc";
 import { senderHex } from "@/lib/senderColor";
 import GlitterBurst from "@/components/GlitterBurst";
 import TasksPanel, { DueTaskPopup } from "@/components/TasksPanel";
-import { cn } from "@/lib/utils";
+import { cn, proxyRecordingUrl } from "@/lib/utils";
 import {
   AlertTriangle, Clock, CheckCheck, Loader2, Send, Megaphone, MapPin,
   X, Camera, Mic, Smile, ImageIcon, UserCheck, Zap, Phone, Wand2, MessageSquare, MessageCircle,
@@ -1120,7 +1120,7 @@ function CallDebriefCard({
           {hasRecording && (
             <audio
               ref={audioRef}
-              src={recordingUrl!}
+              src={proxyRecordingUrl(recordingUrl)!}
               onEnded={() => setIsPlaying(false)}
               onPause={() => setIsPlaying(false)}
               className="hidden"
@@ -1316,7 +1316,7 @@ function EtaCallResultCard({
             {hasRecording && (
               <audio
                 ref={audioRef}
-                src={recordingUrl!}
+                src={proxyRecordingUrl(recordingUrl)!}
                 onEnded={() => setIsPlaying(false)}
                 onPause={() => setIsPlaying(false)}
                 className="hidden"
@@ -3382,7 +3382,7 @@ function MissedCallPanelRow({ row, lineColor, fmtPhone, tAgo, agentName, onResol
           {row.aiRecordingUrl && (
             <div className="mt-1.5 flex items-center gap-1.5">
               <Bot className="h-3 w-3 text-amber-500 shrink-0" />
-              <audio controls src={row.aiRecordingUrl} style={{ flex: 1, height: 24, minWidth: 0 }} />
+              <audio controls src={proxyRecordingUrl(row.aiRecordingUrl)!} style={{ flex: 1, height: 24, minWidth: 0 }} />
             </div>
           )}
         </div>
@@ -6362,7 +6362,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     )}
                     {entry.recordingUrl && (
                       <div className="mb-2">
-                        <audio controls src={entry.recordingUrl} className="w-full h-8 rounded-xl" style={{ accentColor: "#f97316" }} />
+                        <audio controls src={proxyRecordingUrl(entry.recordingUrl)!} className="w-full h-8 rounded-xl" style={{ accentColor: "#f97316" }} />
                       </div>
                     )}
                     {entry.transcript && (
@@ -7354,7 +7354,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     </div>
                   )}
                   {voiceCallRecordingUrl && (
-                    <audio controls src={voiceCallRecordingUrl} className="w-full mt-2 h-8" />
+                    <audio controls src={proxyRecordingUrl(voiceCallRecordingUrl)!} className="w-full mt-2 h-8" />
                   )}
                 </div>
               )}

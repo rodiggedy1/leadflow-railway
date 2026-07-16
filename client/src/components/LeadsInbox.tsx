@@ -8,7 +8,7 @@
  */
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { cn } from "@/lib/utils";
+import { cn, proxyRecordingUrl } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -968,7 +968,7 @@ export default function LeadsInbox({ rail, initialSessionId }: LeadsInboxProps) 
                               {hasRecording && (
                                 <audio
                                   ref={(el) => { callAudioRefs.current[rec.id] = el; }}
-                                  src={rec.recordingUrl!}
+                                  src={proxyRecordingUrl(rec.recordingUrl)!}
                                   onEnded={() => setPlayingCallId(null)}
                                   onPause={() => { if (playingCallId === rec.id) setPlayingCallId(null); }}
                                   className="hidden"

@@ -11,6 +11,7 @@
  */
 
 import { useState } from "react";
+import { proxyRecordingUrl } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -137,7 +138,7 @@ function CallCard({ entry, onNotesUpdated }: { entry: CallLogEntry; onNotesUpdat
           <Volume2 className="w-3.5 h-3.5 text-green-600 shrink-0" />
           <audio
             controls
-            src={entry.recordingUrl}
+            src={proxyRecordingUrl(entry.recordingUrl)!}
             className="flex-1 h-7"
             style={{ minWidth: 0 }}
           />

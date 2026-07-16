@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 /**
  * AdminDashboard — Leads funnel monitor for Maids in Black
  *
@@ -1815,7 +1816,7 @@ function ConversationDrawer({
                               {rec.recordingUrl && (
                                 <audio
                                   controls
-                                  src={rec.recordingUrl}
+                                  src={proxyRecordingUrl(rec.recordingUrl)!}
                                   className="w-full h-8 mb-2"
                                   style={{ accentColor: "#f97316" }}
                                 />

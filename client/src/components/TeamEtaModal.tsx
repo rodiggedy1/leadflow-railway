@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { proxyRecordingUrl } from "@/lib/utils";
 
 // ─── Design-reference types ──────────────────────────────────────────────────
 type TeamState = "on_time" | "late" | "critical" | "unclear" | "no_answer" | "arrived" | "in_progress" | "finishing_up" | "wrapping_up" | "issue_at_property" | "completed" | "pending";
@@ -539,7 +540,7 @@ function CleanerUpdatePanel({ team }: { team: Team }) {
           <div className="text-[15px] font-semibold italic leading-6 text-slate-700">"{team.cleanerSaid || "No clear ETA was provided."}"</div>
         </div>
       </div>
-      <AudioPlayer url={team.recordingUrl ?? null} />
+      <AudioPlayer url={proxyRecordingUrl(team.recordingUrl ?? null)} />
       {hasTranscript && (
         <div className="mt-3">
           <button

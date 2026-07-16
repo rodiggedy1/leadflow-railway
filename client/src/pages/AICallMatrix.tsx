@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -232,7 +233,7 @@ function HistoryCallCard({ row, s }: { row: HistoryRow; s: Record<string, string
       {row.recordingUrl && (
         <div style={{ background: "#0d1a12", border: "1px solid #1a4a2a", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 11, color: s.muted, flexShrink: 0 }}>Recording</span>
-          <audio controls src={row.recordingUrl} style={{ flex: 1, height: 28, minWidth: 0 }} />
+          <audio controls src={proxyRecordingUrl(row.recordingUrl)!} style={{ flex: 1, height: 28, minWidth: 0 }} />
         </div>
       )}
 

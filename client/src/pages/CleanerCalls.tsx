@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 import { useState, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import AdminHeader from "@/components/AdminHeader";
@@ -191,7 +192,7 @@ function CallCard({ call }: { call: CallRow }) {
               <audio
                 ref={audioRef}
                 controls
-                src={call.recordingUrl}
+                src={proxyRecordingUrl(call.recordingUrl)!}
                 className="w-full h-9 rounded-lg"
               />
             </div>

@@ -1,3 +1,4 @@
+import { proxyRecordingUrl } from "@/lib/utils";
 /**
  * ConfirmationCalls — /admin/confirmation-calls
  *
@@ -444,7 +445,7 @@ function ResultCard({ job, agentName, onOverrideSuccess }: { job: Job; agentName
         <div className="px-4 pb-4">
           <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
             <Mic className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-            <audio controls src={cc.recordingUrl} className="flex-1 h-7" style={{ minWidth: 0 }} />
+            <audio controls src={proxyRecordingUrl(cc.recordingUrl)!} className="flex-1 h-7" style={{ minWidth: 0 }} />
             {cc.durationSeconds ? (
               <span className="text-xs text-slate-400 flex-shrink-0 flex items-center gap-1">
                 <Clock className="w-3 h-3" />{formatDuration(cc.durationSeconds)}

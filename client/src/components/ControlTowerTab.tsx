@@ -43,7 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
+import { cn, proxyRecordingUrl } from "@/lib/utils";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
@@ -804,7 +804,7 @@ export default function ControlTowerTab() {
                                 <p className="text-xs text-slate-500 mb-1">Recording</p>
                                 <audio
                                   controls
-                                  src={call.recordingUrl}
+                                  src={proxyRecordingUrl(call.recordingUrl)!}
                                   className="w-full h-8"
                                   style={{ borderRadius: "8px" }}
                                 />
