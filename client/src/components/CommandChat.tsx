@@ -6858,20 +6858,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative shrink-0", (centerView === "issues" || centerView === "calls") && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
-        {/* AI Concierge slide-in panel */}
-        {conciergeOpen && (
-          <div className="absolute inset-0 z-50 flex">
-            {/* Backdrop */}
-            <div
-              className="flex-1 bg-black/30 backdrop-blur-sm"
-              onClick={() => setConciergeOpen(false)}
-            />
-            {/* Panel */}
-            <div className="w-[420px] max-w-full flex flex-col bg-[#0f1120] shadow-2xl animate-in slide-in-from-right duration-200">
-              <AiConcierge onClose={() => setConciergeOpen(false)} />
-            </div>
-          </div>
-        )}
+
         <div className="px-5 py-4 bg-white">
 
           {/* Staged photo preview strip */}
@@ -9306,6 +9293,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </div>
             )}
           </div>
+        </div>
+      )}
+      {/* AI Concierge slide-in panel */}
+      {conciergeOpen && (
+        <div
+          className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-[#0f1120] shadow-2xl border-l border-slate-700 animate-in slide-in-from-right-2 duration-200"
+          style={{ width: "420px", maxWidth: "90vw" }}
+        >
+          <AiConcierge onClose={() => setConciergeOpen(false)} />
         </div>
       )}
       {/* Email Inbox slide-in panel */}
