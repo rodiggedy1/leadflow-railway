@@ -2885,79 +2885,76 @@ const MessageList = memo(function MessageList({
                   const sentTime = msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }) : "";
                   return (
                     <div key={msg.id} className="flex justify-start mb-4">
-                      <div style={{ width: "420px", maxWidth: "90%" }}>
-                        {/* Main card */}
-                        <div className="rounded-2xl overflow-hidden shadow-lg" style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.08)" }}>
-                          {/* Header row: customer + SMS badge + team */}
-                          <div className="flex items-center gap-0" style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                            {/* Customer section */}
-                            <div className="flex items-center gap-3 px-4 py-3 flex-1 min-w-0">
-                              <div className="relative shrink-0">
-                                {custAvatarUrl ? (
-                                  <img src={custAvatarUrl} alt={custInitials} className="w-11 h-11 rounded-full object-cover" />
-                                ) : (
-                                  <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-sm" style={{ background: `hsl(${custHue}, 55%, 52%)` }}>{custInitials}</div>
-                                )}
-                                <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0f172a]" />
-                              </div>
-                              <div className="flex flex-col min-w-0">
-                                <span className="font-bold text-[15px] text-white leading-tight">{custName}</span>
-                                {phone && (
-                                  <span className="flex items-center gap-1 text-[12px] text-white/60 mt-0.5">
-                                    <Phone className="h-3 w-3 shrink-0" />
-                                    {fmtPhone(phone)}
-                                  </span>
-                                )}
-                              </div>
-                              {/* SMS sent badge */}
-                              <div className="ml-3 flex flex-col items-center shrink-0">
-                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-bold" style={{ background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)", color: "#34d399" }}>
-                                  <Smartphone className="h-3.5 w-3.5" />
-                                  SMS sent
+                      {/* Option 2: dark slate + cyan — card grows to fit content, no clipping */}
+                      <div className="inline-flex flex-col rounded-2xl overflow-hidden shadow-lg" style={{ background: "#0f172a", border: "1px solid rgba(255,255,255,0.07)", minWidth: "360px" }}>
+                        {/* Header: customer | badge | team — all shrink-0 so nothing clips */}
+                        <div className="flex items-stretch" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          {/* Customer */}
+                          <div className="flex items-center gap-3 px-4 py-3" style={{ flexShrink: 0 }}>
+                            <div className="relative" style={{ flexShrink: 0 }}>
+                              {custAvatarUrl ? (
+                                <img src={custAvatarUrl} alt={custInitials} className="w-11 h-11 rounded-full object-cover" />
+                              ) : (
+                                <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-black text-sm" style={{ background: `hsl(${custHue}, 55%, 52%)`, flexShrink: 0 }}>{custInitials}</div>
+                              )}
+                              <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-400" style={{ border: "2px solid #0f172a" }} />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="font-bold text-[15px] text-white leading-none" style={{ whiteSpace: "nowrap" }}>{custName}</span>
+                              {phone && (
+                                <span className="flex items-center gap-1 text-[11px] leading-none" style={{ color: "rgba(255,255,255,0.45)", whiteSpace: "nowrap" }}>
+                                  <Phone className="h-3 w-3" style={{ flexShrink: 0 }} />
+                                  {fmtPhone(phone)}
                                 </span>
-                                <span className="text-[10px] text-white/30 mt-0.5">via OpenPhone</span>
-                              </div>
-                            </div>
-                            {/* Team section */}
-                            {teamName && (
-                              <div className="flex items-center gap-2.5 px-4 py-3 shrink-0" style={{ borderLeft: "1px solid rgba(255,255,255,0.07)", background: "rgba(99,102,241,0.08)" }}>
-                                <img src={getTeamAvatarUrl()} alt="MIB" className="w-9 h-9 rounded-full object-cover shrink-0" />
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-400/70 leading-none mb-0.5">Assigned Team</span>
-                                  <span className="font-bold text-[13px] text-white leading-tight">{teamName}</span>
-                                  {lastJobDate && <span className="text-[11px] text-indigo-300/60 mt-0.5">Last job: {fmtDate(lastJobDate)}</span>}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          {/* SMS body bubble */}
-                          <div className="px-4 py-3">
-                            <div className="rounded-xl px-4 py-3 flex items-end justify-between gap-3" style={{ background: "rgba(99,102,241,0.15)" }}>
-                              <p className="text-[14px] text-white/90 leading-relaxed whitespace-pre-wrap flex-1">{msg.body}</p>
-                              <div className="flex items-center gap-1 shrink-0 self-end">
-                                <span className="text-[11px] text-white/30">{sentTime}</span>
-                                <CheckCheck className="h-3.5 w-3.5 text-blue-400" />
-                              </div>
+                              )}
                             </div>
                           </div>
-                          {/* Sender footer */}
-                          <div className="flex items-center gap-2.5 px-4 pb-3">
-                            {senderPhoto ? (
-                              <img src={senderPhoto} alt={senderInitials} className="w-7 h-7 rounded-full object-cover shrink-0" />
-                            ) : (
-                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0" style={{ background: `hsl(${senderHue2}, 55%, 52%)` }}>{senderInitials}</div>
-                            )}
-                            <div className="flex flex-col leading-tight">
-                              <span className="text-[12px] font-semibold text-white/80">Sent by {senderName}</span>
-                              {sentTime && <span className="text-[10px] text-white/30">{new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at {sentTime}</span>}
+                          {/* SMS badge */}
+                          <div className="flex flex-col items-center justify-center px-4" style={{ flexShrink: 0 }}>
+                            <span className="inline-flex items-center gap-1.5 font-bold text-[11px] px-3 py-1.5 rounded-full" style={{ background: "rgba(6,182,212,0.12)", border: "1.5px solid rgba(6,182,212,0.35)", color: "#22d3ee", whiteSpace: "nowrap" }}>
+                              <Smartphone className="h-3 w-3" />
+                              SMS sent
+                            </span>
+                            <span className="text-[9px] mt-1" style={{ color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>via OpenPhone</span>
+                          </div>
+                          {/* Team */}
+                          {teamName && (
+                            <div className="flex items-center gap-3 px-4 py-3" style={{ flexShrink: 0, borderLeft: "1px solid rgba(255,255,255,0.06)", background: "rgba(99,102,241,0.1)" }}>
+                              <img src={getTeamAvatarUrl()} alt="MIB" className="w-9 h-9 rounded-full object-cover" style={{ flexShrink: 0 }} />
+                              <div className="flex flex-col gap-1">
+                                <span className="font-bold uppercase tracking-widest leading-none text-[8px]" style={{ color: "rgba(165,180,252,0.5)" }}>Assigned Team</span>
+                                <span className="font-bold text-[13px] text-white leading-none" style={{ whiteSpace: "nowrap" }}>{teamName}</span>
+                                {lastJobDate && <span className="text-[10px] leading-none" style={{ color: "rgba(165,180,252,0.5)", whiteSpace: "nowrap" }}>Last job: {fmtDate(lastJobDate)}</span>}
+                              </div>
                             </div>
+                          )}
+                        </div>
+                        {/* SMS body bubble */}
+                        <div className="px-4 py-3">
+                          <div className="rounded-xl px-4 py-3 flex items-end justify-between gap-4" style={{ background: "rgba(6,182,212,0.08)", border: "1px solid rgba(6,182,212,0.15)" }}>
+                            <p className="text-[14px] leading-relaxed whitespace-pre-wrap flex-1" style={{ color: "rgba(255,255,255,0.88)" }}>{msg.body}</p>
+                            <div className="flex items-center gap-1" style={{ flexShrink: 0, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>
+                              <span className="text-[10px]">{sentTime}</span>
+                              <CheckCheck className="h-3.5 w-3.5 text-cyan-400" />
+                            </div>
+                          </div>
+                        </div>
+                        {/* Sender footer */}
+                        <div className="flex items-center gap-2.5 px-4 pb-3" style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                          {senderPhoto ? (
+                            <img src={senderPhoto} alt={senderInitials} className="w-7 h-7 rounded-full object-cover" style={{ flexShrink: 0 }} />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-[10px]" style={{ background: `hsl(${senderHue2}, 55%, 52%)`, flexShrink: 0 }}>{senderInitials}</div>
+                          )}
+                          <div className="flex flex-col gap-0.5 pt-3">
+                            <span className="text-[12px] font-semibold leading-none" style={{ color: "rgba(255,255,255,0.7)", whiteSpace: "nowrap" }}>Sent by {senderName}</span>
+                            {sentTime && <span className="text-[10px] leading-none" style={{ color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>{new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} at {sentTime}</span>}
                           </div>
                         </div>
                       </div>
                     </div>
                   );
                 }
-
                 // ── Default bubble ─────────────────────────────────────────────────────
                 {
                   const msgReactions = reactionsByMsgId[msg.id] ?? [];
