@@ -2766,6 +2766,7 @@ export const opsChatRouter = router({
         .set({ messageHistory: JSON.stringify(history), ...startSummary } as any)
         .where(eq(conversationSessions.id, sessionId));
 
+      broadcastOpsUpdate("lead_update");
       return { sessionId, isNew: existing.length === 0 };
     }),
 
@@ -4801,6 +4802,46 @@ Rules that ALWAYS apply regardless of instruction:
         threadParentId: null,
       });
       // Broadcast so all connected agents see the new kudos card immediately via SSE
+      broadcastOpsUpdate("new_message", { channel: "command" });
+      return { ok: true };
+    }),
+
+  /**
+   * sendClientSmsFromCommand — send an SMS to a client from the Command Chat @-mention SMS mode.
+   * Fires the SMS via OpenPhone CS number, posts a sms_to_client card in the command channel,
+   * and broadcasts SSE so all agents see it immediately.
+   */
+  sendClientSmsFromCommand: opsChatProcedure
+    .input(z.object({
+      phone: z.string().min(7),
+      customerName: z.string().min(1),
+      body: z.string().min(1).max(1600),
+      agentName: z.string().min(1),
+    }))
+    .mutation(async ({ input }) => {
+      const digits = input.phone.replace(/\D/g, "");
+      const e164 = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
+      await sendSms({ to: e164, content: input.body, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+      const db = await getDb();
+      await db.insert(opsChatMessages).values({
+        cleanerJobId: null,
+        channel: "command",
+        authorName: input.agentName,
+        authorRole: "office",
+        body: input.body,
+        mediaUrl: null,
+        quickAction: "sms_to_client",
+        metadata: JSON.stringify({
+          customerName: input.customerName,
+          phone: e164,
+          agentName: input.agentName,
+          sentAt: Date.now(),
+        }),
+        replyToId: null,
+        replyToBody: null,
+        replyToAuthor: null,
+        threadParentId: null,
+      });
       broadcastOpsUpdate("new_message", { channel: "command" });
       return { ok: true };
     }),

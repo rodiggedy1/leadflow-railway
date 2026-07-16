@@ -5,7 +5,7 @@
  * Only change: static `teams` array replaced with tRPC data from fieldMgmt.getTeamEtaSummary.
  * Data shape is mapped to match the design reference's Team/Job types.
  */
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CarFront,
@@ -463,6 +463,17 @@ function Summary({ icon, count, label, helper, color, soft }: { icon: React.Reac
 function AudioPlayer({ url }: { url: string | null }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+
+  // Reset the Audio object whenever the recording URL changes (e.g. after a second ETA call)
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current = null;
+    }
+    setPlaying(false);
+  }, [url]);
+
   function toggle() {
     if (!url) return;
     if (!audioRef.current) {
