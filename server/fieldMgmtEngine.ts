@@ -2653,7 +2653,24 @@ export async function handleEtaCallEnd(params: {
   step: "eta_call_1" | "eta_call_2";
   cleanerJobId: number;
 }): Promise<void> {
-  const { vapiCallId, transcript, recordingUrl, outcome, step, cleanerJobId } = params;
+  const { vapiCallId, transcript, outcome, step, cleanerJobId } = params;
+  // Fetch the full Vapi call object to get the real recordingUrl — the end-of-call-report
+  // webhook fires before Vapi finishes uploading the recording, so artifact.recordingUrl
+  // is null in the webhook payload. This is the same pattern used in vapiWebhook.ts.
+  let recordingUrl = params.recordingUrl;
+  try {
+    const fullCallRes = await fetch(`${VAPI_API_BASE}/call/${vapiCallId}`, {
+      headers: { Authorization: `Bearer ${ENV.vapiPrivateKey}` },
+    });
+    if (fullCallRes.ok) {
+      const fullCall = await fullCallRes.json() as Record<string, unknown>;
+      const fullArtifact = fullCall.artifact as Record<string, unknown> | undefined;
+      const fetched = (fullArtifact?.recordingUrl as string | undefined) ?? (fullCall.recordingUrl as string | undefined) ?? null;
+      if (fetched && fetched !== "rawRecordingUploadDisabled") recordingUrl = fetched;
+    }
+  } catch (fetchErr) {
+    console.warn(`[EtaEngine] handleEtaCallEnd: recording URL fetch failed for ${vapiCallId} (non-fatal):`, fetchErr);
+  }
   const db = await getDb();
   if (!db) {
     console.error(`[EtaEngine] handleEtaCallEnd: DB unavailable for job ${cleanerJobId}`);

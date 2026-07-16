@@ -459,19 +459,22 @@ function Summary({ icon, count, label, helper, color, soft }: { icon: React.Reac
   return <div className="flex min-w-[185px] flex-1 items-center gap-3 rounded-[20px] border border-slate-200/80 bg-white px-4 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]"><div className="grid h-11 w-11 place-items-center rounded-2xl" style={{ background: soft, color }}>{icon}</div><div><div className="text-2xl font-extrabold tracking-[-0.04em]">{count}</div><div className="text-sm font-bold" style={{ color }}>{label}</div><div className="mt-0.5 text-[11px] text-slate-400">{helper}</div></div></div>;
 }
 
-// AudioPlayer — wires real recordingUrl, falls back to waveform-only UI
+// AudioPlayer — shows loading state when URL not yet available, real player once URL is ready
 function AudioPlayer({ url }: { url: string | null }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
 
-  // Reset the Audio object whenever the recording URL changes (e.g. after a second ETA call)
+  // Reset whenever URL changes (new ETA call replaces old recording)
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.onended = null;
+      audioRef.current.onloadedmetadata = null;
       audioRef.current = null;
     }
     setPlaying(false);
+    setDuration(null);
   }, [url]);
 
   function toggle() {
@@ -479,10 +482,31 @@ function AudioPlayer({ url }: { url: string | null }) {
     if (!audioRef.current) {
       audioRef.current = new Audio(url);
       audioRef.current.onended = () => setPlaying(false);
+      audioRef.current.onloadedmetadata = () => {
+        if (audioRef.current) setDuration(audioRef.current.duration);
+      };
     }
     if (playing) { audioRef.current.pause(); setPlaying(false); }
     else { void audioRef.current.play(); setPlaying(true); }
   }
+
+  function fmtDur(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+
+  if (!url) {
+    return (
+      <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-indigo-100 bg-white/60 px-3 py-3">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-indigo-100 text-indigo-300">
+          <Play className="ml-0.5 h-5 w-5 fill-current" />
+        </div>
+        <span className="text-xs text-indigo-300 italic">Audio loading…</span>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4 flex items-center gap-3 rounded-[18px] border border-indigo-100 bg-white px-3 py-3">
       <button onClick={toggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-200">
@@ -491,7 +515,7 @@ function AudioPlayer({ url }: { url: string | null }) {
       <div className="flex h-10 flex-1 items-center gap-[3px]">
         {[5,11,17,10,20,26,18,31,22,14,27,34,20,12,25,18,30,13,22,10].map((h,i)=><span key={i} className="w-[3px] rounded-full bg-gradient-to-t from-indigo-200 to-indigo-400" style={{height:h, transformOrigin:'bottom', animation: playing ? `audioWave ${0.6 + (i % 5) * 0.1}s ease-in-out ${(i * 0.05).toFixed(2)}s infinite` : 'none'}} />)}
       </div>
-      <span className="text-xs font-bold text-slate-400">0:11</span>
+      {duration !== null && <span className="text-xs font-bold text-slate-400">{fmtDur(duration)}</span>}
     </div>
   );
 }
