@@ -19,6 +19,7 @@ import { useAgentPermissions } from "@/hooks/useAgentPermissions";
 import DayBoard from "@/components/DayBoard";
 import ControlTowerTab from "@/components/ControlTowerTab";
 import SchedulingTab from "@/components/SchedulingTab";
+import AiConcierge from "@/components/AiConcierge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trpc } from "@/lib/trpc";
@@ -1536,7 +1537,7 @@ function LastSyncedBadge() {
 
 export default function FieldManagement() {
   const { pagePermissions, isAdmin } = useAgentPermissions();
-  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower" | "schedule">("board");
+  const [activeTab, setActiveTab] = useState<"workflow" | "log" | "board" | "tower" | "schedule" | "concierge">("board");
 
   return (
     <AdminPageGuard pageId="field-management">
@@ -1546,7 +1547,7 @@ export default function FieldManagement() {
       <div className={`mx-auto px-4 sm:px-6 ${
         activeTab === "schedule" ? "py-3" : "py-8"
       } ${
-        activeTab === "board" || activeTab === "tower" || activeTab === "schedule" ? "max-w-7xl" : "max-w-3xl"
+        activeTab === "board" || activeTab === "tower" || activeTab === "schedule" || activeTab === "concierge" ? "max-w-7xl" : "max-w-3xl"
       }`}>
         {/* Page header — hidden on schedule tab to save vertical space */}
         {activeTab !== "schedule" && (
@@ -1563,7 +1564,7 @@ export default function FieldManagement() {
 
         {/* Tabs */}
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6 w-fit">
-          {(["board", "tower", "schedule", "log", "workflow"] as const).map((tab) => (
+          {(["board", "tower", "schedule", "log", "workflow", "concierge"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1573,7 +1574,7 @@ export default function FieldManagement() {
                   : "text-gray-500 hover:text-gray-700"
               }`}
             >
-              {tab === "board" ? "Day Board" : tab === "tower" ? "Control Tower" : tab === "schedule" ? "Schedule" : tab === "log" ? "Job Log" : "Workflow"}
+              {tab === "board" ? "Day Board" : tab === "tower" ? "Control Tower" : tab === "schedule" ? "Schedule" : tab === "log" ? "Job Log" : tab === "workflow" ? "Workflow" : "✦ AI Concierge"}
             </button>
           ))}
         </div>
@@ -1588,6 +1589,11 @@ export default function FieldManagement() {
 
         {activeTab === "log" && <LogTab />}
         {activeTab === "schedule" && <SchedulingTab />}
+        {activeTab === "concierge" && (
+          <div className="pb-8">
+            <AiConcierge />
+          </div>
+        )}
       </div>
     </div>
     </AdminPageGuard>
