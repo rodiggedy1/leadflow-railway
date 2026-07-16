@@ -4221,10 +4221,43 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         }
       }
 
+      // Also search cleanerJobs for customers not yet in completedJobs (new/upcoming bookings)
+      const liveSearchRows = await db
+        .select({
+          customerPhone: cleanerJobs.customerPhone,
+          customerName: cleanerJobs.customerName,
+          jobAddress: cleanerJobs.jobAddress,
+          frequency: cleanerJobs.frequency,
+          jobRevenue: cleanerJobs.jobRevenue,
+          jobDate: cleanerJobs.jobDate,
+        })
+        .from(cleanerJobs)
+        .where(like(cleanerJobs.customerName, q))
+        .orderBy(desc(cleanerJobs.jobDate))
+        .limit(30);
+      for (const r of liveSearchRows) {
+        if (!r.customerPhone) continue;
+        const digits10 = r.customerPhone.replace(/\D/g, "").slice(-10);
+        const e164Key = `+1${digits10}`;
+        // Only add if not already found in completedJobs
+        if (!byPhone.has(e164Key) && !byPhone.has(r.customerPhone)) {
+          byPhone.set(e164Key, {
+            phone: e164Key,
+            name: r.customerName ?? "",
+            firstName: null,
+            email: null,
+            address: r.jobAddress ?? null,
+            frequency: r.frequency ?? null,
+            lastJobDate: r.jobDate ?? null,
+            ltv: parseFloat(r.jobRevenue ?? "0") || 0,
+            totalCleans: 1,
+          });
+        }
+      }
+
       const topCustomers = Array.from(byPhone.values())
         .sort((a, b) => b.totalCleans - a.totalCleans)
         .slice(0, 8);
-
       // Look up the most recently assigned team for each customer phone.
       // completedJobs.phone is E.164 (+17025551234), cleanerJobs.customerPhone is raw
       // formatted from Launch27 (e.g. "(702) 555-1234" or "702-555-1234").
