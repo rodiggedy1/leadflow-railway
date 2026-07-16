@@ -246,6 +246,12 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
   const [clientQuery, setClientQuery] = useState("");
   const [teamQuery, setTeamQuery] = useState("");
   const query = clientQuery; // kept for backward compat with filtered useMemo
+  // Debounced query for server-side full-text search
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(clientQuery.trim()), 400);
+    return () => clearTimeout(t);
+  }, [clientQuery]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   // Track the pending focus request in a ref so it can be applied once data loads
   const pendingFocusRef = useRef<number | null>(null);
@@ -318,6 +324,11 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     },
   }, { label: "CsInbox" });
 
+  // Server-side full-text search — only fires when local search finds nothing and query >= 2 chars
+  const { data: serverSearchData } = trpc.leads.searchCsInbox.useQuery(
+    { q: debouncedQuery },
+    { enabled: debouncedQuery.length >= 2, refetchOnWindowFocus: false, staleTime: 10_000 }
+  );
   const { data: csData, refetch: refetchInbox, isError: csDataIsError } = trpc.leads.listCsInbox.useQuery({ showResolved: true }, {
     refetchOnWindowFocus: false,
     // SSE (lead_update) is the primary update path. 30s poll is a safety-net fallback
@@ -569,12 +580,20 @@ export default function CsInbox({ onSwitchTab, activeFilter: filterProp, setActi
     // When a search query is active, search across ALL conversations regardless of
     // the active tab filter. Tab filters are for browsing; search is for finding.
     if (q) {
-      return displayConversations.filter((c) => {
+      const localResults = displayConversations.filter((c) => {
         const hay = [c.name, c.location, c.lastMessage, (c as any).searchText ?? "", c.service, c.status, c.queue, c.phone ?? "", c.tags.join(" ")]
           .join(" ")
           .toLowerCase();
         return hay.includes(q);
       });
+      // If server search returned IDs not in local results, surface those conversations too
+      if (serverSearchData && serverSearchData.length > 0) {
+        const localIds = new Set(localResults.map((c) => c.id));
+        const extraIds = serverSearchData.map((r) => r.id).filter((id) => !localIds.has(id));
+        const extraConvs = displayConversations.filter((c) => extraIds.includes(c.id));
+        return [...localResults, ...extraConvs];
+      }
+      return localResults;
     }
     // No search query: apply tab filter and pin the currently selected conversation
     // so it is never evicted mid-session (e.g. after sending a reply).

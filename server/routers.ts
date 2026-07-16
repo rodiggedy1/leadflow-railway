@@ -4675,6 +4675,42 @@ Be somewhat generous — if there is any reasonable signal, flag it. Only respon
         return result;
       }),
     /**
+     * searchCsInbox — full-text search across messageHistory for CS conversations.
+     * Called when client-side search (lastMessageText only) isn't sufficient.
+     */
+    searchCsInbox: opsChatProcedure
+      .input(z.object({ q: z.string().min(1).max(200) }))
+      .query(async ({ input }) => {
+        const db = await getDb();
+        if (!db) throw new Error("Database unavailable");
+        const term = `%${input.q.toLowerCase()}%`;
+        const rows = await db
+          .select({
+            id: conversationSessions.id,
+            leadPhone: conversationSessions.leadPhone,
+            leadName: conversationSessions.leadName,
+            lastMessageText: conversationSessions.lastMessageText,
+            lastMessageTs: conversationSessions.lastMessageTs,
+            csResolvedAt: conversationSessions.csResolvedAt,
+            leadSource: conversationSessions.leadSource,
+            csQueue: conversationSessions.csQueue,
+          })
+          .from(conversationSessions)
+          .where(
+            and(
+              or(
+                eq(conversationSessions.leadSource, "cs-inbound"),
+                eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+                eq(conversationSessions.leadSource, "cs_initiated")
+              ),
+              sql`LOWER(${conversationSessions.messageHistory}) LIKE ${term}`
+            )
+          )
+          .orderBy(desc(conversationSessions.updatedAt))
+          .limit(50);
+        return rows;
+      }),
+    /**
      * addCsNote — saves an internal note to a CS conversation's messageHistory. (internal)
      * Notes use role="note" so they are never sent to the customer via SMS.
      * They appear in the thread as amber sticky-note bubbles visible only to agents.
