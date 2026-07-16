@@ -1201,38 +1201,7 @@ export async function runNoShowEscalation(): Promise<{ checked: number; sent: nu
       const callRecipient = cleanerPhoneForCall ?? CS_ALERT_NUMBER;
       const staggerMs = jobIndex * 30 * 1000; // 30s between each cleaner call
       jobIndex++;
-      sleep(25 * 60 * 1000 + staggerMs)
-        .then(() =>
-          placeNoCheckinEscalationCall({
-            cleanerName: cleanerNameForCall,
-            customerName: job.customerName ?? "Unknown",
-            jobAddress: job.jobAddress ?? "Unknown",
-            scheduledTime: timeStr,
-            cleanerJobId: jobIdForCall,
-            step: "noshow_call",
-            cleanerPhone: cleanerPhoneForCall,
-          })
-        )
-        .then((callResult) => {
-          const success = callResult === true;
-          return recordStep({
-            cleanerJobId: jobIdForCall,
-            step: "noshow_call",
-            success,
-            recipientPhone: callRecipient,
-            errorDetail: success ? undefined : "VAPI call did not return a call ID",
-          });
-        })
-        .catch((err) => {
-          console.error(`[FieldMgmt] Auto-call failed for job ${jobIdForCall}:`, err);
-          recordStep({
-            cleanerJobId: jobIdForCall,
-            step: "noshow_call",
-            success: false,
-            recipientPhone: callRecipient,
-            errorDetail: String(err?.message ?? err),
-          }).catch(() => {});
-        });
+      // noshow_call disabled
     } else {
       errors++;
       await updateStepOutcome(job.id, "noshow_alert", false, result.error);
@@ -2230,31 +2199,7 @@ export async function runPostStartEscalation(): Promise<{ checked: number; acted
     const staggerMs = jobIndex * 30 * 1000;
     jobIndex++;
 
-    // ── Step 1: T+0 to T+5 — VAPI call to cleaner ──────────────────────────
-    if (minutesPast >= 0 && minutesPast < 5) {
-      const claimed = await tryClaimStep({
-        cleanerJobId: jobIdForCall,
-        step: "post_start_call_1",
-        recipientPhone: cleanerPhone ?? CS_ALERT_NUMBER,
-      });
-      if (claimed && cleanerPhone) {
-        acted++;
-        sleep(staggerMs)
-          .then(() =>
-            placeCheckinCall(
-              jobIdForCall,
-              cleanerName,
-              cleanerPhone,
-              "Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
-              "post_start_call_1"
-            )
-          )
-          .catch((err) => {
-            errors++;
-            console.error(`[FieldMgmt] post_start_call_1 failed for job ${jobIdForCall}:`, err);
-          });
-      }
-    }
+    // ── Step 1: T+0 to T+5 — VAPI call to cleaner (disabled)
 
     // ── Step 2: T+5 to T+10 — CS alert SMS + ops board card ────────────────
     if (minutesPast >= 5 && minutesPast < 10) {
@@ -2309,31 +2254,7 @@ export async function runPostStartEscalation(): Promise<{ checked: number; acted
       }
     }
 
-    // ── Step 3: T+10 to T+15 — Second VAPI call to cleaner ─────────────────
-    if (minutesPast >= 10 && minutesPast < 15) {
-      const claimed = await tryClaimStep({
-        cleanerJobId: jobIdForCall,
-        step: "post_start_call_2",
-        recipientPhone: cleanerPhone ?? CS_ALERT_NUMBER,
-      });
-      if (claimed && cleanerPhone) {
-        acted++;
-        sleep(staggerMs)
-          .then(() =>
-            placeCheckinCall(
-              jobIdForCall,
-              cleanerName,
-              cleanerPhone,
-              "Your job has started and we have not received your check-in. Please respond immediately or your assignment may be cancelled and a penalty charged.",
-              "post_start_call_2"
-            )
-          )
-          .catch((err) => {
-            errors++;
-            console.error(`[FieldMgmt] post_start_call_2 failed for job ${jobIdForCall}:`, err);
-          });
-      }
-    }
+    // ── Step 3: T+10 to T+15 — Second VAPI call to cleaner (disabled)
 
     // ── Step 4: T+10 to T+15 — Possible no-show flag on ops board ──────────
     if (minutesPast >= 10 && minutesPast < 15) {
