@@ -2860,15 +2860,20 @@ export async function handleEtaCallEnd(params: {
       `We'll keep you updated. 🚗`;
   }
 
+  // Use a per-call step key so each ETA call (including manual re-triggers) can send its own
+  // client SMS. The old "eta_sms" key was a permanent singleton that blocked every subsequent
+  // call once the first SMS was sent. Using the vapiCallId makes the dedup scoped to this
+  // specific call — concurrent webhook duplicates are still blocked, but a new call is not.
+  const etaSmsStep = `eta_sms_${vapiCallId}`;
   const smsClaimed = await tryClaimStep({
     cleanerJobId,
-    step: "eta_sms",
+    step: etaSmsStep,
     smsSent: smsBody,
     recipientPhone: customerPhone,
   });
   if (!smsClaimed) {
-    console.log(`[EtaEngine] eta_sms step already claimed for job ${cleanerJobId} — skipping duplicate SMS`);
-    // Post card even if SMS was already claimed (dedup)
+    console.log(`[EtaEngine] ${etaSmsStep} step already claimed for job ${cleanerJobId} — skipping duplicate SMS`);
+    // Post card even if SMS was already claimed (dedup within same call)
     await postEtaResultCard({
       resultType: "success",
       etaTimeStr,
@@ -2885,9 +2890,9 @@ export async function handleEtaCallEnd(params: {
   const smsSentOk = smsResult.success;
   if (smsSentOk) {
     console.log(`[EtaEngine] ETA SMS sent to ${customerPhone} for job ${cleanerJobId} (${status}, ETA: ${etaTimeStr})`);
-    if (smsResult.messageId) await updateStepMessageId(cleanerJobId, "eta_sms", smsResult.messageId);
+    if (smsResult.messageId) await updateStepMessageId(cleanerJobId, etaSmsStep, smsResult.messageId);
   } else {
-    await updateStepOutcome(cleanerJobId, "eta_sms", false, smsResult.error);
+    await updateStepOutcome(cleanerJobId, etaSmsStep, false, smsResult.error);
     console.error(`[EtaEngine] ETA SMS FAILED for job ${cleanerJobId}:`, smsResult.error);
   }
 
