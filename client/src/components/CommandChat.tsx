@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import FollowUpsModal from "@/components/FollowUpsModal";
 import { useAuth } from "@/_core/hooks/useAuth";
 import FAQPanel from "@/components/FAQPanel";
+import AiConcierge from "@/components/AiConcierge";
 import ObjectionsPanel from "@/components/ObjectionsPanel";
 import IssueDialog from "@/components/IssueDialog";
 import CallLogPanel from "@/components/CallLogPanel";
@@ -1048,6 +1049,7 @@ type MessageListProps = {
   mentionPhoneMap: Record<string, string>;
   openCreateIssueModal: (defaultTitle: string) => void;
   openIssueEngine: (issueId: number | null) => void;
+  onOpenConcierge: () => void;
 };
 
 // ── Collapsible Call Debrief Card ────────────────────────────────────────────
@@ -1410,6 +1412,7 @@ const MessageList = memo(function MessageList({
   mentionPhoneMap,
   openCreateIssueModal,
   openIssueEngine,
+  onOpenConcierge,
 }: MessageListProps) {
   return (
     <>
@@ -1516,6 +1519,14 @@ const MessageList = memo(function MessageList({
                     {todayCallCount > 9 ? "9+" : todayCallCount}
                   </span>
                 )}
+              </button>
+              {/* AI Concierge button */}
+              <button
+                title="AI Operations Concierge"
+                onClick={onOpenConcierge}
+                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-indigo-50 text-slate-400 hover:text-indigo-600 transition-colors"
+              >
+                <Bot className="h-3.5 w-3.5" />
               </button>
             </div>
           </div>
@@ -3938,6 +3949,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
+  const [conciergeOpen, setConciergeOpen] = useState(false);
   const [objectionOpen, setObjectionOpen] = useState(false);
   const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
@@ -6815,6 +6827,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           emailUnreadCount={emailUnreadCount}
           mentionPhoneMap={mentionPhoneMapRef.current}
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
+          onOpenConcierge={() => setConciergeOpen(true)}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
@@ -6845,6 +6858,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative shrink-0", (centerView === "issues" || centerView === "calls") && "hidden")}>
         <FAQPanel open={faqOpen} onClose={() => setFaqOpen(false)} context="Command Chat" />
         <ObjectionsPanel open={objectionOpen} onClose={() => setObjectionOpen(false)} />
+        {/* AI Concierge slide-in panel */}
+        {conciergeOpen && (
+          <div className="absolute inset-0 z-50 flex">
+            {/* Backdrop */}
+            <div
+              className="flex-1 bg-black/30 backdrop-blur-sm"
+              onClick={() => setConciergeOpen(false)}
+            />
+            {/* Panel */}
+            <div className="w-[420px] max-w-full flex flex-col bg-[#0f1120] shadow-2xl animate-in slide-in-from-right duration-200">
+              <AiConcierge onClose={() => setConciergeOpen(false)} />
+            </div>
+          </div>
+        )}
         <div className="px-5 py-4 bg-white">
 
           {/* Staged photo preview strip */}

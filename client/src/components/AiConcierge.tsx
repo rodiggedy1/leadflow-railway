@@ -377,7 +377,7 @@ function simulateEtaWorkflow(
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AiConcierge({ agentPhotoUrl }: { agentPhotoUrl?: string }) {
+export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?: string; onClose?: () => void }) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -461,9 +461,22 @@ export default function AiConcierge({ agentPhotoUrl }: { agentPhotoUrl?: string 
           </div>
           <p className="text-gray-400 text-xs mt-0.5">Ask anything. I'll get it done.</p>
         </div>
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-xs text-gray-400">Online</span>
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            <span className="text-xs text-gray-400">Online</span>
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              title="Close"
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 
