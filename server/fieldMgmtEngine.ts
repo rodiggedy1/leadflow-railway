@@ -2047,6 +2047,15 @@ async function placeCheckinCall(
   script: string,
   step: string
 ): Promise<void> {
+  // Hard block — these steps are permanently disabled.
+  // This guard runs regardless of which code version calls this function,
+  // protecting against stale Railway instances running old code.
+  // placeEtaCall is a completely separate function and is NOT affected.
+  const PERMANENTLY_DISABLED = ["post_start_call_1", "post_start_call_2", "noshow_call"];
+  if (PERMANENTLY_DISABLED.includes(step)) {
+    console.log(`[FieldMgmt] placeCheckinCall: step '${step}' is permanently disabled — skipping`);
+    return;
+  }
   if (!ENV.vapiPrivateKey) {
     console.warn("[FieldMgmt] VAPI_PRIVATE_KEY not set — skipping check-in call");
     return;
