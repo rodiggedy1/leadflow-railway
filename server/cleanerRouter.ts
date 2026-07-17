@@ -19,6 +19,7 @@ import { parse as parseCookie } from "cookie";
 import { publicProcedure, cleanerProcedure, agentProcedure, opsChatProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
+import heicConvert from "heic-convert";
 import { notifyOwner } from "./_core/notification";
 import { sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
 import { sendCompletionReviewSms } from "./trackerReviewSms";
@@ -329,16 +330,37 @@ export const cleanerRouter = router({
       }
 
       // Upload full-resolution photo to S3
-      const ext = input.filename.split(".").pop() ?? "jpg";
+      const rawBuffer = Buffer.from(input.dataBase64, "base64");
+      const rawMimeType = input.mimeType.toLowerCase();
+      const isHeic = rawMimeType === "image/heic" || rawMimeType === "image/heif";
+      // HEIC/HEIF files are not browser-renderable — convert to JPEG before storing.
+      // Non-HEIC files pass through this block completely unchanged.
+      let buffer: Buffer;
+      let mimeType: string;
+      let ext: string;
+      if (isHeic) {
+        try {
+          const jpegArrayBuffer = await heicConvert({ buffer: rawBuffer, format: "JPEG", quality: 0.9 });
+          buffer = Buffer.from(jpegArrayBuffer);
+          mimeType = "image/jpeg";
+          ext = "jpg";
+        } catch (convErr) {
+          console.error("[uploadPhoto] HEIC conversion failed:", convErr);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Photo format conversion failed. Please try again." });
+        }
+      } else {
+        buffer = rawBuffer;
+        mimeType = input.mimeType;
+        ext = input.filename.split(".").pop() ?? "jpg";
+      }
       const randomSuffix = Math.random().toString(36).slice(2, 10);
       const fileKey = `cleaner-photos/${ctx.cleaner.cleanerId}/${input.cleanerJobId}-${randomSuffix}.${ext}`;
-      const buffer = Buffer.from(input.dataBase64, "base64");
-      const { url } = await storagePut(fileKey, buffer, input.mimeType);
+      const { url } = await storagePut(fileKey, buffer, mimeType);
 
       // Generate and upload 200px thumbnail
       let thumbnailUrl: string | undefined;
       let thumbnailKey: string | undefined;
-      const thumb = await generateThumbnail(buffer, input.mimeType);
+      const thumb = await generateThumbnail(buffer, mimeType);
       if (thumb) {
         const thumbKey = `cleaner-photos/${ctx.cleaner.cleanerId}/${input.cleanerJobId}-${randomSuffix}-thumb.jpg`;
         const { url: tUrl } = await storagePut(thumbKey, thumb.buffer, thumb.contentType);
