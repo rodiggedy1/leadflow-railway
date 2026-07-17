@@ -8,6 +8,10 @@
  * - Completed / failed / in-progress step states
  * - Commands and People chips at the bottom
  * - Expandable "View details" sections
+ *
+ * NOTE: All UI is verbatim from the original design.
+ * The only change from the stub version is that handleSend now calls
+ * trpc.aiConcierge.chat instead of the local simulateEtaWorkflow simulation.
  */
 import { useState, useRef, useEffect, useCallback } from "react";
 import {
@@ -30,6 +34,7 @@ import {
   MapPin,
   AlertTriangle,
 } from "lucide-react";
+import { trpc } from "@/lib/trpc";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -54,10 +59,16 @@ interface CompletedCard {
   ts: string;
 }
 
+interface ClarifyCard {
+  message: string;
+  teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }>;
+}
+
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
-  | { type: "completed"; card: CompletedCard };
+  | { type: "completed"; card: CompletedCard }
+  | { type: "clarify"; card: ClarifyCard };
 
 interface Message {
   id: string;
@@ -177,14 +188,49 @@ function CompletedCardView({ card }: { card: CompletedCard }) {
   );
 }
 
+// ─── Clarify card (team picker) ───────────────────────────────────────────────
+
+function ClarifyCardView({
+  card,
+  onPickTeam,
+}: {
+  card: ClarifyCard;
+  onPickTeam: (jobId: number, teamName: string) => void;
+}) {
+  return (
+    <div className="mt-3 rounded-xl border border-white/10 bg-white/5 overflow-hidden">
+      <div className="px-4 py-3 text-sm text-gray-200 leading-relaxed border-b border-white/10">
+        {card.message}
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        {card.teams.map((team) => (
+          <button
+            key={team.currentJobId}
+            onClick={() => onPickTeam(team.currentJobId, team.name)}
+            className="w-full flex items-center justify-between rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2.5 text-left transition-colors"
+          >
+            <div>
+              <p className="text-sm text-white font-semibold">{team.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{team.address}</p>
+            </div>
+            <span className="text-xs text-gray-500 flex-shrink-0 ml-3">{team.scheduled}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
 function MessageBubble({
   msg,
   agentPhotoUrl,
+  onPickTeam,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
+  onPickTeam: (jobId: number, teamName: string) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -237,6 +283,12 @@ function MessageBubble({
             <div className="text-right text-xs text-gray-500 mt-1">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "clarify" && (
+          <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
+            <ClarifyCardView card={msg.content.card} onPickTeam={onPickTeam} />
+            <div className="text-right text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -263,7 +315,7 @@ function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void;
         {COMMANDS.map((cmd) => (
           <button
             key={cmd.label}
-            onClick={() => { onSelect(cmd.description); onClose(); }}
+            onClick={() => { onSelect(cmd.label); onClose(); }}
             className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/8 transition-colors text-left"
           >
             <span className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
@@ -278,101 +330,6 @@ function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void;
       </div>
     </div>
   );
-}
-
-// ─── Demo workflow simulation ─────────────────────────────────────────────────
-
-function simulateEtaWorkflow(
-  input: string,
-  onUpdate: (msgs: Message[]) => void,
-  existingMsgs: Message[]
-) {
-  const ts = nowTime();
-  const workflowId = uid();
-
-  const steps: WorkflowStep[] = [
-    { id: "1", label: "Found today's job schedule", status: "running", ts },
-    { id: "2", label: "Calculated ETA based on current location", status: "pending" },
-    { id: "3", label: "Calling team to confirm ETA", status: "pending" },
-    { id: "4", label: "Texting client with ETA update", status: "pending" },
-    { id: "5", label: "Waiting for team confirmation", status: "pending" },
-  ];
-
-  const aiMsg: Message = {
-    id: workflowId,
-    role: "ai",
-    content: {
-      type: "workflow",
-      workflow: {
-        summary: "I'll get the ETA for the team and send it to the client right away.",
-        steps: [...steps],
-        expandable: { label: "View job details", content: "Loading..." },
-      },
-    },
-    ts,
-  };
-
-  const allMsgs = [...existingMsgs, aiMsg];
-  onUpdate(allMsgs);
-
-  // Simulate step progression
-  const progressions: Array<{ delay: number; stepIdx: number; status: StepStatus; detail?: string }> = [
-    { delay: 900, stepIdx: 0, status: "done" },
-    { delay: 1200, stepIdx: 1, status: "running" },
-    { delay: 2200, stepIdx: 1, status: "done" },
-    { delay: 2500, stepIdx: 2, status: "running" },
-    { delay: 4000, stepIdx: 2, status: "done" },
-    { delay: 4300, stepIdx: 3, status: "running" },
-    { delay: 5500, stepIdx: 3, status: "done" },
-    { delay: 5800, stepIdx: 4, status: "running" },
-  ];
-
-  progressions.forEach(({ delay, stepIdx, status }) => {
-    setTimeout(() => {
-      steps[stepIdx].status = status;
-      if (status === "running" && stepIdx > 0) {
-        // Timestamp the step
-        steps[stepIdx].ts = nowTime();
-      }
-      onUpdate((prev: Message[]) =>
-        prev.map((m) =>
-          m.id === workflowId
-            ? {
-                ...m,
-                content: {
-                  type: "workflow",
-                  workflow: {
-                    summary: "I'll get the ETA for the team and send it to the client right away.",
-                    steps: [...steps],
-                    expandable: {
-                      label: "View job details",
-                      content: "Job: 123 Main St.\nTeam: Team 8\nScheduled: 2:00 PM\nETA sent: 2:15 PM\nClient notified via SMS",
-                    },
-                  },
-                },
-              }
-            : m
-        ) as Message[]
-      );
-    }, delay);
-  });
-
-  // Final completed card
-  setTimeout(() => {
-    const completedMsg: Message = {
-      id: uid(),
-      role: "ai",
-      content: {
-        type: "completed",
-        card: {
-          message: "Team confirmed ETA. Client has been notified via SMS.",
-          ts: nowTime(),
-        },
-      },
-      ts: nowTime(),
-    };
-    onUpdate((prev: Message[]) => [...prev, completedMsg] as Message[]);
-  }, 8000);
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -395,9 +352,46 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  const chatMutation = trpc.aiConcierge.chat.useMutation();
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Called when agent picks a team from a clarify card
+  const handlePickTeam = useCallback((jobId: number, teamName: string) => {
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: { type: "text", text: `ETA update for ${teamName}` },
+      ts: nowTime(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsThinking(true);
+
+    chatMutation.mutate(
+      { message: `ETA update for ${teamName}`, resolvedJobId: jobId },
+      {
+        onSuccess: (result) => {
+          setIsThinking(false);
+          const aiMsg = buildAiMessage(result);
+          setMessages((prev) => [...prev, aiMsg]);
+        },
+        onError: (err) => {
+          setIsThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "ai",
+              content: { type: "text", text: `Something went wrong: ${err.message}` },
+              ts: nowTime(),
+            },
+          ]);
+        },
+      }
+    );
+  }, [chatMutation]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -410,35 +404,33 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       ts: nowTime(),
     };
 
-    const newMsgs = [...messages, userMsg];
-    setMessages(newMsgs);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsThinking(true);
 
-    // Detect ETA-related intent for demo
-    const lower = text.toLowerCase();
-    const isEta = lower.includes("eta") || lower.includes("late") || lower.includes("running") || lower.includes("time") || lower.includes("team") || lower.includes("entry");
-
-    setTimeout(() => {
-      setIsThinking(false);
-      if (isEta) {
-        simulateEtaWorkflow(text, setMessages as any, newMsgs);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: uid(),
-            role: "ai",
-            content: {
-              type: "text",
-              text: "Got it. I'm working on building that workflow. For now I can run ETA updates, entry info lookups, and team notifications. Try: \"Send ETA update for Team 8 to the 2pm client\"",
+    chatMutation.mutate(
+      { message: text },
+      {
+        onSuccess: (result) => {
+          setIsThinking(false);
+          const aiMsg = buildAiMessage(result);
+          setMessages((prev) => [...prev, aiMsg]);
+        },
+        onError: (err) => {
+          setIsThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "ai",
+              content: { type: "text", text: `Something went wrong: ${err.message}` },
+              ts: nowTime(),
             },
-            ts: nowTime(),
-          },
-        ]);
+          ]);
+        },
       }
-    }, 600);
-  }, [input, isThinking, messages]);
+    );
+  }, [input, isThinking, chatMutation]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -469,7 +461,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           {onClose && (
             <button
               onClick={onClose}
-              className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              className="w-7 h-7 rounded-full flex items-center justify-between text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
               title="Close"
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -483,7 +475,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -552,4 +544,51 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
     </div>
   );
+}
+
+// ─── Map server result → Message ──────────────────────────────────────────────
+
+type ServerResult =
+  | { type: "completed"; message: string }
+  | { type: "error"; message: string }
+  | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
+  | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } };
+
+function buildAiMessage(result: ServerResult): Message {
+  const ts = nowTime();
+
+  if (result.type === "completed") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "completed", card: { message: result.message, ts } },
+      ts,
+    };
+  }
+
+  if (result.type === "error") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "text", text: result.message },
+      ts,
+    };
+  }
+
+  if (result.type === "clarify") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "clarify", card: { message: result.message, teams: result.teams } },
+      ts,
+    };
+  }
+
+  // workflow
+  return {
+    id: uid(),
+    role: "ai",
+    content: { type: "workflow", workflow: { summary: result.summary, steps: result.steps, expandable: result.expandable } },
+    ts,
+  };
 }
