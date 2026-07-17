@@ -2483,8 +2483,9 @@ export async function placeEtaCall(params: {
               "The cleaner will tell you their estimated arrival time. " +
               "Step 1 — Read back the exact time you heard: say 'Just to confirm, you said [TIME], is that right?' " +
               "Step 2 — If they confirm: say 'Perfect, I will update the customer. Have a great day!' then end the call. " +
-              "Step 2 — If they correct you: say 'Got it, [CORRECTED TIME]. Have a great day!' then end the call. " +
-              "Keep the entire exchange under 20 seconds. Do not ask anything else.",
+              "Step 2 — If they correct you: read back the corrected time once more — say 'Just to confirm, you said [CORRECTED TIME], is that right?' " +
+              "Step 3 — If they confirm the correction: say 'Perfect, I will update the customer. Have a great day!' then end the call. " +
+              "Never close the call without a confirmed time. Keep the entire exchange under 30 seconds. Do not ask anything else.",
           },
         ],
       },
