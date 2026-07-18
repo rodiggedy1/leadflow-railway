@@ -984,14 +984,14 @@ async function handleQueryData(
     .orderBy(desc(cleanerJobs.jobDate))
     .limit(50);
 
-  // Query completedJobs (historical bookings) — only when searching by customer/cleaner name or doing summary
+  // Query completedJobs (historical bookings) — always run; search name column against both customerName and cleanerName
   let historicalJobs: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> = [];
-  if (!entities.cleanerName) {
-    // completedJobs doesn't have cleaner/team info — skip if filtering by cleaner
+  {
     const compConditions: any[] = [];
-    if (entities.customerName) compConditions.push(like(completedJobs.name, `%${entities.customerName}%`));
-    // Only apply date cutoff when NOT searching by customer name — customer history should always be fully visible
-    if (!entities.customerName && effectiveCutoff) compConditions.push(gte(completedJobs.jobDate, effectiveCutoff));
+    const nameSearch = entities.customerName || entities.cleanerName;
+    if (nameSearch) compConditions.push(like(completedJobs.name, `%${nameSearch}%`));
+    // Only apply date cutoff when NOT searching by a specific name
+    if (!nameSearch && effectiveCutoff) compConditions.push(gte(completedJobs.jobDate, effectiveCutoff));
 
     const compRows = await db
       .select({ id: completedJobs.id, jobDate: completedJobs.jobDate, name: completedJobs.name, address: completedJobs.address, lastBookingPrice: completedJobs.lastBookingPrice, frequency: completedJobs.frequency })
