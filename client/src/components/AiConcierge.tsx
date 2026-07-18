@@ -1788,6 +1788,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   onMouseDown={(e) => {
                     e.preventDefault();
                     const fc = focusedCustomer;
+                    setFocusedCustomer(null); // always close panel on any chip tap
                     if (chip.action === "text") {
                       // Prefill input so user can type the message content
                       setInput(`Text ${fc.name} — `);
