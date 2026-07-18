@@ -1089,7 +1089,14 @@ async function handleQueryData(
   }
 
   console.log("[QueryData] scheduledJobs:", scheduledJobs.length, "historicalJobs:", historicalJobs.length);
-  const jobs = [...scheduledJobs, ...historicalJobs]
+  // Deduplicate: if a job appears in both cleanerJobs (scheduled) and completedJobs (historical)
+  // for the same customer+date+address, prefer the cleanerJobs row (has team data)
+  const scheduledKeys = new Set(scheduledJobs.map(j => `${(j.jobAddress ?? "").toLowerCase().slice(0, 30)}|${j.jobDate ?? ""}`));
+  const dedupedHistorical = historicalJobs.filter(j => {
+    const key = `${(j.jobAddress ?? "").toLowerCase().slice(0, 30)}|${j.jobDate ?? ""}`;
+    return !scheduledKeys.has(key);
+  });
+  const jobs = [...scheduledJobs, ...dedupedHistorical]
     .sort((a, b) => (b.jobDate ?? "").localeCompare(a.jobDate ?? ""))
     .slice(0, 80);
 
