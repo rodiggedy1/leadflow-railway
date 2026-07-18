@@ -8040,7 +8040,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {/* ── Madison AI Concierge button ── */}
           <button
             onClick={() => setConciergeOpen(true)}
-            className="w-full flex items-center gap-3 rounded-2xl bg-[#1a1a2e] hover:bg-[#22223b] px-4 py-3 transition-colors group"
+            className="w-full flex items-center gap-3 rounded-2xl bg-[#1a1a2e] hover:bg-[#22223b] px-4 py-3 transition-colors group shadow-[0_0_24px_6px_rgba(139,92,246,0.35)] hover:shadow-[0_0_32px_8px_rgba(139,92,246,0.5)]"
           >
             <span className="w-9 h-9 rounded-xl bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
               <Sparkles className="w-4 h-4 text-indigo-300" />
