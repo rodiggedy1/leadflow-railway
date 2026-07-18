@@ -8036,8 +8036,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-        <div className="px-5 py-4 space-y-4">
-
+                <div className="px-5 py-4 space-y-4">
+          {/* ── Madison AI Concierge button ── */}
+          <button
+            onClick={() => setConciergeOpen(true)}
+            className="w-full flex items-center gap-3 rounded-2xl bg-[#1a1a2e] hover:bg-[#22223b] px-4 py-3 transition-colors group"
+          >
+            <span className="w-9 h-9 rounded-xl bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-4 h-4 text-indigo-300" />
+            </span>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-bold text-white leading-tight">Madison</p>
+              <p className="text-xs text-indigo-300/80 leading-tight">AI Concierge</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+          </button>
           {/* ── Search bar ── */}
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
