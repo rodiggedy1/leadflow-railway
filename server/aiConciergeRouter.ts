@@ -244,9 +244,12 @@ Classify the user's message into one of these actions:
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
 - query_data: user is asking a question about job data, clients, or teams (e.g. "list all jobs today", "what jobs does Team 3 have", "show me jobs for Kara Turner", "how many jobs this week", "what's the status of the 10am job", "which teams are working today")
-- customer_profile: user wants a full profile/overview of a specific customer (e.g. "tell me about Mary Jones", "who is Rohan Gilkes", "show me Kara Turner's profile", "what do we know about Sarah Smith", "customer profile for John Doe", "give me the rundown on Dave Pringle")
+- customer_profile: user wants a full profile/overview of a specific customer (e.g. "tell me about Mary Jones", "who is Rohan Gilkes", "show me Kara Turner's profile", "what do we know about Sarah Smith", "customer profile for John Doe", "give me the rundown on Dave Pringle", "tell me everything about Dave Pringle", "pull up John Smith")
 - unknown: anything else
 KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer. "customer_profile" is for viewing a customer's full history, stats, messages, and AI summary — NOT for texting or calling them.
+
+For customer_profile:
+- clientName MUST be the exact full name of the customer as written by the user (e.g. "tell me everything about Dave Pringle" → clientName = "Dave Pringle", "who is Mary Jones" → clientName = "Mary Jones")
 
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
