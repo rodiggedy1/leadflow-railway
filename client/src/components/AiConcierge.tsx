@@ -1116,6 +1116,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     const before = val.slice(0, cursor);
     const wordMatch = before.match(/(\S+)$/);
     const word = wordMatch ? wordMatch[1] : "";
+    console.log("[AC] word:", word, "acQuery:", acQuery, "acResults:", acResults.length);
     if (word.length >= 2 && /[a-zA-Z]/.test(word)) {
       setAcQuery(word);
       setAcWordStart(cursor - word.length);
