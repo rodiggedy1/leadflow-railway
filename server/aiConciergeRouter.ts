@@ -223,6 +223,7 @@ type ConciergeResult =
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
   | { action: "eta_update"; teamHint: string | null }
+  | { action: "get_eta_for_customer"; clientName: string | null }
   | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
   | { action: "text_client"; clientName: string | null; messageHint: string | null }
   | { action: "send_payment_link"; clientName: string | null }
@@ -238,7 +239,8 @@ async function classifyIntent(message: string): Promise<Intent> {
         role: "system",
         content: `You are an intent classifier for a cleaning operations AI assistant.
 Classify the user's message into one of these actions:
-- eta_update: user wants to request an ETA call for a team (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
+- eta_update: user wants to request an ETA call for a team by team name (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
+- get_eta_for_customer: user wants an ETA for a specific CUSTOMER's job — the system will find which team is assigned and call them (e.g. "get ETA for Dave Pringle", "ETA for Mary Jones", "what's the ETA for John Smith's job")
 - text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow")
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
@@ -250,6 +252,8 @@ KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_c
 
 For customer_profile:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "tell me everything about Dave Pringle" → clientName = "Dave Pringle", "who is Mary Jones" → clientName = "Mary Jones")
+For get_eta_for_customer:
+- clientName MUST be the exact full name of the customer as written by the user (e.g. "get ETA for Dave Pringle" → clientName = "Dave Pringle")
 
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
@@ -266,7 +270,7 @@ For call_client:
 - questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
+  "action": "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
@@ -284,7 +288,7 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "customer_profile", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "get_eta_for_customer", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "customer_profile", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
             clientName: { type: ["string", "null"] },
@@ -1280,6 +1284,79 @@ async function handleTextCleaners(
   };
 }
 
+// ── ETA for customer: look up today's job, find assigned team, kick ETA call ──
+async function handleGetEtaForCustomer(
+  clientName: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConciergeResult> {
+  if (!clientName) {
+    return { type: "error", message: "Please include the customer's name. Example: \"Get ETA for Mary Jones\"" };
+  }
+  const today = getTodayET();
+  // Find today's cleanerJobs row for this customer
+  const q = `%${clientName.trim()}%`;
+  const [job] = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      teamName: cleanerJobs.teamName,
+      cleanerName: cleanerJobs.cleanerName,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobAddress: cleanerJobs.jobAddress,
+      cleanerPhone: cleanerProfiles.phone,
+    })
+    .from(cleanerJobs)
+    .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+    .where(
+      and(
+        eq(cleanerJobs.jobDate, today),
+        like(cleanerJobs.customerName, q),
+        ne(cleanerJobs.bookingStatus, "cancelled"),
+        ne(cleanerJobs.bookingStatus, "rescheduled")
+      )
+    )
+    .orderBy(cleanerJobs.serviceDateTime)
+    .limit(1);
+
+  if (!job) {
+    return { type: "error", message: `No job found for ${clientName} today. They may not have a scheduled job.` };
+  }
+  if (!job.cleanerPhone) {
+    return { type: "error", message: `Found ${job.customerName}'s job (${job.teamName ?? job.cleanerName}) but no phone number on file for the team.` };
+  }
+  if (!job.serviceDateTime) {
+    return { type: "error", message: `${job.customerName}'s job has no service time set.` };
+  }
+  const serviceTime = parseServiceDateTime(job.serviceDateTime);
+  if (!serviceTime) return { type: "error", message: "Could not parse service time for this job." };
+  const scheduledTimeET = formatTimeET(serviceTime);
+  const cleanerFirstName = (job.cleanerName ?? "there").split(" ")[0];
+  const customerFirstName = (job.customerName ?? clientName).split(" ")[0];
+  const teamName = job.teamName ?? job.cleanerName ?? "Unknown Team";
+
+  const result = await placeEtaCall({
+    cleanerJobId: job.id,
+    step: "eta_call_1",
+    cleanerPhone: job.cleanerPhone,
+    cleanerFirstName,
+    customerFirstName,
+    scheduledTimeET,
+    bypassStepLock: true,
+  });
+
+  if (!result.success) {
+    return { type: "error", message: result.reason ?? "ETA call failed." };
+  }
+  return {
+    type: "eta_pending",
+    jobId: job.id,
+    teamName,
+    cleanerName: job.cleanerName ?? teamName,
+    scheduledTimeET,
+    date: today,
+  };
+}
+
 // ── ETA update handler ────────────────────────────────────────────────────────
 async function handleEtaUpdate(
   teamHint: string | null,
@@ -1484,6 +1561,9 @@ export const aiConciergeRouter = router({
       console.log("[Concierge] intent:", JSON.stringify(intent), "message:", input.message);
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
+      }
+      if (intent.action === "get_eta_for_customer") {
+        return await handleGetEtaForCustomer(intent.clientName, db);
       }
 
       if (intent.action === "text_cleaners") {

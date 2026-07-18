@@ -425,21 +425,40 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
 // ─── Bulk SMS sent card ───────────────────────────────────────────────────────
 function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
   const allOk = card.results.every(r => r.success);
+  const successCount = card.results.filter(r => r.success).length;
+  const failCount = card.results.filter(r => !r.success).length;
+  const sentAt = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   return (
     <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
-          {allOk ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <AlertTriangle className="w-3.5 h-3.5 text-white" />}
+      {/* Header */}
+      <div className={`px-4 py-3 border-b border-white/10 flex items-center gap-3 ${allOk ? "bg-green-500/8" : "bg-yellow-500/8"}`}>
+        <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
+          {allOk ? <CheckCircle2 className="w-5 h-5 text-white" /> : <AlertTriangle className="w-5 h-5 text-white" />}
         </span>
-        <p className="text-sm font-semibold text-white">{card.message}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white">{allOk ? "Message Sent" : "Partial Send"}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {successCount > 0 && <span className="text-green-400">{successCount} delivered</span>}
+            {failCount > 0 && <span className="text-red-400 ml-2">{failCount} failed</span>}
+            <span className="text-gray-500 ml-2">· {sentAt}</span>
+          </p>
+        </div>
+        <MessageSquare className={`w-4 h-4 flex-shrink-0 ${allOk ? "text-green-400" : "text-yellow-400"}`} />
       </div>
+      {/* Recipient rows */}
       <div className="px-4 py-3 space-y-2">
         {card.results.map((r, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <StepIcon status={r.success ? "done" : "failed"} />
-            <span className={`flex-1 text-sm ${r.success ? "text-gray-300" : "text-red-400"}`}>
-              {r.name}{r.error ? ` — ${r.error}` : ""}
-            </span>
+          <div key={i} className={`flex items-center gap-3 p-2.5 rounded-lg ${r.success ? "bg-green-500/5 border border-green-500/15" : "bg-red-500/5 border border-red-500/15"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${r.success ? "bg-green-500/20" : "bg-red-500/20"}`}>
+              {r.success
+                ? <CheckCircle2 className="w-4 h-4 text-green-400" />
+                : <XCircle className="w-4 h-4 text-red-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold truncate ${r.success ? "text-white" : "text-red-300"}`}>{r.name}</p>
+              <p className="text-xs text-gray-500 truncate">{r.phone}{r.error ? ` — ${r.error}` : ""}</p>
+            </div>
+            {r.success && <span className="text-xs text-green-400 font-medium flex-shrink-0">✓ Sent</span>}
           </div>
         ))}
       </div>
@@ -1757,6 +1776,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               {[
                 { label: `Jobs for ${focusedCustomer.name.split(" ")[0]}`, q: `Jobs for ${focusedCustomer.name}`, icon: "📋" },
                 { label: "Full profile", q: `Tell me everything about ${focusedCustomer.name}`, icon: "👤" },
+                { label: "Get ETA", q: `Get ETA for ${focusedCustomer.name}`, icon: "📍" },
                 { label: "Payment link", q: `Send payment link to ${focusedCustomer.name}`, icon: "💳" },
                 { label: `Text ${focusedCustomer.name.split(" ")[0]}`, q: `Text ${focusedCustomer.name}`, icon: "💬" },
                 { label: `Call ${focusedCustomer.name.split(" ")[0]}`, q: `Call ${focusedCustomer.name}`, icon: "📞" },
@@ -1811,6 +1831,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                         {[
                           { label: `Jobs for ${c.name.split(" ")[0]}`, q: `Jobs for ${c.name}`, icon: "📋" },
                           { label: "Full profile", q: `Tell me everything about ${c.name}`, icon: "👤" },
+                          { label: "Get ETA", q: `Get ETA for ${c.name}`, icon: "📍" },
                           { label: "Payment link", q: `Send payment link to ${c.name}`, icon: "💳" },
                           { label: `Text ${c.name.split(" ")[0]}`, q: `Text ${c.name}`, icon: "💬" },
                           { label: `Call ${c.name.split(" ")[0]}`, q: `Call ${c.name}`, icon: "📞" },
