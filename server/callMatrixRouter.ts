@@ -350,7 +350,7 @@ export const callMatrixRouter = router({
         cleanerJobId: input.cleanerJobId,
         clientName: input.personName,
         calledPhone: normalizedPhone,
-        calledTarget: input.audience === "cleaner" ? "cleaner" : "client",
+        calledTarget: input.audience === "cleaner" ? "team" : "client",
         resolvedScript: input.script.slice(0, 1000),
         status: "pending",
         jobDate: input.jobDate,
