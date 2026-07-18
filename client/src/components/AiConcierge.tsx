@@ -77,9 +77,13 @@ interface EtaPendingCard {
   date: string;
 }
 interface BulkSmsRecipient {
-  cleanerProfileId: number;
+  cleanerProfileId?: number;
   name: string;
   phone: string;
+}
+interface ClientDisambiguationCard {
+  messageHint: string | null;
+  matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }>;
 }
 interface BulkSmsConfirmCard {
   targetDescription: string;
@@ -97,7 +101,8 @@ type MessageContent =
   | { type: "clarify"; card: ClarifyCard }
   | { type: "eta_pending"; card: EtaPendingCard }
   | { type: "bulk_sms_confirm"; card: BulkSmsConfirmCard }
-  | { type: "bulk_sms_sent"; card: BulkSmsSentCard };
+  | { type: "bulk_sms_sent"; card: BulkSmsSentCard }
+  | { type: "client_disambiguation"; card: ClientDisambiguationCard };
 
 interface Message {
   id: string;
@@ -243,6 +248,40 @@ function ClarifyCardView({
               <p className="text-xs text-gray-400 mt-0.5">{team.address}</p>
             </div>
             <span className="text-xs text-gray-500 flex-shrink-0 ml-3">{team.scheduled}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Client disambiguation card ─────────────────────────────────────────────
+function ClientDisambiguationCardView({
+  card,
+  onPick,
+}: {
+  card: ClientDisambiguationCard;
+  onPick: (phone: string, name: string) => void;
+}) {
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10">
+        <p className="text-sm font-semibold text-white">Multiple matches — choose one</p>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        {card.matches.map((m) => (
+          <button
+            key={m.phone}
+            onClick={() => onPick(m.phone, m.name)}
+            className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2.5 text-left transition-colors"
+          >
+            <span className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-indigo-400" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white font-semibold">{m.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
+            </div>
           </button>
         ))}
       </div>
@@ -520,10 +559,12 @@ function MessageBubble({
   msg,
   agentPhotoUrl,
   onPickTeam,
+  onPickClient,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
   onPickTeam: (jobId: number, teamName: string) => void;
+  onPickClient: (phone: string, name: string, messageHint: string | null) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -611,6 +652,15 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "client_disambiguation" && (
+          <div>
+            <ClientDisambiguationCardView
+              card={msg.content.card}
+              onPick={(phone, name) => onPickClient(phone, name, msg.content.type === "client_disambiguation" ? msg.content.card.messageHint : null)}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -679,6 +729,41 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Called when agent picks a client from a disambiguation card
+  const handlePickClient = useCallback((phone: string, name: string, messageHint: string | null) => {
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: { type: "text", text: `Text ${name}` },
+      ts: nowTime(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsThinking(true);
+
+    chatMutation.mutate(
+      { message: `Text ${name}`, resolvedClientPhone: phone, resolvedClientMessageHint: messageHint },
+      {
+        onSuccess: (result) => {
+          setIsThinking(false);
+          const aiMsg = buildAiMessage(result);
+          setMessages((prev) => [...prev, aiMsg]);
+        },
+        onError: (err) => {
+          setIsThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "ai",
+              content: { type: "text", text: `Something went wrong: ${err.message}` },
+              ts: nowTime(),
+            },
+          ]);
+        },
+      }
+    );
+  }, [chatMutation]);
 
   // Called when agent picks a team from a clarify card
   const handlePickTeam = useCallback((jobId: number, teamName: string) => {
@@ -805,7 +890,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -885,7 +970,8 @@ type ServerResult =
   | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } }
   | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
   | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
-  | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> };
+  | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
+  | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }> };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -956,6 +1042,17 @@ function buildAiMessage(result: ServerResult): Message {
       content: {
         type: "bulk_sms_sent",
         card: { message: result.message, results: result.results },
+      },
+      ts,
+    };
+  }
+  if (result.type === "client_disambiguation") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "client_disambiguation",
+        card: { messageHint: result.messageHint, matches: result.matches },
       },
       ts,
     };

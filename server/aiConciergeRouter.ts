@@ -17,8 +17,8 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles } from "../drizzle/schema";
-import { eq, ne, and, inArray } from "drizzle-orm";
+import { cleanerJobs, cleanerProfiles, completedJobs } from "../drizzle/schema";
+import { eq, ne, and, inArray, like, or, desc } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
@@ -86,18 +86,35 @@ interface BulkSmsSentResult {
   }>;
 }
 
+/** Returned when a client name search returns multiple matches — agent must pick one */
+export interface ClientDisambiguationResult {
+  type: "client_disambiguation";
+  query: string;
+  messageHint: string | null;
+  matches: Array<{
+    phone: string;
+    name: string;
+    city: string | null;
+    totalCleans: number;
+    ltv: number;
+    lastJobDate: string | null;
+  }>;
+}
+
 type ConciergeResult =
   | EtaPendingResult
   | CompletedResult
   | ErrorResult
   | ClarifyResult
   | BulkSmsConfirmResult
-  | BulkSmsSentResult;
+  | BulkSmsSentResult
+  | ClientDisambiguationResult;
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
   | { action: "eta_update"; teamHint: string | null }
   | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
+  | { action: "text_client"; clientName: string | null; messageHint: string | null }
   | { action: "unknown" };
 
 async function classifyIntent(message: string): Promise<Intent> {
@@ -108,19 +125,26 @@ async function classifyIntent(message: string): Promise<Intent> {
         content: `You are an intent classifier for a cleaning operations AI assistant.
 Classify the user's message into one of these actions:
 - eta_update: user wants to request an ETA call for a team (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
-- text_cleaners: user wants to send an SMS to one or more cleaners (e.g. "text cleaners working today", "text all DC cleaners", "text Maria and ask if she found a purse", "message all cleaners about tomorrow", "text team 5", "text Abigail Wacker")
+- text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow")
+- text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - unknown: anything else
 
+KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams.
+
 For text_cleaners:
-- targetHint should be the EXACT name or group mentioned (e.g. "Abigail Wacker", "working today", "DC", "team 5", "all active")
-- If a specific person's name is mentioned, targetHint MUST be their full name exactly as written
-- messageHint should be the topic/content to send (e.g. "ask if they found a purse", "ask if we can come early")
+- targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
+- messageHint should be the topic/content to send
+
+For text_client:
+- clientName MUST be the exact full name of the customer as written by the user
+- messageHint should be the topic/content to send
 
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "unknown",
+  "action": "eta_update" | "text_cleaners" | "text_client" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
+  "clientName": "<exact customer full name for text_client, or null>",
   "messageHint": "<the message content or topic the user wants to send, or null>"
 }`,
       },
@@ -134,12 +158,13 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
+            clientName: { type: ["string", "null"] },
             messageHint: { type: ["string", "null"] },
           },
-          required: ["action", "teamHint", "targetHint", "messageHint"],
+          required: ["action", "teamHint", "targetHint", "clientName", "messageHint"],
           additionalProperties: false,
         },
       },
@@ -383,6 +408,119 @@ The dispatcher wants to: ${messageHint ?? "send a general message to the team"}`
   return (result.choices[0].message.content as string).trim();
 }
 
+// ── Text client handler ──────────────────────────────────────────────────────
+async function handleTextClient(
+  clientName: string | null,
+  messageHint: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  resolvedClientPhone?: string
+): Promise<ConciergeResult> {
+  if (!clientName && !resolvedClientPhone) {
+    return { type: "error", message: "Please specify a client name to text." };
+  }
+
+  // If agent already picked from disambiguation, resolve directly
+  if (resolvedClientPhone) {
+    const q = `%${resolvedClientPhone}%`;
+    const rows = await db
+      .select({ phone: completedJobs.phone, name: completedJobs.name })
+      .from(completedJobs)
+      .where(like(completedJobs.phone, q))
+      .limit(1);
+    const client = rows[0];
+    if (!client) return { type: "error", message: "Client not found." };
+    const draft = await draftClientMessage(messageHint, client.name ?? clientName ?? "the client");
+    return {
+      type: "bulk_sms_confirm",
+      targetDescription: client.name ?? resolvedClientPhone,
+      recipients: [{ cleanerProfileId: 0, name: client.name ?? resolvedClientPhone, phone: resolvedClientPhone }],
+      draftMessage: draft,
+    };
+  }
+
+  // Search by name
+  const q = `%${(clientName ?? "").trim()}%`;
+  const rows = await db
+    .select({
+      phone: completedJobs.phone,
+      name: completedJobs.name,
+      address: completedJobs.address,
+      lastBookingPrice: completedJobs.lastBookingPrice,
+      jobDate: completedJobs.jobDate,
+    })
+    .from(completedJobs)
+    .where(like(completedJobs.name, q))
+    .orderBy(desc(completedJobs.jobDate))
+    .limit(30);
+
+  // Deduplicate by phone
+  const byPhone = new Map<string, { phone: string; name: string; city: string | null; totalCleans: number; ltv: number; lastJobDate: string | null }>();
+  for (const r of rows) {
+    const key = r.phone;
+    const existing = byPhone.get(key);
+    if (existing) {
+      existing.ltv += r.lastBookingPrice ?? 0;
+      existing.totalCleans += 1;
+      if (!existing.lastJobDate || (r.jobDate && r.jobDate > existing.lastJobDate)) existing.lastJobDate = r.jobDate ?? null;
+    } else {
+      byPhone.set(key, {
+        phone: key,
+        name: r.name ?? "",
+        city: r.address ? r.address.split(",").slice(-2, -1)[0]?.trim() ?? null : null,
+        ltv: r.lastBookingPrice ?? 0,
+        totalCleans: 1,
+        lastJobDate: r.jobDate ?? null,
+      });
+    }
+  }
+
+  const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
+
+  if (matches.length === 0) {
+    return { type: "error", message: `No client found matching "${clientName}". Check the spelling or try a partial name.` };
+  }
+
+  if (matches.length === 1) {
+    const client = matches[0];
+    const draft = await draftClientMessage(messageHint, client.name);
+    return {
+      type: "bulk_sms_confirm",
+      targetDescription: client.name,
+      recipients: [{ cleanerProfileId: 0, name: client.name, phone: client.phone }],
+      draftMessage: draft,
+    };
+  }
+
+  // Multiple matches — return disambiguation card
+  return {
+    type: "client_disambiguation",
+    query: clientName ?? "",
+    messageHint,
+    matches,
+  };
+}
+
+async function draftClientMessage(messageHint: string | null, clientName: string): Promise<string> {
+  const firstName = clientName.split(" ")[0];
+  const result = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `You are drafting a short, professional SMS from a cleaning company to a client.
+Keep it brief (1-3 sentences), friendly, and direct.
+Address the client by first name.
+Do NOT include a sign-off or company name.
+Just write the message body.`,
+      },
+      {
+        role: "user",
+        content: `Draft an SMS to client ${firstName}. The dispatcher wants to: ${messageHint ?? "send a general message"}`,
+      },
+    ],
+  });
+  return (result.choices[0].message.content as string).trim();
+}
+
 // ── Text cleaners handler ─────────────────────────────────────────────────────
 async function handleTextCleaners(
   targetHint: string | null,
@@ -579,6 +717,8 @@ export const aiConciergeRouter = router({
       z.object({
         message: z.string().min(1).max(2000),
         resolvedJobId: z.number().optional(),
+        resolvedClientPhone: z.string().optional(),
+        resolvedClientMessageHint: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -587,6 +727,10 @@ export const aiConciergeRouter = router({
 
       if (input.resolvedJobId) {
         return await handleEtaUpdateByJobId(input.resolvedJobId, db);
+      }
+
+      if (input.resolvedClientPhone) {
+        return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
       }
 
       const intent = await classifyIntent(input.message);
@@ -599,9 +743,13 @@ export const aiConciergeRouter = router({
         return await handleTextCleaners(intent.targetHint, intent.messageHint, db);
       }
 
+      if (intent.action === "text_client") {
+        return await handleTextClient(intent.clientName, intent.messageHint, db);
+      }
+
       return {
         type: "error" as const,
-        message: "I can handle ETA updates and texting cleaners. Try: \"Send ETA for Team 8\" or \"Text cleaners working today about tomorrow's schedule\".",
+        message: "I can handle ETA updates, texting cleaners, and texting clients. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", or \"Text Abigail Avrick and ask if we can come early\".",
       };
     }),
 
@@ -613,7 +761,7 @@ export const aiConciergeRouter = router({
     .input(
       z.object({
         recipients: z.array(z.object({
-          cleanerProfileId: z.number(),
+          cleanerProfileId: z.number().optional(),
           name: z.string(),
           phone: z.string(),
         })),
