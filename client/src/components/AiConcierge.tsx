@@ -33,8 +33,12 @@ import {
   Calendar,
   MapPin,
   AlertTriangle,
+  Play,
+  PhoneMissed,
+  MessageCircle,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { proxyRecordingUrl } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,12 +67,19 @@ interface ClarifyCard {
   message: string;
   teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }>;
 }
-
+interface EtaPendingCard {
+  jobId: number;
+  teamName: string;
+  cleanerName: string;
+  scheduledTimeET: string;
+  date: string;
+}
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
   | { type: "completed"; card: CompletedCard }
-  | { type: "clarify"; card: ClarifyCard };
+  | { type: "clarify"; card: ClarifyCard }
+  | { type: "eta_pending"; card: EtaPendingCard };
 
 interface Message {
   id: string;
@@ -221,6 +232,181 @@ function ClarifyCardView({
   );
 }
 
+// ─── AudioPlayer — copied verbatim from TeamEtaModal ────────────────────────
+function AudioPlayer({ url }: { url: string | null }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onloadedmetadata = null;
+      audioRef.current = null;
+    }
+    setPlaying(false);
+    setDuration(null);
+  }, [url]);
+  function toggle() {
+    if (!url) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(url);
+      audioRef.current.onended = () => setPlaying(false);
+      audioRef.current.onloadedmetadata = () => {
+        if (audioRef.current) setDuration(audioRef.current.duration);
+      };
+    }
+    if (playing) { audioRef.current.pause(); setPlaying(false); }
+    else { void audioRef.current.play(); setPlaying(true); }
+  }
+  function fmtDur(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+  if (!url) {
+    return (
+      <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-indigo-900/60 text-indigo-400">
+          <Play className="ml-0.5 h-5 w-5 fill-current" />
+        </div>
+        <span className="text-xs text-indigo-400 italic">Audio loading…</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3">
+      <button onClick={toggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-900/40">
+        {playing
+          ? <span className="flex gap-[3px]"><span className="h-4 w-[3px] rounded-full bg-white" /><span className="h-4 w-[3px] rounded-full bg-white" /></span>
+          : <Play className="ml-0.5 h-5 w-5 fill-current" />}
+      </button>
+      <div className="flex h-10 flex-1 items-center gap-[3px]">
+        {[5,11,17,10,20,26,18,31,22,14,27,34,20,12,25,18,30,13,22,10].map((h,i)=>(
+          <span key={i} className="w-[3px] rounded-full bg-gradient-to-t from-indigo-600 to-indigo-400" style={{height:h, transformOrigin:"bottom", animation: playing ? `audioWave ${0.6 + (i % 5) * 0.1}s ease-in-out ${(i * 0.05).toFixed(2)}s infinite` : "none"}} />
+        ))}
+      </div>
+      {duration !== null && <span className="text-xs font-bold text-gray-400">{fmtDur(duration)}</span>}
+      <style>{`@keyframes audioWave{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1.0)}}`}</style>
+    </div>
+  );
+}
+// ─── ETA Pending card — polls getTeamEtaSummary, shows steps with full content ──
+function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const { data: rawTeams } = trpc.fieldMgmt.getTeamEtaSummary.useQuery(
+    { date: card.date },
+    { refetchInterval: (query) => {
+        const team = (query.state.data ?? []).find((t: { currentJobId: number }) => t.currentJobId === card.jobId);
+        return team?.etaCall ? false : 5000;
+      }
+    }
+  );
+  const team = (rawTeams ?? []).find((t: { currentJobId: number }) => t.currentJobId === card.jobId);
+  const etaCall = team?.etaCall ?? null;
+  const callDone = etaCall !== null;
+  const resultType = etaCall?.resultType ?? null;
+  const etaTimeStr = etaCall?.etaTimeStr ?? null;
+  const cleanerStatement = etaCall?.cleanerStatement ?? null;
+  const clientNotified = etaCall?.clientNotified ?? false;
+  const smsSentBody = etaCall?.smsSentBody ?? null;
+  const recordingUrl = etaCall?.recordingUrl ?? null;
+  const transcript = etaCall?.transcript ?? null;
+  const hasTranscript = !!transcript && transcript.trim().length > 5;
+  // Step 2: call result
+  let step2Status: StepStatus = "running";
+  let step2Label = "Waiting for call to complete…";
+  if (callDone) {
+    if (resultType === "success") {
+      step2Status = "done";
+      step2Label = etaTimeStr
+        ? `ETA confirmed: ${etaTimeStr}${cleanerStatement ? ` — "${cleanerStatement}"` : ""}`
+        : `Call completed${cleanerStatement ? ` — "${cleanerStatement}"` : ""}`;
+    } else if (resultType === "no_answer" || resultType === "dispatcher_needed") {
+      step2Status = "failed";
+      step2Label = "No answer — cleaner did not pick up";
+    } else if (resultType === "unclear") {
+      step2Status = "failed";
+      step2Label = "Unclear — could not confirm ETA";
+    } else {
+      step2Status = "done";
+      step2Label = "Call completed";
+    }
+  }
+  // Step 3: client SMS
+  let step3Status: StepStatus = "pending";
+  let step3Label = "Client SMS pending…";
+  if (callDone) {
+    if (clientNotified && smsSentBody) {
+      step3Status = "done";
+      step3Label = `Client texted: "${smsSentBody}"`;
+    } else {
+      step3Status = "failed";
+      step3Label = "Client was not notified";
+    }
+  }
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10">
+        <p className="text-sm font-semibold text-white">ETA Update — {card.teamName}</p>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        {/* Step 1: call placed */}
+        <div className="flex items-start gap-3">
+          <StepIcon status="done" />
+          <span className="flex-1 text-sm text-gray-300">
+            ETA call placed for <span className="text-white font-semibold">{card.teamName}</span> ({card.cleanerName}) — scheduled {card.scheduledTimeET}
+          </span>
+        </div>
+        {/* Step 2: call result */}
+        <div className="flex items-start gap-3">
+          <StepIcon status={step2Status} />
+          <span className={`flex-1 text-sm ${step2Status === "running" ? "text-white font-semibold" : step2Status === "done" ? "text-gray-300" : "text-red-400"}`}>
+            {step2Label}
+          </span>
+        </div>
+        {/* Step 3: client SMS */}
+        <div className="flex items-start gap-3">
+          <StepIcon status={step3Status} />
+          <span className={`flex-1 text-sm ${step3Status === "pending" ? "text-gray-500" : step3Status === "done" ? "text-gray-300" : "text-red-400"}`}>
+            {step3Label}
+          </span>
+        </div>
+      </div>
+      {/* Recording + transcript once call is done */}
+      {callDone && (
+        <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-3">
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400">
+            <MessageCircle className="h-3.5 w-3.5" /> Recording
+          </div>
+          {resultType === "no_answer" || resultType === "dispatcher_needed" ? (
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <PhoneMissed className="h-4 w-4 flex-shrink-0" /> No answer — no recording available
+            </div>
+          ) : (
+            <AudioPlayer url={proxyRecordingUrl(recordingUrl)} />
+          )}
+          {hasTranscript && (
+            <div>
+              <button
+                onClick={() => setTranscriptOpen(v => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400 hover:bg-white/10 transition-colors"
+              >
+                <span>Call transcript</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
+              </button>
+              {transcriptOpen && (
+                <div className="mt-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs leading-relaxed text-gray-300 whitespace-pre-wrap">
+                  {transcript}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
 function MessageBubble({
@@ -287,6 +473,12 @@ function MessageBubble({
           <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
             <ClarifyCardView card={msg.content.card} onPickTeam={onPickTeam} />
             <div className="text-right text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "eta_pending" && (
+          <div>
+            <EtaPendingCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
       </div>
@@ -552,7 +744,8 @@ type ServerResult =
   | { type: "completed"; message: string }
   | { type: "error"; message: string }
   | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
-  | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } };
+  | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } }
+  | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -584,6 +777,23 @@ function buildAiMessage(result: ServerResult): Message {
     };
   }
 
+  if (result.type === "eta_pending") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "eta_pending",
+        card: {
+          jobId: result.jobId,
+          teamName: result.teamName,
+          cleanerName: result.cleanerName,
+          scheduledTimeET: result.scheduledTimeET,
+          date: result.date,
+        },
+      },
+      ts,
+    };
+  }
   // workflow
   return {
     id: uid(),
