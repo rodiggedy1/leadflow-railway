@@ -17,9 +17,10 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls } from "../drizzle/schema";
 import { eq, ne, and, inArray, like, or, desc } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
+import { normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
@@ -114,6 +115,26 @@ export interface PaymentLinkConfirmResult {
   smsText: string;
 }
 
+/** Returned when concierge is about to call a client — agent must confirm script before firing */
+export interface CallClientConfirmResult {
+  type: "call_client_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  /** AI-drafted script the agent can edit before firing */
+  script: string;
+  /** "customer" | "cleaner" — passed to callMatrix.startCall */
+  audience: "customer" | "cleaner";
+  /** 0 for concierge calls with no specific job */
+  cleanerJobId: number;
+}
+/** Returned after the concierge call is fired — UI polls callLogId for result */
+export interface CallClientPendingResult {
+  type: "call_client_pending";
+  callLogId: number;
+  recipientName: string;
+  recipientPhone: string;
+}
 /** Returned after payment link SMS is sent */
 export interface PaymentLinkSentResult {
   type: "payment_link_sent";
@@ -133,7 +154,9 @@ type ConciergeResult =
   | BulkSmsSentResult
   | ClientDisambiguationResult
   | PaymentLinkConfirmResult
-  | PaymentLinkSentResult;
+  | PaymentLinkSentResult
+  | CallClientConfirmResult
+  | CallClientPendingResult;
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
@@ -141,6 +164,7 @@ type Intent =
   | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
   | { action: "text_client"; clientName: string | null; messageHint: string | null }
   | { action: "send_payment_link"; clientName: string | null }
+  | { action: "call_client"; clientName: string | null; questionHint: string | null }
   | { action: "unknown" };
 
 async function classifyIntent(message: string): Promise<Intent> {
@@ -154,9 +178,9 @@ Classify the user's message into one of these actions:
 - text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow")
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
+- call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
 - unknown: anything else
-
-KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link.
+KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer.
 
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
@@ -168,13 +192,17 @@ For text_client:
 For send_payment_link:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "send rohan gilkes a payment link" → clientName = "rohan gilkes")
 - messageHint is null
+For call_client:
+- clientName MUST be the exact full name of the customer as written by the user (e.g. "call rohan gilkes and ask about reschedule" → clientName = "rohan gilkes")
+- questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "unknown",
+  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
-  "clientName": "<exact customer full name for text_client or send_payment_link, or null>",
-  "messageHint": "<the message content or topic the user wants to send, or null>"
+  "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
+  "messageHint": "<the message content or topic for text_client or text_cleaners, or null>",
+  "questionHint": "<the topic/question to ask for call_client, or null>"
 }`,
       },
       { role: "user", content: message },
@@ -187,13 +215,14 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
             clientName: { type: ["string", "null"] },
             messageHint: { type: ["string", "null"] },
+            questionHint: { type: ["string", "null"] },
           },
-          required: ["action", "teamHint", "targetHint", "clientName", "messageHint"],
+          required: ["action", "teamHint", "targetHint", "clientName", "messageHint", "questionHint"],
           additionalProperties: false,
         },
       },
@@ -714,6 +743,127 @@ async function handleSendPaymentLink(
   };
 }
 
+// ── Call person handler ──────────────────────────────────────────────────────
+/**
+ * handleCallPerson — searches for a client or cleaner by name, drafts a VAPI call script,
+ * and returns a call_client_confirm card. The UI then calls callMatrix.startCall directly.
+ * No new VAPI infrastructure — reuses callMatrix.startCall + pollCall exactly.
+ */
+async function handleCallPerson(
+  personName: string | null,
+  questionHint: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  resolvedPhone?: string,
+  resolvedName?: string,
+): Promise<ConciergeResult> {
+  if (!personName && !resolvedPhone) {
+    return { type: "error", message: "Please specify who you want to call." };
+  }
+  let recipientPhone: string;
+  let recipientName: string;
+  let cleanerJobId = 0; // sentinel — no specific job for concierge calls
+  let audience: "customer" | "cleaner" = "customer";
+  if (resolvedPhone && resolvedName) {
+    // Already resolved from disambiguation
+    recipientPhone = resolvedPhone;
+    recipientName = resolvedName;
+    // Detect if it's a cleaner by checking cleanerProfiles
+    const [cp] = await db.select({ id: cleanerProfiles.id }).from(cleanerProfiles)
+      .where(like(cleanerProfiles.phone, `%${resolvedPhone.replace(/\D/g, "").slice(-10)}%`)).limit(1);
+    if (cp) { audience = "cleaner"; cleanerJobId = 0; }
+  } else {
+    const q = `%${(personName ?? "").trim()}%`;
+    // 1. Search cleanerProfiles first (exact name match wins)
+    const cleaners = await db
+      .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
+      .from(cleanerProfiles)
+      .where(and(eq(cleanerProfiles.isActive, 1), like(cleanerProfiles.name, q)))
+      .limit(5);
+    // 2. Search clients (same dual-table as payment link)
+    const completedRows = await db
+      .select({ phone: completedJobs.phone, name: completedJobs.name, jobDate: completedJobs.jobDate })
+      .from(completedJobs)
+      .where(or(like(completedJobs.name, q), like(completedJobs.phone, q)))
+      .orderBy(desc(completedJobs.jobDate))
+      .limit(30);
+    const byPhone = new Map<string, { phone: string; name: string; isClient: boolean }>();
+    for (const r of completedRows) {
+      if (!r.phone || byPhone.has(r.phone)) continue;
+      byPhone.set(r.phone, { phone: r.phone, name: r.name ?? "", isClient: true });
+    }
+    const liveRows = await db
+      .select({ customerPhone: cleanerJobs.customerPhone, customerName: cleanerJobs.customerName })
+      .from(cleanerJobs)
+      .where(like(cleanerJobs.customerName, q))
+      .limit(20);
+    for (const r of liveRows) {
+      if (!r.customerPhone) continue;
+      const digits10 = r.customerPhone.replace(/\D/g, "").slice(-10);
+      const e164 = `+1${digits10}`;
+      if (!byPhone.has(e164) && !byPhone.has(r.customerPhone)) {
+        byPhone.set(e164, { phone: e164, name: r.customerName ?? "", isClient: true });
+      }
+    }
+    const clientMatches = Array.from(byPhone.values()).slice(0, 5);
+    // Build combined list: cleaners first, then clients
+    type Match = { phone: string; name: string; audience: "customer" | "cleaner" };
+    const allMatches: Match[] = [
+      ...cleaners.filter(c => c.phone).map(c => ({ phone: c.phone!, name: c.name, audience: "cleaner" as const })),
+      ...clientMatches.map(c => ({ phone: c.phone, name: c.name, audience: "customer" as const })),
+    ];
+    if (allMatches.length === 0) {
+      return { type: "error", message: `No client or cleaner found matching "${personName}". Check the spelling or try a partial name.` };
+    }
+    if (allMatches.length > 1) {
+      // Disambiguation — reuse client_disambiguation card with __call_client__ sentinel
+      return {
+        type: "client_disambiguation",
+        query: personName ?? "",
+        messageHint: `__call_client__:${questionHint ?? ""}`,
+        matches: allMatches.map(m => ({
+          phone: m.phone,
+          name: m.name,
+          city: m.audience === "cleaner" ? "Cleaner" : "Client",
+          totalCleans: 0,
+          ltv: 0,
+          lastJobDate: null,
+        })),
+      };
+    }
+    const match = allMatches[0];
+    recipientPhone = match.phone;
+    recipientName = match.name;
+    audience = match.audience;
+  }
+  // Draft the call script using LLM
+  const firstName = recipientName.split(" ")[0];
+  const scriptResult = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `You are drafting a short, professional call script for a Maids in Black dispatcher.
+The script is the FIRST MESSAGE the AI will say when the call is answered.
+Keep it to 2-3 sentences max. Be warm, direct, and professional.
+Address the person by first name. Do NOT include a sign-off.
+Just write what the AI will say when the call connects.`,
+      },
+      {
+        role: "user",
+        content: `Draft a call script for ${firstName} (${audience}). The dispatcher wants to: ${questionHint ?? "check in with them"}`,
+      },
+    ],
+  });
+  const script = (scriptResult.choices[0].message.content as string).trim();
+  return {
+    type: "call_client_confirm",
+    recipientName,
+    recipientFirstName: firstName,
+    recipientPhone,
+    script,
+    audience,
+    cleanerJobId,
+  } as CallClientConfirmResult;
+}
 async function draftClientMessage(messageHint: string | null, clientName: string): Promise<string> {
   const firstName = clientName.split(" ")[0];
   const result = await invokeLLM({
@@ -934,6 +1084,9 @@ export const aiConciergeRouter = router({
         resolvedClientPhone: z.string().optional(),
         resolvedClientMessageHint: z.string().nullable().optional(),
         resolvedPaymentLink: z.boolean().optional(),
+        resolvedCallClient: z.boolean().optional(),
+        resolvedCallPersonName: z.string().optional(),
+        resolvedCallQuestionHint: z.string().nullable().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -947,6 +1100,9 @@ export const aiConciergeRouter = router({
       if (input.resolvedClientPhone) {
         if (input.resolvedPaymentLink) {
           return await handleSendPaymentLink(null, db, input.resolvedClientPhone);
+        }
+        if (input.resolvedCallClient) {
+          return await handleCallPerson(null, input.resolvedCallQuestionHint ?? null, db, input.resolvedClientPhone, input.resolvedCallPersonName);
         }
         return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
       }
@@ -965,13 +1121,15 @@ export const aiConciergeRouter = router({
         return await handleTextClient(intent.clientName, intent.messageHint, db);
       }
 
-      if (intent.action === "send_payment_link") {
+            if (intent.action === "send_payment_link") {
         return await handleSendPaymentLink(intent.clientName, db);
       }
-
+      if (intent.action === "call_client") {
+        return await handleCallPerson(intent.clientName, intent.questionHint, db);
+      }
       return {
         type: "error" as const,
-        message: "I can handle ETA updates, texting cleaners, texting clients, and sending payment links. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", \"Text Abigail Avrick\", or \"Send payment link to Mary Jones\".",
+        message: "I can handle ETA updates, texting cleaners, texting clients, sending payment links, and calling clients or cleaners. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", \"Text Abigail Avrick\", \"Send payment link to Mary Jones\", or \"Call Rohan Gilkes and ask about reschedule\".",
       };
     }),
 

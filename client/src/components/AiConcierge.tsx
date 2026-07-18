@@ -111,6 +111,19 @@ interface PaymentLinkSentCard {
   success: boolean;
   error?: string;
 }
+interface CallClientConfirmCard {
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  script: string;
+  audience: "customer" | "cleaner";
+  cleanerJobId: number;
+}
+interface CallClientPendingCard {
+  vapiCallId: string;
+  recipientName: string;
+  recipientPhone: string;
+}
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
@@ -121,7 +134,9 @@ type MessageContent =
   | { type: "bulk_sms_sent"; card: BulkSmsSentCard }
   | { type: "client_disambiguation"; card: ClientDisambiguationCard }
   | { type: "payment_link_confirm"; card: PaymentLinkConfirmCard }
-  | { type: "payment_link_sent"; card: PaymentLinkSentCard };
+  | { type: "payment_link_sent"; card: PaymentLinkSentCard }
+  | { type: "call_client_confirm"; card: CallClientConfirmCard }
+  | { type: "call_client_pending"; card: CallClientPendingCard };
 
 interface Message {
   id: string;
@@ -570,6 +585,155 @@ function AudioPlayer({ url }: { url: string | null }) {
     </div>
   );
 }
+// ─── Call client confirm card ──────────────────────────────────────────────────
+function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmCard; onFired: (vapiCallId: string) => void }) {
+  const [script, setScript] = useState(card.script);
+  const [fired, setFired] = useState(false);
+  const startCall = trpc.callMatrix.startCall.useMutation({
+    onSuccess: (result) => {
+      setFired(true);
+      onFired(result.vapiCallId ?? "");
+    },
+  });
+  function handleCall() {
+    if (fired || startCall.isPending) return;
+    startCall.mutate({
+      cleanerJobId: card.cleanerJobId || 1,
+      jobDate: new Date().toISOString().slice(0, 10),
+      personName: card.recipientName,
+      phone: card.recipientPhone,
+      scenario: "Concierge call",
+      script: script.trim(),
+      audience: card.audience,
+    });
+  }
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3">
+        <span className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
+          <Phone className="w-4 h-4 text-indigo-400" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white font-semibold">{card.recipientName}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone} · {card.audience === "cleaner" ? "Cleaner" : "Client"}</p>
+        </div>
+      </div>
+      <div className="px-4 py-3">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Edit3 className="w-3 h-3 text-indigo-400" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Call script</span>
+        </div>
+        <textarea
+          value={script}
+          onChange={(e) => setScript(e.target.value)}
+          disabled={fired || startCall.isPending}
+          rows={4}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+        />
+      </div>
+      {!fired && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={handleCall}
+            disabled={!script.trim() || startCall.isPending}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          >
+            {startCall.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Calling…</>
+            ) : (
+              <><Phone className="w-4 h-4" /> Call {card.recipientFirstName}</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+// ─── Call client pending card — polls callMatrix.pollCall ────────────────────
+function CallClientPendingCardView({ card }: { card: CallClientPendingCard }) {
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const utils = trpc.useUtils();
+  const [pollResult, setPollResult] = useState<{
+    status: string;
+    transcript: string | null;
+    recordingUrl: string | null;
+    summary: string | null;
+    endedReason: string | null;
+  } | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!card.vapiCallId) return;
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const result = await utils.callMatrix.pollCall.fetch({ vapiCallId: card.vapiCallId });
+        setPollResult(result);
+        const s = result.status;
+        if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          pollIntervalRef.current = null;
+        }
+      } catch { /* ignore */ }
+    }, 5000);
+    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+  }, [card.vapiCallId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const callDone = pollResult !== null && (pollResult.status === "completed" || pollResult.status === "voicemail" || pollResult.status === "no_answer" || pollResult.status === "failed");
+  const noAnswer = pollResult?.status === "no_answer" || pollResult?.status === "failed";
+  const transcript = pollResult?.transcript ?? null;
+  const hasTranscript = !!transcript && transcript.trim().length > 5;
+  let step2Status: StepStatus = "running";
+  let step2Label = "Waiting for call to complete…";
+  if (callDone) {
+    if (noAnswer) { step2Status = "failed"; step2Label = "No answer"; }
+    else if (pollResult?.status === "voicemail") { step2Status = "done"; step2Label = "Left voicemail"; }
+    else { step2Status = "done"; step2Label = pollResult?.summary ? `Completed — "${pollResult.summary}"` : "Call completed"; }
+  }
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10">
+        <p className="text-sm font-semibold text-white">Calling {card.recipientName}</p>
+        <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone}</p>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        <div className="flex items-start gap-3">
+          <StepIcon status="done" />
+          <span className="flex-1 text-sm text-gray-300">Call placed to <span className="text-white font-semibold">{card.recipientName}</span></span>
+        </div>
+        <div className="flex items-start gap-3">
+          <StepIcon status={step2Status} />
+          <span className={`flex-1 text-sm ${step2Status === "running" ? "text-white font-semibold" : step2Status === "done" ? "text-gray-300" : "text-red-400"}`}>{step2Label}</span>
+        </div>
+      </div>
+      {callDone && (
+        <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-3">
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400">
+            <MessageCircle className="h-3.5 w-3.5" /> Recording
+          </div>
+          {noAnswer ? (
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <PhoneMissed className="h-4 w-4 flex-shrink-0" /> No answer — no recording available
+            </div>
+          ) : (
+            <AudioPlayer url={proxyRecordingUrl(pollResult?.recordingUrl ?? null)} />
+          )}
+          {hasTranscript && (
+            <div>
+              <button
+                onClick={() => setTranscriptOpen(v => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400 hover:bg-white/10 transition-colors"
+              >
+                <span>Call transcript</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
+              </button>
+              {transcriptOpen && (
+                <div className="mt-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs leading-relaxed text-gray-300 whitespace-pre-wrap">{transcript}</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // ─── ETA Pending card — polls getTeamEtaSummary, shows steps with full content ──
 function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
@@ -821,6 +985,28 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "call_client_confirm" && (
+          <div>
+            <CallClientConfirmCardView
+              card={msg.content.card}
+              onFired={(vapiCallId) => {
+                onAddMessage({
+                  id: uid(),
+                  role: "ai",
+                  content: { type: "call_client_pending", card: { vapiCallId, recipientName: msg.content.type === "call_client_confirm" ? msg.content.card.recipientName : "", recipientPhone: msg.content.type === "call_client_confirm" ? msg.content.card.recipientPhone : "" } },
+                  ts: nowTime(),
+                });
+              }}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "call_client_pending" && (
+          <div>
+            <CallClientPendingCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -891,23 +1077,27 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   }, [messages]);
 
   // Called when agent picks a client from a disambiguation card
-  const handlePickClient = useCallback((phone: string, name: string, messageHint: string | null) => {
+    const handlePickClient = useCallback((phone: string, name: string, messageHint: string | null) => {
     const isPaymentLink = messageHint === "__payment_link__";
+    const isCallClient = (messageHint ?? "").startsWith("__call_client__");
+    const callQuestionHint = isCallClient ? (messageHint ?? "").replace("__call_client__:", "") || null : null;
     const userMsg: Message = {
       id: uid(),
       role: "user",
-      content: { type: "text", text: isPaymentLink ? `Send payment link to ${name}` : `Text ${name}` },
+      content: { type: "text", text: isPaymentLink ? `Send payment link to ${name}` : isCallClient ? `Call ${name}` : `Text ${name}` },
       ts: nowTime(),
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsThinking(true);
-
     chatMutation.mutate(
       {
-        message: isPaymentLink ? `Send payment link to ${name}` : `Text ${name}`,
+        message: isPaymentLink ? `Send payment link to ${name}` : isCallClient ? `Call ${name}` : `Text ${name}`,
         resolvedClientPhone: phone,
-        resolvedClientMessageHint: isPaymentLink ? null : messageHint,
+        resolvedClientMessageHint: (isPaymentLink || isCallClient) ? null : messageHint,
         resolvedPaymentLink: isPaymentLink,
+        resolvedCallClient: isCallClient,
+        resolvedCallPersonName: isCallClient ? name : undefined,
+        resolvedCallQuestionHint: callQuestionHint,
       },
       {
         onSuccess: (result) => {
@@ -1139,7 +1329,8 @@ type ServerResult =
   | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
   | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }> }
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
-  | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string };
+  | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
+  | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -1256,6 +1447,24 @@ function buildAiMessage(result: ServerResult): Message {
       content: {
         type: "client_disambiguation",
         card: { messageHint: result.messageHint, matches: result.matches },
+      },
+      ts,
+    };
+  }
+  if (result.type === "call_client_confirm") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "call_client_confirm",
+        card: {
+          recipientName: result.recipientName,
+          recipientFirstName: result.recipientFirstName,
+          recipientPhone: result.recipientPhone,
+          script: result.script,
+          audience: result.audience,
+          cleanerJobId: result.cleanerJobId,
+        },
       },
       ts,
     };
