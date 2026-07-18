@@ -909,10 +909,10 @@ async function handleQueryData(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
   const today = getTodayET();
-  // Fetch all raw job rows for today (not grouped — gives full picture per job)
   const jobs = await db
     .select({
       id: cleanerJobs.id,
+      jobDate: cleanerJobs.jobDate,
       teamName: cleanerJobs.teamName,
       cleanerName: cleanerJobs.cleanerName,
       customerName: cleanerJobs.customerName,
@@ -923,7 +923,6 @@ async function handleQueryData(
     .from(cleanerJobs)
     .where(
       and(
-        eq(cleanerJobs.jobDate, today),
         ne(cleanerJobs.bookingStatus, "cancelled"),
         ne(cleanerJobs.bookingStatus, "rescheduled")
       )
@@ -931,11 +930,12 @@ async function handleQueryData(
     .orderBy(cleanerJobs.serviceDateTime);
 
   if (jobs.length === 0) {
-    return { type: "query_result", answer: `No jobs found for today (${today}).` };
+    return { type: "query_result", answer: "No job data found." };
   }
 
   const jobSummary = jobs.map(j => ({
     id: j.id,
+    date: j.jobDate,
     team: j.teamName ?? j.cleanerName,
     cleaner: j.cleanerName,
     customer: j.customerName ?? "Unknown",
@@ -952,7 +952,7 @@ async function handleQueryData(
       },
       {
         role: "user",
-        content: `Job data for today:\n${JSON.stringify(jobSummary, null, 2)}\n\nDispatcher question: ${question}`,
+        content: `Job data:\n${JSON.stringify(jobSummary, null, 2)}\n\nDispatcher question: ${question}`,
       },
     ],
   });
