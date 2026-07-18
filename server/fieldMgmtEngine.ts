@@ -2367,7 +2367,6 @@ CRITICAL RULE: The AI's readback line ("Just to confirm, you said X") is NOT the
 - cleanerStatement must be the cleaner's own words only.
 
 Return the confirmed time as an ABSOLUTE clock string in 12-hour ET format (e.g. "7:30 PM", "10:30 AM"). Do NOT compute a minutes offset — just return the clock time exactly as spoken.
-CRITICAL: ALWAYS include AM or PM in confirmedArrivalTimeET. If the cleaner did not say AM/PM, infer it from the scheduled time ${scheduledTimeET}. For example, if scheduled is "8:30 AM" and cleaner says "8 30" or "8:30", return "8:30 AM".
 Determine status by comparing confirmedArrivalTimeET to the scheduled time ${scheduledTimeET}:
   same time → "on_time", later → "late", earlier → "early", cannot determine → "unclear".
 
@@ -2761,22 +2760,25 @@ export async function handleEtaCallEnd(params: {
   // on the job date, then apply it explicitly.
   const etaDate = (() => {
     try {
-      // Match "7:30 PM" or "7:30 AM" or "7 PM" etc.
-      let match = confirmedArrivalTimeET.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
-      // Fallback: bare time like "8:30" or "8 30" without AM/PM — infer meridiem from scheduledTimeET
-      if (!match) {
-        const bareMatch = confirmedArrivalTimeET.match(/(\d{1,2})[: ]?(\d{2})?/);
-        if (bareMatch) {
-          const schedMeridiem = scheduledTimeET?.match(/(AM|PM)/i)?.[1]?.toUpperCase() ?? "AM";
-          match = [bareMatch[0], bareMatch[1], bareMatch[2] ?? "0", schedMeridiem] as RegExpMatchArray;
-        }
+      // Match "7:30 PM", "7:30 AM", "7 PM", or bare "8:30" / "8 30" (no AM/PM)
+      const matchWithMeridiem = confirmedArrivalTimeET.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+      const matchBare = confirmedArrivalTimeET.match(/(\d{1,2})[: ](\d{2})/);
+      const matchHourOnly = confirmedArrivalTimeET.match(/^(\d{1,2})$/);
+      if (!matchWithMeridiem && !matchBare && !matchHourOnly) return null;
+      let hours: number;
+      let minutes: number;
+      if (matchWithMeridiem) {
+        hours = parseInt(matchWithMeridiem[1], 10);
+        minutes = parseInt(matchWithMeridiem[2] ?? "0", 10);
+        const meridiem = matchWithMeridiem[3].toUpperCase();
+        if (meridiem === "PM" && hours !== 12) hours += 12;
+        if (meridiem === "AM" && hours === 12) hours = 0;
+      } else {
+        // Bare time — use hours and minutes as-is (already in 24h or unambiguous morning time)
+        const m = matchBare ?? matchHourOnly!;
+        hours = parseInt(m[1], 10);
+        minutes = parseInt(m[2] ?? "0", 10);
       }
-      if (!match) return null;
-      let hours = parseInt(match[1], 10);
-      const minutes = parseInt(match[2] ?? "0", 10);
-      const meridiem = match[3].toUpperCase();
-      if (meridiem === "PM" && hours !== 12) hours += 12;
-      if (meridiem === "AM" && hours === 12) hours = 0;
       // Build a UTC date by finding the ET offset for this date
       // Use a reference point on the job date at noon UTC to get the ET offset
       const [y, mo, d] = jobDate.split("-").map(Number);
