@@ -1869,7 +1869,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </div>
           </div>
         )}
-        <div className="relative bg-[#1e2235] border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-3">
+        <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
+          {/* Text input area */}
           <textarea
             ref={inputRef}
             value={input}
@@ -1877,18 +1878,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className="w-full bg-transparent text-white placeholder-gray-500 text-sm resize-none outline-none leading-relaxed"
-            style={{ minHeight: 44 }}
+            className="w-full bg-transparent text-white placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            style={{ minHeight: 52 }}
           />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 relative">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/8 transition-colors text-xs font-medium">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-3 pb-3 pt-1">
+            <div className="flex items-center gap-0.5">
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <div className="relative">
                 <button
                   onClick={() => setShowCommands((v) => !v)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/8 transition-colors text-xs font-medium"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium"
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span>Commands</span>
@@ -1900,7 +1902,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   />
                 )}
               </div>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/8 transition-colors text-xs font-medium">
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
                 <AtSign className="w-3.5 h-3.5" />
                 <span>People</span>
               </button>
@@ -1908,9 +1910,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             <button
               onClick={handleSend}
               disabled={!input.trim() || isThinking}
-              className="w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
+              className="w-8 h-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all flex-shrink-0 shadow-sm"
             >
-              <Send className="w-4 h-4 text-white" />
+              {isThinking
+                ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                : <Send className="w-3.5 h-3.5 text-white" />}
             </button>
           </div>
         </div>
