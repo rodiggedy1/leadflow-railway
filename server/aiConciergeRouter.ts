@@ -165,13 +165,15 @@ For text_cleaners:
 For text_client:
 - clientName MUST be the exact full name of the customer as written by the user
 - messageHint should be the topic/content to send
-
+For send_payment_link:
+- clientName MUST be the exact full name of the customer as written by the user (e.g. "send rohan gilkes a payment link" → clientName = "rohan gilkes")
+- messageHint is null
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "text_client" | "unknown",
+  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
-  "clientName": "<exact customer full name for text_client, or null>",
+  "clientName": "<exact customer full name for text_client or send_payment_link, or null>",
   "messageHint": "<the message content or topic the user wants to send, or null>"
 }`,
       },
