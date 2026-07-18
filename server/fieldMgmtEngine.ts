@@ -2756,13 +2756,45 @@ export async function handleEtaCallEnd(params: {
 
   // ── Parse confirmed clock time directly — no offset math ─────────────────
   // The LLM returns the exact time the cleaner said (e.g. "7:30 PM").
-  // We parse it against the job date in ET to get a UTC timestamp.
+  // We must parse it as ET, not UTC. Use Intl to find the UTC offset for ET
+  // on the job date, then apply it explicitly.
   const etaDate = (() => {
     try {
-      // Parse "7:30 PM" against jobDate (YYYY-MM-DD) in ET
-      const parsed = new Date(`${jobDate} ${confirmedArrivalTimeET}`);
-      if (!isNaN(parsed.getTime())) return parsed;
-      return null;
+      // Match "7:30 PM" or "7:30 AM" or "7 PM" etc.
+      const match = confirmedArrivalTimeET.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
+      if (!match) return null;
+      let hours = parseInt(match[1], 10);
+      const minutes = parseInt(match[2] ?? "0", 10);
+      const meridiem = match[3].toUpperCase();
+      if (meridiem === "PM" && hours !== 12) hours += 12;
+      if (meridiem === "AM" && hours === 12) hours = 0;
+      // Build a UTC date by finding the ET offset for this date
+      // Use a reference point on the job date at noon UTC to get the ET offset
+      const [y, mo, d] = jobDate.split("-").map(Number);
+      const refUtc = Date.UTC(y, mo - 1, d, 12, 0, 0); // noon UTC on job date
+      const etOffsetMin = (() => {
+        // Format noon UTC as ET to extract the offset
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: false,
+          timeZoneName: "shortOffset",
+        });
+        const parts = fmt.formatToParts(new Date(refUtc));
+        const tzPart = parts.find(p => p.type === "timeZoneName")?.value ?? "GMT-4";
+        // tzPart is like "GMT-4" or "GMT-5"
+        const offsetMatch = tzPart.match(/GMT([+-]\d+)(?::(\d+))?/);
+        if (!offsetMatch) return -240; // default EDT
+        const h = parseInt(offsetMatch[1], 10);
+        const m = parseInt(offsetMatch[2] ?? "0", 10);
+        return h * 60 + (h < 0 ? -m : m);
+      })();
+      // ET time in UTC = ET wall clock - ET offset
+      const utcMs = Date.UTC(y, mo - 1, d, hours, minutes, 0) - etOffsetMin * 60 * 1000;
+      const result = new Date(utcMs);
+      if (isNaN(result.getTime())) return null;
+      return result;
     } catch {
       return null;
     }

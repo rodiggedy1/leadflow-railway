@@ -8,15 +8,16 @@
  * Design principle: this router ONLY orchestrates existing procedures.
  * It does NOT re-implement any logic that already exists elsewhere.
  * - Team data  → fieldMgmtRouter.getTeamEtaSummary (already used by TeamEtaModal)
- * - ETA call   → fieldMgmtRouter.requestEta (already used by TeamEtaModal footer button)
+ * - ETA call   → placeEtaCall (same as requestEta mutation)
+ * - Poll result → fieldMgmt.getTeamEtaSummary (same data TeamEtaModal shows)
  */
 import { z } from "zod";
 import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, opsChatMessages } from "../drizzle/schema";
-import { eq, ne, and, desc, inArray } from "drizzle-orm";
+import { cleanerJobs, cleanerProfiles } from "../drizzle/schema";
+import { eq, ne, and } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,21 +26,17 @@ function getTodayET(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
-// ── Step types (mirrors AiConcierge.tsx WorkflowStep) ────────────────────────
-type StepStatus = "done" | "pending" | "running" | "failed";
+// ── Result types ──────────────────────────────────────────────────────────────
 
-interface WorkflowStep {
-  id: string;
-  label: string;
-  status: StepStatus;
-  ts?: string;
-}
-
-interface WorkflowResult {
-  type: "workflow";
-  summary: string;
-  steps: WorkflowStep[];
-  expandable?: { label: string; content: string };
+interface EtaPendingResult {
+  type: "eta_pending";
+  /** Job ID to poll fieldMgmt.getTeamEtaSummary for */
+  jobId: number;
+  teamName: string;
+  cleanerName: string;
+  scheduledTimeET: string;
+  /** Today's date string for the getTeamEtaSummary query */
+  date: string;
 }
 
 interface CompletedResult {
@@ -55,11 +52,10 @@ interface ErrorResult {
 interface ClarifyResult {
   type: "clarify";
   message: string;
-  /** Teams the agent can pick from */
   teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }>;
 }
 
-type ConciergeResult = WorkflowResult | CompletedResult | ErrorResult | ClarifyResult;
+type ConciergeResult = EtaPendingResult | CompletedResult | ErrorResult | ClarifyResult;
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
@@ -106,7 +102,7 @@ teamHint: extract the team name or cleaner name if mentioned, otherwise null.`,
   }
 }
 
-// ── Fetch today's teams (same data getTeamEtaSummary returns, but inline) ────
+// ── Fetch today's teams ───────────────────────────────────────────────────────
 async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
   const today = getTodayET();
 
@@ -133,7 +129,6 @@ async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
     )
     .orderBy(cleanerJobs.serviceDateTime);
 
-  // Group by team
   const teamMap = new Map<string, {
     teamName: string;
     cleanerName: string;
@@ -171,12 +166,12 @@ async function handleEtaUpdate(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
   const teams = await getTodayTeams(db);
+  const today = getTodayET();
 
   if (teams.length === 0) {
     return { type: "error", message: "No active jobs found for today." };
   }
 
-  // Match team by hint
   let matched = teams.find(t => {
     if (!teamHint) return false;
     const hint = teamHint.toLowerCase();
@@ -186,12 +181,10 @@ async function handleEtaUpdate(
     );
   });
 
-  // If no match and only one team, use it
   if (!matched && teams.length === 1) {
     matched = teams[0];
   }
 
-  // If still no match, ask for clarification
   if (!matched) {
     return {
       type: "clarify",
@@ -218,7 +211,6 @@ async function handleEtaUpdate(
     return { type: "error", message: `No phone number on file for ${matched.cleanerName}.` };
   }
 
-  // Fetch job details for the ETA call (same as requestEta does)
   const [row] = await db
     .select({
       id: cleanerJobs.id,
@@ -232,9 +224,7 @@ async function handleEtaUpdate(
     .where(eq(cleanerJobs.id, matched.currentJobId))
     .limit(1);
 
-  if (!row) {
-    return { type: "error", message: "Job not found." };
-  }
+  if (!row) return { type: "error", message: "Job not found." };
 
   const cleanerFirstName = (row.cleanerName ?? "there").split(" ")[0];
   const customerFirstName = (row.customerName ?? "your customer").split(" ")[0];
@@ -244,13 +234,10 @@ async function handleEtaUpdate(
   }
 
   const serviceTime = parseServiceDateTime(row.serviceDateTime);
-  if (!serviceTime) {
-    return { type: "error", message: "Could not parse service date/time for this job." };
-  }
+  if (!serviceTime) return { type: "error", message: "Could not parse service date/time for this job." };
 
   const scheduledTimeET = formatTimeET(serviceTime);
 
-  // Fire the ETA call — same as requestEta mutation
   const result = await placeEtaCall({
     cleanerJobId: matched.currentJobId,
     step: "eta_call_1",
@@ -269,55 +256,22 @@ async function handleEtaUpdate(
   }
 
   return {
-    type: "completed",
-    message: `ETA call placed for ${matched.teamName} (${cleanerFirstName}). The client will be notified once the call completes.`,
+    type: "eta_pending",
+    jobId: matched.currentJobId,
+    teamName: matched.teamName,
+    cleanerName: matched.cleanerName,
+    scheduledTimeET,
+    date: today,
   };
 }
-
-// ── Router ────────────────────────────────────────────────────────────────────
-export const aiConciergeRouter = router({
-  /**
-   * Main chat endpoint for the AI Concierge panel.
-   * Receives the agent's message, classifies intent, executes the action,
-   * and returns a structured result the UI renders as a workflow card or completed card.
-   */
-  chat: agentProcedure
-    .input(
-      z.object({
-        message: z.string().min(1).max(2000),
-        /** If the agent already picked a team from a clarify response, pass the jobId directly */
-        resolvedJobId: z.number().optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-
-      // If agent already resolved the team (clicked a clarify chip), skip classification
-      if (input.resolvedJobId) {
-        const result = await handleEtaUpdateByJobId(input.resolvedJobId, db);
-        return result;
-      }
-
-      const intent = await classifyIntent(input.message);
-
-      if (intent.action === "eta_update") {
-        return await handleEtaUpdate(intent.teamHint, db);
-      }
-
-      // Unknown intent — friendly fallback
-      return {
-        type: "error" as const,
-        message: "I can handle ETA updates right now. Try: \"Send ETA for Team 8\" or just \"ETA update\".",
-      };
-    }),
-});
 
 // ── ETA by resolved job ID (when agent picks from clarify list) ───────────────
 async function handleEtaUpdateByJobId(
   jobId: number,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
+  const today = getTodayET();
+
   const [row] = await db
     .select({
       id: cleanerJobs.id,
@@ -359,7 +313,49 @@ async function handleEtaUpdateByJobId(
   }
 
   return {
-    type: "completed",
-    message: `ETA call placed for ${teamName} (${cleanerFirstName}). The client will be notified once the call completes.`,
+    type: "eta_pending",
+    jobId,
+    teamName,
+    cleanerName: row.cleanerName ?? teamName,
+    scheduledTimeET,
+    date: today,
   };
 }
+
+// ── Router ────────────────────────────────────────────────────────────────────
+export const aiConciergeRouter = router({
+  /**
+   * Main chat endpoint for the AI Concierge panel.
+   * Receives the agent's message, classifies intent, executes the action,
+   * and returns a structured result the UI renders.
+   *
+   * On ETA update: returns eta_pending with jobId so the UI can poll
+   * fieldMgmt.getTeamEtaSummary until the call result arrives.
+   */
+  chat: agentProcedure
+    .input(
+      z.object({
+        message: z.string().min(1).max(2000),
+        resolvedJobId: z.number().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      if (input.resolvedJobId) {
+        return await handleEtaUpdateByJobId(input.resolvedJobId, db);
+      }
+
+      const intent = await classifyIntent(input.message);
+
+      if (intent.action === "eta_update") {
+        return await handleEtaUpdate(intent.teamHint, db);
+      }
+
+      return {
+        type: "error" as const,
+        message: "I can handle ETA updates right now. Try: \"Send ETA for Team 8\" or just \"ETA update\".",
+      };
+    }),
+});
