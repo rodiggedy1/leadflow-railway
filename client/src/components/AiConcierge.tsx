@@ -1101,17 +1101,21 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
-  const { data: acData } = trpc.opsChat.searchCustomers.useQuery(
+  const { data: acData, error: acError } = trpc.opsChat.searchCustomers.useQuery(
     { query: acQuery ?? "" },
     { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
-  const { data: acCleanerData } = trpc.opsChat.searchCleaners.useQuery(
+  const { data: acCleanerData, error: acCleanerError } = trpc.opsChat.searchCleaners.useQuery(
     { query: acQuery ?? "" },
     { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
   const acCustomers = (acData?.customers ?? []).slice(0, 4);
   const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 3);
   const showSuggestions = (acQuery?.length ?? 0) >= 2 && (acCustomers.length > 0 || acCleaners.length > 0);
+  // Debug: log suggestions state
+  if (acQuery && acQuery.length >= 2) {
+    console.log("[AC] query:", acQuery, "customers:", acCustomers.length, "cleaners:", acCleaners.length, "show:", showSuggestions, "err:", acError?.message ?? acCleanerError?.message ?? null);
+  }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
