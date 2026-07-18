@@ -13,7 +13,7 @@
  * The only change from the stub version is that handleSend now calls
  * trpc.aiConcierge.chat instead of the local simulateEtaWorkflow simulation.
  */
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Bot,
   Send,
@@ -137,6 +137,25 @@ interface QueryResultCard {
     jobStatus: string | null;
   }>;
 }
+interface CustomerProfileCard {
+  name: string;
+  phone: string;
+  address: string | null;
+  frequency: string | null;
+  totalBookings: number;
+  ltv: number;
+  avgPrice: number | null;
+  usualTeam: string | null;
+  isVip: boolean;
+  lastJobs: Array<{ jobDate: string | null; serviceType: string | null; price: number | null; rating: number | null; teamName: string | null }>;
+  upcomingJob: { jobDate: string | null; serviceDateTime: string | null; jobStatus: string | null; teamName: string | null; jobAddress: string | null } | null;
+  lastMessages: Array<{ content: string; ts: number | null }>;
+  aiMemoryBullets: string[];
+  openPhoneCalls: Array<{ direction: string | null; durationSeconds: number | null; callStartedAt: string | Date | null; callDebrief: string | null }>;
+  vapiCalls: Array<{ step: string | null; outcome: string | null; summary: string | null; durationSeconds: number | null; createdAt: string | Date | null }>;
+  aiSummary: string;
+}
+
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
@@ -150,7 +169,8 @@ type MessageContent =
   | { type: "payment_link_sent"; card: PaymentLinkSentCard }
   | { type: "call_client_confirm"; card: CallClientConfirmCard }
   | { type: "call_client_pending"; card: CallClientPendingCard }
-  | { type: "query_result"; card: QueryResultCard };
+  | { type: "query_result"; card: QueryResultCard }
+  | { type: "customer_profile"; card: CustomerProfileCard };
 
 interface Message {
   id: string;
@@ -1020,6 +1040,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "customer_profile" && (
+          <div>
+            <CustomerProfileCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1152,6 +1178,228 @@ function QueryResultCardView({ card }: { card: QueryResultCard }) {
         <span style={{ fontSize: 11, color: "#3d4260", fontStyle: "italic" }}>Historical jobs may not include team info</span>
         <span style={{ fontSize: 10, color: "#3d4260" }}>cleanerJobs + completedJobs</span>
       </div>
+    </div>
+  );
+}
+
+// ─── Customer profile card ───────────────────────────────────────────────────
+
+function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
+  const [expandedSection, setExpandedSection] = React.useState<string | null>(null);
+
+  const toggle = (s: string) => setExpandedSection(prev => prev === s ? null : s);
+
+  const formatDate = (d: string | null) => {
+    if (!d) return "—";
+    const [y, m, day] = d.split("-");
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return `${months[parseInt(m)-1]} ${parseInt(day)}`;
+  };
+
+  const formatDuration = (secs: number | null) => {
+    if (!secs) return null;
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
+  const formatCallDate = (d: string | Date | null) => {
+    if (!d) return "—";
+    try { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" }); }
+    catch { return "—"; }
+  };
+
+  const stars = (rating: number | null) => {
+    if (!rating) return null;
+    return "★".repeat(Math.round(rating)) + "☆".repeat(5 - Math.round(rating));
+  };
+
+  return (
+    <div className="rounded-xl overflow-hidden border border-white/10 bg-[#1a1f2e] text-white w-full max-w-sm">
+      {/* Header */}
+      <div className="px-4 pt-4 pb-3 border-b border-white/10">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-semibold tracking-widest text-indigo-400 uppercase">Customer Profile</span>
+              {card.isVip && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">VIP</span>
+              )}
+            </div>
+            <div className="text-base font-bold text-white mt-0.5 truncate">{card.name}</div>
+            {card.address && (
+              <div className="text-xs text-gray-400 truncate mt-0.5">{card.address.split(",").slice(0,2).join(",")}</div>
+            )}
+          </div>
+        </div>
+
+        {/* AI Summary */}
+        {card.aiSummary && (
+          <div className="mt-3 text-xs text-gray-300 leading-relaxed bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+            {card.aiSummary}
+          </div>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-4 divide-x divide-white/10 border-b border-white/10">
+        {[
+          { label: "Cleans", value: card.totalBookings },
+          { label: "LTV", value: card.ltv > 0 ? `$${card.ltv.toLocaleString()}` : "—" },
+          { label: "Avg", value: card.avgPrice ? `$${card.avgPrice}` : "—" },
+          { label: "Freq", value: card.frequency ? card.frequency.replace(/monthly/i,"Mo").replace(/weekly/i,"Wk").replace(/bi-weekly/i,"BiWk").replace(/one-time/i,"1x") : "—" },
+        ].map(s => (
+          <div key={s.label} className="flex flex-col items-center py-2.5 px-1">
+            <span className="text-sm font-bold text-white">{s.value}</span>
+            <span className="text-[10px] text-gray-500 mt-0.5">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Usual team */}
+      {card.usualTeam && (
+        <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+          <span className="text-xs text-gray-400">Usual team:</span>
+          <span className="text-xs font-semibold text-white">{card.usualTeam}</span>
+        </div>
+      )}
+
+      {/* Upcoming job */}
+      {card.upcomingJob && (
+        <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
+          <span className="text-xs text-gray-400">Next job:</span>
+          <span className="text-xs font-semibold text-white">{formatDate(card.upcomingJob.jobDate)}</span>
+          {card.upcomingJob.serviceDateTime && (
+            <span className="text-xs text-gray-400">at {card.upcomingJob.serviceDateTime}</span>
+          )}
+          {card.upcomingJob.teamName && (
+            <span className="text-xs text-gray-500">· {card.upcomingJob.teamName}</span>
+          )}
+        </div>
+      )}
+
+      {/* AI Memory bullets */}
+      {card.aiMemoryBullets.length > 0 && (
+        <div className="border-b border-white/10">
+          <button onClick={() => toggle("memory")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+            <span className="text-xs font-semibold text-indigo-300">AI Memory ({card.aiMemoryBullets.length})</span>
+            <span className="text-gray-500 text-xs">{expandedSection === "memory" ? "▲" : "▼"}</span>
+          </button>
+          {expandedSection === "memory" && (
+            <div className="px-4 pb-3 space-y-1">
+              {card.aiMemoryBullets.map((b, i) => (
+                <div key={i} className="text-xs text-gray-300 flex gap-2">
+                  <span className="text-indigo-400 shrink-0">·</span>
+                  <span>{b}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Last 5 jobs */}
+      {card.lastJobs.length > 0 && (
+        <div className="border-b border-white/10">
+          <button onClick={() => toggle("jobs")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+            <span className="text-xs font-semibold text-gray-300">Job History ({card.lastJobs.length})</span>
+            <span className="text-gray-500 text-xs">{expandedSection === "jobs" ? "▲" : "▼"}</span>
+          </button>
+          {expandedSection === "jobs" && (
+            <div className="px-4 pb-3 space-y-2">
+              {card.lastJobs.map((j, i) => (
+                <div key={i} className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold text-white">{formatDate(j.jobDate)}</div>
+                    <div className="text-[10px] text-gray-500 truncate">{j.teamName ?? "No team"}</div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    {j.price && <div className="text-xs font-bold text-green-400">${j.price}</div>}
+                    {j.rating && <div className="text-[10px] text-amber-400">{stars(j.rating)}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recent messages */}
+      {card.lastMessages.length > 0 && (
+        <div className="border-b border-white/10">
+          <button onClick={() => toggle("messages")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+            <span className="text-xs font-semibold text-gray-300">Recent Messages ({card.lastMessages.length})</span>
+            <span className="text-gray-500 text-xs">{expandedSection === "messages" ? "▲" : "▼"}</span>
+          </button>
+          {expandedSection === "messages" && (
+            <div className="px-4 pb-3 space-y-2">
+              {card.lastMessages.map((m, i) => (
+                <div key={i} className="bg-white/5 rounded-lg px-3 py-2">
+                  <div className="text-xs text-gray-200 leading-relaxed">{m.content}</div>
+                  {m.ts && <div className="text-[10px] text-gray-500 mt-1">{new Date(m.ts).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* OpenPhone calls */}
+      {card.openPhoneCalls.length > 0 && (
+        <div className="border-b border-white/10">
+          <button onClick={() => toggle("calls")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+            <span className="text-xs font-semibold text-gray-300">Calls ({card.openPhoneCalls.length})</span>
+            <span className="text-gray-500 text-xs">{expandedSection === "calls" ? "▲" : "▼"}</span>
+          </button>
+          {expandedSection === "calls" && (
+            <div className="px-4 pb-3 space-y-2">
+              {card.openPhoneCalls.map((c, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${c.direction === "inbound" ? "bg-blue-500/20 text-blue-400" : "bg-purple-500/20 text-purple-400"}`}>
+                    {c.direction === "inbound" ? "IN" : "OUT"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-300">{formatCallDate(c.callStartedAt)}</span>
+                      {c.durationSeconds && <span className="text-[10px] text-gray-500">{formatDuration(c.durationSeconds)}</span>}
+                    </div>
+                    {c.callDebrief && <div className="text-[10px] text-gray-400 mt-0.5 line-clamp-2">{c.callDebrief}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Vapi calls */}
+      {card.vapiCalls.length > 0 && (
+        <div>
+          <button onClick={() => toggle("vapi")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+            <span className="text-xs font-semibold text-gray-300">AI Calls ({card.vapiCalls.length})</span>
+            <span className="text-gray-500 text-xs">{expandedSection === "vapi" ? "▲" : "▼"}</span>
+          </button>
+          {expandedSection === "vapi" && (
+            <div className="px-4 pb-3 space-y-2">
+              {card.vapiCalls.map((c, i) => (
+                <div key={i} className="bg-white/5 rounded-lg px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-white capitalize">{(c.step ?? "call").replace(/_/g," ")}</span>
+                    {c.outcome && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${c.outcome === "success" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{c.outcome}</span>}
+                  </div>
+                  {c.summary && <div className="text-[10px] text-gray-400 mt-1 line-clamp-2">{c.summary}</div>}
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-gray-500">{formatCallDate(c.createdAt)}</span>
+                    {c.durationSeconds && <span className="text-[10px] text-gray-500">{formatDuration(c.durationSeconds)}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1600,7 +1848,8 @@ type ServerResult =
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
-  | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> };
+  | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> }
+  | { type: "customer_profile"; profile: CustomerProfileCard };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -1744,6 +1993,14 @@ function buildAiMessage(result: ServerResult): Message {
       id: uid(),
       role: "ai",
       content: { type: "query_result", card: { answer: result.answer, rows: result.rows?.map(r => ({ ...r, jobDate: r.jobDate ?? null })) } },
+      ts,
+    };
+  }
+  if (result.type === "customer_profile") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "customer_profile", card: result.profile },
       ts,
     };
   }
