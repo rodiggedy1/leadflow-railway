@@ -571,9 +571,10 @@ async function handleSendPaymentLink(
     recipientName = client.name ?? resolvedClientPhone;
     recipientAddress = client.address ?? null;
   } else {
-    // Search by name
+    // Search by name — same dual-table logic as searchCustomers (@ mentions)
     const q = `%${(clientName ?? "").trim()}%`;
-    const rows = await db
+    // 1. completedJobs (historical bookings)
+    const completedRows = await db
       .select({
         phone: completedJobs.phone,
         name: completedJobs.name,
@@ -582,13 +583,12 @@ async function handleSendPaymentLink(
         jobDate: completedJobs.jobDate,
       })
       .from(completedJobs)
-      .where(like(completedJobs.name, q))
+      .where(or(like(completedJobs.name, q), like(completedJobs.phone, q)))
       .orderBy(desc(completedJobs.jobDate))
-      .limit(30);
-
+      .limit(50);
     // Deduplicate by phone
     const byPhone = new Map<string, { phone: string; name: string; city: string | null; totalCleans: number; ltv: number; lastJobDate: string | null; address: string | null }>();
-    for (const r of rows) {
+    for (const r of completedRows) {
       const key = r.phone;
       const existing = byPhone.get(key);
       if (existing) {
@@ -607,7 +607,35 @@ async function handleSendPaymentLink(
         });
       }
     }
-
+    // 2. cleanerJobs (upcoming/live bookings) — catches clients not yet in completedJobs
+    const liveRows = await db
+      .select({
+        customerPhone: cleanerJobs.customerPhone,
+        customerName: cleanerJobs.customerName,
+        jobAddress: cleanerJobs.jobAddress,
+        jobRevenue: cleanerJobs.jobRevenue,
+        jobDate: cleanerJobs.jobDate,
+      })
+      .from(cleanerJobs)
+      .where(like(cleanerJobs.customerName, q))
+      .orderBy(desc(cleanerJobs.jobDate))
+      .limit(30);
+    for (const r of liveRows) {
+      if (!r.customerPhone) continue;
+      const digits10 = r.customerPhone.replace(/\D/g, "").slice(-10);
+      const e164Key = `+1${digits10}`;
+      if (!byPhone.has(e164Key) && !byPhone.has(r.customerPhone)) {
+        byPhone.set(e164Key, {
+          phone: e164Key,
+          name: r.customerName ?? "",
+          city: r.jobAddress ? r.jobAddress.split(",").slice(-2, -1)[0]?.trim() ?? null : null,
+          ltv: parseFloat(r.jobRevenue ?? "0") || 0,
+          totalCleans: 1,
+          lastJobDate: r.jobDate ?? null,
+          address: r.jobAddress ?? null,
+        });
+      }
+    }
     const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
 
     if (matches.length === 0) {
