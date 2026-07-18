@@ -1664,7 +1664,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setIsThinking(true);
 
     chatMutation.mutate(
-      { message: text },
+      {
+        message: text,
+        // If a customer is already focused/locked in, pass their phone so the server
+        // skips name disambiguation entirely
+        ...(focusedCustomer ? { resolvedClientPhone: focusedCustomer.phone } : {}),
+      },
       {
         onSuccess: (result) => {
           setIsThinking(false);
@@ -1689,7 +1694,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         },
       }
     );
-  }, [input, isThinking, chatMutation]);
+  }, [input, isThinking, chatMutation, focusedCustomer]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
