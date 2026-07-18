@@ -1037,7 +1037,13 @@ async function handleQueryData(
     messages: [
       {
         role: "system",
-        content: `You are an operations assistant for a cleaning company. Answer the dispatcher's question using only the provided job data. If the answer cannot be determined from the data, say so. Do not invent information. Today is ${today}. Be concise and direct.`,
+        content: `You are an operations assistant for a cleaning company. Answer the dispatcher's question using only the provided job data. If the answer cannot be determined from the data, say so. Do not invent information. Today is ${today}. Be concise and direct.
+
+Formatting rules:
+- Never show Job IDs
+- For each job show: date, address, team/cleaner, and dollar amount (from status field)
+- List jobs in reverse chronological order
+- Use plain text, no markdown headers`
       },
       {
         role: "user",
