@@ -403,7 +403,7 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
           onChange={(e) => setDraft(e.target.value)}
           disabled={sent || sendMutation.isPending}
           rows={3}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
         />
       </div>
       {!sent && (
@@ -687,7 +687,7 @@ function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmC
           onChange={(e) => setScript(e.target.value)}
           disabled={fired || startCall.isPending}
           rows={4}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
         />
       </div>
       {callError && (
@@ -1497,7 +1497,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   );
   const acCustomers = (acData?.customers ?? []).slice(0, 4);
   const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 3);
-  const showSuggestions = (acQuery?.length ?? 0) >= 2 && (acCustomers.length > 0 || acCleaners.length > 0);
+  const showSuggestions = !focusedCustomer && (acQuery?.length ?? 0) >= 2 && (acCustomers.length > 0 || acCleaners.length > 0);
   // Debug: log suggestions state
   if (acQuery && acQuery.length >= 2) {
     console.log("[AC] query:", acQuery, "customers:", acCustomers.length, "cleaners:", acCleaners.length, "show:", showSuggestions, "err:", acError?.message ?? acCleanerError?.message ?? null);
