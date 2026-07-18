@@ -2828,19 +2828,20 @@ export async function handleEtaCallEnd(params: {
 
   const etaMs = etaDate.getTime();
 
-  // ── Update cleanerJobs ────────────────────────────────────────────────────
+    // ── Update cleanerJobs ────────────────────────────────────────────────────
+  // etaTimeStr: store verbatim — exactly what the cleaner said, no conversion
+  const etaTimeStr = confirmedArrivalTimeET;
   await db
     .update(cleanerJobs)
     .set({
       etaTimestamp: etaMs,
+      etaTimeStr,
       etaConfidence: 85,
       etaSource: "eta_call",
       etaVerifiedAt: new Date(),
     })
     .where(eq(cleanerJobs.id, cleanerJobId));
-
-  const etaTimeStr = formatTimeET(etaDate);
-  console.log(`[EtaEngine] ETA updated for job ${cleanerJobId}: ${etaTimeStr} (confirmed: ${confirmedArrivalTimeET}, status: ${status})`);
+  console.log(`[EtaEngine] ETA updated for job ${cleanerJobId}: ${etaTimeStr} (status: ${status})`);
 
   // ── Send customer SMS ─────────────────────────────────────────────────────
   if (!customerPhone) {
