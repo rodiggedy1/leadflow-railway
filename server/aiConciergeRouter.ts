@@ -18,7 +18,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls } from "../drizzle/schema";
-import { eq, ne, and, inArray, like, or, desc, gte } from "drizzle-orm";
+import { eq, ne, and, inArray, like, or, desc, gte, sql } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
@@ -160,6 +160,51 @@ export interface QueryResultResult {
   }>;
 }
 
+export interface CustomerProfileResult {
+  type: "customer_profile";
+  profile: {
+    name: string;
+    phone: string;
+    address: string | null;
+    frequency: string | null;
+    totalBookings: number;
+    ltv: number;
+    avgPrice: number | null;
+    usualTeam: string | null;
+    isVip: boolean;
+    lastJobs: Array<{
+      jobDate: string | null;
+      serviceType: string | null;
+      price: number | null;
+      rating: number | null;
+      teamName: string | null;
+    }>;
+    upcomingJob: {
+      jobDate: string | null;
+      serviceDateTime: string | null;
+      jobStatus: string | null;
+      teamName: string | null;
+      jobAddress: string | null;
+    } | null;
+    lastMessages: Array<{ content: string; ts: number | null }>;
+    aiMemoryBullets: string[];
+    openPhoneCalls: Array<{
+      direction: string | null;
+      durationSeconds: number | null;
+      callStartedAt: Date | null;
+      callDebrief: string | null;
+    }>;
+    vapiCalls: Array<{
+      step: string | null;
+      outcome: string | null;
+      summary: string | null;
+      durationSeconds: number | null;
+      createdAt: Date | null;
+    }>;
+    aiSummary: string;
+  };
+}
+
 type ConciergeResult =
   | EtaPendingResult
   | CompletedResult
@@ -172,7 +217,8 @@ type ConciergeResult =
   | PaymentLinkSentResult
   | CallClientConfirmResult
   | CallClientPendingResult
-  | QueryResultResult;
+  | QueryResultResult
+  | CustomerProfileResult;
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
@@ -182,6 +228,7 @@ type Intent =
   | { action: "send_payment_link"; clientName: string | null }
   | { action: "call_client"; clientName: string | null; questionHint: string | null }
   | { action: "query_data" }
+  | { action: "customer_profile"; clientName: string | null }
   | { action: "unknown" };
 
 async function classifyIntent(message: string): Promise<Intent> {
@@ -197,8 +244,9 @@ Classify the user's message into one of these actions:
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
 - query_data: user is asking a question about job data, clients, or teams (e.g. "list all jobs today", "what jobs does Team 3 have", "show me jobs for Kara Turner", "how many jobs this week", "what's the status of the 10am job", "which teams are working today")
+- customer_profile: user wants a full profile/overview of a specific customer (e.g. "tell me about Mary Jones", "who is Rohan Gilkes", "show me Kara Turner's profile", "what do we know about Sarah Smith", "customer profile for John Doe", "give me the rundown on Dave Pringle")
 - unknown: anything else
-KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer.
+KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer. "customer_profile" is for viewing a customer's full history, stats, messages, and AI summary — NOT for texting or calling them.
 
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
@@ -215,7 +263,7 @@ For call_client:
 - questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "unknown",
+  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
@@ -233,7 +281,7 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "customer_profile", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
             clientName: { type: ["string", "null"] },
@@ -994,22 +1042,47 @@ async function handleQueryData(
     if (!nameSearch && effectiveCutoff) compConditions.push(gte(completedJobs.jobDate, effectiveCutoff));
 
     const compRows = await db
-      .select({ id: completedJobs.id, jobDate: completedJobs.jobDate, name: completedJobs.name, address: completedJobs.address, lastBookingPrice: completedJobs.lastBookingPrice, frequency: completedJobs.frequency })
+      .select({ id: completedJobs.id, jobDate: completedJobs.jobDate, name: completedJobs.name, address: completedJobs.address, lastBookingPrice: completedJobs.lastBookingPrice, frequency: completedJobs.frequency, phone: completedJobs.phone })
       .from(completedJobs)
       .where(compConditions.length > 0 ? and(...compConditions) : undefined)
       .orderBy(desc(completedJobs.jobDate))
       .limit(hasSpecificFilter ? 50 : 30);
 
-    historicalJobs = compRows.map(r => ({
-      id: r.id,
-      jobDate: r.jobDate ?? null,
-      teamName: null,
-      cleanerName: null,
-      customerName: r.name ?? null,
-      jobAddress: r.address ?? null,
-      serviceDateTime: null,
-      jobStatus: `completed (${r.frequency ?? "one-time"}, $${r.lastBookingPrice ?? "?"})`
-    }));
+    // Backfill team data: match each completedJobs row to cleanerJobs by phone10 + jobDate
+    const histPhones10 = [...new Set(compRows.map(r => r.phone?.replace(/\D/g, "").slice(-10)).filter(Boolean))] as string[];
+    // Map: "phone10|jobDate" -> teamName
+    const teamByPhoneDate = new Map<string, string>();
+    if (histPhones10.length > 0) {
+      const teamRows = await db
+        .select({ customerPhone: cleanerJobs.customerPhone, teamName: cleanerJobs.teamName, cleanerName: cleanerJobs.cleanerName, jobDate: cleanerJobs.jobDate })
+        .from(cleanerJobs)
+        .where(inArray(sql`RIGHT(REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', ''), 10)`, histPhones10))
+        .orderBy(desc(cleanerJobs.jobDate))
+        .limit(histPhones10.length * 20);
+      for (const tr of teamRows) {
+        const p10 = (tr.customerPhone ?? "").replace(/\D/g, "").slice(-10);
+        const key = `${p10}|${tr.jobDate ?? ""}`;
+        if (p10 && tr.jobDate && !teamByPhoneDate.has(key)) {
+          teamByPhoneDate.set(key, tr.teamName ?? tr.cleanerName ?? "");
+        }
+      }
+    }
+
+    historicalJobs = compRows.map(r => {
+      const p10 = (r.phone ?? "").replace(/\D/g, "").slice(-10);
+      const key = `${p10}|${r.jobDate ?? ""}`;
+      const team = teamByPhoneDate.get(key) ?? null;
+      return {
+        id: r.id,
+        jobDate: r.jobDate ?? null,
+        teamName: team,
+        cleanerName: null,
+        customerName: r.name ?? null,
+        jobAddress: r.address ?? null,
+        serviceDateTime: null,
+        jobStatus: `completed (${r.frequency ?? "one-time"}, $${r.lastBookingPrice ?? "?"})`
+      };
+    });
   }
 
   console.log("[QueryData] scheduledJobs:", scheduledJobs.length, "historicalJobs:", historicalJobs.length);
@@ -1066,6 +1139,112 @@ Formatting rules:
       serviceDateTime: j.serviceDateTime,
       jobStatus: j.jobStatus,
     })),
+  };
+}
+
+// ── Customer profile handler ────────────────────────────────────────────────
+async function handleCustomerProfile(
+  name: string,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConciergeResult> {
+  // Delegate to the opsChatRouter.getCustomerProfile procedure logic directly
+  // by calling the same DB queries inline (avoid circular imports)
+  const { invokeLLM: llm } = await import("./_core/llm");
+  const { conversationSessions, openphoneCallRecordings: opCR, fieldMgmtCalls: fmc } = await import("../drizzle/schema");
+  const { desc: d2, eq: eq2, like: like2, inArray: inArray2, sql: sql2 } = await import("drizzle-orm");
+
+  const digits10 = (p: string) => p.replace(/[^\d]/g, "").slice(-10);
+  const q = `%${name.trim()}%`;
+
+  // 1. Resolve phone
+  const nameRows = await db.select({ phone: completedJobs.phone, name: completedJobs.name }).from(completedJobs).where(like2(completedJobs.name, q)).orderBy(d2(completedJobs.jobDate)).limit(1);
+  let phone: string | null = nameRows[0]?.phone ?? null;
+  let resolvedName: string = nameRows[0]?.name ?? name;
+  if (!phone) {
+    const cjRow = await db.select({ customerPhone: cleanerJobs.customerPhone, customerName: cleanerJobs.customerName }).from(cleanerJobs).where(like2(cleanerJobs.customerName, q)).orderBy(d2(cleanerJobs.jobDate)).limit(1);
+    if (cjRow[0]?.customerPhone) {
+      const p10 = digits10(cjRow[0].customerPhone);
+      phone = `+1${p10}`;
+      resolvedName = cjRow[0].customerName ?? name;
+    }
+  }
+  if (!phone) {
+    return { type: "error", message: `No customer found matching "${name}". Try their full name.` };
+  }
+
+  const phone10 = digits10(phone);
+  const e164 = phone.startsWith("+") ? phone : `+1${phone10}`;
+
+  // 2. completedJobs history
+  const historyRows = await db.select({ jobDate: completedJobs.jobDate, serviceType: completedJobs.serviceType, lastBookingPrice: completedJobs.lastBookingPrice, frequency: completedJobs.frequency, address: completedJobs.address }).from(completedJobs).where(eq2(completedJobs.phone, e164)).orderBy(d2(completedJobs.jobDate)).limit(20);
+  const totalBookings = historyRows.length;
+  const ltv = historyRows.reduce((s, r) => s + (r.lastBookingPrice ?? 0), 0);
+  const avgPrice = totalBookings > 0 ? Math.round(ltv / totalBookings) : null;
+  const latestFrequency = historyRows[0]?.frequency ?? null;
+  const latestAddress = historyRows[0]?.address ?? null;
+
+  // 3. cleanerJobs
+  const cjRows = await db.select({ jobDate: cleanerJobs.jobDate, serviceType: cleanerJobs.serviceType, jobRevenue: cleanerJobs.jobRevenue, customerRating: cleanerJobs.customerRating, teamName: cleanerJobs.teamName, cleanerName: cleanerJobs.cleanerName, jobStatus: cleanerJobs.jobStatus, jobAddress: cleanerJobs.jobAddress, serviceDateTime: cleanerJobs.serviceDateTime }).from(cleanerJobs).where(sql2`REGEXP_REPLACE(${cleanerJobs.customerPhone}, '[^0-9]', '') = ${phone10}`).orderBy(d2(cleanerJobs.jobDate)).limit(20);
+
+  const teamCounts = new Map<string, number>();
+  for (const r of cjRows) { if (r.teamName) teamCounts.set(r.teamName, (teamCounts.get(r.teamName) ?? 0) + 1); }
+  const usualTeam = teamCounts.size > 0 ? Array.from(teamCounts.entries()).sort((a, b) => b[1] - a[1])[0][0] : null;
+
+  const lastJobsFromCj = cjRows.slice(0, 5).map(r => ({ jobDate: r.jobDate, serviceType: r.serviceType, price: r.jobRevenue ? Math.round(parseFloat(r.jobRevenue)) : null, rating: r.customerRating ?? null, teamName: r.teamName ?? r.cleanerName ?? null }));
+  const lastJobsFromHistory = historyRows.slice(0, 5).map(r => ({ jobDate: r.jobDate, serviceType: r.serviceType, price: r.lastBookingPrice ?? null, rating: null as number | null, teamName: null as string | null }));
+  const lastJobs = [...lastJobsFromCj, ...lastJobsFromHistory].sort((a, b) => (b.jobDate ?? "").localeCompare(a.jobDate ?? "")).slice(0, 5);
+
+  const nowET = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  const upcomingJob = cjRows.find(r => (r.jobDate ?? "") >= nowET) ?? null;
+
+  // 4. conversationSessions
+  const sessionRows = await db.select({ messageHistory: conversationSessions.messageHistory, csMemoryCache: conversationSessions.csMemoryCache, updatedAt: conversationSessions.updatedAt }).from(conversationSessions).where(sql2`RIGHT(REGEXP_REPLACE(${conversationSessions.leadPhone}, '[^0-9]', ''), 10) = ${phone10}`).orderBy(d2(conversationSessions.updatedAt)).limit(3);
+  const lastMessages: Array<{ content: string; ts: number | null }> = [];
+  for (const sess of sessionRows) {
+    if (lastMessages.length >= 3) break;
+    try {
+      const history: Array<{ role: string; content: string; ts?: number }> = JSON.parse(sess.messageHistory ?? "[]");
+      const userMsgs = history.filter(m => m.role === "user").slice(-3).reverse();
+      for (const m of userMsgs) { if (lastMessages.length >= 3) break; lastMessages.push({ content: m.content, ts: m.ts ?? null }); }
+    } catch { /* skip */ }
+  }
+  let aiMemoryBullets: string[] = [];
+  const bestSession = sessionRows.find(s => s.csMemoryCache != null) ?? sessionRows[0];
+  if (bestSession?.csMemoryCache) {
+    try { const p = JSON.parse(bestSession.csMemoryCache); if (Array.isArray(p)) aiMemoryBullets = p.filter((b: unknown) => typeof b === "string"); } catch { /* skip */ }
+  }
+
+  // 5. OpenPhone calls
+  const opCalls = await db.select({ direction: opCR.direction, durationSeconds: opCR.durationSeconds, callStartedAt: opCR.callStartedAt, callDebrief: opCR.callDebrief }).from(opCR).where(eq2(opCR.callerPhone, e164)).orderBy(d2(opCR.callStartedAt)).limit(5);
+
+  // 6. Vapi calls
+  const fmcRows = await db.select({ step: fmc.step, outcome: fmc.outcome, summary: fmc.summary, durationSeconds: fmc.durationSeconds, createdAt: fmc.createdAt }).from(fmc).where(sql2`${fmc.cleanerJobId} IN (SELECT id FROM cleaner_jobs WHERE REGEXP_REPLACE(customerPhone, '[^0-9]', '') = ${phone10} LIMIT 10)`).orderBy(d2(fmc.createdAt)).limit(5);
+
+  // 7. AI summary
+  const contextLines = [`Customer: ${resolvedName}`, `Total cleans: ${totalBookings}`, `LTV: $${ltv}`, `Frequency: ${latestFrequency ?? "unknown"}`, `Usual team: ${usualTeam ?? "unknown"}`, `Last job: ${lastJobs[0]?.jobDate ?? "unknown"}`, upcomingJob ? `Upcoming: ${upcomingJob.jobDate} — ${upcomingJob.jobStatus ?? "scheduled"}` : "No upcoming job"];
+  const llmResult = await llm({ messages: [{ role: "system", content: "You are a concise CRM assistant for a home cleaning company. Write 2 sentences max. Be specific and actionable." }, { role: "user", content: `Summarize this customer and recommend the single best next action:\n${contextLines.join("\n")}` }] });
+  const aiSummary = (llmResult?.choices?.[0]?.message?.content as string ?? "").trim();
+
+  return {
+    type: "customer_profile" as const,
+    profile: {
+      name: resolvedName,
+      phone: e164,
+      address: latestAddress,
+      frequency: latestFrequency,
+      totalBookings,
+      ltv,
+      avgPrice,
+      usualTeam,
+      isVip: totalBookings >= 10 || ltv >= 2000,
+      lastJobs,
+      upcomingJob: upcomingJob ? { jobDate: upcomingJob.jobDate, serviceDateTime: upcomingJob.serviceDateTime, jobStatus: upcomingJob.jobStatus, teamName: upcomingJob.teamName ?? upcomingJob.cleanerName ?? null, jobAddress: upcomingJob.jobAddress } : null,
+      lastMessages,
+      aiMemoryBullets,
+      openPhoneCalls: opCalls.map(c => ({ direction: c.direction, durationSeconds: c.durationSeconds, callStartedAt: c.callStartedAt, callDebrief: c.callDebrief })),
+      vapiCalls: fmcRows.map(c => ({ step: c.step, outcome: c.outcome, summary: c.summary, durationSeconds: c.durationSeconds, createdAt: c.createdAt })),
+      aiSummary,
+    },
   };
 }
 
@@ -1314,9 +1493,15 @@ export const aiConciergeRouter = router({
       if (intent.action === "query_data") {
         return await handleQueryData(input.message, db);
       }
+      if (intent.action === "customer_profile") {
+        if (!intent.clientName) {
+          return { type: "error" as const, message: "Please include the customer's name. Example: \"Tell me about Mary Jones\"" };
+        }
+        return await handleCustomerProfile(intent.clientName, db);
+      }
       return {
         type: "error" as const,
-        message: "I can handle ETA updates, texting cleaners, texting clients, sending payment links, calling clients or cleaners, and answering questions about today's jobs. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", \"Text Abigail Avrick\", \"Send payment link to Mary Jones\", \"Call Rohan Gilkes and ask about reschedule\", or \"List all jobs today\".",
+        message: "I can handle ETA updates, texting cleaners, texting clients, sending payment links, calling clients or cleaners, answering questions about today's jobs, and pulling up customer profiles. Try: \"Tell me about Mary Jones\", \"List all jobs today\", \"Send ETA for Team 8\", \"Text Abigail Avrick\", or \"Call Rohan Gilkes\".",
       };
     }),
 
