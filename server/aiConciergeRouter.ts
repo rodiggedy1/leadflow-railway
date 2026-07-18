@@ -946,6 +946,8 @@ async function handleQueryData(
     entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
   }
 
+  console.log("[QueryData] entities:", JSON.stringify(entities), "question:", question);
+
   // Step 2: query both cleanerJobs (scheduled/active) and completedJobs (historical)
   // and merge results so customer history is always found regardless of which table it's in.
 
@@ -988,7 +990,8 @@ async function handleQueryData(
     // completedJobs doesn't have cleaner/team info — skip if filtering by cleaner
     const compConditions: any[] = [];
     if (entities.customerName) compConditions.push(like(completedJobs.name, `%${entities.customerName}%`));
-    if (effectiveCutoff) compConditions.push(gte(completedJobs.jobDate, effectiveCutoff));
+    // Only apply date cutoff when NOT searching by customer name — customer history should always be fully visible
+    if (!entities.customerName && effectiveCutoff) compConditions.push(gte(completedJobs.jobDate, effectiveCutoff));
 
     const compRows = await db
       .select({ id: completedJobs.id, jobDate: completedJobs.jobDate, name: completedJobs.name, address: completedJobs.address, lastBookingPrice: completedJobs.lastBookingPrice, frequency: completedJobs.frequency })

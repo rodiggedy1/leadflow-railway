@@ -1364,7 +1364,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
         {/* Suggestions panel */}
         {showSuggestions && (
-          <div className="mb-3 bg-[#13162a] border border-white/10 rounded-2xl p-4">
+          <div className="mb-3 bg-[#1e2235] border border-white/20 rounded-2xl p-4">
             <div className="mb-3">
               <p className="text-white text-sm font-bold">Suggestions</p>
               <p className="text-gray-500 text-xs mt-0.5">Tap a suggestion to autofill the full question.</p>
