@@ -1102,10 +1102,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   // ── Customer name autocomplete ──────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null); // null = closed
   const [acWordStart, setAcWordStart] = useState(0); // index of word start in input
-  const { data: acResults } = trpc.opsChat.searchCustomers.useQuery(
+  const { data: acData } = trpc.opsChat.searchCustomers.useQuery(
     { query: acQuery ?? "" },
     { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
+  const acResults = acData?.customers ?? [];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
