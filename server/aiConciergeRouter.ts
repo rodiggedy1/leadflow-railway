@@ -946,66 +946,75 @@ async function handleQueryData(
     entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
   }
 
-  // Step 2: build DB filters based on extracted entities
-  const conditions: ReturnType<typeof eq>[] = [
-    ne(cleanerJobs.bookingStatus, "cancelled") as any,
-    ne(cleanerJobs.bookingStatus, "rescheduled") as any,
+  // Step 2: query both cleanerJobs (scheduled/active) and completedJobs (historical)
+  // and merge results so customer history is always found regardless of which table it's in.
+
+  // Helper: resolve a dateHint to a cutoff date string (YYYY-MM-DD)
+  const resolveDateCutoff = (hint: string | null): string | null => {
+    if (!hint) return null;
+    const h = hint.toLowerCase();
+    const d = new Date();
+    if (h === "today") return today;
+    if (h === "yesterday") { d.setDate(d.getDate() - 1); return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
+    if (h.includes("last week") || h.includes("this week")) { d.setDate(d.getDate() - 7); return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
+    if (h.includes("last month") || h.includes("this month")) { d.setDate(d.getDate() - 30); return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
+    return null;
+  };
+  const dateCutoff = resolveDateCutoff(entities.dateHint);
+  const hasSpecificFilter = !!(entities.customerName || entities.cleanerName);
+  // Default cutoff for summary queries: last 30 days
+  const defaultCutoff = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); })();
+  const effectiveCutoff = dateCutoff ?? (hasSpecificFilter ? null : defaultCutoff);
+
+  // Query cleanerJobs (scheduled/upcoming/active jobs)
+  const cjConditions: any[] = [
+    ne(cleanerJobs.bookingStatus, "cancelled"),
+    ne(cleanerJobs.bookingStatus, "rescheduled"),
   ];
+  if (entities.customerName) cjConditions.push(like(cleanerJobs.customerName, `%${entities.customerName}%`));
+  if (entities.cleanerName) cjConditions.push(or(like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`), like(cleanerJobs.teamName, `%${entities.cleanerName}%`)));
+  if (effectiveCutoff) cjConditions.push(gte(cleanerJobs.jobDate, effectiveCutoff));
 
-  if (entities.customerName) {
-    conditions.push(like(cleanerJobs.customerName, `%${entities.customerName}%`) as any);
-  }
-  if (entities.cleanerName) {
-    conditions.push(
-      or(
-        like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`),
-        like(cleanerJobs.teamName, `%${entities.cleanerName}%`)
-      ) as any
-    );
-  }
-
-  // Resolve dateHint to a jobDate filter
-  if (entities.dateHint) {
-    const hint = entities.dateHint.toLowerCase();
-    if (hint === "today") {
-      conditions.push(eq(cleanerJobs.jobDate, today) as any);
-    } else if (hint === "yesterday") {
-      const d = new Date(); d.setDate(d.getDate() - 1);
-      const yest = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-      conditions.push(eq(cleanerJobs.jobDate, yest) as any);
-    } else if (hint.includes("last week") || hint.includes("this week")) {
-      const d = new Date(); d.setDate(d.getDate() - 7);
-      const cutoff = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-      conditions.push(gte(cleanerJobs.jobDate, cutoff) as any);
-    }
-    // For other date hints, let the LLM interpret from the full result set
-  }
-
-  // For summary queries with no specific filters, limit to last 30 days
-  const hasSpecificFilter = entities.customerName || entities.cleanerName;
-  if (!hasSpecificFilter) {
-    const d = new Date(); d.setDate(d.getDate() - 30);
-    const cutoff = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-    conditions.push(gte(cleanerJobs.jobDate, cutoff) as any);
-  }
-
-  const jobs = await db
-    .select({
-      id: cleanerJobs.id,
-      jobDate: cleanerJobs.jobDate,
-      teamName: cleanerJobs.teamName,
-      cleanerName: cleanerJobs.cleanerName,
-      customerName: cleanerJobs.customerName,
-      jobAddress: cleanerJobs.jobAddress,
-      serviceDateTime: cleanerJobs.serviceDateTime,
-      jobStatus: cleanerJobs.jobStatus,
-    })
+  const scheduledJobs = await db
+    .select({ id: cleanerJobs.id, jobDate: cleanerJobs.jobDate, teamName: cleanerJobs.teamName, cleanerName: cleanerJobs.cleanerName, customerName: cleanerJobs.customerName, jobAddress: cleanerJobs.jobAddress, serviceDateTime: cleanerJobs.serviceDateTime, jobStatus: cleanerJobs.jobStatus })
     .from(cleanerJobs)
-    .where(and(...conditions))
-    .orderBy(desc(cleanerJobs.jobDate));
+    .where(and(...cjConditions))
+    .orderBy(desc(cleanerJobs.jobDate))
+    .limit(50);
+
+  // Query completedJobs (historical bookings) — only when searching by customer/cleaner name or doing summary
+  let historicalJobs: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> = [];
+  if (!entities.cleanerName) {
+    // completedJobs doesn't have cleaner/team info — skip if filtering by cleaner
+    const compConditions: any[] = [];
+    if (entities.customerName) compConditions.push(like(completedJobs.name, `%${entities.customerName}%`));
+    if (effectiveCutoff) compConditions.push(gte(completedJobs.jobDate, effectiveCutoff));
+
+    const compRows = await db
+      .select({ id: completedJobs.id, jobDate: completedJobs.jobDate, name: completedJobs.name, address: completedJobs.address, lastBookingPrice: completedJobs.lastBookingPrice, frequency: completedJobs.frequency })
+      .from(completedJobs)
+      .where(compConditions.length > 0 ? and(...compConditions) : undefined)
+      .orderBy(desc(completedJobs.jobDate))
+      .limit(hasSpecificFilter ? 50 : 30);
+
+    historicalJobs = compRows.map(r => ({
+      id: r.id,
+      jobDate: r.jobDate ?? null,
+      teamName: null,
+      cleanerName: null,
+      customerName: r.name ?? null,
+      jobAddress: r.address ?? null,
+      serviceDateTime: null,
+      jobStatus: `completed (${r.frequency ?? "one-time"}, $${r.lastBookingPrice ?? "?"})`
+    }));
+  }
+
+  const jobs = [...scheduledJobs, ...historicalJobs]
+    .sort((a, b) => (b.jobDate ?? "").localeCompare(a.jobDate ?? ""))
+    .slice(0, 80);
 
   if (jobs.length === 0) {
-    return { type: "query_result", answer: "No matching jobs found." };
+    return { type: "query_result", answer: "No matching jobs found in either scheduled or historical records." };
   }
 
   const jobSummary = jobs.map(j => ({
