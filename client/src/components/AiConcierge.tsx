@@ -1800,55 +1800,28 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           <div className="mb-3 bg-[#1e2235] border border-white/20 rounded-2xl p-4">
             <div className="mb-3">
               <p className="text-white text-sm font-bold">Suggestions</p>
-              <p className="text-gray-500 text-xs mt-0.5">Tap a suggestion to autofill the full question.</p>
+              <p className="text-gray-500 text-xs mt-0.5">Tap a name to select, then choose an action.</p>
             </div>
             <div className="flex flex-col gap-2">
               {acCustomers.map((c, i) => {
                 const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                 const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                const isFirst = i === 0;
-                const isOnlyMatch = acCustomers.length === 1;
                 return (
-                  <div key={c.phone} className={`rounded-xl border transition-colors ${
-                    isOnlyMatch
-                      ? "bg-indigo-500/10 border-indigo-500/40"
-                      : isFirst
-                        ? "bg-emerald-500/8 border-emerald-500/30"
-                        : "bg-transparent border-white/8"
-                  }`}>
-                    <div className="flex items-center gap-3 px-3 pt-3 pb-2">
-                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
-                        {initials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-semibold truncate">{c.name}</p>
-                        {!isOnlyMatch && <p className="text-gray-400 text-xs">Tap an action below or keep typing to narrow down</p>}
-                      </div>
-                      {isFirst && !isOnlyMatch && <span className="text-emerald-400 text-base shrink-0">✓</span>}
+                  <button
+                    key={c.phone}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: c.name, phone: c.phone }); setInput(""); setAcQuery(null); }}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-white/8 hover:bg-indigo-500/10 hover:border-indigo-500/30 transition-colors text-left"
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
+                      {initials}
                     </div>
-                    {isOnlyMatch && (
-                      <div className="flex flex-wrap gap-1.5 px-3 pb-3">
-                        {[
-                          { label: `Jobs for ${c.name.split(" ")[0]}`, q: `Jobs for ${c.name}`, icon: "📋" },
-                          { label: "Full profile", q: `Tell me everything about ${c.name}`, icon: "👤" },
-                          { label: "Get ETA", q: `Get ETA for ${c.name}`, icon: "📍" },
-                          { label: "Payment link", q: `Send payment link to ${c.name}`, icon: "💳" },
-                          { label: `Text ${c.name.split(" ")[0]}`, q: `Text ${c.name}`, icon: "💬" },
-                          { label: `Call ${c.name.split(" ")[0]}`, q: `Call ${c.name}`, icon: "📞" },
-                        ].map((action) => (
-                          <button
-                            key={action.q}
-                            type="button"
-                            onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(action.q); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-colors text-xs text-gray-200 font-medium"
-                          >
-                            <span>{action.icon}</span>
-                            <span>{action.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
+                      <p className="text-gray-400 text-xs">{c.city || "Customer"}</p>
+                    </div>
+
+                  </button>
                 );
               })}
               {acCleaners.map((c) => {
