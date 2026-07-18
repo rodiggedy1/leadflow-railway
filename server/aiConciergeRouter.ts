@@ -909,10 +909,86 @@ async function handleQueryData(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
   const today = getTodayET();
-  // 90-day window keeps the payload well under the LLM context limit
-  const ninetyDaysAgo = new Date();
-  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
-  const cutoff = ninetyDaysAgo.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+  // Step 1: extract search entities from the question
+  const extractResult = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.`,
+      },
+      { role: "user", content: question },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "entities",
+        strict: true,
+        schema: {
+          type: "object",
+          properties: {
+            customerName: { type: ["string", "null"], description: "Customer/client name if mentioned, else null" },
+            cleanerName: { type: ["string", "null"], description: "Cleaner or team name if mentioned, else null" },
+            dateHint: { type: ["string", "null"], description: "Date or relative term like 'today', 'yesterday', 'last week', 'July 10', else null" },
+            queryType: { type: "string", enum: ["specific", "summary"], description: "specific = about a named person/team; summary = general counts or status across all jobs" },
+          },
+          required: ["customerName", "cleanerName", "dateHint", "queryType"],
+          additionalProperties: false,
+        },
+      },
+    },
+  });
+
+  let entities: { customerName: string | null; cleanerName: string | null; dateHint: string | null; queryType: string };
+  try {
+    entities = JSON.parse(extractResult.choices[0].message.content as string);
+  } catch {
+    entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
+  }
+
+  // Step 2: build DB filters based on extracted entities
+  const conditions: ReturnType<typeof eq>[] = [
+    ne(cleanerJobs.bookingStatus, "cancelled") as any,
+    ne(cleanerJobs.bookingStatus, "rescheduled") as any,
+  ];
+
+  if (entities.customerName) {
+    conditions.push(like(cleanerJobs.customerName, `%${entities.customerName}%`) as any);
+  }
+  if (entities.cleanerName) {
+    conditions.push(
+      or(
+        like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`),
+        like(cleanerJobs.teamName, `%${entities.cleanerName}%`)
+      ) as any
+    );
+  }
+
+  // Resolve dateHint to a jobDate filter
+  if (entities.dateHint) {
+    const hint = entities.dateHint.toLowerCase();
+    if (hint === "today") {
+      conditions.push(eq(cleanerJobs.jobDate, today) as any);
+    } else if (hint === "yesterday") {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      const yest = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      conditions.push(eq(cleanerJobs.jobDate, yest) as any);
+    } else if (hint.includes("last week") || hint.includes("this week")) {
+      const d = new Date(); d.setDate(d.getDate() - 7);
+      const cutoff = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      conditions.push(gte(cleanerJobs.jobDate, cutoff) as any);
+    }
+    // For other date hints, let the LLM interpret from the full result set
+  }
+
+  // For summary queries with no specific filters, limit to last 30 days
+  const hasSpecificFilter = entities.customerName || entities.cleanerName;
+  if (!hasSpecificFilter) {
+    const d = new Date(); d.setDate(d.getDate() - 30);
+    const cutoff = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    conditions.push(gte(cleanerJobs.jobDate, cutoff) as any);
+  }
+
   const jobs = await db
     .select({
       id: cleanerJobs.id,
@@ -925,17 +1001,11 @@ async function handleQueryData(
       jobStatus: cleanerJobs.jobStatus,
     })
     .from(cleanerJobs)
-    .where(
-      and(
-        gte(cleanerJobs.jobDate, cutoff),
-        ne(cleanerJobs.bookingStatus, "cancelled"),
-        ne(cleanerJobs.bookingStatus, "rescheduled")
-      )
-    )
-    .orderBy(cleanerJobs.serviceDateTime);
+    .where(and(...conditions))
+    .orderBy(desc(cleanerJobs.jobDate));
 
   if (jobs.length === 0) {
-    return { type: "query_result", answer: "No job data found." };
+    return { type: "query_result", answer: "No matching jobs found." };
   }
 
   const jobSummary = jobs.map(j => ({
@@ -949,6 +1019,7 @@ async function handleQueryData(
     status: j.jobStatus ?? "not started",
   }));
 
+  // Step 3: answer the question using only the matched rows
   const llmResult = await invokeLLM({
     messages: [
       {
