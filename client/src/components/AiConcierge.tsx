@@ -124,6 +124,18 @@ interface CallClientPendingCard {
   recipientName: string;
   recipientPhone: string;
 }
+interface QueryResultCard {
+  answer: string;
+  rows?: Array<{
+    id: number;
+    teamName: string | null;
+    cleanerName: string;
+    customerName: string | null;
+    jobAddress: string | null;
+    serviceDateTime: string | null;
+    jobStatus: string | null;
+  }>;
+}
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
@@ -136,7 +148,8 @@ type MessageContent =
   | { type: "payment_link_confirm"; card: PaymentLinkConfirmCard }
   | { type: "payment_link_sent"; card: PaymentLinkSentCard }
   | { type: "call_client_confirm"; card: CallClientConfirmCard }
-  | { type: "call_client_pending"; card: CallClientPendingCard };
+  | { type: "call_client_pending"; card: CallClientPendingCard }
+  | { type: "query_result"; card: QueryResultCard };
 
 interface Message {
   id: string;
@@ -1000,6 +1013,29 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "query_result" && (
+          <div>
+            <QueryResultCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ─── Query result card ────────────────────────────────────────────────────────
+
+function QueryResultCardView({ card }: { card: QueryResultCard }) {
+  return (
+    <div className="flex items-start gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-4">
+      <span className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+        <MessageCircle className="w-5 h-5 text-blue-400" />
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-white font-semibold text-sm mb-1">Answer</p>
+        <p className="text-gray-300 text-sm whitespace-pre-wrap">{card.answer}</p>
       </div>
     </div>
   );
@@ -1323,7 +1359,8 @@ type ServerResult =
   | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }> }
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
-  | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number };
+  | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
+  | { type: "query_result"; answer: string; rows?: Array<{ id: number; teamName: string | null; cleanerName: string; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -1459,6 +1496,14 @@ function buildAiMessage(result: ServerResult): Message {
           cleanerJobId: result.cleanerJobId,
         },
       },
+      ts,
+    };
+  }
+  if (result.type === "query_result") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "query_result", card: { answer: result.answer, rows: result.rows } },
       ts,
     };
   }

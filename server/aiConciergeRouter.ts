@@ -145,6 +145,21 @@ export interface PaymentLinkSentResult {
   error?: string;
 }
 
+/** Returned when the concierge answers a natural-language query about today's jobs */
+export interface QueryResultResult {
+  type: "query_result";
+  answer: string;
+  rows?: Array<{
+    id: number;
+    teamName: string | null;
+    cleanerName: string;
+    customerName: string | null;
+    jobAddress: string | null;
+    serviceDateTime: string | null;
+    jobStatus: string | null;
+  }>;
+}
+
 type ConciergeResult =
   | EtaPendingResult
   | CompletedResult
@@ -156,7 +171,8 @@ type ConciergeResult =
   | PaymentLinkConfirmResult
   | PaymentLinkSentResult
   | CallClientConfirmResult
-  | CallClientPendingResult;
+  | CallClientPendingResult
+  | QueryResultResult;
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
@@ -165,6 +181,7 @@ type Intent =
   | { action: "text_client"; clientName: string | null; messageHint: string | null }
   | { action: "send_payment_link"; clientName: string | null }
   | { action: "call_client"; clientName: string | null; questionHint: string | null }
+  | { action: "query_data" }
   | { action: "unknown" };
 
 async function classifyIntent(message: string): Promise<Intent> {
@@ -179,6 +196,7 @@ Classify the user's message into one of these actions:
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
+- query_data: user is asking a question about job data, clients, or teams (e.g. "list all jobs today", "what jobs does Team 3 have", "show me jobs for Kara Turner", "how many jobs this week", "what's the status of the 10am job", "which teams are working today")
 - unknown: anything else
 KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer.
 
@@ -197,7 +215,7 @@ For call_client:
 - questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "unknown",
+  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
@@ -215,7 +233,7 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
             clientName: { type: ["string", "null"] },
@@ -885,6 +903,76 @@ Just write the message body.`,
   return (result.choices[0].message.content as string).trim();
 }
 
+// ── Query data handler ──────────────────────────────────────────────────────
+async function handleQueryData(
+  question: string,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConciergeResult> {
+  const today = getTodayET();
+  // Fetch all raw job rows for today (not grouped — gives full picture per job)
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      teamName: cleanerJobs.teamName,
+      cleanerName: cleanerJobs.cleanerName,
+      customerName: cleanerJobs.customerName,
+      jobAddress: cleanerJobs.jobAddress,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobStatus: cleanerJobs.jobStatus,
+    })
+    .from(cleanerJobs)
+    .where(
+      and(
+        eq(cleanerJobs.jobDate, today),
+        ne(cleanerJobs.bookingStatus, "cancelled"),
+        ne(cleanerJobs.bookingStatus, "rescheduled")
+      )
+    )
+    .orderBy(cleanerJobs.serviceDateTime);
+
+  if (jobs.length === 0) {
+    return { type: "query_result", answer: `No jobs found for today (${today}).` };
+  }
+
+  const jobSummary = jobs.map(j => ({
+    id: j.id,
+    team: j.teamName ?? j.cleanerName,
+    cleaner: j.cleanerName,
+    customer: j.customerName ?? "Unknown",
+    address: j.jobAddress ?? "—",
+    time: j.serviceDateTime ?? "—",
+    status: j.jobStatus ?? "not started",
+  }));
+
+  const llmResult = await invokeLLM({
+    messages: [
+      {
+        role: "system",
+        content: `You are an operations assistant for a cleaning company. Answer the dispatcher's question using only the provided job data. If the answer cannot be determined from the data, say so. Do not invent information. Today is ${today}. Be concise and direct.`,
+      },
+      {
+        role: "user",
+        content: `Job data for today:\n${JSON.stringify(jobSummary, null, 2)}\n\nDispatcher question: ${question}`,
+      },
+    ],
+  });
+
+  const answer = (llmResult.choices[0].message.content as string).trim();
+  return {
+    type: "query_result",
+    answer,
+    rows: jobs.map(j => ({
+      id: j.id,
+      teamName: j.teamName,
+      cleanerName: j.cleanerName,
+      customerName: j.customerName,
+      jobAddress: j.jobAddress,
+      serviceDateTime: j.serviceDateTime,
+      jobStatus: j.jobStatus,
+    })),
+  };
+}
+
 // ── Text cleaners handler ─────────────────────────────────────────────────────
 async function handleTextCleaners(
   targetHint: string | null,
@@ -1127,9 +1215,12 @@ export const aiConciergeRouter = router({
       if (intent.action === "call_client") {
         return await handleCallPerson(intent.clientName, intent.questionHint, db);
       }
+      if (intent.action === "query_data") {
+        return await handleQueryData(input.message, db);
+      }
       return {
         type: "error" as const,
-        message: "I can handle ETA updates, texting cleaners, texting clients, sending payment links, and calling clients or cleaners. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", \"Text Abigail Avrick\", \"Send payment link to Mary Jones\", or \"Call Rohan Gilkes and ask about reschedule\".",
+        message: "I can handle ETA updates, texting cleaners, texting clients, sending payment links, calling clients or cleaners, and answering questions about today's jobs. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", \"Text Abigail Avrick\", \"Send payment link to Mary Jones\", \"Call Rohan Gilkes and ask about reschedule\", or \"List all jobs today\".",
       };
     }),
 
