@@ -626,7 +626,9 @@ async function handleSendPaymentLink(
       if (!r.customerPhone) continue;
       const digits10 = r.customerPhone.replace(/\D/g, "").slice(-10);
       const e164Key = `+1${digits10}`;
-      if (!byPhone.has(e164Key) && !byPhone.has(r.customerPhone)) {
+      const existing = byPhone.get(e164Key) ?? byPhone.get(r.customerPhone);
+      if (!existing) {
+        // Client not in completedJobs — add from cleanerJobs
         byPhone.set(e164Key, {
           phone: e164Key,
           name: r.customerName ?? "",
@@ -636,6 +638,10 @@ async function handleSendPaymentLink(
           lastJobDate: r.jobDate ?? null,
           address: r.jobAddress ?? null,
         });
+      } else if (!existing.address && r.jobAddress) {
+        // Found in completedJobs but address was null — backfill from cleanerJobs
+        existing.address = r.jobAddress;
+        existing.city = r.jobAddress.split(",").slice(-2, -1)[0]?.trim() ?? existing.city;
       }
     }
     const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
