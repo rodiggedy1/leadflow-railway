@@ -128,8 +128,9 @@ interface QueryResultCard {
   answer: string;
   rows?: Array<{
     id: number;
+    jobDate: string | null;
     teamName: string | null;
-    cleanerName: string;
+    cleanerName: string | null;
     customerName: string | null;
     jobAddress: string | null;
     serviceDateTime: string | null;
@@ -1028,14 +1029,128 @@ function MessageBubble({
 // ─── Query result card ────────────────────────────────────────────────────────
 
 function QueryResultCardView({ card }: { card: QueryResultCard }) {
+  const rows = card.rows ?? [];
+
+  // Parse amount and status from jobStatus string
+  // completedJobs format: "completed (bi-weekly, $161)"
+  // cleanerJobs format: "not started" | "in progress" | "completed" etc.
+  type JobRow = NonNullable<QueryResultCard["rows"]>[0];
+  function parseJobRow(row: JobRow) {
+    const status = row.jobStatus ?? "";
+    // Extract dollar amount from completedJobs format: "completed (bi-weekly, $161)"
+    const amountMatch = status.match(/\$(\d+(?:\.\d+)?)/);
+    const amount = amountMatch ? `$${amountMatch[1]}` : null;
+    // Determine display status
+    const isHistorical = status.startsWith("completed (");
+    const displayStatus = isHistorical ? "completed" : (status || "scheduled");
+    // Team display
+    const team = row.teamName ?? row.cleanerName ?? null;
+    // Date formatting
+    const dateStr = row.jobDate ?? row.serviceDateTime ?? null;
+    let displayDate = "—";
+    let displayWeekday = "";
+    if (dateStr) {
+      // jobDate is YYYY-MM-DD, parse as local date
+      const parts = dateStr.split("T")[0].split("-");
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        displayDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        displayWeekday = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+      }
+    }
+    return { amount, displayStatus, team, isHistorical, displayDate, displayWeekday };
+  }
+
+  function StatusBadge({ status }: { status: string }) {
+    const s = status.toLowerCase();
+    if (s === "completed") return <span style={{ background: "#064e3b", color: "#6ee7b7", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>Completed</span>;
+    if (s === "in progress" || s === "in-progress") return <span style={{ background: "#3b2a00", color: "#fbbf24", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>In Progress</span>;
+    if (s === "scheduled" || s === "not started") return <span style={{ background: "#1e3a5f", color: "#93c5fd", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>Scheduled</span>;
+    return <span style={{ background: "#2a2e47", color: "#8b8fa8", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap", textTransform: "capitalize" }}>{status}</span>;
+  }
+
   return (
-    <div className="flex items-start gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-4">
-      <span className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-        <MessageCircle className="w-5 h-5 text-blue-400" />
-      </span>
-      <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-sm mb-1">Answer</p>
-        <p className="text-gray-300 text-sm whitespace-pre-wrap">{card.answer}</p>
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+          <Calendar className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Job Lookup</p>
+          <p style={{ fontSize: 13, fontWeight: 500, color: "#c8cde8", lineHeight: 1.4 }}>{card.answer.split("\n")[0].slice(0, 120)}</p>
+        </div>
+      </div>
+
+      {/* Summary bar */}
+      {rows.length > 0 && (
+        <div style={{ padding: "8px 14px", background: "#161929", borderBottom: "1px solid #2a2e47", display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ background: "#2a2e47", color: "#a5b4fc", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20 }}>{rows.length} job{rows.length !== 1 ? "s" : ""}</span>
+          <span style={{ color: "#8b8fa8", fontSize: 12 }}>
+            {rows[0].customerName ?? rows[0].cleanerName ?? ""}
+          </span>
+        </div>
+      )}
+
+      {/* Job rows */}
+      {rows.length === 0 ? (
+        <div style={{ padding: "24px 14px", textAlign: "center" }}>
+          <p style={{ color: "#3d4260", fontSize: 13 }}>No jobs found</p>
+        </div>
+      ) : (
+        <div>
+          {rows.map((row, i) => {
+            const { amount, displayStatus, team, displayDate, displayWeekday } = parseJobRow(row);
+            return (
+              <div
+                key={row.id}
+                style={{
+                  padding: "9px 14px",
+                  display: "grid",
+                  gridTemplateColumns: "80px 1fr auto",
+                  gap: 8,
+                  alignItems: "start",
+                  borderBottom: i < rows.length - 1 ? "1px solid #1e2235" : "none",
+                }}
+              >
+                {/* Date */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e5f5", whiteSpace: "nowrap" }}>{displayDate}</span>
+                  <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{displayWeekday}</span>
+                </div>
+                {/* Address + team */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                  <span style={{ fontSize: 12, color: "#c8cde8", lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {row.jobAddress ?? "—"}
+                  </span>
+                  {team ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4f6ef7", flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{team}</span>
+                    </div>
+                  ) : (
+                    <span style={{ fontSize: 11, color: "#3d4260", fontStyle: "italic" }}>No team data</span>
+                  )}
+                </div>
+                {/* Amount + status */}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+                  {amount ? (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#34d399", whiteSpace: "nowrap" }}>{amount}</span>
+                  ) : (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#3d4260" }}>—</span>
+                  )}
+                  <StatusBadge status={displayStatus} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{ background: "#161929", borderTop: "1px solid #2a2e47", padding: "7px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontSize: 11, color: "#3d4260", fontStyle: "italic" }}>Historical jobs may not include team info</span>
+        <span style={{ fontSize: 10, color: "#3d4260" }}>cleanerJobs + completedJobs</span>
       </div>
     </div>
   );
@@ -1485,7 +1600,7 @@ type ServerResult =
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
-  | { type: "query_result"; answer: string; rows?: Array<{ id: number; teamName: string | null; cleanerName: string; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> };
+  | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -1628,7 +1743,7 @@ function buildAiMessage(result: ServerResult): Message {
     return {
       id: uid(),
       role: "ai",
-      content: { type: "query_result", card: { answer: result.answer, rows: result.rows } },
+      content: { type: "query_result", card: { answer: result.answer, rows: result.rows?.map(r => ({ ...r, jobDate: r.jobDate ?? null })) } },
       ts,
     };
   }
