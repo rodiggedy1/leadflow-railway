@@ -652,31 +652,17 @@ function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmC
 // ─── Call client pending card — polls callMatrix.pollCall ────────────────────
 function CallClientPendingCardView({ card }: { card: CallClientPendingCard }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
-  const utils = trpc.useUtils();
-  const [pollResult, setPollResult] = useState<{
-    status: string;
-    transcript: string | null;
-    recordingUrl: string | null;
-    summary: string | null;
-    endedReason: string | null;
-  } | null>(null);
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (!card.vapiCallId) return;
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const result = await utils.callMatrix.pollCall.fetch({ vapiCallId: card.vapiCallId });
-        setPollResult(result);
-        const s = result.status;
-        if (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") {
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          pollIntervalRef.current = null;
-        }
-      } catch { /* ignore */ }
-    }, 5000);
-    return () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
-  }, [card.vapiCallId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const callDone = pollResult !== null && (pollResult.status === "completed" || pollResult.status === "voicemail" || pollResult.status === "no_answer" || pollResult.status === "failed");
+  const { data: pollResult } = trpc.callMatrix.pollCall.useQuery(
+    { vapiCallId: card.vapiCallId },
+    {
+      enabled: !!card.vapiCallId,
+      refetchInterval: (query) => {
+        const s = query.state.data?.status;
+        return (s === "completed" || s === "voicemail" || s === "no_answer" || s === "failed") ? false : 5000;
+      },
+    }
+  );
+  const callDone = pollResult !== undefined && (pollResult.status === "completed" || pollResult.status === "voicemail" || pollResult.status === "no_answer" || pollResult.status === "failed");
   const noAnswer = pollResult?.status === "no_answer" || pollResult?.status === "failed";
   const transcript = pollResult?.transcript ?? null;
   const hasTranscript = !!transcript && transcript.trim().length > 5;
