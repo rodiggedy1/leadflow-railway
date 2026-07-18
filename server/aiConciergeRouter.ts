@@ -1283,8 +1283,8 @@ export const aiConciergeRouter = router({
         return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
       }
 
-      const intent = await classifyIntent(input.message);
-
+            const intent = await classifyIntent(input.message);
+      console.log("[Concierge] intent:", JSON.stringify(intent), "message:", input.message);
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
       }
