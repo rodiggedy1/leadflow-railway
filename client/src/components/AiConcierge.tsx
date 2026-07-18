@@ -1099,6 +1099,48 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── Customer name autocomplete ──────────────────────────────────────────
+  const [acQuery, setAcQuery] = useState<string | null>(null); // null = closed
+  const [acWordStart, setAcWordStart] = useState(0); // index of word start in input
+  const { data: acResults } = trpc.opsChat.searchCustomers.useQuery(
+    { query: acQuery ?? "" },
+    { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
+  );
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    // Find the word currently being typed at cursor
+    const cursor = e.target.selectionStart ?? val.length;
+    const before = val.slice(0, cursor);
+    const wordMatch = before.match(/(\S+)$/);
+    const word = wordMatch ? wordMatch[1] : "";
+    if (word.length >= 2 && /[a-zA-Z]/.test(word)) {
+      setAcQuery(word);
+      setAcWordStart(cursor - word.length);
+    } else {
+      setAcQuery(null);
+    }
+  };
+
+  const handleAcSelect = (name: string) => {
+    // Replace the current partial word with the selected name
+    const cursor = inputRef.current?.selectionStart ?? input.length;
+    const before = input.slice(0, acWordStart);
+    const after = input.slice(cursor);
+    const newVal = before + name + after;
+    setInput(newVal);
+    setAcQuery(null);
+    // Restore focus and move cursor to end of inserted name
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        const pos = before.length + name.length;
+        inputRef.current.setSelectionRange(pos, pos);
+      }
+    }, 0);
+  };
+
   const chatMutation = trpc.aiConcierge.chat.useMutation();
 
   useEffect(() => {
@@ -1297,10 +1339,30 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
         <div className="relative bg-[#1e2235] border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-3">
+          {/* Customer autocomplete dropdown */}
+          {acQuery && acResults && acResults.length > 0 && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1d30] border border-white/15 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
+              {acResults.slice(0, 6).map((r) => (
+                <button
+                  key={r.phone}
+                  onMouseDown={(e) => { e.preventDefault(); handleAcSelect(r.name); }}
+                  className="w-full text-left px-4 py-2.5 hover:bg-white/8 transition-colors flex items-center gap-3"
+                >
+                  <div className="w-7 h-7 rounded-full bg-indigo-600/40 flex items-center justify-center flex-shrink-0">
+                    <span className="text-indigo-300 text-xs font-semibold">{r.name.charAt(0).toUpperCase()}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-white text-sm font-medium truncate">{r.name}</div>
+                    {r.lastJobDate && <div className="text-gray-500 text-xs">Last job: {r.lastJobDate}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
