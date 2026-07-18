@@ -590,6 +590,7 @@ function todayET(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmCard; onFired: (vapiCallId: string) => void }) {
+  const [script, setScript] = useState(card.script);
   const [fired, setFired] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const startCall = trpc.callMatrix.startCall.useMutation({
@@ -610,13 +611,13 @@ function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmC
       personName: card.recipientName,
       phone: card.recipientPhone,
       scenario: "Concierge call",
-      script: card.script,
+      script: script.trim(),
       audience: card.audience,
     });
   }
   return (
     <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 flex items-center gap-3">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3">
         <span className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
           <Phone className="w-4 h-4 text-indigo-400" />
         </span>
@@ -624,22 +625,33 @@ function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmC
           <p className="text-sm text-white font-semibold">{card.recipientName}</p>
           <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone}</p>
         </div>
-        {!fired && (
-          <button
-            onClick={handleCall}
-            disabled={startCall.isPending}
-            className="flex items-center gap-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-semibold text-white transition-colors flex-shrink-0"
-          >
-            {startCall.isPending ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Calling…</>
-            ) : (
-              <><Phone className="w-3.5 h-3.5" /> Call {card.recipientFirstName}</>
-            )}
-          </button>
-        )}
+      </div>
+      <div className="px-4 py-3">
+        <textarea
+          value={script}
+          onChange={(e) => setScript(e.target.value)}
+          disabled={fired || startCall.isPending}
+          rows={4}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+        />
       </div>
       {callError && (
-        <div className="px-4 pb-3 text-sm text-red-400">{callError}</div>
+        <div className="px-4 pb-2 text-sm text-red-400">{callError}</div>
+      )}
+      {!fired && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={handleCall}
+            disabled={!script.trim() || startCall.isPending}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          >
+            {startCall.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Calling…</>
+            ) : (
+              <><Phone className="w-4 h-4" /> Call {card.recipientFirstName}</>
+            )}
+          </button>
+        </div>
       )}
     </div>
   );
