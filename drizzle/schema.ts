@@ -1149,6 +1149,8 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   etaCallFiredAt: timestamp("etaCallFiredAt"),
   /** ETA Engine: when Maps verification completed and ETA was written */
   etaVerifiedAt: timestamp("etaVerifiedAt"),
+  /** ETA Engine: exact time string the cleaner confirmed, e.g. "8:30 PM" — stored verbatim, no conversion */
+  etaTimeStr: varchar("etaTimeStr", { length: 32 }),
   /** Whether this job has been flagged for admin review */
   flagged: int("flagged").default(0).notNull(),
   /** Admin notes on this job */

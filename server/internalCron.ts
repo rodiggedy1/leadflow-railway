@@ -1030,22 +1030,8 @@ export function startInternalCron(): void {
     }
   }, { timezone: "America/New_York" });
 
-  // ── Daily 8 PM ET: escalation VAPI calls to unconfirmed cleaners ────────────
-  // Places automated calls to any cleaner who still hasn't confirmed by 8 PM.
-  // Flags non-responders in Command Chat for manual follow-up.
-  cron.schedule("0 0 20 * * *", async () => {
-    console.log("[InternalCron] Running ScheduleEscalation (8 PM)...");
-    try {
-      const result = await runEscalationCalls();
-      const summary = `called: ${result.called}, skipped: ${result.skipped}, errors: ${result.errors}`;
-      console.log(`[InternalCron] ScheduleEscalation — ${summary}`);
-      await recordHeartbeat("schedule-escalation", summary, result.called > 0);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[InternalCron] ScheduleEscalation failed:", msg);
-      await recordHeartbeat("schedule-escalation", `error: ${msg}`, false);
-    }
-  }, { timezone: "America/New_York" });
+  // NOTE: schedule-escalation is triggered exclusively via /api/cron/schedule-escalation
+  // (cronSync.ts). Do NOT add an internal cron here — it would fire twice at 8 PM.
 
   // ── Daily 2 AM ET: message integrity check ─────────────────────────────────
   // Compares last-7-days message counts per active session against OpenPhone.

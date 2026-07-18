@@ -33,8 +33,16 @@ import {
   Calendar,
   MapPin,
   AlertTriangle,
+  Play,
+  PhoneMissed,
+  MessageCircle,
+  Users,
+  Edit3,
+  CreditCard,
+  ExternalLink,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { proxyRecordingUrl } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,12 +71,57 @@ interface ClarifyCard {
   message: string;
   teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }>;
 }
-
+interface EtaPendingCard {
+  jobId: number;
+  teamName: string;
+  cleanerName: string;
+  scheduledTimeET: string;
+  date: string;
+}
+interface BulkSmsRecipient {
+  cleanerProfileId?: number;
+  name: string;
+  phone: string;
+}
+interface ClientDisambiguationCard {
+  messageHint: string | null;
+  matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }>;
+}
+interface BulkSmsConfirmCard {
+  targetDescription: string;
+  recipients: BulkSmsRecipient[];
+  draftMessage: string;
+}
+interface BulkSmsSentCard {
+  message: string;
+  results: Array<{ name: string; phone: string; success: boolean; error?: string }>;
+}
+interface PaymentLinkConfirmCard {
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  paymentLinkUrl: string;
+  expiresAt: number;
+  smsText: string;
+}
+interface PaymentLinkSentCard {
+  recipientName: string;
+  recipientPhone: string;
+  paymentLinkUrl: string;
+  success: boolean;
+  error?: string;
+}
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
   | { type: "completed"; card: CompletedCard }
-  | { type: "clarify"; card: ClarifyCard };
+  | { type: "clarify"; card: ClarifyCard }
+  | { type: "eta_pending"; card: EtaPendingCard }
+  | { type: "bulk_sms_confirm"; card: BulkSmsConfirmCard }
+  | { type: "bulk_sms_sent"; card: BulkSmsSentCard }
+  | { type: "client_disambiguation"; card: ClientDisambiguationCard }
+  | { type: "payment_link_confirm"; card: PaymentLinkConfirmCard }
+  | { type: "payment_link_sent"; card: PaymentLinkSentCard };
 
 interface Message {
   id: string;
@@ -221,16 +274,432 @@ function ClarifyCardView({
   );
 }
 
+// ─── Client disambiguation card ─────────────────────────────────────────────
+function ClientDisambiguationCardView({
+  card,
+  onPick,
+}: {
+  card: ClientDisambiguationCard;
+  onPick: (phone: string, name: string) => void;
+}) {
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10">
+        <p className="text-sm font-semibold text-white">Multiple matches — choose one</p>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        {card.matches.map((m) => (
+          <button
+            key={m.phone}
+            onClick={() => onPick(m.phone, m.name)}
+            className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2.5 text-left transition-colors"
+          >
+            <span className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
+              <User className="w-4 h-4 text-indigo-400" />
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-white font-semibold">{m.name}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Bulk SMS confirm card ───────────────────────────────────────────────────
+function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; onSent: (result: BulkSmsSentCard) => void }) {
+  const [draft, setDraft] = useState(card.draftMessage);
+  const [sent, setSent] = useState(false);
+  const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
+
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    sendMutation.mutate(
+      { recipients: card.recipients, message: draft },
+      {
+        onSuccess: (result) => {
+          setSent(true);
+          onSent({ message: result.message, results: result.results });
+        },
+      }
+    );
+  }
+
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+        <Users className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+        <p className="text-sm font-semibold text-white">Text {card.targetDescription}</p>
+        <span className="ml-auto text-xs text-gray-500">{card.recipients.length} recipient{card.recipients.length !== 1 ? "s" : ""}</span>
+      </div>
+      <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
+        {card.recipients.map((r) => (
+          <span key={r.cleanerProfileId} className="inline-flex items-center gap-1 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
+            <User className="w-3 h-3 text-gray-500" />
+            {r.name.split(" ")[0]}
+          </span>
+        ))}
+      </div>
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Edit3 className="w-3 h-3 text-indigo-400" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Message</span>
+        </div>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          disabled={sent || sendMutation.isPending}
+          rows={3}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+        />
+      </div>
+      {!sent && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={handleSend}
+            disabled={!draft.trim() || sendMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          >
+            {sendMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+            ) : (
+              <><Send className="w-4 h-4" /> Send to {card.recipients.length} cleaner{card.recipients.length !== 1 ? "s" : ""}</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+// ─── Bulk SMS sent card ───────────────────────────────────────────────────────
+function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
+  const allOk = card.results.every(r => r.success);
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
+          {allOk ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <AlertTriangle className="w-3.5 h-3.5 text-white" />}
+        </span>
+        <p className="text-sm font-semibold text-white">{card.message}</p>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        {card.results.map((r, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <StepIcon status={r.success ? "done" : "failed"} />
+            <span className={`flex-1 text-sm ${r.success ? "text-gray-300" : "text-red-400"}`}>
+              {r.name}{r.error ? ` — ${r.error}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+// ─── AudioPlayer — copied verbatim from TeamEtaModal ────────────────────────
+// ─── Payment link confirm card ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirmCard; onSent: (result: PaymentLinkSentCard) => void }) {
+  const [smsText, setSmsText] = useState(card.smsText);
+  const [sent, setSent] = useState(false);
+  const sendMutation = trpc.aiConcierge.sendPaymentLinkSms.useMutation();
+
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    sendMutation.mutate(
+      {
+        recipientPhone: card.recipientPhone,
+        recipientName: card.recipientName,
+        smsText,
+        paymentLinkUrl: card.paymentLinkUrl,
+      },
+      {
+        onSuccess: (result) => {
+          setSent(true);
+          onSent(result);
+        },
+      }
+    );
+  }
+
+  const expiryDate = new Date(card.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+        <CreditCard className="w-4 h-4 text-violet-400 flex-shrink-0" />
+        <p className="text-sm font-semibold text-white">Send Payment Link</p>
+      </div>
+      <div className="px-4 pt-3 pb-2 flex items-center gap-3">
+        <span className="w-8 h-8 rounded-full bg-violet-600/30 flex items-center justify-center flex-shrink-0">
+          <User className="w-4 h-4 text-violet-400" />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-white font-semibold">{card.recipientName}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone}</p>
+        </div>
+        <a
+          href={card.paymentLinkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors flex-shrink-0"
+        >
+          <ExternalLink className="w-3 h-3" />
+          View link
+        </a>
+      </div>
+      <div className="px-4 pb-2">
+        <span className="text-[11px] text-gray-500">Link expires {expiryDate}</span>
+      </div>
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Edit3 className="w-3 h-3 text-violet-400" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-violet-400">Message to send</span>
+        </div>
+        <textarea
+          value={smsText}
+          onChange={(e) => setSmsText(e.target.value)}
+          disabled={sent || sendMutation.isPending}
+          rows={8}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-violet-500/50 transition-colors disabled:opacity-60"
+        />
+      </div>
+      {!sent && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={handleSend}
+            disabled={!smsText.trim() || sendMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          >
+            {sendMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+            ) : (
+              <><Send className="w-4 h-4" /> Send to {card.recipientFirstName}</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+// ─── Payment link sent card ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+function PaymentLinkSentCardView({ card }: { card: PaymentLinkSentCard }) {
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${card.success ? "bg-green-500" : "bg-red-500"}`}>
+          {card.success ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <XCircle className="w-3.5 h-3.5 text-white" />}
+        </span>
+        <p className="text-sm font-semibold text-white">
+          {card.success ? `Payment link sent to ${card.recipientName}` : `Failed to send to ${card.recipientName}`}
+        </p>
+      </div>
+      <div className="px-4 py-3 space-y-1.5">
+        <p className="text-xs text-gray-400">{card.recipientPhone}</p>
+        {card.success && (
+          <a
+            href={card.paymentLinkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            View payment link
+          </a>
+        )}
+        {card.error && <p className="text-xs text-red-400">{card.error}</p>}
+      </div>
+    </div>
+  );
+}
+function AudioPlayer({ url }: { url: string | null }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState<number | null>(null);
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onloadedmetadata = null;
+      audioRef.current = null;
+    }
+    setPlaying(false);
+    setDuration(null);
+  }, [url]);
+  function toggle() {
+    if (!url) return;
+    if (!audioRef.current) {
+      audioRef.current = new Audio(url);
+      audioRef.current.onended = () => setPlaying(false);
+      audioRef.current.onloadedmetadata = () => {
+        if (audioRef.current) setDuration(audioRef.current.duration);
+      };
+    }
+    if (playing) { audioRef.current.pause(); setPlaying(false); }
+    else { void audioRef.current.play(); setPlaying(true); }
+  }
+  function fmtDur(s: number) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  }
+  if (!url) {
+    return (
+      <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-indigo-900/60 text-indigo-400">
+          <Play className="ml-0.5 h-5 w-5 fill-current" />
+        </div>
+        <span className="text-xs text-indigo-400 italic">Audio loading…</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3">
+      <button onClick={toggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-900/40">
+        {playing
+          ? <span className="flex gap-[3px]"><span className="h-4 w-[3px] rounded-full bg-white" /><span className="h-4 w-[3px] rounded-full bg-white" /></span>
+          : <Play className="ml-0.5 h-5 w-5 fill-current" />}
+      </button>
+      <div className="flex h-10 flex-1 items-center gap-[3px]">
+        {[5,11,17,10,20,26,18,31,22,14,27,34,20,12,25,18,30,13,22,10].map((h,i)=>(
+          <span key={i} className="w-[3px] rounded-full bg-gradient-to-t from-indigo-600 to-indigo-400" style={{height:h, transformOrigin:"bottom", animation: playing ? `audioWave ${0.6 + (i % 5) * 0.1}s ease-in-out ${(i * 0.05).toFixed(2)}s infinite` : "none"}} />
+        ))}
+      </div>
+      {duration !== null && <span className="text-xs font-bold text-gray-400">{fmtDur(duration)}</span>}
+      <style>{`@keyframes audioWave{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1.0)}}`}</style>
+    </div>
+  );
+}
+// ─── ETA Pending card — polls getTeamEtaSummary, shows steps with full content ──
+function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const { data: rawTeams } = trpc.fieldMgmt.getTeamEtaSummary.useQuery(
+    { date: card.date },
+    { refetchInterval: (query) => {
+        const team = (query.state.data ?? []).find((t: { currentJobId: number }) => t.currentJobId === card.jobId);
+        return team?.etaCall ? false : 5000;
+      }
+    }
+  );
+  const team = (rawTeams ?? []).find((t: { currentJobId: number }) => t.currentJobId === card.jobId);
+  const etaCall = team?.etaCall ?? null;
+  const callDone = etaCall !== null;
+  const resultType = etaCall?.resultType ?? null;
+  const etaTimeStr = etaCall?.etaTimeStr ?? null;
+  const cleanerStatement = etaCall?.cleanerStatement ?? null;
+  const clientNotified = etaCall?.clientNotified ?? false;
+  const smsSentBody = etaCall?.smsSentBody ?? null;
+  const recordingUrl = etaCall?.recordingUrl ?? null;
+  const transcript = etaCall?.transcript ?? null;
+  const hasTranscript = !!transcript && transcript.trim().length > 5;
+  // Step 2: call result
+  let step2Status: StepStatus = "running";
+  let step2Label = "Waiting for call to complete…";
+  if (callDone) {
+    if (resultType === "success") {
+      step2Status = "done";
+      step2Label = etaTimeStr
+        ? `ETA confirmed: ${etaTimeStr}${cleanerStatement ? ` — "${cleanerStatement}"` : ""}`
+        : `Call completed${cleanerStatement ? ` — "${cleanerStatement}"` : ""}`;
+    } else if (resultType === "no_answer" || resultType === "dispatcher_needed") {
+      step2Status = "failed";
+      step2Label = "No answer — cleaner did not pick up";
+    } else if (resultType === "unclear") {
+      step2Status = "failed";
+      step2Label = "Unclear — could not confirm ETA";
+    } else {
+      step2Status = "done";
+      step2Label = "Call completed";
+    }
+  }
+  // Step 3: client SMS
+  let step3Status: StepStatus = "pending";
+  let step3Label = "Client SMS pending…";
+  if (callDone) {
+    if (clientNotified && smsSentBody) {
+      step3Status = "done";
+      step3Label = `Client texted: "${smsSentBody}"`;
+    } else {
+      step3Status = "failed";
+      step3Label = "Client was not notified";
+    }
+  }
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10">
+        <p className="text-sm font-semibold text-white">ETA Update — {card.teamName}</p>
+      </div>
+      <div className="px-4 py-3 space-y-3">
+        {/* Step 1: call placed */}
+        <div className="flex items-start gap-3">
+          <StepIcon status="done" />
+          <span className="flex-1 text-sm text-gray-300">
+            ETA call placed for <span className="text-white font-semibold">{card.teamName}</span> ({card.cleanerName}) — scheduled {card.scheduledTimeET}
+          </span>
+        </div>
+        {/* Step 2: call result */}
+        <div className="flex items-start gap-3">
+          <StepIcon status={step2Status} />
+          <span className={`flex-1 text-sm ${step2Status === "running" ? "text-white font-semibold" : step2Status === "done" ? "text-gray-300" : "text-red-400"}`}>
+            {step2Label}
+          </span>
+        </div>
+        {/* Step 3: client SMS */}
+        <div className="flex items-start gap-3">
+          <StepIcon status={step3Status} />
+          <span className={`flex-1 text-sm ${step3Status === "pending" ? "text-gray-500" : step3Status === "done" ? "text-gray-300" : "text-red-400"}`}>
+            {step3Label}
+          </span>
+        </div>
+      </div>
+      {/* Recording + transcript once call is done */}
+      {callDone && (
+        <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-3">
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400">
+            <MessageCircle className="h-3.5 w-3.5" /> Recording
+          </div>
+          {resultType === "no_answer" || resultType === "dispatcher_needed" ? (
+            <div className="flex items-center gap-2 text-sm text-red-400">
+              <PhoneMissed className="h-4 w-4 flex-shrink-0" /> No answer — no recording available
+            </div>
+          ) : (
+            <AudioPlayer url={proxyRecordingUrl(recordingUrl)} />
+          )}
+          {hasTranscript && (
+            <div>
+              <button
+                onClick={() => setTranscriptOpen(v => !v)}
+                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400 hover:bg-white/10 transition-colors"
+              >
+                <span>Call transcript</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
+              </button>
+              {transcriptOpen && (
+                <div className="mt-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs leading-relaxed text-gray-300 whitespace-pre-wrap">
+                  {transcript}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
 function MessageBubble({
   msg,
   agentPhotoUrl,
   onPickTeam,
+  onPickClient,
+  onAddMessage,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
   onPickTeam: (jobId: number, teamName: string) => void;
+  onPickClient: (phone: string, name: string, messageHint: string | null) => void;
+  onAddMessage: (m: Message) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -287,6 +756,69 @@ function MessageBubble({
           <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
             <ClarifyCardView card={msg.content.card} onPickTeam={onPickTeam} />
             <div className="text-right text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "eta_pending" && (
+          <div>
+            <EtaPendingCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "bulk_sms_confirm" && (
+          <div>
+            <BulkSmsConfirmCardView
+              card={msg.content.card}
+              onSent={(result) => {
+                const sentMsg: Message = {
+                  id: uid(),
+                  role: "ai",
+                  content: { type: "bulk_sms_sent", card: result },
+                  ts: nowTime(),
+                };
+                setMessages((prev) => [...prev, sentMsg]);
+              }}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "bulk_sms_sent" && (
+          <div>
+            <BulkSmsSentCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "client_disambiguation" && (
+          <div>
+            <ClientDisambiguationCardView
+              card={msg.content.card}
+              onPick={(phone, name) => {
+                const hint = msg.content.type === "client_disambiguation" ? msg.content.card.messageHint : null;
+                onPickClient(phone, name, hint);
+              }}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "payment_link_confirm" && (
+          <div>
+            <PaymentLinkConfirmCardView
+              card={msg.content.card}
+              onSent={(result) => {
+                onAddMessage({
+                  id: uid(),
+                  role: "ai",
+                  content: { type: "payment_link_sent", card: result },
+                  ts: nowTime(),
+                });
+              }}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "payment_link_sent" && (
+          <div>
+            <PaymentLinkSentCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
       </div>
@@ -358,6 +890,47 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Called when agent picks a client from a disambiguation card
+  const handlePickClient = useCallback((phone: string, name: string, messageHint: string | null) => {
+    const isPaymentLink = messageHint === "__payment_link__";
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: { type: "text", text: isPaymentLink ? `Send payment link to ${name}` : `Text ${name}` },
+      ts: nowTime(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsThinking(true);
+
+    chatMutation.mutate(
+      {
+        message: isPaymentLink ? `Send payment link to ${name}` : `Text ${name}`,
+        resolvedClientPhone: phone,
+        resolvedClientMessageHint: isPaymentLink ? null : messageHint,
+        resolvedPaymentLink: isPaymentLink,
+      },
+      {
+        onSuccess: (result) => {
+          setIsThinking(false);
+          const aiMsg = buildAiMessage(result);
+          setMessages((prev) => [...prev, aiMsg]);
+        },
+        onError: (err) => {
+          setIsThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: uid(),
+              role: "ai",
+              content: { type: "text", text: `Something went wrong: ${err.message}` },
+              ts: nowTime(),
+            },
+          ]);
+        },
+      }
+    );
+  }, [chatMutation]);
+
   // Called when agent picks a team from a clarify card
   const handlePickTeam = useCallback((jobId: number, teamName: string) => {
     const userMsg: Message = {
@@ -404,6 +977,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       ts: nowTime(),
     };
 
+    // Cancel any pending bulk_sms_confirm cards — they're stale once user sends a new message
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.content.type === "bulk_sms_confirm"
+          ? { ...m, content: { type: "text" as const, text: "_(Cancelled — new request sent)_" } }
+          : m
+      )
+    );
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsThinking(true);
@@ -475,7 +1056,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -552,7 +1133,13 @@ type ServerResult =
   | { type: "completed"; message: string }
   | { type: "error"; message: string }
   | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
-  | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } };
+  | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } }
+  | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
+  | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
+  | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
+  | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }> }
+  | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
+  | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -584,6 +1171,95 @@ function buildAiMessage(result: ServerResult): Message {
     };
   }
 
+  if (result.type === "eta_pending") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "eta_pending",
+        card: {
+          jobId: result.jobId,
+          teamName: result.teamName,
+          cleanerName: result.cleanerName,
+          scheduledTimeET: result.scheduledTimeET,
+          date: result.date,
+        },
+      },
+      ts,
+    };
+  }
+  if (result.type === "bulk_sms_confirm") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "bulk_sms_confirm",
+        card: {
+          targetDescription: result.targetDescription,
+          recipients: result.recipients,
+          draftMessage: result.draftMessage,
+        },
+      },
+      ts,
+    };
+  }
+  if (result.type === "bulk_sms_sent") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "bulk_sms_sent",
+        card: { message: result.message, results: result.results },
+      },
+      ts,
+    };
+  }
+  if (result.type === "payment_link_confirm") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "payment_link_confirm",
+        card: {
+          recipientName: result.recipientName,
+          recipientFirstName: result.recipientFirstName,
+          recipientPhone: result.recipientPhone,
+          paymentLinkUrl: result.paymentLinkUrl,
+          expiresAt: result.expiresAt,
+          smsText: result.smsText,
+        },
+      },
+      ts,
+    };
+  }
+  if (result.type === "payment_link_sent") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "payment_link_sent",
+        card: {
+          recipientName: result.recipientName,
+          recipientPhone: result.recipientPhone,
+          paymentLinkUrl: result.paymentLinkUrl,
+          success: result.success,
+          error: result.error,
+        },
+      },
+      ts,
+    };
+  }
+  if (result.type === "client_disambiguation") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "client_disambiguation",
+        card: { messageHint: result.messageHint, matches: result.matches },
+      },
+      ts,
+    };
+  }
   // workflow
   return {
     id: uid(),
