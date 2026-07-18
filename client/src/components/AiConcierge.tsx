@@ -1337,28 +1337,28 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
+      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a] relative">
+        {/* Customer autocomplete dropdown — outside overflow-hidden box so it's not clipped */}
+        {acQuery && acResults && acResults.length > 0 && (
+          <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#1a1d30] border border-white/15 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
+            {acResults.slice(0, 6).map((r) => (
+              <button
+                key={r.phone}
+                onMouseDown={(e) => { e.preventDefault(); handleAcSelect(r.name); }}
+                className="w-full text-left px-4 py-2.5 hover:bg-white/8 transition-colors flex items-center gap-3"
+              >
+                <div className="w-7 h-7 rounded-full bg-indigo-600/40 flex items-center justify-center flex-shrink-0">
+                  <span className="text-indigo-300 text-xs font-semibold">{r.name.charAt(0).toUpperCase()}</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-white text-sm font-medium truncate">{r.name}</div>
+                  {r.lastJobDate && <div className="text-gray-500 text-xs">Last job: {r.lastJobDate}</div>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="relative bg-[#1e2235] border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-3">
-          {/* Customer autocomplete dropdown */}
-          {acQuery && acResults && acResults.length > 0 && (
-            <div className="absolute bottom-full left-0 right-0 mb-1 bg-[#1a1d30] border border-white/15 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
-              {acResults.slice(0, 6).map((r) => (
-                <button
-                  key={r.phone}
-                  onMouseDown={(e) => { e.preventDefault(); handleAcSelect(r.name); }}
-                  className="w-full text-left px-4 py-2.5 hover:bg-white/8 transition-colors flex items-center gap-3"
-                >
-                  <div className="w-7 h-7 rounded-full bg-indigo-600/40 flex items-center justify-center flex-shrink-0">
-                    <span className="text-indigo-300 text-xs font-semibold">{r.name.charAt(0).toUpperCase()}</span>
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-white text-sm font-medium truncate">{r.name}</div>
-                    {r.lastJobDate && <div className="text-gray-500 text-xs">Last job: {r.lastJobDate}</div>}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
           <textarea
             ref={inputRef}
             value={input}
