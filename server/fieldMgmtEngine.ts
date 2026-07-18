@@ -2320,14 +2320,12 @@ export async function runPostStartEscalation(): Promise<{ checked: number; acted
 export type EtaCallStatus = "on_time" | "late" | "early" | "unclear";
 
 export interface ExtractedCleanerStatus {
-  /**
-   * The confirmed arrival time as an absolute ET clock string, e.g. "7:30 PM".
-   * null when the cleaner's answer was unclear or not quantifiable.
-   */
-  confirmedArrivalTimeET: string | null;
-  status: EtaCallStatus;
-  /** The cleaner's own words only — not the AI's question. */
+  /** Exactly what the cleaner said, e.g. "8:30", "1:15", "8:30 PM". null if unclear. */
+  arrivalTime: string | null;
+  /** The cleaner's own words from the transcript. */
   cleanerStatement: string;
+  /** true if the cleaner's answer was vague, voicemail, or unusable. */
+  unclear: boolean;
 }
 
 /**
@@ -2343,40 +2341,18 @@ export interface ExtractedCleanerStatus {
  */
 export async function extractCleanerStatus(
   transcript: string,
-  scheduledTimeET: string // e.g. "1:00 PM" — used by LLM to convert relative answers
+  scheduledTimeET: string
 ): Promise<ExtractedCleanerStatus> {
   const response = await invokeLLM({
     messages: [
       {
         role: "system",
-        content: `You are extracting a cleaner's confirmed estimated arrival time from a voice call transcript.
-The AI assistant asked the cleaner what time they think they will arrive at their next job.
-The job is scheduled for ${scheduledTimeET}.
-
-The call follows this pattern:
-  AI: "What time do you think you'll arrive?"
-  Cleaner: states a time (e.g. "7:30")
-  AI: "Just to confirm, you said [TIME], is that right?"
-  Cleaner: confirms ("yes", "correct", "that's right") OR corrects ("no, 8:00")
-  If corrected: AI reads back the corrected time, cleaner confirms.
-
-CRITICAL RULE: The AI's readback line ("Just to confirm, you said X") is NOT the source of the time — it is just a confirmation prompt.
-- If the cleaner confirmed after the AI's readback of TIME X → confirmedArrivalTimeET = TIME X (exactly as stated, e.g. "7:30 PM").
-- If the cleaner corrected the AI → confirmedArrivalTimeET = the corrected time the cleaner stated.
-- If the cleaner said "right on time" or similar → confirmedArrivalTimeET = "${scheduledTimeET}".
-- cleanerStatement must be the cleaner's own words only.
-
-Return the confirmed time as an ABSOLUTE clock string in 12-hour ET format (e.g. "7:30 PM", "10:30 AM"). Do NOT compute a minutes offset — just return the clock time exactly as spoken.
-Determine status by comparing confirmedArrivalTimeET to the scheduled time ${scheduledTimeET}:
-  same time → "on_time", later → "late", earlier → "early", cannot determine → "unclear".
-
-Examples:
-  Cleaner: "7:30" + AI readback "7:30 PM" + Cleaner: "yes" → confirmedArrivalTimeET: "7:30 PM", status: "late" (vs ${scheduledTimeET})
-  Cleaner: "right on time" → confirmedArrivalTimeET: "${scheduledTimeET}", status: "on_time"
-  Cleaner: "I'm not sure" → confirmedArrivalTimeET: null, status: "unclear"
-
-- Use status "unclear" for: voicemail, silence, incomplete transcripts, or vague responses.
-- cleanerStatement must be the cleaner's own words only — a short verbatim or paraphrased quote.`,
+        content: `Extract the cleaner's arrival time from this call transcript.
+Return exactly what the cleaner said — do not normalize, do not add AM/PM, do not compute status.
+Examples: "8:30", "1:15", "8:30 PM", "around 10".
+If the cleaner said "right on time" or similar, return "${scheduledTimeET}".
+Set unclear=true for: voicemail, silence, vague answers, or anything that cannot be used as an arrival time.
+cleanerStatement must be the cleaner's own words only.`,
       },
       {
         role: "user",
@@ -2386,26 +2362,25 @@ Examples:
     response_format: {
       type: "json_schema",
       json_schema: {
-        name: "cleaner_eta_status",
+        name: "cleaner_eta",
         strict: true,
         schema: {
           type: "object",
           properties: {
-            confirmedArrivalTimeET: {
+            arrivalTime: {
               type: ["string", "null"],
-              description: "The confirmed arrival time as an absolute 12-hour ET clock string, e.g. '7:30 PM'. null if unclear.",
-            },
-            status: {
-              type: "string",
-              enum: ["on_time", "late", "early", "unclear"],
-              description: "Arrival status relative to scheduled time.",
+              description: "Exactly what the cleaner said, e.g. '8:30', '1:15', '8:30 PM'. null if unclear.",
             },
             cleanerStatement: {
               type: "string",
               description: "The cleaner's own words from the transcript.",
             },
+            unclear: {
+              type: "boolean",
+              description: "true if the answer was vague, voicemail, or unusable.",
+            },
           },
-          required: ["confirmedArrivalTimeET", "status", "cleanerStatement"],
+          required: ["arrivalTime", "cleanerStatement", "unclear"],
           additionalProperties: false,
         },
       },
@@ -2421,12 +2396,6 @@ Examples:
     parsed = JSON.parse(raw) as ExtractedCleanerStatus;
   } catch {
     throw new Error(`[EtaEngine] extractCleanerStatus: failed to parse LLM JSON: ${raw}`);
-  }
-
-  // Validate status enum
-  const validStatuses: EtaCallStatus[] = ["on_time", "late", "early", "unclear"];
-  if (!validStatuses.includes(parsed.status)) {
-    throw new Error(`[EtaEngine] extractCleanerStatus: invalid status value: ${parsed.status}`);
   }
 
   return parsed;
@@ -2740,10 +2709,10 @@ export async function handleEtaCallEnd(params: {
     return;
   }
 
-  const { confirmedArrivalTimeET, status, cleanerStatement } = extracted;
+  const { arrivalTime, cleanerStatement, unclear } = extracted;
 
-  // ── Unclear status → alert dispatch ──────────────────────────────────────
-  if (status === "unclear" || !confirmedArrivalTimeET) {
+  // ── Unclear → alert dispatch ─────────────────────────────────────────────────────
+  if (unclear || !arrivalTime) {
     await postEtaResultCard({
       resultType: "unclear",
       cleanerStatement,
@@ -2754,30 +2723,27 @@ export async function handleEtaCallEnd(params: {
     return;
   }
 
-  // ── Parse confirmed clock time directly — no offset math ─────────────────
-  // The LLM returns the exact time the cleaner said (e.g. "7:30 PM").
-  // We must parse it as ET, not UTC. Use Intl to find the UTC offset for ET
-  // on the job date, then apply it explicitly.
+  // ── Parse arrival time ───────────────────────────────────────────────────────────────
+  // One regex finds the first valid time anywhere in arrivalTime (handles "about 8:30",
+  // "we'll be there at 1:15 PM", "probably 9", etc.).
+  // If AM/PM is present, use it. Otherwise use the meridiem from scheduledTimeET.
   const etaDate = (() => {
     try {
-      // Match "7:30 PM", "7:30 AM", "7 PM", or bare "8:30" / "8 30" (no AM/PM)
-      const matchWithMeridiem = confirmedArrivalTimeET.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
-      const matchBare = confirmedArrivalTimeET.match(/(\d{1,2})[: ](\d{2})/);
-      const matchHourOnly = confirmedArrivalTimeET.match(/^(\d{1,2})$/);
-      if (!matchWithMeridiem && !matchBare && !matchHourOnly) return null;
-      let hours: number;
-      let minutes: number;
-      if (matchWithMeridiem) {
-        hours = parseInt(matchWithMeridiem[1], 10);
-        minutes = parseInt(matchWithMeridiem[2] ?? "0", 10);
-        const meridiem = matchWithMeridiem[3].toUpperCase();
+      // Find first H[:MM][ AM/PM] anywhere in the string
+      const m = arrivalTime.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+      if (!m) return null;
+      let hours = parseInt(m[1], 10);
+      const minutes = parseInt(m[2] ?? "0", 10);
+      if (m[3]) {
+        // AM/PM explicitly provided
+        const meridiem = m[3].toUpperCase();
         if (meridiem === "PM" && hours !== 12) hours += 12;
         if (meridiem === "AM" && hours === 12) hours = 0;
       } else {
-        // Bare time — use hours and minutes as-is (already in 24h or unambiguous morning time)
-        const m = matchBare ?? matchHourOnly!;
-        hours = parseInt(m[1], 10);
-        minutes = parseInt(m[2] ?? "0", 10);
+        // Use meridiem from scheduledTimeET
+        const schedMeridiem = scheduledTimeET?.match(/(AM|PM)/i)?.[1]?.toUpperCase() ?? "AM";
+        if (schedMeridiem === "PM" && hours !== 12) hours += 12;
+        if (schedMeridiem === "AM" && hours === 12) hours = 0;
       }
       // Build a UTC date by finding the ET offset for this date
       // Use a reference point on the job date at noon UTC to get the ET offset
@@ -2812,10 +2778,10 @@ export async function handleEtaCallEnd(params: {
   })();
 
   if (!etaDate) {
-    console.error(`[EtaEngine] Could not parse confirmedArrivalTimeET "${confirmedArrivalTimeET}" for job ${cleanerJobId}`);
+    console.error(`[EtaEngine] Could not parse arrivalTime "${arrivalTime}" for job ${cleanerJobId}`);
     await postEtaResultCard({
       resultType: "unclear",
-      cleanerStatement: `${cleanerStatement} (could not parse time: ${confirmedArrivalTimeET})`,
+      cleanerStatement: `${cleanerStatement} (could not parse time: ${arrivalTime})`,
       clientNotified: false,
       scheduledTime: scheduledTimeET ?? jobDate,
     });
@@ -2830,7 +2796,7 @@ export async function handleEtaCallEnd(params: {
     console.warn(`[EtaEngine] ETA date mismatch for job ${cleanerJobId}: etaDate=${etaDateStr}, jobDate=${jobDateFormatted}`);
     await postEtaResultCard({
       resultType: "unclear",
-      cleanerStatement: `${cleanerStatement} (wrong date: ${confirmedArrivalTimeET})`,
+      cleanerStatement: `${cleanerStatement} (wrong date: ${arrivalTime})`,
       clientNotified: false,
       scheduledTime: scheduledTimeET ?? jobDate,
     });
@@ -2841,7 +2807,16 @@ export async function handleEtaCallEnd(params: {
 
     // ── Update cleanerJobs ────────────────────────────────────────────────────
   // etaTimeStr: store verbatim — exactly what the cleaner said, no conversion
-  const etaTimeStr = confirmedArrivalTimeET;
+  const etaTimeStr = arrivalTime;
+
+  // ── Compute status server-side ────────────────────────────────────────────
+  const status: EtaCallStatus = (() => {
+    if (!scheduledMs) return "unclear";
+    const diffMin = (etaMs - scheduledMs) / 60000; // positive = late, negative = early
+    if (diffMin > 2) return "late";
+    if (diffMin < -2) return "early";
+    return "on_time";
+  })();
   await db
     .update(cleanerJobs)
     .set({
