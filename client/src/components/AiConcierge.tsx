@@ -1110,10 +1110,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     { query: acQuery ?? "" },
     { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
-  const acResults = [
-    ...(acData?.customers ?? []).slice(0, 4).map(c => ({ name: c.name, sub: c.lastJobDate ? `Last job: ${c.lastJobDate}` : null, type: "customer" as const })),
-    ...(acCleanerData?.cleaners ?? []).slice(0, 3).map(c => ({ name: c.name, sub: "Cleaner", type: "cleaner" as const })),
-  ];
+  const acCustomers = (acData?.customers ?? []).slice(0, 5);
+  const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 4);
+  const acHasResults = acCustomers.length > 0 || acCleaners.length > 0;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -1347,28 +1346,67 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a] relative">
-        {/* Customer/Cleaner autocomplete dropdown */}
-        {acQuery && acResults.length > 0 && (
-          <div className="absolute bottom-full left-4 mb-2 w-72 bg-[#1a1d30] border border-white/20 rounded-xl shadow-2xl overflow-hidden z-50">
-            {acResults.map((r) => (
-              <button
-                key={r.name + r.type}
-                onMouseDown={(e) => { e.preventDefault(); handleAcSelect(r.name); }}
-                className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors flex items-center gap-2.5"
-              >
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  r.type === "cleaner" ? "bg-emerald-600/40" : "bg-indigo-600/40"
-                }`}>
-                  <span className={`text-xs font-semibold ${
-                    r.type === "cleaner" ? "text-emerald-300" : "text-indigo-300"
-                  }`}>{r.name.charAt(0).toUpperCase()}</span>
+        {/* Customer/Cleaner autocomplete dropdown — same style as CommandChat mention popup */}
+        {acQuery && acHasResults && (
+          <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-80 overflow-y-auto">
+            {acCustomers.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 sticky top-0">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Customers</p>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-white text-sm font-medium truncate">{r.name}</div>
-                  {r.sub && <div className="text-gray-500 text-xs">{r.sub}</div>}
+                {acCustomers.map((c) => {
+                  const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                  return (
+                    <button
+                      key={c.phone}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); handleAcSelect(c.name); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{c.name}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{c.frequency ?? "Customer"}{c.city ? ` · ${c.city}` : ""}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-bold text-emerald-600">${c.ltv >= 1000 ? `${(c.ltv / 1000).toFixed(1)}k` : c.ltv}</p>
+                        <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+            {acCleaners.length > 0 && (
+              <>
+                <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 sticky top-0">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Cleaners / Teams</p>
                 </div>
-              </button>
-            ))}
+                {acCleaners.map((c) => {
+                  const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                  const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                  return (
+                    <button
+                      key={c.phone}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); handleAcSelect(c.name); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{c.name}</p>
+                        <p className="text-[11px] text-slate-400">Cleaner</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </>
+            )}
           </div>
         )}
         <div className="relative bg-[#1e2235] border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-3">
