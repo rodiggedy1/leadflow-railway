@@ -1099,47 +1099,66 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Customer name autocomplete ──────────────────────────────────────────
-  const [acQuery, setAcQuery] = useState<string | null>(null); // null = closed
-  const [acWordStart, setAcWordStart] = useState(0); // index of word start in input
+  // ── Suggestions panel ──────────────────────────────────────────────────
+  const [acQuery, setAcQuery] = useState<string | null>(null);
   const { data: acData } = trpc.opsChat.searchCustomers.useQuery(
     { query: acQuery ?? "" },
     { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
-  const acResults = acData?.customers ?? [];
+  const { data: acCleanerData } = trpc.opsChat.searchCleaners.useQuery(
+    { query: acQuery ?? "" },
+    { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
+  );
+  const acCustomers = (acData?.customers ?? []).slice(0, 4);
+  const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 3);
+  const showSuggestions = (acQuery?.length ?? 0) >= 2 && (acCustomers.length > 0 || acCleaners.length > 0);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
-    // Find the word currently being typed at cursor
+    // Extract the last word being typed
     const cursor = e.target.selectionStart ?? val.length;
     const before = val.slice(0, cursor);
     const wordMatch = before.match(/(\S+)$/);
     const word = wordMatch ? wordMatch[1] : "";
     if (word.length >= 2 && /[a-zA-Z]/.test(word)) {
       setAcQuery(word);
-      setAcWordStart(cursor - word.length);
     } else {
       setAcQuery(null);
     }
   };
 
-  const handleAcSelect = (name: string) => {
-    // Replace the current partial word with the selected name
-    const cursor = inputRef.current?.selectionStart ?? input.length;
-    const before = input.slice(0, acWordStart);
-    const after = input.slice(cursor);
-    const newVal = before + name + after;
-    setInput(newVal);
+  // Clicking a suggestion fills the input with a full question and sends it
+  const handleSuggestionSelect = (fullQuestion: string) => {
     setAcQuery(null);
-    // Restore focus and move cursor to end of inserted name
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        const pos = before.length + name.length;
-        inputRef.current.setSelectionRange(pos, pos);
+    setInput("");
+    const text = fullQuestion.trim();
+    if (!text) return;
+    const userMsg: Message = {
+      id: uid(),
+      role: "user",
+      content: { type: "text", text },
+      ts: nowTime(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsThinking(true);
+    chatMutation.mutate(
+      { message: text },
+      {
+        onSuccess: (result) => {
+          setIsThinking(false);
+          setMessages((prev) => [...prev, buildAiMessage(result)]);
+        },
+        onError: (err) => {
+          setIsThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            { id: uid(), role: "ai", content: { type: "text", text: `Something went wrong: ${err.message}` }, ts: nowTime() },
+          ]);
+        },
       }
-    }, 0);
+    );
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const chatMutation = trpc.aiConcierge.chat.useMutation();
@@ -1338,25 +1357,64 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a] relative">
-        {/* Customer autocomplete dropdown — outside overflow-hidden box so it's not clipped */}
-        {acQuery && acResults && acResults.length > 0 && (
-          <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#1a1d30] border border-white/15 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
-            {acResults.slice(0, 6).map((r) => (
-              <button
-                key={r.phone}
-                onMouseDown={(e) => { e.preventDefault(); handleAcSelect(r.name); }}
-                className="w-full text-left px-4 py-2.5 hover:bg-white/8 transition-colors flex items-center gap-3"
-              >
-                <div className="w-7 h-7 rounded-full bg-indigo-600/40 flex items-center justify-center flex-shrink-0">
-                  <span className="text-indigo-300 text-xs font-semibold">{r.name.charAt(0).toUpperCase()}</span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-white text-sm font-medium truncate">{r.name}</div>
-                  {r.lastJobDate && <div className="text-gray-500 text-xs">Last job: {r.lastJobDate}</div>}
-                </div>
-              </button>
-            ))}
+      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
+        {/* Suggestions panel */}
+        {showSuggestions && (
+          <div className="mb-3 bg-[#13162a] border border-white/10 rounded-2xl p-4">
+            <div className="mb-3">
+              <p className="text-white text-sm font-bold">Suggestions</p>
+              <p className="text-gray-500 text-xs mt-0.5">Tap a suggestion to autofill the full question.</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              {acCustomers.map((c, i) => {
+                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                const question = `Jobs for ${c.name}`;
+                const isFirst = i === 0;
+                return (
+                  <button
+                    key={c.phone}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(question); }}
+                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors text-left ${
+                      isFirst
+                        ? "bg-emerald-500/8 border-emerald-500/30 hover:bg-emerald-500/12"
+                        : "bg-transparent border-white/8 hover:bg-white/5"
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
+                      <p className="text-gray-400 text-xs">{question}</p>
+                    </div>
+                    {isFirst && <span className="text-emerald-400 text-base shrink-0">✓</span>}
+                  </button>
+                );
+              })}
+              {acCleaners.map((c) => {
+                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
+                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
+                const question = `Jobs for ${c.name}`;
+                return (
+                  <button
+                    key={c.phone}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(question); }}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-white/8 hover:bg-white/5 transition-colors text-left"
+                  >
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
+                      <p className="text-gray-400 text-xs">{question}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
         <div className="relative bg-[#1e2235] border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-3">
