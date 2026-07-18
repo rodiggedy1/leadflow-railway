@@ -1661,7 +1661,22 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     );
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAcQuery(null); // always clear autocomplete on send
     setIsThinking(true);
+
+    // When a customer is locked in, extract the message hint from what the user typed.
+    // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
+    // Also handles bare messages like "let him know you're running late" (no em-dash)
+    let focusedMessageHint: string | null = null;
+    if (focusedCustomer) {
+      const emDashIdx = text.indexOf(" — ");
+      if (emDashIdx !== -1) {
+        focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
+      } else {
+        // Bare message with no em-dash — use the whole text as the hint
+        focusedMessageHint = text.trim();
+      }
+    }
 
     chatMutation.mutate(
       {
@@ -1669,6 +1684,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         // If a customer is already focused/locked in, pass their phone so the server
         // skips name disambiguation entirely
         ...(focusedCustomer ? { resolvedClientPhone: focusedCustomer.phone } : {}),
+        // Pass the message hint so the LLM uses it instead of generating a generic message
+        ...(focusedMessageHint ? { resolvedClientMessageHint: focusedMessageHint } : {}),
       },
       {
         onSuccess: (result) => {
