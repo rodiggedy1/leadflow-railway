@@ -18,7 +18,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls } from "../drizzle/schema";
-import { eq, ne, and, inArray, like, or, desc } from "drizzle-orm";
+import { eq, ne, and, inArray, like, or, desc, gte } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
@@ -909,6 +909,10 @@ async function handleQueryData(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
   const today = getTodayET();
+  // 90-day window keeps the payload well under the LLM context limit
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const cutoff = ninetyDaysAgo.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
   const jobs = await db
     .select({
       id: cleanerJobs.id,
@@ -923,6 +927,7 @@ async function handleQueryData(
     .from(cleanerJobs)
     .where(
       and(
+        gte(cleanerJobs.jobDate, cutoff),
         ne(cleanerJobs.bookingStatus, "cancelled"),
         ne(cleanerJobs.bookingStatus, "rescheduled")
       )
