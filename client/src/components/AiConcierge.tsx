@@ -726,6 +726,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       ts: nowTime(),
     };
 
+    // Cancel any pending bulk_sms_confirm cards — they're stale once user sends a new message
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.content.type === "bulk_sms_confirm"
+          ? { ...m, content: { type: "text" as const, text: "_(Cancelled — new request sent)_" } }
+          : m
+      )
+    );
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsThinking(true);

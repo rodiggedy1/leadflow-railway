@@ -108,14 +108,19 @@ async function classifyIntent(message: string): Promise<Intent> {
         content: `You are an intent classifier for a cleaning operations AI assistant.
 Classify the user's message into one of these actions:
 - eta_update: user wants to request an ETA call for a team (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
-- text_cleaners: user wants to send an SMS to one or more cleaners (e.g. "text cleaners working today", "text all DC cleaners", "text Maria and ask if she found a purse", "message all cleaners about tomorrow", "text team 5")
+- text_cleaners: user wants to send an SMS to one or more cleaners (e.g. "text cleaners working today", "text all DC cleaners", "text Maria and ask if she found a purse", "message all cleaners about tomorrow", "text team 5", "text Abigail Wacker")
 - unknown: anything else
+
+For text_cleaners:
+- targetHint should be the EXACT name or group mentioned (e.g. "Abigail Wacker", "working today", "DC", "team 5", "all active")
+- If a specific person's name is mentioned, targetHint MUST be their full name exactly as written
+- messageHint should be the topic/content to send (e.g. "ask if they found a purse", "ask if we can come early")
 
 Return JSON only:
 {
   "action": "eta_update" | "text_cleaners" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
-  "targetHint": "<who to text for text_cleaners — e.g. 'working today', 'DC', 'Maria', 'all active', or null>",
+  "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "messageHint": "<the message content or topic the user wants to send, or null>"
 }`,
       },
@@ -297,9 +302,19 @@ async function resolveTextTargets(
     .from(cleanerProfiles)
     .where(eq(cleanerProfiles.isActive, 1));
 
-  const matched = profiles.filter(p =>
-    p.name.toLowerCase().includes(hint) || hint.includes(p.name.toLowerCase().split(" ")[0])
-  );
+  // Try exact full-name match first, then partial
+  const hintWords = hint.split(/\s+/).filter(Boolean);
+  const matched = profiles.filter(p => {
+    const pName = p.name.toLowerCase();
+    // Full name contains hint or hint contains full name
+    if (pName.includes(hint) || hint.includes(pName)) return true;
+    // All hint words appear in the profile name
+    if (hintWords.length >= 2 && hintWords.every(w => pName.includes(w))) return true;
+    // First name exact match only (must be at least 4 chars to avoid false positives)
+    const firstName = pName.split(" ")[0];
+    if (firstName.length >= 4 && hint === firstName) return true;
+    return false;
+  });
 
   if (matched.length > 0) {
     const recipients = matched
