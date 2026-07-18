@@ -586,20 +586,28 @@ function AudioPlayer({ url }: { url: string | null }) {
   );
 }
 // ─── Call client confirm card ──────────────────────────────────────────────────
+function todayET(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
 function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmCard; onFired: (vapiCallId: string) => void }) {
   const [script, setScript] = useState(card.script);
   const [fired, setFired] = useState(false);
+  const [callError, setCallError] = useState<string | null>(null);
   const startCall = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
       setFired(true);
       onFired(result.vapiCallId ?? "");
     },
+    onError: (err) => {
+      setCallError(err.message);
+    },
   });
   function handleCall() {
     if (fired || startCall.isPending) return;
+    setCallError(null);
     startCall.mutate({
       cleanerJobId: card.cleanerJobId || 1,
-      jobDate: new Date().toISOString().slice(0, 10),
+      jobDate: todayET(),
       personName: card.recipientName,
       phone: card.recipientPhone,
       scenario: "Concierge call",
@@ -631,6 +639,9 @@ function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmC
           className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
         />
       </div>
+      {callError && (
+        <div className="px-4 pb-2 text-sm text-red-400">{callError}</div>
+      )}
       {!fired && (
         <div className="px-4 pb-4">
           <button
