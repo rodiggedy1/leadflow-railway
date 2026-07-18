@@ -1012,6 +1012,7 @@ async function handleQueryData(
     }));
   }
 
+  console.log("[QueryData] scheduledJobs:", scheduledJobs.length, "historicalJobs:", historicalJobs.length);
   const jobs = [...scheduledJobs, ...historicalJobs]
     .sort((a, b) => (b.jobDate ?? "").localeCompare(a.jobDate ?? ""))
     .slice(0, 80);
