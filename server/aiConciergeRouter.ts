@@ -1058,6 +1058,7 @@ Formatting rules:
     answer,
     rows: jobs.map(j => ({
       id: j.id,
+      jobDate: j.jobDate,
       teamName: j.teamName,
       cleanerName: j.cleanerName,
       customerName: j.customerName,
