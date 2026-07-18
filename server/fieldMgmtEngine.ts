@@ -2348,11 +2348,15 @@ export async function extractCleanerStatus(
       {
         role: "system",
         content: `Extract the cleaner's arrival time from this call transcript.
-Return exactly what the cleaner said — do not normalize, do not add AM/PM, do not compute status.
-Examples: "8:30", "1:15", "8:30 PM", "around 10".
+Return only the time expression — no surrounding words.
+Examples:
+  "We'll be there around 8:30." → "8:30"
+  "Probably 9." → "9"
+  "Around 1:15 PM." → "1:15 PM"
+  "We'll arrive at about 10." → "10"
 If the cleaner said "right on time" or similar, return "${scheduledTimeET}".
 Set unclear=true for: voicemail, silence, vague answers, or anything that cannot be used as an arrival time.
-cleanerStatement must be the cleaner's own words only.`,
+cleanerStatement must be the cleaner's own words from the transcript.`,
       },
       {
         role: "user",
