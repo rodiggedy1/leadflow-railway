@@ -1106,7 +1106,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     { query: acQuery ?? "" },
     { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
   );
-  const acResults = acData?.customers ?? [];
+  const { data: acCleanerData } = trpc.opsChat.searchCleaners.useQuery(
+    { query: acQuery ?? "" },
+    { enabled: (acQuery?.length ?? 0) >= 2, staleTime: 30_000 }
+  );
+  const acResults = [
+    ...(acData?.customers ?? []).slice(0, 4).map(c => ({ name: c.name, sub: c.lastJobDate ? `Last job: ${c.lastJobDate}` : null, type: "customer" as const })),
+    ...(acCleanerData?.cleaners ?? []).slice(0, 3).map(c => ({ name: c.name, sub: "Cleaner", type: "cleaner" as const })),
+  ];
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -1340,21 +1347,25 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a] relative">
-        {/* Customer autocomplete dropdown — outside overflow-hidden box so it's not clipped */}
-        {acQuery && acResults && acResults.length > 0 && (
-          <div className="absolute bottom-full left-4 right-4 mb-1 bg-[#1a1d30] border border-white/15 rounded-xl shadow-xl overflow-hidden z-50 max-h-48 overflow-y-auto">
-            {acResults.slice(0, 6).map((r) => (
+        {/* Customer/Cleaner autocomplete dropdown */}
+        {acQuery && acResults.length > 0 && (
+          <div className="absolute bottom-full left-4 mb-2 w-72 bg-[#1a1d30] border border-white/20 rounded-xl shadow-2xl overflow-hidden z-50">
+            {acResults.map((r) => (
               <button
-                key={r.phone}
+                key={r.name + r.type}
                 onMouseDown={(e) => { e.preventDefault(); handleAcSelect(r.name); }}
-                className="w-full text-left px-4 py-2.5 hover:bg-white/8 transition-colors flex items-center gap-3"
+                className="w-full text-left px-3 py-2 hover:bg-white/10 transition-colors flex items-center gap-2.5"
               >
-                <div className="w-7 h-7 rounded-full bg-indigo-600/40 flex items-center justify-center flex-shrink-0">
-                  <span className="text-indigo-300 text-xs font-semibold">{r.name.charAt(0).toUpperCase()}</span>
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  r.type === "cleaner" ? "bg-emerald-600/40" : "bg-indigo-600/40"
+                }`}>
+                  <span className={`text-xs font-semibold ${
+                    r.type === "cleaner" ? "text-emerald-300" : "text-indigo-300"
+                  }`}>{r.name.charAt(0).toUpperCase()}</span>
                 </div>
                 <div className="min-w-0">
                   <div className="text-white text-sm font-medium truncate">{r.name}</div>
-                  {r.lastJobDate && <div className="text-gray-500 text-xs">Last job: {r.lastJobDate}</div>}
+                  {r.sub && <div className="text-gray-500 text-xs">{r.sub}</div>}
                 </div>
               </button>
             ))}
