@@ -1786,28 +1786,42 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               {acCustomers.map((c, i) => {
                 const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
                 const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                const question = `Jobs for ${c.name}`;
                 const isFirst = i === 0;
                 return (
-                  <button
-                    key={c.phone}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(question); }}
-                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors text-left ${
-                      isFirst
-                        ? "bg-emerald-500/8 border-emerald-500/30 hover:bg-emerald-500/12"
-                        : "bg-transparent border-white/8 hover:bg-white/5"
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
-                      {initials}
+                  <div key={c.phone} className={`rounded-xl border transition-colors ${
+                    isFirst
+                      ? "bg-emerald-500/8 border-emerald-500/30"
+                      : "bg-transparent border-white/8"
+                  }`}>
+                    <div className="flex items-center gap-3 px-3 pt-3 pb-2">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-semibold truncate">{c.name}</p>
+                      </div>
+                      {isFirst && <span className="text-emerald-400 text-base shrink-0">✓</span>}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
-                      <p className="text-gray-400 text-xs">{question}</p>
+                    <div className="flex flex-wrap gap-1.5 px-3 pb-3">
+                      {[
+                        { label: `Jobs for ${c.name.split(" ")[0]}`, q: `Jobs for ${c.name}`, icon: "📋" },
+                        { label: "Full profile", q: `Tell me everything about ${c.name}`, icon: "👤" },
+                        { label: "Payment link", q: `Send payment link to ${c.name}`, icon: "💳" },
+                        { label: `Text ${c.name.split(" ")[0]}`, q: `Text ${c.name}`, icon: "💬" },
+                        { label: `Call ${c.name.split(" ")[0]}`, q: `Call ${c.name}`, icon: "📞" },
+                      ].map((action) => (
+                        <button
+                          key={action.q}
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(action.q); }}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-colors text-xs text-gray-200 font-medium"
+                        >
+                          <span>{action.icon}</span>
+                          <span>{action.label}</span>
+                        </button>
+                      ))}
                     </div>
-                    {isFirst && <span className="text-emerald-400 text-base shrink-0">✓</span>}
-                  </button>
+                  </div>
                 );
               })}
               {acCleaners.map((c) => {
