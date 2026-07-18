@@ -36,6 +36,8 @@ import {
   Play,
   PhoneMissed,
   MessageCircle,
+  Users,
+  Edit3,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
@@ -74,12 +76,28 @@ interface EtaPendingCard {
   scheduledTimeET: string;
   date: string;
 }
+interface BulkSmsRecipient {
+  cleanerProfileId: number;
+  name: string;
+  phone: string;
+}
+interface BulkSmsConfirmCard {
+  targetDescription: string;
+  recipients: BulkSmsRecipient[];
+  draftMessage: string;
+}
+interface BulkSmsSentCard {
+  message: string;
+  results: Array<{ name: string; phone: string; success: boolean; error?: string }>;
+}
 type MessageContent =
   | { type: "text"; text: string }
   | { type: "workflow"; workflow: WorkflowCard }
   | { type: "completed"; card: CompletedCard }
   | { type: "clarify"; card: ClarifyCard }
-  | { type: "eta_pending"; card: EtaPendingCard };
+  | { type: "eta_pending"; card: EtaPendingCard }
+  | { type: "bulk_sms_confirm"; card: BulkSmsConfirmCard }
+  | { type: "bulk_sms_sent"; card: BulkSmsSentCard };
 
 interface Message {
   id: string;
@@ -232,6 +250,95 @@ function ClarifyCardView({
   );
 }
 
+// ─── Bulk SMS confirm card ───────────────────────────────────────────────────
+function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; onSent: (result: BulkSmsSentCard) => void }) {
+  const [draft, setDraft] = useState(card.draftMessage);
+  const [sent, setSent] = useState(false);
+  const sendMutation = trpc.aiConcierge.sendBulkSms.useMutation();
+
+  function handleSend() {
+    if (sent || sendMutation.isPending) return;
+    sendMutation.mutate(
+      { recipients: card.recipients, message: draft },
+      {
+        onSuccess: (result) => {
+          setSent(true);
+          onSent({ message: result.message, results: result.results });
+        },
+      }
+    );
+  }
+
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+        <Users className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+        <p className="text-sm font-semibold text-white">Text {card.targetDescription}</p>
+        <span className="ml-auto text-xs text-gray-500">{card.recipients.length} recipient{card.recipients.length !== 1 ? "s" : ""}</span>
+      </div>
+      <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
+        {card.recipients.map((r) => (
+          <span key={r.cleanerProfileId} className="inline-flex items-center gap-1 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
+            <User className="w-3 h-3 text-gray-500" />
+            {r.name.split(" ")[0]}
+          </span>
+        ))}
+      </div>
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Edit3 className="w-3 h-3 text-indigo-400" />
+          <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Message</span>
+        </div>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          disabled={sent || sendMutation.isPending}
+          rows={3}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+        />
+      </div>
+      {!sent && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={handleSend}
+            disabled={!draft.trim() || sendMutation.isPending}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+          >
+            {sendMutation.isPending ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+            ) : (
+              <><Send className="w-4 h-4" /> Send to {card.recipients.length} cleaner{card.recipients.length !== 1 ? "s" : ""}</>
+            )}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+// ─── Bulk SMS sent card ───────────────────────────────────────────────────────
+function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
+  const allOk = card.results.every(r => r.success);
+  return (
+    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
+          {allOk ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <AlertTriangle className="w-3.5 h-3.5 text-white" />}
+        </span>
+        <p className="text-sm font-semibold text-white">{card.message}</p>
+      </div>
+      <div className="px-4 py-3 space-y-2">
+        {card.results.map((r, i) => (
+          <div key={i} className="flex items-center gap-3">
+            <StepIcon status={r.success ? "done" : "failed"} />
+            <span className={`flex-1 text-sm ${r.success ? "text-gray-300" : "text-red-400"}`}>
+              {r.name}{r.error ? ` — ${r.error}` : ""}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 // ─── AudioPlayer — copied verbatim from TeamEtaModal ────────────────────────
 function AudioPlayer({ url }: { url: string | null }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -478,6 +585,29 @@ function MessageBubble({
         {msg.content.type === "eta_pending" && (
           <div>
             <EtaPendingCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "bulk_sms_confirm" && (
+          <div>
+            <BulkSmsConfirmCardView
+              card={msg.content.card}
+              onSent={(result) => {
+                const sentMsg: Message = {
+                  id: uid(),
+                  role: "ai",
+                  content: { type: "bulk_sms_sent", card: result },
+                  ts: nowTime(),
+                };
+                setMessages((prev) => [...prev, sentMsg]);
+              }}
+            />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "bulk_sms_sent" && (
+          <div>
+            <BulkSmsSentCardView card={msg.content.card} />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -745,7 +875,9 @@ type ServerResult =
   | { type: "error"; message: string }
   | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
   | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } }
-  | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string };
+  | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
+  | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
+  | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> };
 
 function buildAiMessage(result: ServerResult): Message {
   const ts = nowTime();
@@ -790,6 +922,32 @@ function buildAiMessage(result: ServerResult): Message {
           scheduledTimeET: result.scheduledTimeET,
           date: result.date,
         },
+      },
+      ts,
+    };
+  }
+  if (result.type === "bulk_sms_confirm") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "bulk_sms_confirm",
+        card: {
+          targetDescription: result.targetDescription,
+          recipients: result.recipients,
+          draftMessage: result.draftMessage,
+        },
+      },
+      ts,
+    };
+  }
+  if (result.type === "bulk_sms_sent") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: {
+        type: "bulk_sms_sent",
+        card: { message: result.message, results: result.results },
       },
       ts,
     };
