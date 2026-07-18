@@ -1462,6 +1462,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── Focused customer (set when a customer_profile card is shown) ──────────
+  const [focusedCustomer, setFocusedCustomer] = useState<{ name: string; phone: string } | null>(null);
+
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
   const { data: acData, error: acError } = trpc.opsChat.searchCustomers.useQuery(
@@ -1515,6 +1518,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         onSuccess: (result) => {
           setIsThinking(false);
           setMessages((prev) => [...prev, buildAiMessage(result)]);
+          if (result.type === "customer_profile") {
+            setFocusedCustomer({ name: result.profile.name, phone: result.profile.phone });
+          }
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1644,6 +1650,10 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           setIsThinking(false);
           const aiMsg = buildAiMessage(result);
           setMessages((prev) => [...prev, aiMsg]);
+          // Lock suggestions to this customer when a profile is shown
+          if (result.type === "customer_profile") {
+            setFocusedCustomer({ name: result.profile.name, phone: result.profile.phone });
+          }
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1725,6 +1735,46 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
+        {/* Focused customer panel — shown when a customer profile was loaded */}
+        {focusedCustomer && !showSuggestions && (
+          <div className="mb-3 bg-[#1e2235] border border-indigo-500/30 rounded-2xl p-3">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-xs font-bold shrink-0">
+                  {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+                <span className="text-white text-sm font-semibold">{focusedCustomer.name}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFocusedCustomer(null)}
+                className="text-gray-500 hover:text-gray-300 text-xs px-2 py-0.5 rounded hover:bg-white/5 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { label: `Jobs for ${focusedCustomer.name.split(" ")[0]}`, q: `Jobs for ${focusedCustomer.name}`, icon: "📋" },
+                { label: "Full profile", q: `Tell me everything about ${focusedCustomer.name}`, icon: "👤" },
+                { label: "Payment link", q: `Send payment link to ${focusedCustomer.name}`, icon: "💳" },
+                { label: `Text ${focusedCustomer.name.split(" ")[0]}`, q: `Text ${focusedCustomer.name}`, icon: "💬" },
+                { label: `Call ${focusedCustomer.name.split(" ")[0]}`, q: `Call ${focusedCustomer.name}`, icon: "📞" },
+              ].map((action) => (
+                <button
+                  key={action.q}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(action.q); }}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-colors text-xs text-gray-200 font-medium"
+                >
+                  <span>{action.icon}</span>
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Suggestions panel */}
         {showSuggestions && (
           <div className="mb-3 bg-[#1e2235] border border-white/20 rounded-2xl p-4">
