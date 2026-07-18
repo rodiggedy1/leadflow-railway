@@ -385,9 +385,11 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
       </div>
       <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
         {card.recipients.map((r) => (
-          <span key={r.cleanerProfileId} className="inline-flex items-center gap-1 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
+          <span key={r.phone} className="inline-flex items-center gap-1.5 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
             <User className="w-3 h-3 text-gray-500" />
-            {r.name.split(" ")[0]}
+            <span className="font-medium text-white">{r.name}</span>
+            <span className="text-gray-500">·</span>
+            <span className="text-indigo-300">{r.phone}</span>
           </span>
         ))}
       </div>
@@ -414,7 +416,7 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
             {sendMutation.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
             ) : (
-              <><Send className="w-4 h-4" /> Send to {card.recipients.length} cleaner{card.recipients.length !== 1 ? "s" : ""}</>
+              <><Send className="w-4 h-4" /> Send text{card.recipients.length > 1 ? ` to ${card.recipients.length} people` : ""}</>
             )}
           </button>
         </div>
@@ -979,13 +981,12 @@ function MessageBubble({
             <BulkSmsConfirmCardView
               card={msg.content.card}
               onSent={(result) => {
-                const sentMsg: Message = {
+                onAddMessage({
                   id: uid(),
                   role: "ai",
                   content: { type: "bulk_sms_sent", card: result },
                   ts: nowTime(),
-                };
-                setMessages((prev) => [...prev, sentMsg]);
+                });
               }}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
