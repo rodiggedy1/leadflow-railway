@@ -17,9 +17,10 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens } from "../drizzle/schema";
 import { eq, ne, and, inArray, like, or, desc } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
+import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
 
@@ -101,6 +102,28 @@ export interface ClientDisambiguationResult {
   }>;
 }
 
+/** Returned when payment link is created and ready to send — agent must confirm before sending SMS */
+export interface PaymentLinkConfirmResult {
+  type: "payment_link_confirm";
+  recipientName: string;
+  recipientFirstName: string;
+  recipientPhone: string;
+  paymentLinkUrl: string;
+  expiresAt: number;
+  /** Pre-filled SMS text with first name and link already substituted */
+  smsText: string;
+}
+
+/** Returned after payment link SMS is sent */
+export interface PaymentLinkSentResult {
+  type: "payment_link_sent";
+  recipientName: string;
+  recipientPhone: string;
+  paymentLinkUrl: string;
+  success: boolean;
+  error?: string;
+}
+
 type ConciergeResult =
   | EtaPendingResult
   | CompletedResult
@@ -108,13 +131,16 @@ type ConciergeResult =
   | ClarifyResult
   | BulkSmsConfirmResult
   | BulkSmsSentResult
-  | ClientDisambiguationResult;
+  | ClientDisambiguationResult
+  | PaymentLinkConfirmResult
+  | PaymentLinkSentResult;
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
   | { action: "eta_update"; teamHint: string | null }
   | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
   | { action: "text_client"; clientName: string | null; messageHint: string | null }
+  | { action: "send_payment_link"; clientName: string | null }
   | { action: "unknown" };
 
 async function classifyIntent(message: string): Promise<Intent> {
@@ -127,9 +153,10 @@ Classify the user's message into one of these actions:
 - eta_update: user wants to request an ETA call for a team (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
 - text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow")
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
+- send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - unknown: anything else
 
-KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams.
+KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link.
 
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
@@ -158,7 +185,7 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
             clientName: { type: ["string", "null"] },
@@ -500,6 +527,157 @@ async function handleTextClient(
   };
 }
 
+// ── Payment link handler ─────────────────────────────────────────────────────
+
+const PAYMENT_LINK_SMS_TEMPLATE = `Hi {first_name}! 👋 
+
+This is Madison from Maids in Black. You're all scheduled for your cleaning service appointment, we just need a card on file via our secure Stripe link: {link}
+
+🔒 100% secure – no one on our team sees your card info
+✅ Pre-auth only – you're NOT charged until after service.
+💳 Your card is not saved on our servers and is processed by Stripe.
+
+Reply if you have any questions! See you soon 🧹✨`;
+
+function buildPaymentSms(firstName: string, linkUrl: string): string {
+  return PAYMENT_LINK_SMS_TEMPLATE
+    .replace("{first_name}", firstName)
+    .replace("{link}", linkUrl);
+}
+
+async function handleSendPaymentLink(
+  clientName: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  resolvedClientPhone?: string
+): Promise<ConciergeResult> {
+  if (!clientName && !resolvedClientPhone) {
+    return { type: "error", message: "Please specify a client name to send the payment link to." };
+  }
+
+  let recipientPhone: string;
+  let recipientName: string;
+  let recipientAddress: string | null = null;
+
+  if (resolvedClientPhone) {
+    // Agent already picked from disambiguation
+    const rows = await db
+      .select({ phone: completedJobs.phone, name: completedJobs.name, address: completedJobs.address })
+      .from(completedJobs)
+      .where(like(completedJobs.phone, `%${resolvedClientPhone}%`))
+      .limit(1);
+    const client = rows[0];
+    if (!client) return { type: "error", message: "Client not found." };
+    recipientPhone = resolvedClientPhone;
+    recipientName = client.name ?? resolvedClientPhone;
+    recipientAddress = client.address ?? null;
+  } else {
+    // Search by name
+    const q = `%${(clientName ?? "").trim()}%`;
+    const rows = await db
+      .select({
+        phone: completedJobs.phone,
+        name: completedJobs.name,
+        address: completedJobs.address,
+        lastBookingPrice: completedJobs.lastBookingPrice,
+        jobDate: completedJobs.jobDate,
+      })
+      .from(completedJobs)
+      .where(like(completedJobs.name, q))
+      .orderBy(desc(completedJobs.jobDate))
+      .limit(30);
+
+    // Deduplicate by phone
+    const byPhone = new Map<string, { phone: string; name: string; city: string | null; totalCleans: number; ltv: number; lastJobDate: string | null; address: string | null }>();
+    for (const r of rows) {
+      const key = r.phone;
+      const existing = byPhone.get(key);
+      if (existing) {
+        existing.ltv += r.lastBookingPrice ?? 0;
+        existing.totalCleans += 1;
+        if (!existing.lastJobDate || (r.jobDate && r.jobDate > existing.lastJobDate)) existing.lastJobDate = r.jobDate ?? null;
+      } else {
+        byPhone.set(key, {
+          phone: key,
+          name: r.name ?? "",
+          city: r.address ? r.address.split(",").slice(-2, -1)[0]?.trim() ?? null : null,
+          ltv: r.lastBookingPrice ?? 0,
+          totalCleans: 1,
+          lastJobDate: r.jobDate ?? null,
+          address: r.address ?? null,
+        });
+      }
+    }
+
+    const matches = Array.from(byPhone.values()).sort((a, b) => b.totalCleans - a.totalCleans).slice(0, 6);
+
+    if (matches.length === 0) {
+      return { type: "error", message: `No client found matching "${clientName}". Check the spelling or try a partial name.` };
+    }
+
+    if (matches.length > 1) {
+      // Return disambiguation card — reuse existing client_disambiguation type
+      // but store intent as payment_link so the UI knows what to do after selection
+      return {
+        type: "client_disambiguation",
+        query: clientName ?? "",
+        messageHint: "__payment_link__",
+        matches: matches.map(m => ({
+          phone: m.phone,
+          name: m.name,
+          city: m.city,
+          totalCleans: m.totalCleans,
+          ltv: m.ltv,
+          lastJobDate: m.lastJobDate,
+        })),
+      };
+    }
+
+    const client = matches[0];
+    recipientPhone = client.phone;
+    recipientName = client.name;
+    recipientAddress = client.address;
+  }
+
+  // Normalise phone for Stripe
+  const digits = recipientPhone.replace(/\D/g, "");
+  const normPhone = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith("1") ? `+${digits}` : recipientPhone.startsWith("+") ? recipientPhone : `+${recipientPhone}`;
+
+  // Create payment token using same logic as stripeRouter.generateCardAuthToken
+  const token = randomBytes(32).toString("hex");
+  const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;
+
+  await db.insert(cardAuthTokens).values({
+    token,
+    customerPhone: normPhone,
+    customerName: recipientName,
+    jobDate: null,
+    jobAddress: recipientAddress ?? null,
+    cleanerJobId: null,
+    used: 0,
+    expiresAt,
+  });
+
+  const baseUrl = "https://quote.maidinblack.com";
+  const params = new URLSearchParams();
+  if (recipientName) params.set("name", recipientName);
+  if (recipientAddress) params.set("address", recipientAddress);
+  const qs = params.toString();
+  const paymentLinkUrl = `${baseUrl}/pay/${token}${qs ? `?${qs}` : ""}`;
+
+  const firstName = recipientName.split(" ")[0];
+  const smsText = buildPaymentSms(firstName, paymentLinkUrl);
+
+  return {
+    type: "payment_link_confirm",
+    recipientName,
+    recipientFirstName: firstName,
+    recipientPhone,
+    paymentLinkUrl,
+    expiresAt,
+    smsText,
+  };
+}
+
 async function draftClientMessage(messageHint: string | null, clientName: string): Promise<string> {
   const firstName = clientName.split(" ")[0];
   const result = await invokeLLM({
@@ -719,6 +897,7 @@ export const aiConciergeRouter = router({
         resolvedJobId: z.number().optional(),
         resolvedClientPhone: z.string().optional(),
         resolvedClientMessageHint: z.string().nullable().optional(),
+        resolvedPaymentLink: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -730,6 +909,9 @@ export const aiConciergeRouter = router({
       }
 
       if (input.resolvedClientPhone) {
+        if (input.resolvedPaymentLink) {
+          return await handleSendPaymentLink(null, db, input.resolvedClientPhone);
+        }
         return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
       }
 
@@ -747,10 +929,54 @@ export const aiConciergeRouter = router({
         return await handleTextClient(intent.clientName, intent.messageHint, db);
       }
 
+      if (intent.action === "send_payment_link") {
+        return await handleSendPaymentLink(intent.clientName, db);
+      }
+
       return {
         type: "error" as const,
-        message: "I can handle ETA updates, texting cleaners, and texting clients. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", or \"Text Abigail Avrick and ask if we can come early\".",
+        message: "I can handle ETA updates, texting cleaners, texting clients, and sending payment links. Try: \"Send ETA for Team 8\", \"Text cleaners working today\", \"Text Abigail Avrick\", or \"Send payment link to Mary Jones\".",
       };
+    }),
+
+  /**
+   * Send payment link SMS after agent confirms.
+   * Called when agent clicks "Send" on the payment_link_confirm card.
+   */
+  sendPaymentLinkSms: agentProcedure
+    .input(
+      z.object({
+        recipientPhone: z.string().min(7).max(30),
+        recipientName: z.string(),
+        smsText: z.string().min(1).max(1600),
+        paymentLinkUrl: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      try {
+        const result = await sendSms({
+          to: input.recipientPhone,
+          content: input.smsText,
+          fromNumberId: ENV.openPhoneCsNumberId,
+        });
+        return {
+          type: "payment_link_sent" as const,
+          recipientName: input.recipientName,
+          recipientPhone: input.recipientPhone,
+          paymentLinkUrl: input.paymentLinkUrl,
+          success: result.success,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          type: "payment_link_sent" as const,
+          recipientName: input.recipientName,
+          recipientPhone: input.recipientPhone,
+          paymentLinkUrl: input.paymentLinkUrl,
+          success: false,
+          error: msg,
+        };
+      }
     }),
 
   /**
