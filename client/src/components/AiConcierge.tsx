@@ -1348,11 +1348,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a] relative">
         {/* Customer/Cleaner autocomplete dropdown — same style as CommandChat mention popup */}
         {acQuery && acHasResults && (
-          <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden max-h-80 overflow-y-auto">
+          <div className="absolute bottom-full mb-1 left-0 z-50 w-72 bg-[#1a1d30] border border-white/15 rounded-xl shadow-2xl overflow-hidden max-h-80 overflow-y-auto">
             {acCustomers.length > 0 && (
               <>
-                <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 sticky top-0">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Customers</p>
+                <div className="px-3 py-1.5 border-b border-white/10 bg-white/5 sticky top-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Customers</p>
                 </div>
                 {acCustomers.map((c) => {
                   const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -1362,18 +1362,18 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                       key={c.phone}
                       type="button"
                       onMouseDown={(e) => { e.preventDefault(); handleAcSelect(c.name); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-white/8 transition-colors"
                     >
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 45%)` }}>
                         {initials}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-900 truncate">{c.name}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{c.frequency ?? "Customer"}{c.city ? ` · ${c.city}` : ""}</p>
+                        <p className="font-semibold text-white truncate">{c.name}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{c.frequency ?? "Customer"}{c.city ? ` · ${c.city}` : ""}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-xs font-bold text-emerald-600">${c.ltv >= 1000 ? `${(c.ltv / 1000).toFixed(1)}k` : c.ltv}</p>
-                        <p className="text-[10px] text-slate-400">{c.totalCleans} cleans</p>
+                        <p className="text-xs font-bold text-emerald-400">${c.ltv >= 1000 ? `${(c.ltv / 1000).toFixed(1)}k` : c.ltv}</p>
+                        <p className="text-[10px] text-gray-500">{c.totalCleans} cleans</p>
                       </div>
                     </button>
                   );
@@ -1382,8 +1382,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             )}
             {acCleaners.length > 0 && (
               <>
-                <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50 sticky top-0">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Cleaners / Teams</p>
+                <div className="px-3 py-1.5 border-b border-white/10 bg-white/5 sticky top-0">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Cleaners / Teams</p>
                 </div>
                 {acCleaners.map((c) => {
                   const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
@@ -1393,14 +1393,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                       key={c.phone}
                       type="button"
                       onMouseDown={(e) => { e.preventDefault(); handleAcSelect(c.name); }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-slate-50 transition-colors"
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-white/8 transition-colors"
                     >
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 52%)` }}>
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 55%, 45%)` }}>
                         {initials}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-900 truncate">{c.name}</p>
-                        <p className="text-[11px] text-slate-400">Cleaner</p>
+                        <p className="font-semibold text-white truncate">{c.name}</p>
+                        <p className="text-[11px] text-gray-400">Cleaner</p>
                       </div>
                     </button>
                   );
