@@ -1773,22 +1773,42 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {[
-                { label: `Jobs for ${focusedCustomer.name.split(" ")[0]}`, q: `Jobs for ${focusedCustomer.name}`, icon: "📋" },
-                { label: "Full profile", q: `Tell me everything about ${focusedCustomer.name}`, icon: "👤" },
-                { label: "Get ETA", q: `Get ETA for ${focusedCustomer.name}`, icon: "📍" },
-                { label: "Payment link", q: `Send payment link to ${focusedCustomer.name}`, icon: "💳" },
-                { label: `Text ${focusedCustomer.name.split(" ")[0]}`, q: `Text ${focusedCustomer.name}`, icon: "💬" },
-                { label: `Call ${focusedCustomer.name.split(" ")[0]}`, q: `Call ${focusedCustomer.name}`, icon: "📞" },
-              ].map((action) => (
+              {([
+                { label: `Jobs for ${focusedCustomer.name.split(" ")[0]}`, icon: "📋", action: "jobs" },
+                { label: "Full profile", icon: "👤", action: "profile" },
+                { label: "Get ETA", icon: "📍", action: "eta" },
+                { label: "Payment link", icon: "💳", action: "payment" },
+                { label: `Text ${focusedCustomer.name.split(" ")[0]}`, icon: "💬", action: "text" },
+                { label: `Call ${focusedCustomer.name.split(" ")[0]}`, icon: "📞", action: "call" },
+              ] as Array<{ label: string; icon: string; action: string }>).map((chip) => (
                 <button
-                  key={action.q}
+                  key={chip.action}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(action.q); }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    const fc = focusedCustomer;
+                    if (chip.action === "text") {
+                      // Prefill input so user can type the message content
+                      setInput(`Text ${fc.name} — `);
+                      setTimeout(() => inputRef.current?.focus(), 0);
+                    } else if (chip.action === "call") {
+                      // Prefill input so user can type what to say
+                      setInput(`Call ${fc.name} — `);
+                      setTimeout(() => inputRef.current?.focus(), 0);
+                    } else if (chip.action === "jobs") {
+                      handleSuggestionSelect(`Jobs for ${fc.name}`);
+                    } else if (chip.action === "payment") {
+                      handlePickClient(fc.phone, fc.name, "__payment_link__");
+                    } else if (chip.action === "eta") {
+                      handleSuggestionSelect(`Get ETA for ${fc.name}`);
+                    } else if (chip.action === "profile") {
+                      handleSuggestionSelect(`Tell me everything about ${fc.name}`);
+                    }
+                  }}
                   className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-colors text-xs text-gray-200 font-medium"
                 >
-                  <span>{action.icon}</span>
-                  <span>{action.label}</span>
+                  <span>{chip.icon}</span>
+                  <span>{chip.label}</span>
                 </button>
               ))}
             </div>
