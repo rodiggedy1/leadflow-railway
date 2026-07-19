@@ -160,9 +160,11 @@ export const confirmationCallsRouter = router({
         try {
           const firstName = input.clientName?.split(" ")[0] ?? "there";
           const smsBody =
-            `Hi ${firstName}, this is Maids in Black! Just confirming your cleaning appointment tomorrow. ` +
-            `Reply YES to confirm and FLEXIBLE or NOT FLEXIBLE to give us an idea on if you're okay moving your two hour arrival window to an earlier or later slot. ` +
-            `Feel free to add any additional notes as well. We look forward to seeing you!`;
+            `Hi ${firstName}, this is Maids in Black! \u{1F5A4} Confirming your cleaning appointment tomorrow.\n\n` +
+            `\u2705 Reply YES to confirm\n` +
+            `\u{1F504} Reply FLEXIBLE or NOT FLEXIBLE to let us know if you\u2019re open to shifting your two-hour arrival window earlier or later\n\n` +
+            `Quick note: we use a two-hour arrival window to account for traffic, weather, and other jobs running longer, this helps us to show up ready to do our best work for you.\n\n` +
+            `Thanks so much, looking forward to seeing you tomorrow! \u{1F60A}`;
           const csNumberId = ENV.openPhoneCsNumberId;
           const smsResult = await sendSms({
             to: normalizedPhone,
