@@ -1497,14 +1497,54 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   );
   const acCustomers = (acData?.customers ?? []).slice(0, 4);
   const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 3);
-  const showSuggestions = !focusedCustomer && (acQuery?.length ?? 0) >= 2 && (acCustomers.length > 0 || acCleaners.length > 0);
-  // Debug: log suggestions state
-  if (acQuery && acQuery.length >= 2) {
-    console.log("[AC] query:", acQuery, "customers:", acCustomers.length, "cleaners:", acCleaners.length, "show:", showSuggestions, "err:", acError?.message ?? acCleanerError?.message ?? null);
-  }
+  // Combine all matches into a unified list for the recognition pill
+  const allMatches: Array<{ name: string; phone: string; subtitle: string; isCleaner?: boolean }> = [
+    ...acCustomers.map(c => ({
+      name: c.name,
+      phone: c.phone,
+      subtitle: [c.city, c.teamName ? `Team ${c.teamName}` : null].filter(Boolean).join(" · ") || "Customer",
+    })),
+    ...acCleaners.map(c => ({
+      name: c.name,
+      phone: c.phone,
+      subtitle: c.isActive ? "Cleaner · Active" : "Cleaner",
+      isCleaner: true,
+    })),
+  ];
+  // Show recognition pill only when not already locked and we have results
+  const showRecognitionPill = !focusedCustomer && (acQuery?.length ?? 0) >= 2 && allMatches.length > 0;
+
+  // ── Name recognition debounce timer ─────────────────────────────────────
+  const acDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Show change popup
+  const [showChangePopup, setShowChangePopup] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
+    const val = e.target.value;
+    setInput(val);
+
+    // If a person is already locked, check if their name is still in the text.
+    // If not, clear the lock.
+    if (focusedCustomer) {
+      const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
+      if (!val.toLowerCase().includes(firstName)) {
+        setFocusedCustomer(null);
+        setShowChangePopup(false);
+      }
+      return; // don't re-trigger search while locked
+    }
+
+    // Debounce: extract 2-4 consecutive capitalized-looking words from the input
+    if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
+    acDebounceRef.current = setTimeout(() => {
+      // Match sequences of 2-4 words that start with a capital letter (likely a name)
+      const nameMatch = val.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/);
+      if (nameMatch) {
+        setAcQuery(nameMatch[1]);
+      } else {
+        setAcQuery(null);
+      }
+    }, 200);
   };
 
   // Clicking a suggestion fills the input with a full question and sends it
@@ -1766,8 +1806,98 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
-        {/* Focused customer panel — shown when a customer profile was loaded */}
-        
+
+        {/* ── Recognition pill: locked person ── */}
+        {focusedCustomer && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/15 border border-indigo-500/40 rounded-xl">
+            <div className="w-5 h-5 rounded-md bg-indigo-600/50 flex items-center justify-center text-indigo-200 text-[10px] font-bold shrink-0">
+              {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+            <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
+            <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">Recognized ✓</span>
+            <button
+              type="button"
+              onClick={() => setShowChangePopup(v => !v)}
+              className="text-indigo-400 hover:text-indigo-200 text-[11px] font-medium px-2 py-0.5 rounded hover:bg-indigo-500/20 transition-colors"
+            >
+              Change
+            </button>
+          </div>
+        )}
+
+        {/* ── Recognition pill: multiple matches ── */}
+        {showRecognitionPill && allMatches.length === 1 && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
+            <div className="w-5 h-5 rounded-md bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+              {allMatches[0].name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
+              <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
+            </div>
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: allMatches[0].name, phone: allMatches[0].phone }); setAcQuery(null); }}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            >
+              Confirm
+            </button>
+          </div>
+        )}
+        {showRecognitionPill && allMatches.length > 1 && (
+          <div className="mb-2 bg-[#1e2235] border border-indigo-500/25 rounded-xl overflow-hidden">
+            <div className="px-3 py-2 border-b border-white/8">
+              <p className="text-indigo-300 text-xs font-semibold">{allMatches.length} people found — who did you mean?</p>
+            </div>
+            <div className="flex flex-col">
+              {allMatches.slice(0, 4).map((m) => (
+                <button
+                  key={m.phone}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: m.name, phone: m.phone }); setAcQuery(null); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+                    {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs font-semibold truncate">{m.name}</p>
+                    <p className="text-gray-400 text-[11px] truncate">{m.subtitle}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Change popup: shown when user taps Change on the locked pill ── */}
+        {showChangePopup && focusedCustomer && (
+          <div className="mb-2 bg-[#1e2235] border border-white/20 rounded-xl overflow-hidden">
+            <div className="px-3 py-2 border-b border-white/8 flex items-center justify-between">
+              <p className="text-white text-xs font-semibold">Who did you mean?</p>
+              <button type="button" onClick={() => setShowChangePopup(false)} className="text-gray-500 hover:text-gray-300 text-xs">✕</button>
+            </div>
+            <div className="flex flex-col">
+              {allMatches.slice(0, 5).map((m) => (
+                <button
+                  key={m.phone}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: m.name, phone: m.phone }); setShowChangePopup(false); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+                    {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs font-semibold truncate">{m.name}</p>
+                    <p className="text-gray-400 text-[11px] truncate">{m.subtitle}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
           {/* Text input area */}
           <textarea
