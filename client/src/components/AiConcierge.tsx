@@ -1779,63 +1779,18 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
         {/* Focused customer panel — shown when a customer profile was loaded */}
         {focusedCustomer && !showSuggestions && (
-          <div className="mb-3 bg-[#1e2235] border border-indigo-500/30 rounded-2xl p-3">
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-xs font-bold shrink-0">
-                  {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
-                </div>
-                <span className="text-white text-sm font-semibold">{focusedCustomer.name}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFocusedCustomer(null)}
-                className="text-gray-500 hover:text-gray-300 text-xs px-2 py-0.5 rounded hover:bg-white/5 transition-colors"
-              >
-                ✕
-              </button>
+          <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-[#1e2235] border border-indigo-500/30 rounded-xl">
+            <div className="w-6 h-6 rounded-lg bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-xs font-bold shrink-0">
+              {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {([
-                { label: `Jobs for ${focusedCustomer.name.split(" ")[0]}`, icon: "📋", action: "jobs" },
-                { label: "Full profile", icon: "👤", action: "profile" },
-                { label: "Get ETA", icon: "📍", action: "eta" },
-                { label: "Payment link", icon: "💳", action: "payment" },
-                { label: `Text ${focusedCustomer.name.split(" ")[0]}`, icon: "💬", action: "text" },
-                { label: `Call ${focusedCustomer.name.split(" ")[0]}`, icon: "📞", action: "call" },
-              ] as Array<{ label: string; icon: string; action: string }>).map((chip) => (
-                <button
-                  key={chip.action}
-                  type="button"
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    const fc = focusedCustomer;
-                    setFocusedCustomer(null); // always close panel on any chip tap
-                    if (chip.action === "text") {
-                      // Prefill input so user can type the message content
-                      setInput(`Text ${fc.name} — `);
-                      setTimeout(() => inputRef.current?.focus(), 0);
-                    } else if (chip.action === "call") {
-                      // Prefill input so user can type what to say
-                      setInput(`Call ${fc.name} — `);
-                      setTimeout(() => inputRef.current?.focus(), 0);
-                    } else if (chip.action === "jobs") {
-                      handleSuggestionSelect(`Jobs for ${fc.name}`);
-                    } else if (chip.action === "payment") {
-                      handlePickClient(fc.phone, fc.name, "__payment_link__");
-                    } else if (chip.action === "eta") {
-                      handleSuggestionSelect(`Get ETA for ${fc.name}`);
-                    } else if (chip.action === "profile") {
-                      handleSuggestionSelect(`Tell me everything about ${fc.name}`);
-                    }
-                  }}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-indigo-500/20 hover:border-indigo-500/40 transition-colors text-xs text-gray-200 font-medium"
-                >
-                  <span>{chip.icon}</span>
-                  <span>{chip.label}</span>
-                </button>
-              ))}
-            </div>
+            <span className="text-white text-sm font-semibold flex-1 truncate">{focusedCustomer.name}</span>
+            <button
+              type="button"
+              onClick={() => setFocusedCustomer(null)}
+              className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors"
+            >
+              ✕
+            </button>
           </div>
         )}
 
@@ -1876,7 +1831,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   <button
                     key={c.phone}
                     type="button"
-                    onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(question); }}
+                    onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: c.name, phone: c.phone }); setInput(""); setAcQuery(null); }}
                     className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-white/8 hover:bg-white/5 transition-colors text-left"
                   >
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
