@@ -255,6 +255,34 @@ export async function runScheduleConfirmSend(targetDate?: string): Promise<Sched
       continue;
     }
 
+    // Dedup guard: skip if a schedule_confirm SMS was already sent to this cleaner today.
+    // Prevents duplicate sends when Railway runs multiple instances during a rolling deploy.
+    const etMidnight = new Date();
+    etMidnight.setHours(0, 0, 0, 0); // start of today local (server is ET)
+    const [existingSession] = await db
+      .select({ id: conversationSessions.id })
+      .from(conversationSessions)
+      .where(
+        and(
+          eq(conversationSessions.leadPhone, rawPhone),
+          eq(conversationSessions.leadSource, "schedule_confirm"),
+          gte(conversationSessions.createdAt, etMidnight)
+        )
+      )
+      .limit(1);
+    if (existingSession) {
+      console.log(`[ScheduleConfirm] Already sent today for ${group.cleanerName} (${rawPhone}) — skipping duplicate.`);
+      result.details.push({
+        teamName: group.teamName,
+        cleanerName: group.cleanerName,
+        phone: rawPhone,
+        jobCount: group.jobs.length,
+        sent: false,
+        error: "Already sent today (dedup)",
+      });
+      continue;
+    }
+
     // Sort jobs by serviceDateTime
     const sortedJobs = [...group.jobs].sort((a, b) => {
       if (!a.serviceDateTime) return 1;
