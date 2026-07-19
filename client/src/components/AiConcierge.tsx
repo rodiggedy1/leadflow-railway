@@ -1927,21 +1927,6 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
 
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
-          {/* Highlight overlay: renders name in blue, rest in white, behind the transparent textarea */}
-          {focusedCustomer && (() => {
-            const prefix = `${focusedCustomer.name} `;
-            const rest = input.startsWith(prefix) ? input.slice(prefix.length) : input;
-            return (
-              <div
-                aria-hidden="true"
-                className="absolute inset-0 px-4 pt-3.5 pb-2 text-sm leading-relaxed pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
-                style={{ minHeight: 52, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
-              >
-                <span className="text-indigo-400 font-semibold">{input.startsWith(prefix) ? prefix : ""}</span>
-                <span className="text-white">{input.startsWith(prefix) ? rest : input}</span>
-              </div>
-            );
-          })()}
           {/* Text input area */}
           <textarea
             ref={inputRef}
@@ -1950,9 +1935,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className={`w-full bg-transparent placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10 ${
-              focusedCustomer ? "text-transparent caret-white" : "text-white"
-            }`}
+            className="w-full bg-transparent text-white placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
             style={{ minHeight: 52 }}
           />
           {/* Toolbar */}
