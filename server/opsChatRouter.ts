@@ -46,6 +46,7 @@ import { ENV } from "./_core/env";
 import { broadcastOpsUpdate } from "./sseBroadcast";
 import { buildSystemPrompt } from "./csReplyStream";
 import { computeSessionSummary } from "./sessionSummary";
+import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 function todayDateString(): string {
@@ -4854,7 +4855,7 @@ Rules that ALWAYS apply regardless of instruction:
     .mutation(async ({ input }) => {
       const digits = input.phone.replace(/\D/g, "");
       const e164 = digits.startsWith("1") ? `+${digits}` : `+1${digits}`;
-      await sendSms({ to: e164, content: input.body, fromNumberId: ENV.openPhoneCsNumberId || undefined });
+      const smsResult = await sendSms({ to: e164, content: input.body, fromNumberId: ENV.openPhoneCsNumberId || undefined });
       const db = await getDb();
       await db.insert(opsChatMessages).values({
         cleanerJobId: null,
@@ -4875,6 +4876,17 @@ Rules that ALWAYS apply regardless of instruction:
         replyToAuthor: null,
         threadParentId: null,
       });
+      // Append to CS inbox so the message is visible in the conversation thread
+      if (smsResult.success && db) {
+        appendCsOutboundMessage({
+          db: db as any,
+          recipientPhone: e164,
+          recipientName: input.customerName,
+          message: input.body,
+          senderName: input.agentName,
+          openPhoneMessageId: smsResult.messageId,
+        }).catch(console.error);
+      }
       broadcastOpsUpdate("new_message", { channel: "command" });
       return { ok: true };
     }),

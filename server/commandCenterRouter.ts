@@ -42,6 +42,7 @@ import { normalizePhoneLegacy } from "./utils/phone";
 import { notifyNewLeadViaCall } from "./vapiLeadNotification";
 import { getCompletedBookingsForDate } from "./launch27";
 import { appendOutboundCampaignMessageToSession } from "./sms/appendCampaignMessage";
+import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function calcRevenue(row: {
@@ -1025,6 +1026,16 @@ If TOP OBJECTIONS are provided in the metrics:
             : `Hi ${firstName}! Just checking in — are you still interested in scheduling your cleaning? We have openings this week!`);
 
         const result = await sendSms({ to: s.leadPhone, content: message });
+        if (result.success) {
+          appendCsOutboundMessage({
+            db: db as any,
+            recipientPhone: s.leadPhone,
+            recipientName: s.leadName ?? undefined,
+            message,
+            senderName: "Agent",
+            openPhoneMessageId: result.messageId,
+          }).catch(console.error);
+        }
         return { success: result.success ?? true, message: "SMS sent" };
       }
 
@@ -1121,17 +1132,26 @@ If TOP OBJECTIONS are provided in the metrics:
 
       let sent = 0;
       let failed = 0;
-      for (const s of sessions) {
+            for (const s of sessions) {
         const firstName = (s.leadName ?? "there").split(" ")[0];
         const msg = (input.customMessage ?? defaultMessage).replace("{firstName}", firstName);
         try {
-          await sendSms({ to: s.leadPhone, content: msg });
+          const result = await sendSms({ to: s.leadPhone, content: msg });
+          if (result.success) {
+            appendCsOutboundMessage({
+              db: db as any,
+              recipientPhone: s.leadPhone,
+              recipientName: s.leadName ?? undefined,
+              message: msg,
+              senderName: "Agent",
+              openPhoneMessageId: result.messageId,
+            }).catch(console.error);
+          }
           sent++;
         } catch {
           failed++;
         }
       }
-
       return { success: true, sent, failed, total: sessions.length };
     }),
 

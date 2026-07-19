@@ -24,6 +24,7 @@ import { normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
+import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1608,13 +1609,26 @@ export const aiConciergeRouter = router({
         paymentLinkUrl: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
       try {
         const result = await sendSms({
           to: input.recipientPhone,
           content: input.smsText,
           fromNumberId: ENV.openPhoneCsNumberId,
         });
+        if (result.success) {
+          const db = await getDb();
+          if (db) {
+            appendCsOutboundMessage({
+              db: db as any,
+              recipientPhone: input.recipientPhone,
+              recipientName: input.recipientName,
+              message: input.smsText,
+              senderName: ctx.user?.name ?? "Agent",
+              openPhoneMessageId: result.messageId,
+            }).catch(console.error);
+          }
+        }
         return {
           type: "payment_link_sent" as const,
           recipientName: input.recipientName,
@@ -1634,7 +1648,6 @@ export const aiConciergeRouter = router({
         };
       }
     }),
-
   /**
    * Confirm and send bulk SMS after agent reviews/edits the draft.
    * Called when agent clicks "Send" on the bulk_sms_confirm card.
@@ -1650,9 +1663,9 @@ export const aiConciergeRouter = router({
         message: z.string().min(1).max(1600),
       })
     )
-    .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
       const results: BulkSmsSentResult["results"] = [];
-
+      const db = await getDb();
       for (const recipient of input.recipients) {
         try {
           const result = await sendSms({
@@ -1661,6 +1674,16 @@ export const aiConciergeRouter = router({
             fromNumberId: ENV.openPhoneCsNumberId,
           });
           results.push({ name: recipient.name, phone: recipient.phone, success: result.success });
+          if (result.success && db) {
+            appendCsOutboundMessage({
+              db: db as any,
+              recipientPhone: recipient.phone,
+              recipientName: recipient.name,
+              message: input.message,
+              senderName: ctx.user?.name ?? "Agent",
+              openPhoneMessageId: result.messageId,
+            }).catch(console.error);
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           results.push({ name: recipient.name, phone: recipient.phone, success: false, error: msg });
