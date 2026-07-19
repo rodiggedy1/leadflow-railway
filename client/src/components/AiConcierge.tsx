@@ -1524,6 +1524,24 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   // Show change popup
   const [showChangePopup, setShowChangePopup] = useState(false);
 
+  // ── Confirm pill: set entity + auto-fill name into input ─────────────────
+  type SelectedEntity = { type: "customer"; name: string; phone: string } | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
+  const confirmPill = (entity: SelectedEntity) => {
+    setFocusedCustomer(entity);
+    setAcQuery(null);
+    setShowChangePopup(false);
+    // Auto-fill "Name — " so user just types the rest
+    const prefix = `${entity.name} — `;
+    setInput(prefix);
+    // Focus and place cursor at end
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.setSelectionRange(prefix.length, prefix.length);
+      }
+    }, 0);
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
@@ -1849,7 +1867,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </div>
             <button
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); setAcQuery(null); }}
+              onMouseDown={(e) => { e.preventDefault(); confirmPill(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); }}
               className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
             >
               Confirm
@@ -1866,7 +1884,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                 <button
                   key={m.phone}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); setAcQuery(null); }}
+                  onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
                   className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
@@ -1894,7 +1912,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                 <button
                   key={m.phone}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); setShowChangePopup(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
                   className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
@@ -1911,6 +1929,21 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
 
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
+          {/* Highlight overlay: renders name in blue, rest in white, behind the transparent textarea */}
+          {focusedCustomer && (() => {
+            const prefix = `${focusedCustomer.name} — `;
+            const rest = input.startsWith(prefix) ? input.slice(prefix.length) : input;
+            return (
+              <div
+                aria-hidden="true"
+                className="absolute inset-0 px-4 pt-3.5 pb-2 text-sm leading-relaxed pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
+                style={{ minHeight: 52, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
+              >
+                <span className="text-indigo-400 font-semibold">{input.startsWith(prefix) ? prefix : ""}</span>
+                <span className="text-white">{input.startsWith(prefix) ? rest : input}</span>
+              </div>
+            );
+          })()}
           {/* Text input area */}
           <textarea
             ref={inputRef}
@@ -1919,7 +1952,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className="w-full bg-transparent text-white placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            className={`w-full bg-transparent placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10 ${
+              focusedCustomer ? "text-transparent caret-white" : "text-white"
+            }`}
             style={{ minHeight: 52 }}
           />
           {/* Toolbar */}
