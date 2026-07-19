@@ -1570,26 +1570,7 @@ export const aiConciergeRouter = router({
         return await handleEtaUpdateByJobId(input.resolvedJobId, db);
       }
 
-      // Pill-selected entity shortcut — bypasses LLM intent classification
-      if (input.resolvedEntity) {
-        if (input.resolvedEntity.type === "customer") {
-          // Route to existing client shortcut via resolvedClientPhone
-          const re = input.resolvedEntity;
-          if (input.resolvedPaymentLink) {
-            return await handleSendPaymentLink(null, db, re.phone);
-          }
-          if (input.resolvedCallClient) {
-            return await handleCallPerson(null, input.resolvedCallQuestionHint ?? null, db, re.phone, re.name);
-          }
-          return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, re.phone);
-        }
-        if (input.resolvedEntity.type === "cleaner") {
-          // Pill = person already resolved. Just text them.
-          const messageHint = input.resolvedClientMessageHint ?? null;
-          return await handleTextCleaners(input.resolvedEntity.name, messageHint, db);
-        }
-      }
-
+      // Legacy resolvedClientPhone path (disambiguation card flows — entity already resolved upstream)
       if (input.resolvedClientPhone) {
         if (input.resolvedPaymentLink) {
           return await handleSendPaymentLink(null, db, input.resolvedClientPhone);
@@ -1600,8 +1581,15 @@ export const aiConciergeRouter = router({
         return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
       }
 
-            const intent = await classifyIntent(input.message);
-      console.log("[Concierge] intent:", JSON.stringify(intent), "message:", input.message);
+      // resolvedEntity = chip-attached person (already resolved by the UI).
+      // Intent classification always runs — the chip is injected only as the pre-resolved
+      // target for the matching intent. Strict type guards prevent cross-type mismatches.
+      // When the chip type conflicts with the classified intent, fall back to the
+      // unresolved handler so the LLM-extracted name is used instead.
+      const re = input.resolvedEntity ?? null;
+      const intent = await classifyIntent(input.message);
+      console.log("[Concierge] intent:", JSON.stringify(intent), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
+
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
       }
@@ -1610,23 +1598,45 @@ export const aiConciergeRouter = router({
       }
 
       if (intent.action === "text_cleaners") {
-        return await handleTextCleaners(intent.targetHint, intent.messageHint, db);
+        // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
+        return re?.type === "cleaner"
+          ? await handleTextCleaners(re.name, intent.messageHint, db)
+          : await handleTextCleaners(intent.targetHint, intent.messageHint, db);
       }
 
       if (intent.action === "text_client") {
-        return await handleTextClient(intent.clientName, intent.messageHint, db);
+        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
+        return re?.type === "customer"
+          ? await handleTextClient(null, intent.messageHint, db, re.phone)
+          : await handleTextClient(intent.clientName, intent.messageHint, db);
       }
 
-            if (intent.action === "send_payment_link") {
-        return await handleSendPaymentLink(intent.clientName, db);
+      if (intent.action === "send_payment_link") {
+        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
+        return re?.type === "customer"
+          ? await handleSendPaymentLink(null, db, re.phone)
+          : await handleSendPaymentLink(intent.clientName, db);
       }
+
       if (intent.action === "call_client") {
-        return await handleCallPerson(intent.clientName, intent.questionHint, db);
+        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
+        return re?.type === "customer"
+          ? await handleCallPerson(null, intent.questionHint, db, re.phone, re.name)
+          : await handleCallPerson(intent.clientName, intent.questionHint, db);
       }
+
       if (intent.action === "query_data") {
-        return await handleQueryData(input.message, db);
+        // handleQueryData only supports cleaner entities — pass chip only when it is a cleaner
+        return re?.type === "cleaner"
+          ? await handleQueryData(input.message, db, re)
+          : await handleQueryData(input.message, db);
       }
+
       if (intent.action === "customer_profile") {
+        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
+        if (re?.type === "customer") {
+          return await handleCustomerProfile(re.name, db);
+        }
         if (!intent.clientName) {
           return { type: "error" as const, message: "Please include the customer's name. Example: \"Tell me about Mary Jones\"" };
         }
