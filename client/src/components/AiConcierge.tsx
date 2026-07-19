@@ -1502,12 +1502,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     ...acCustomers.map(c => ({
       name: c.name,
       phone: c.phone,
-      subtitle: [c.city, c.teamName ? `Team ${c.teamName}` : null].filter(Boolean).join(" · ") || "Customer",
+      subtitle: [c.city, c.teamName ? `Team ${c.teamName}` : null, c.phone].filter(Boolean).join(" · ") || c.phone,
     })),
     ...acCleaners.map(c => ({
       name: c.name,
       phone: c.phone,
-      subtitle: c.isActive ? "Cleaner · Active" : "Cleaner",
+      subtitle: [c.isActive ? "Cleaner · Active" : "Cleaner", c.phone].filter(Boolean).join(" · "),
       isCleaner: true,
     })),
   ];
@@ -1537,9 +1537,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     // Debounce: extract 2-4 consecutive capitalized-looking words from the input
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
     acDebounceRef.current = setTimeout(() => {
-      // Match sequences of 2-4 words that start with a capital letter (likely a name)
-      const nameMatch = val.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b/);
-      if (nameMatch) {
+      // Match sequences of 2-4 consecutive words (case-insensitive) that look like a name
+      const nameMatch = val.match(/\b([a-zA-Z]+(?:\s+[a-zA-Z]+){1,3})\b/);
+      if (nameMatch && nameMatch[1].length >= 4) {
         setAcQuery(nameMatch[1]);
       } else {
         setAcQuery(null);
