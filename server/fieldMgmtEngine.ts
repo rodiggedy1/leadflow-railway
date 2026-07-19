@@ -2051,7 +2051,14 @@ async function placeCheckinCall(
   // This guard runs regardless of which code version calls this function,
   // protecting against stale Railway instances running old code.
   // placeEtaCall is a completely separate function and is NOT affected.
-  const PERMANENTLY_DISABLED = ["post_start_call_1", "post_start_call_2", "noshow_call"];
+  // All call steps except eta_call_1/2 are permanently disabled.
+  // This guard runs regardless of Railway instance age — protects against
+  // stale instances firing old steps during rolling deploys.
+  const PERMANENTLY_DISABLED = [
+    "post_start_call_1", "post_start_call_2", "noshow_call",
+    "checkin_call_attempt_1", "checkin_call_attempt_2", "checkin_call_attempt_3",
+    "checkin_call_t30_attempt_1", "checkin_call_t30_attempt_2", "checkin_call_t30_attempt_3",
+  ];
   if (PERMANENTLY_DISABLED.includes(step)) {
     console.log(`[FieldMgmt] placeCheckinCall: step '${step}' is permanently disabled — skipping`);
     return;
@@ -2945,6 +2952,7 @@ export async function runEtaCallTrigger(): Promise<void> {
         and(
           eq(cleanerJobs.bookingStatus, "assigned"),
           isNull(cleanerJobs.etaCallFiredAt),
+          isNull(cleanerJobs.etaTimestamp), // skip if cleaner already provided ETA
           gte(cleanerJobs.serviceDateTime, windowStart.toISOString()),
           lte(cleanerJobs.serviceDateTime, windowEnd.toISOString()),
         )
