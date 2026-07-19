@@ -1530,8 +1530,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
-    // Auto-fill "Name — " so user just types the rest
-    const prefix = `${entity.name} — `;
+    // Auto-fill "Name " so user just types the rest
+    const prefix = `${entity.name} `;
     setInput(prefix);
     // Focus and place cursor at end
     setTimeout(() => {
@@ -1717,15 +1717,13 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setIsThinking(true);
 
     // When a person is locked in, extract the message hint from what the user typed.
-    // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
-    // Also handles bare messages like "let him know you're running late" (no em-dash)
+    // Format is "Name message" — strip the name prefix and use the rest as the hint.
     let focusedMessageHint: string | null = null;
     if (focusedCustomer) {
-      const emDashIdx = text.indexOf(" — ");
-      if (emDashIdx !== -1) {
-        focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
+      const prefix = `${focusedCustomer.name} `;
+      if (text.startsWith(prefix)) {
+        focusedMessageHint = text.slice(prefix.length).trim() || null;
       } else {
-        // Bare message with no em-dash — use the whole text as the hint
         focusedMessageHint = text.trim();
       }
     }
@@ -1931,7 +1929,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
           {/* Highlight overlay: renders name in blue, rest in white, behind the transparent textarea */}
           {focusedCustomer && (() => {
-            const prefix = `${focusedCustomer.name} — `;
+            const prefix = `${focusedCustomer.name} `;
             const rest = input.startsWith(prefix) ? input.slice(prefix.length) : input;
             return (
               <div
