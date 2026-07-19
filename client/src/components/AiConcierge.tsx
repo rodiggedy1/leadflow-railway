@@ -1504,18 +1504,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setInput(val);
-    // Extract the last word being typed
-    const cursor = e.target.selectionStart ?? val.length;
-    const before = val.slice(0, cursor);
-    const wordMatch = before.match(/(\S+)$/);
-    const word = wordMatch ? wordMatch[1] : "";
-    if (word.length >= 2 && /[a-zA-Z]/.test(word)) {
-      setAcQuery(word);
-    } else {
-      setAcQuery(null);
-    }
+    setInput(e.target.value);
   };
 
   // Clicking a suggestion fills the input with a full question and sends it
@@ -1778,75 +1767,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
         {/* Focused customer panel — shown when a customer profile was loaded */}
-        {focusedCustomer && !showSuggestions && (
-          <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-[#1e2235] border border-indigo-500/30 rounded-xl">
-            <div className="w-6 h-6 rounded-lg bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-xs font-bold shrink-0">
-              {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
-            </div>
-            <span className="text-white text-sm font-semibold flex-1 truncate">{focusedCustomer.name}</span>
-            <button
-              type="button"
-              onClick={() => setFocusedCustomer(null)}
-              className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-0.5 rounded hover:bg-white/5 transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* Suggestions panel */}
-        {showSuggestions && (
-          <div className="mb-3 bg-[#1e2235] border border-white/20 rounded-2xl p-4">
-            <div className="mb-3">
-              <p className="text-white text-sm font-bold">Suggestions</p>
-              <p className="text-gray-500 text-xs mt-0.5">Tap a name to select, then choose an action.</p>
-            </div>
-            <div className="flex flex-col gap-2">
-              {acCustomers.map((c, i) => {
-                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                return (
-                  <button
-                    key={c.phone}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: c.name, phone: c.phone }); setInput(""); setAcQuery(null); }}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-white/8 hover:bg-indigo-500/10 hover:border-indigo-500/30 transition-colors text-left"
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
-                      <p className="text-gray-400 text-xs">{c.city || "Customer"}</p>
-                    </div>
-
-                  </button>
-                );
-              })}
-              {acCleaners.map((c) => {
-                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                const question = `Jobs for ${c.name}`;
-                return (
-                  <button
-                    key={c.phone}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: c.name, phone: c.phone }); setInput(""); setAcQuery(null); }}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-white/8 hover:bg-white/5 transition-colors text-left"
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
-                      <p className="text-gray-400 text-xs">{question}</p>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
           {/* Text input area */}
           <textarea
