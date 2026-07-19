@@ -85,7 +85,7 @@ interface BulkSmsRecipient {
 }
 interface ClientDisambiguationCard {
   messageHint: string | null;
-  matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }>;
+  matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }>;
 }
 interface BulkSmsConfirmCard {
   targetDescription: string;
@@ -385,9 +385,11 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
       </div>
       <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
         {card.recipients.map((r) => (
-          <span key={r.cleanerProfileId} className="inline-flex items-center gap-1 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
+          <span key={r.phone} className="inline-flex items-center gap-1.5 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
             <User className="w-3 h-3 text-gray-500" />
-            {r.name.split(" ")[0]}
+            <span className="font-medium text-white">{r.name}</span>
+            <span className="text-gray-500">·</span>
+            <span className="text-indigo-300">{r.phone}</span>
           </span>
         ))}
       </div>
@@ -401,7 +403,7 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
           onChange={(e) => setDraft(e.target.value)}
           disabled={sent || sendMutation.isPending}
           rows={3}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
         />
       </div>
       {!sent && (
@@ -414,7 +416,7 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
             {sendMutation.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
             ) : (
-              <><Send className="w-4 h-4" /> Send to {card.recipients.length} cleaner{card.recipients.length !== 1 ? "s" : ""}</>
+              <><Send className="w-4 h-4" /> Send text{card.recipients.length > 1 ? ` to ${card.recipients.length} people` : ""}</>
             )}
           </button>
         </div>
@@ -425,21 +427,40 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
 // ─── Bulk SMS sent card ───────────────────────────────────────────────────────
 function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
   const allOk = card.results.every(r => r.success);
+  const successCount = card.results.filter(r => r.success).length;
+  const failCount = card.results.filter(r => !r.success).length;
+  const sentAt = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   return (
     <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-        <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
-          {allOk ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <AlertTriangle className="w-3.5 h-3.5 text-white" />}
+      {/* Header */}
+      <div className={`px-4 py-3 border-b border-white/10 flex items-center gap-3 ${allOk ? "bg-green-500/8" : "bg-yellow-500/8"}`}>
+        <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
+          {allOk ? <CheckCircle2 className="w-5 h-5 text-white" /> : <AlertTriangle className="w-5 h-5 text-white" />}
         </span>
-        <p className="text-sm font-semibold text-white">{card.message}</p>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white">{allOk ? "Message Sent" : "Partial Send"}</p>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {successCount > 0 && <span className="text-green-400">{successCount} delivered</span>}
+            {failCount > 0 && <span className="text-red-400 ml-2">{failCount} failed</span>}
+            <span className="text-gray-500 ml-2">· {sentAt}</span>
+          </p>
+        </div>
+        <MessageSquare className={`w-4 h-4 flex-shrink-0 ${allOk ? "text-green-400" : "text-yellow-400"}`} />
       </div>
+      {/* Recipient rows */}
       <div className="px-4 py-3 space-y-2">
         {card.results.map((r, i) => (
-          <div key={i} className="flex items-center gap-3">
-            <StepIcon status={r.success ? "done" : "failed"} />
-            <span className={`flex-1 text-sm ${r.success ? "text-gray-300" : "text-red-400"}`}>
-              {r.name}{r.error ? ` — ${r.error}` : ""}
-            </span>
+          <div key={i} className={`flex items-center gap-3 p-2.5 rounded-lg ${r.success ? "bg-green-500/5 border border-green-500/15" : "bg-red-500/5 border border-red-500/15"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${r.success ? "bg-green-500/20" : "bg-red-500/20"}`}>
+              {r.success
+                ? <CheckCircle2 className="w-4 h-4 text-green-400" />
+                : <XCircle className="w-4 h-4 text-red-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold truncate ${r.success ? "text-white" : "text-red-300"}`}>{r.name}</p>
+              <p className="text-xs text-gray-500 truncate">{r.phone}{r.error ? ` — ${r.error}` : ""}</p>
+            </div>
+            {r.success && <span className="text-xs text-green-400 font-medium flex-shrink-0">✓ Sent</span>}
           </div>
         ))}
       </div>
@@ -666,7 +687,7 @@ function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmC
           onChange={(e) => setScript(e.target.value)}
           disabled={fired || startCall.isPending}
           rows={4}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60"
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
         />
       </div>
       {callError && (
@@ -960,13 +981,12 @@ function MessageBubble({
             <BulkSmsConfirmCardView
               card={msg.content.card}
               onSent={(result) => {
-                const sentMsg: Message = {
+                onAddMessage({
                   id: uid(),
                   role: "ai",
                   content: { type: "bulk_sms_sent", card: result },
                   ts: nowTime(),
-                };
-                setMessages((prev) => [...prev, sentMsg]);
+                });
               }}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
@@ -1462,6 +1482,13 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // ── Selected entity (set when a pill is confirmed or a customer_profile card is shown) ──────────
+  // Discriminated union: customer entities route via resolvedClientPhone; cleaner entities route via resolvedEntity
+  type SelectedEntity =
+    | { type: "customer"; name: string; phone: string }
+    | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
+  const [focusedCustomer, setFocusedCustomer] = useState<SelectedEntity | null>(null);
+
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
   const { data: acData, error: acError } = trpc.opsChat.searchCustomers.useQuery(
@@ -1474,25 +1501,55 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   );
   const acCustomers = (acData?.customers ?? []).slice(0, 4);
   const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 3);
-  const showSuggestions = (acQuery?.length ?? 0) >= 2 && (acCustomers.length > 0 || acCleaners.length > 0);
-  // Debug: log suggestions state
-  if (acQuery && acQuery.length >= 2) {
-    console.log("[AC] query:", acQuery, "customers:", acCustomers.length, "cleaners:", acCleaners.length, "show:", showSuggestions, "err:", acError?.message ?? acCleanerError?.message ?? null);
-  }
+  // Combine all matches into a unified list for the recognition pill
+  const allMatches: Array<{ name: string; phone: string; subtitle: string; isCleaner?: boolean; cleanerProfileId?: number }> = [
+    ...acCustomers.map(c => ({
+      name: c.name,
+      phone: c.phone,
+      subtitle: [c.city, c.teamName ? `Team ${c.teamName}` : null, c.phone].filter(Boolean).join(" · ") || c.phone,
+    })),
+    ...acCleaners.map(c => ({
+      name: c.name,
+      phone: c.phone,
+      subtitle: [c.isActive ? "Team · Active" : "Team", c.phone].filter(Boolean).join(" · "),
+      isCleaner: true,
+      cleanerProfileId: c.cleanerProfileId,
+    })),
+  ];
+  // Show recognition pill only when not already locked and we have results
+  const showRecognitionPill = !focusedCustomer && (acQuery?.length ?? 0) >= 2 && allMatches.length > 0;
+
+  // ── Name recognition debounce timer ─────────────────────────────────────
+  const acDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Show change popup
+  const [showChangePopup, setShowChangePopup] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
-    // Extract the last word being typed
-    const cursor = e.target.selectionStart ?? val.length;
-    const before = val.slice(0, cursor);
-    const wordMatch = before.match(/(\S+)$/);
-    const word = wordMatch ? wordMatch[1] : "";
-    if (word.length >= 2 && /[a-zA-Z]/.test(word)) {
-      setAcQuery(word);
-    } else {
-      setAcQuery(null);
+
+    // If a person is already locked, check if their name is still in the text.
+    // If not, clear the lock.
+    if (focusedCustomer) {
+      const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
+      if (!val.toLowerCase().includes(firstName)) {
+        setFocusedCustomer(null);
+        setShowChangePopup(false);
+      }
+      return; // don't re-trigger search while locked
     }
+
+    // Debounce: extract 2-4 consecutive capitalized-looking words from the input
+    if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
+    acDebounceRef.current = setTimeout(() => {
+      // Match sequences of 2-3 words that start with a capital letter (likely a name)
+      const nameMatch = val.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/);
+      if (nameMatch) {
+        setAcQuery(nameMatch[1]);
+      } else {
+        setAcQuery(null);
+      }
+    }, 200);
   };
 
   // Clicking a suggestion fills the input with a full question and sends it
@@ -1515,6 +1572,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         onSuccess: (result) => {
           setIsThinking(false);
           setMessages((prev) => [...prev, buildAiMessage(result)]);
+          if (result.type === "customer_profile") {
+            setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
+          }
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1635,15 +1695,49 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     );
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
+    setAcQuery(null); // always clear autocomplete on send
     setIsThinking(true);
 
+    // When a customer is locked in, extract the message hint from what the user typed.
+    // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
+    // Also handles bare messages like "let him know you're running late" (no em-dash)
+    // For cleaner entities, skip hint extraction — they route to handleQueryData, not handleTextClient
+    let focusedMessageHint: string | null = null;
+    if (focusedCustomer && focusedCustomer.type === "customer") {
+      const emDashIdx = text.indexOf(" — ");
+      if (emDashIdx !== -1) {
+        focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
+      } else {
+        // Bare message with no em-dash — use the whole text as the hint
+        focusedMessageHint = text.trim();
+      }
+    }
+
+    // Build resolvedEntity for pill-selected entities
+    const resolvedEntityPayload = focusedCustomer
+      ? focusedCustomer.type === "customer"
+        ? ({ type: "customer" as const, phone: focusedCustomer.phone, name: focusedCustomer.name })
+        : ({ type: "cleaner" as const, cleanerProfileId: focusedCustomer.cleanerProfileId, name: focusedCustomer.name })
+      : undefined;
+
     chatMutation.mutate(
-      { message: text },
+      {
+        message: text,
+        // Pass resolvedEntity for pill-selected entities (customer or cleaner)
+        ...(resolvedEntityPayload ? { resolvedEntity: resolvedEntityPayload } : {}),
+        // Legacy resolvedClientPhone kept for non-pill flows (disambiguation cards, etc.)
+        // Pass the message hint so the LLM uses it instead of generating a generic message
+        ...(focusedMessageHint ? { resolvedClientMessageHint: focusedMessageHint } : {}),
+      },
       {
         onSuccess: (result) => {
           setIsThinking(false);
           const aiMsg = buildAiMessage(result);
           setMessages((prev) => [...prev, aiMsg]);
+          // Lock suggestions to this customer when a profile is shown
+          if (result.type === "customer_profile") {
+            setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
+          }
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1659,7 +1753,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         },
       }
     );
-  }, [input, isThinking, chatMutation]);
+  }, [input, isThinking, chatMutation, focusedCustomer]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -1725,66 +1819,100 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
       {/* Composer */}
       <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
-        {/* Suggestions panel */}
-        {showSuggestions && (
-          <div className="mb-3 bg-[#1e2235] border border-white/20 rounded-2xl p-4">
-            <div className="mb-3">
-              <p className="text-white text-sm font-bold">Suggestions</p>
-              <p className="text-gray-500 text-xs mt-0.5">Tap a suggestion to autofill the full question.</p>
+
+        {/* ── Recognition pill: locked person ── */}
+        {focusedCustomer && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/15 border border-indigo-500/40 rounded-xl">
+            <div className="w-5 h-5 rounded-md bg-indigo-600/50 flex items-center justify-center text-indigo-200 text-[10px] font-bold shrink-0">
+              {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
-            <div className="flex flex-col gap-2">
-              {acCustomers.map((c, i) => {
-                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                const question = `Jobs for ${c.name}`;
-                const isFirst = i === 0;
-                return (
-                  <button
-                    key={c.phone}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(question); }}
-                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-colors text-left ${
-                      isFirst
-                        ? "bg-emerald-500/8 border-emerald-500/30 hover:bg-emerald-500/12"
-                        : "bg-transparent border-white/8 hover:bg-white/5"
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
-                      <p className="text-gray-400 text-xs">{question}</p>
-                    </div>
-                    {isFirst && <span className="text-emerald-400 text-base shrink-0">✓</span>}
-                  </button>
-                );
-              })}
-              {acCleaners.map((c) => {
-                const initials = c.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase();
-                const hue = Math.abs(c.phone.split("").reduce((a: number, ch: string) => a + ch.charCodeAt(0), 0)) % 360;
-                const question = `Jobs for ${c.name}`;
-                return (
-                  <button
-                    key={c.phone}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); handleSuggestionSelect(question); }}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl border border-white/8 hover:bg-white/5 transition-colors text-left"
-                  >
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: `hsl(${hue}, 50%, 35%)` }}>
-                      {initials}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-semibold truncate">{c.name}</p>
-                      <p className="text-gray-400 text-xs">{question}</p>
-                    </div>
-                  </button>
-                );
-              })}
+            <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
+            <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
+            <button
+              type="button"
+              onClick={() => setShowChangePopup(v => !v)}
+              className="text-indigo-400 hover:text-indigo-200 text-[11px] font-medium px-2 py-0.5 rounded hover:bg-indigo-500/20 transition-colors"
+            >
+              Change
+            </button>
+          </div>
+        )}
+
+        {/* ── Recognition pill: multiple matches ── */}
+        {showRecognitionPill && allMatches.length === 1 && (
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
+            <div className="w-5 h-5 rounded-md bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+              {allMatches[0].name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
+              <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
+            </div>
+            <button
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); setAcQuery(null); }}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+            >
+              Confirm
+            </button>
+          </div>
+        )}
+        {showRecognitionPill && allMatches.length > 1 && (
+          <div className="mb-2 bg-[#1e2235] border border-indigo-500/25 rounded-xl overflow-hidden">
+            <div className="px-3 py-2 border-b border-white/8">
+              <p className="text-indigo-300 text-xs font-semibold">{allMatches.length} people found — who did you mean?</p>
+            </div>
+            <div className="flex flex-col">
+              {allMatches.slice(0, 4).map((m) => (
+                <button
+                  key={m.phone}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); setAcQuery(null); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+                    {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs font-semibold truncate">{m.name}</p>
+                    <p className="text-gray-400 text-[11px] truncate">{m.subtitle}</p>
+                  </div>
+                </button>
+              ))}
             </div>
           </div>
         )}
-        <div className="relative bg-[#1e2235] border border-white/15 rounded-2xl px-4 py-3 flex flex-col gap-3">
+
+        {/* ── Change popup: shown when user taps Change on the locked pill ── */}
+        {showChangePopup && focusedCustomer && (
+          <div className="mb-2 bg-[#1e2235] border border-white/20 rounded-xl overflow-hidden">
+            <div className="px-3 py-2 border-b border-white/8 flex items-center justify-between">
+              <p className="text-white text-xs font-semibold">Who did you mean?</p>
+              <button type="button" onClick={() => setShowChangePopup(false)} className="text-gray-500 hover:text-gray-300 text-xs">✕</button>
+            </div>
+            <div className="flex flex-col">
+              {allMatches.slice(0, 5).map((m) => (
+                <button
+                  key={m.phone}
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); setShowChangePopup(false); }}
+                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                >
+                  <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+                    {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white text-xs font-semibold truncate">{m.name}</p>
+                    <p className="text-gray-400 text-[11px] truncate">{m.subtitle}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
+          {/* Text input area */}
           <textarea
             ref={inputRef}
             value={input}
@@ -1792,18 +1920,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className="w-full bg-transparent text-white placeholder-gray-500 text-sm resize-none outline-none leading-relaxed"
-            style={{ minHeight: 44 }}
+            className="w-full bg-transparent text-white placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            style={{ minHeight: 52 }}
           />
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 relative">
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/8 transition-colors text-xs font-medium">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between px-3 pb-3 pt-1">
+            <div className="flex items-center gap-0.5">
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <div className="relative">
                 <button
                   onClick={() => setShowCommands((v) => !v)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/8 transition-colors text-xs font-medium"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium"
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span>Commands</span>
@@ -1815,7 +1944,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   />
                 )}
               </div>
-              <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-white/8 transition-colors text-xs font-medium">
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
                 <AtSign className="w-3.5 h-3.5" />
                 <span>People</span>
               </button>
@@ -1823,9 +1952,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             <button
               onClick={handleSend}
               disabled={!input.trim() || isThinking}
-              className="w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors flex-shrink-0"
+              className="w-8 h-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all flex-shrink-0 shadow-sm"
             >
-              <Send className="w-4 h-4 text-white" />
+              {isThinking
+                ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                : <Send className="w-3.5 h-3.5 text-white" />}
             </button>
           </div>
         </div>
@@ -1844,10 +1975,11 @@ type ServerResult =
   | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
   | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
   | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
-  | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }> }
+  | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }> }
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
+  | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
   | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> }
   | { type: "customer_profile"; profile: CustomerProfileCard };
 
@@ -2004,11 +2136,20 @@ function buildAiMessage(result: ServerResult): Message {
       ts,
     };
   }
+  if (result.type === "call_client_pending") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "call_client_pending", card: { vapiCallId: "", recipientName: result.recipientName, recipientPhone: result.recipientPhone } },
+      ts,
+    };
+  }
   // workflow
+  const workflowResult = result as { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } };
   return {
     id: uid(),
     role: "ai",
-    content: { type: "workflow", workflow: { summary: result.summary, steps: result.steps, expandable: result.expandable } },
+    content: { type: "workflow", workflow: { summary: workflowResult.summary, steps: workflowResult.steps, expandable: workflowResult.expandable } },
     ts,
   };
 }

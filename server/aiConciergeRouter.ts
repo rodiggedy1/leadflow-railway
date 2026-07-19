@@ -24,6 +24,7 @@ import { normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
 import { ENV } from "./_core/env";
+import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -151,8 +152,9 @@ export interface QueryResultResult {
   answer: string;
   rows?: Array<{
     id: number;
+    jobDate: string | null;
     teamName: string | null;
-    cleanerName: string;
+    cleanerName: string | null;
     customerName: string | null;
     jobAddress: string | null;
     serviceDateTime: string | null;
@@ -223,6 +225,7 @@ type ConciergeResult =
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
   | { action: "eta_update"; teamHint: string | null }
+  | { action: "get_eta_for_customer"; clientName: string | null }
   | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
   | { action: "text_client"; clientName: string | null; messageHint: string | null }
   | { action: "send_payment_link"; clientName: string | null }
@@ -238,15 +241,21 @@ async function classifyIntent(message: string): Promise<Intent> {
         role: "system",
         content: `You are an intent classifier for a cleaning operations AI assistant.
 Classify the user's message into one of these actions:
-- eta_update: user wants to request an ETA call for a team (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
+- eta_update: user wants to request an ETA call for a team by team name (e.g. "send ETA for Team 8", "call team 3 for ETA", "get ETA update", "ETA for Maria")
+- get_eta_for_customer: user wants an ETA for a specific CUSTOMER's job — the system will find which team is assigned and call them (e.g. "get ETA for Dave Pringle", "ETA for Mary Jones", "what's the ETA for John Smith's job")
 - text_cleaners: user wants to send an SMS to one or more CLEANERS/STAFF (e.g. "text cleaners working today", "text all DC cleaners", "text team 5", "message all cleaners about tomorrow")
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
 - query_data: user is asking a question about job data, clients, or teams (e.g. "list all jobs today", "what jobs does Team 3 have", "show me jobs for Kara Turner", "how many jobs this week", "what's the status of the 10am job", "which teams are working today")
-- customer_profile: user wants a full profile/overview of a specific customer (e.g. "tell me about Mary Jones", "who is Rohan Gilkes", "show me Kara Turner's profile", "what do we know about Sarah Smith", "customer profile for John Doe", "give me the rundown on Dave Pringle")
+- customer_profile: user wants a full profile/overview of a specific customer (e.g. "tell me about Mary Jones", "who is Rohan Gilkes", "show me Kara Turner's profile", "what do we know about Sarah Smith", "customer profile for John Doe", "give me the rundown on Dave Pringle", "tell me everything about Dave Pringle", "pull up John Smith")
 - unknown: anything else
 KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer. "customer_profile" is for viewing a customer's full history, stats, messages, and AI summary — NOT for texting or calling them.
+
+For customer_profile:
+- clientName MUST be the exact full name of the customer as written by the user (e.g. "tell me everything about Dave Pringle" → clientName = "Dave Pringle", "who is Mary Jones" → clientName = "Mary Jones")
+For get_eta_for_customer:
+- clientName MUST be the exact full name of the customer as written by the user (e.g. "get ETA for Dave Pringle" → clientName = "Dave Pringle")
 
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
@@ -263,7 +272,7 @@ For call_client:
 - questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
 Return JSON only:
 {
-  "action": "eta_update" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
+  "action": "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
   "teamHint": "<team/cleaner name for eta_update, or null>",
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
@@ -281,7 +290,7 @@ Return JSON only:
         schema: {
           type: "object",
           properties: {
-            action: { type: "string", enum: ["eta_update", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "customer_profile", "unknown"] },
+            action: { type: "string", enum: ["eta_update", "get_eta_for_customer", "text_cleaners", "text_client", "send_payment_link", "call_client", "query_data", "customer_profile", "unknown"] },
             teamHint: { type: ["string", "null"] },
             targetHint: { type: ["string", "null"] },
             clientName: { type: ["string", "null"] },
@@ -954,47 +963,58 @@ Just write the message body.`,
 // ── Query data handler ──────────────────────────────────────────────────────
 async function handleQueryData(
   question: string,
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  resolvedEntity?: { type: "cleaner"; cleanerProfileId: number; name: string }
 ): Promise<ConciergeResult> {
   const today = getTodayET();
 
-  // Step 1: extract search entities from the question
-  const extractResult = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.`,
-      },
-      { role: "user", content: question },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "entities",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            customerName: { type: ["string", "null"], description: "Customer/client name if mentioned, else null" },
-            cleanerName: { type: ["string", "null"], description: "Cleaner or team name if mentioned, else null" },
-            dateHint: { type: ["string", "null"], description: "Date or relative term like 'today', 'yesterday', 'last week', 'July 10', else null" },
-            queryType: { type: "string", enum: ["specific", "summary"], description: "specific = about a named person/team; summary = general counts or status across all jobs" },
+  let entities: { customerName: string | null; cleanerName: string | null; dateHint: string | null; queryType: string };
+
+  if (resolvedEntity) {
+    // Cleaner was pre-resolved by the pill — skip LLM extraction entirely
+    entities = { customerName: null, cleanerName: resolvedEntity.name, dateHint: null, queryType: "specific" };
+    console.log("[QueryData] resolvedEntity (cleaner):", JSON.stringify(resolvedEntity));
+  } else {
+    // Step 1: extract search entities from the question
+    const extractResult = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.
+Rules:
+- customerName: the name of a CLIENT/CUSTOMER (the person whose home is being cleaned)
+- cleanerName: the name of a CLEANER, TEAM, or STAFF MEMBER (the person doing the cleaning). If the question is "jobs for [name]" or "what does [name] have today" and the name sounds like a person who works there (not a client), set cleanerName.
+- When in doubt about whether a name is a customer or cleaner, set BOTH fields with the same name so the system can search both.
+- dateHint: date reference like 'today', 'tomorrow', 'yesterday', 'July 10', else null`,
+        },
+        { role: "user", content: question },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "entities",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              customerName: { type: ["string", "null"], description: "Customer/client name if mentioned, else null" },
+              cleanerName: { type: ["string", "null"], description: "Cleaner or team name if mentioned, else null" },
+              dateHint: { type: ["string", "null"], description: "Date or relative term like 'today', 'yesterday', 'last week', 'July 10', else null" },
+              queryType: { type: "string", enum: ["specific", "summary"], description: "specific = about a named person/team; summary = general counts or status across all jobs" },
+            },
+            required: ["customerName", "cleanerName", "dateHint", "queryType"],
+            additionalProperties: false,
           },
-          required: ["customerName", "cleanerName", "dateHint", "queryType"],
-          additionalProperties: false,
         },
       },
-    },
-  });
-
-  let entities: { customerName: string | null; cleanerName: string | null; dateHint: string | null; queryType: string };
-  try {
-    entities = JSON.parse(extractResult.choices[0].message.content as string);
-  } catch {
-    entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
+    });
+    try {
+      entities = JSON.parse(extractResult.choices[0].message.content as string);
+    } catch {
+      entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
+    }
+    console.log("[QueryData] entities:", JSON.stringify(entities), "question:", question);
   }
-
-  console.log("[QueryData] entities:", JSON.stringify(entities), "question:", question);
 
   // Step 2: query both cleanerJobs (scheduled/active) and completedJobs (historical)
   // and merge results so customer history is always found regardless of which table it's in.
@@ -1011,7 +1031,7 @@ async function handleQueryData(
     return null;
   };
   const dateCutoff = resolveDateCutoff(entities.dateHint);
-  const hasSpecificFilter = !!(entities.customerName || entities.cleanerName);
+  const hasSpecificFilter = !!(entities.customerName || entities.cleanerName) || !!resolvedEntity;
   // Default cutoff for summary queries: last 30 days
   const defaultCutoff = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); })();
   const effectiveCutoff = dateCutoff ?? (hasSpecificFilter ? null : defaultCutoff);
@@ -1022,7 +1042,12 @@ async function handleQueryData(
     ne(cleanerJobs.bookingStatus, "rescheduled"),
   ];
   if (entities.customerName) cjConditions.push(like(cleanerJobs.customerName, `%${entities.customerName}%`));
-  if (entities.cleanerName) cjConditions.push(or(like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`), like(cleanerJobs.teamName, `%${entities.cleanerName}%`)));
+  if (resolvedEntity) {
+    // Resolved cleaner: query by cleanerProfileId — no name fallback
+    cjConditions.push(eq(cleanerJobs.cleanerProfileId, resolvedEntity.cleanerProfileId));
+  } else if (entities.cleanerName) {
+    cjConditions.push(or(like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`), like(cleanerJobs.teamName, `%${entities.cleanerName}%`)));
+  }
   if (effectiveCutoff) cjConditions.push(gte(cleanerJobs.jobDate, effectiveCutoff));
 
   const scheduledJobs = await db
@@ -1032,9 +1057,9 @@ async function handleQueryData(
     .orderBy(desc(cleanerJobs.jobDate))
     .limit(50);
 
-  // Query completedJobs (historical bookings) — always run; search name column against both customerName and cleanerName
+  // Query completedJobs (historical bookings) — skipped when a cleaner is resolved (completedJobs.name is customer name)
   let historicalJobs: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> = [];
-  {
+  if (!resolvedEntity) {
     const compConditions: any[] = [];
     const nameSearch = entities.customerName || entities.cleanerName;
     if (nameSearch) compConditions.push(like(completedJobs.name, `%${nameSearch}%`));
@@ -1086,7 +1111,14 @@ async function handleQueryData(
   }
 
   console.log("[QueryData] scheduledJobs:", scheduledJobs.length, "historicalJobs:", historicalJobs.length);
-  const jobs = [...scheduledJobs, ...historicalJobs]
+  // Deduplicate: if a job appears in both cleanerJobs (scheduled) and completedJobs (historical)
+  // for the same customer+date+address, prefer the cleanerJobs row (has team data)
+  const scheduledKeys = new Set(scheduledJobs.map(j => `${(j.jobAddress ?? "").toLowerCase().slice(0, 30)}|${j.jobDate ?? ""}`));
+  const dedupedHistorical = historicalJobs.filter(j => {
+    const key = `${(j.jobAddress ?? "").toLowerCase().slice(0, 30)}|${j.jobDate ?? ""}`;
+    return !scheduledKeys.has(key);
+  });
+  const jobs = [...scheduledJobs, ...dedupedHistorical]
     .sort((a, b) => (b.jobDate ?? "").localeCompare(a.jobDate ?? ""))
     .slice(0, 80);
 
@@ -1270,6 +1302,80 @@ async function handleTextCleaners(
   };
 }
 
+// ── ETA for customer: look up today's job, find assigned team, kick ETA call ──
+async function handleGetEtaForCustomer(
+  clientName: string | null,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConciergeResult> {
+  if (!clientName) {
+    return { type: "error", message: "Please include the customer's name. Example: \"Get ETA for Mary Jones\"" };
+  }
+  const today = getTodayET();
+  // Find today's cleanerJobs row for this customer
+  const q = `%${clientName.trim()}%`;
+  const [job] = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      teamName: cleanerJobs.teamName,
+      cleanerName: cleanerJobs.cleanerName,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobAddress: cleanerJobs.jobAddress,
+      cleanerPhone: cleanerProfiles.phone,
+    })
+    .from(cleanerJobs)
+    .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
+    .where(
+      and(
+        eq(cleanerJobs.jobDate, today),
+        like(cleanerJobs.customerName, q),
+        ne(cleanerJobs.bookingStatus, "cancelled"),
+        ne(cleanerJobs.bookingStatus, "rescheduled")
+      )
+    )
+    .orderBy(cleanerJobs.serviceDateTime)
+    .limit(1);
+
+  if (!job) {
+    // Fall back: maybe clientName is a cleaner/team name, not a customer
+    return await handleEtaUpdate(clientName, db);
+  }
+  if (!job.cleanerPhone) {
+    return { type: "error", message: `Found ${job.customerName}'s job (${job.teamName ?? job.cleanerName}) but no phone number on file for the team.` };
+  }
+  if (!job.serviceDateTime) {
+    return { type: "error", message: `${job.customerName}'s job has no service time set.` };
+  }
+  const serviceTime = parseServiceDateTime(job.serviceDateTime);
+  if (!serviceTime) return { type: "error", message: "Could not parse service time for this job." };
+  const scheduledTimeET = formatTimeET(serviceTime);
+  const cleanerFirstName = (job.cleanerName ?? "there").split(" ")[0];
+  const customerFirstName = (job.customerName ?? clientName).split(" ")[0];
+  const teamName = job.teamName ?? job.cleanerName ?? "Unknown Team";
+
+  const result = await placeEtaCall({
+    cleanerJobId: job.id,
+    step: "eta_call_1",
+    cleanerPhone: job.cleanerPhone,
+    cleanerFirstName,
+    customerFirstName,
+    scheduledTimeET,
+    bypassStepLock: true,
+  });
+
+  if (!result.success) {
+    return { type: "error", message: result.reason ?? "ETA call failed." };
+  }
+  return {
+    type: "eta_pending",
+    jobId: job.id,
+    teamName,
+    cleanerName: job.cleanerName ?? teamName,
+    scheduledTimeET,
+    date: today,
+  };
+}
+
 // ── ETA update handler ────────────────────────────────────────────────────────
 async function handleEtaUpdate(
   teamHint: string | null,
@@ -1450,6 +1556,10 @@ export const aiConciergeRouter = router({
         resolvedCallClient: z.boolean().optional(),
         resolvedCallPersonName: z.string().optional(),
         resolvedCallQuestionHint: z.string().nullable().optional(),
+        resolvedEntity: z.discriminatedUnion("type", [
+          z.object({ type: z.literal("customer"), phone: z.string(), name: z.string() }),
+          z.object({ type: z.literal("cleaner"), cleanerProfileId: z.number(), name: z.string() }),
+        ]).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1458,6 +1568,25 @@ export const aiConciergeRouter = router({
 
       if (input.resolvedJobId) {
         return await handleEtaUpdateByJobId(input.resolvedJobId, db);
+      }
+
+      // Pill-selected entity shortcut — bypasses LLM intent classification
+      if (input.resolvedEntity) {
+        if (input.resolvedEntity.type === "customer") {
+          // Route to existing client shortcut via resolvedClientPhone
+          const re = input.resolvedEntity;
+          if (input.resolvedPaymentLink) {
+            return await handleSendPaymentLink(null, db, re.phone);
+          }
+          if (input.resolvedCallClient) {
+            return await handleCallPerson(null, input.resolvedCallQuestionHint ?? null, db, re.phone, re.name);
+          }
+          return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, re.phone);
+        }
+        if (input.resolvedEntity.type === "cleaner") {
+          // Route directly to handleQueryData with resolved cleaner — no LLM extraction
+          return await handleQueryData(input.message, db, input.resolvedEntity);
+        }
       }
 
       if (input.resolvedClientPhone) {
@@ -1474,6 +1603,9 @@ export const aiConciergeRouter = router({
       console.log("[Concierge] intent:", JSON.stringify(intent), "message:", input.message);
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
+      }
+      if (intent.action === "get_eta_for_customer") {
+        return await handleGetEtaForCustomer(intent.clientName, db);
       }
 
       if (intent.action === "text_cleaners") {
@@ -1518,13 +1650,26 @@ export const aiConciergeRouter = router({
         paymentLinkUrl: z.string(),
       })
     )
-    .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
       try {
         const result = await sendSms({
           to: input.recipientPhone,
           content: input.smsText,
           fromNumberId: ENV.openPhoneCsNumberId,
         });
+        if (result.success) {
+          const db = await getDb();
+          if (db) {
+            appendCsOutboundMessage({
+              db: db as any,
+              recipientPhone: input.recipientPhone,
+              recipientName: input.recipientName,
+              message: input.smsText,
+              senderName: ctx.user?.name ?? "Agent",
+              openPhoneMessageId: result.messageId,
+            }).catch(console.error);
+          }
+        }
         return {
           type: "payment_link_sent" as const,
           recipientName: input.recipientName,
@@ -1544,7 +1689,6 @@ export const aiConciergeRouter = router({
         };
       }
     }),
-
   /**
    * Confirm and send bulk SMS after agent reviews/edits the draft.
    * Called when agent clicks "Send" on the bulk_sms_confirm card.
@@ -1560,9 +1704,9 @@ export const aiConciergeRouter = router({
         message: z.string().min(1).max(1600),
       })
     )
-    .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
       const results: BulkSmsSentResult["results"] = [];
-
+      const db = await getDb();
       for (const recipient of input.recipients) {
         try {
           const result = await sendSms({
@@ -1571,6 +1715,16 @@ export const aiConciergeRouter = router({
             fromNumberId: ENV.openPhoneCsNumberId,
           });
           results.push({ name: recipient.name, phone: recipient.phone, success: result.success });
+          if (result.success && db) {
+            appendCsOutboundMessage({
+              db: db as any,
+              recipientPhone: recipient.phone,
+              recipientName: recipient.name,
+              message: input.message,
+              senderName: ctx.user?.name ?? "Agent",
+              openPhoneMessageId: result.messageId,
+            }).catch(console.error);
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           results.push({ name: recipient.name, phone: recipient.phone, success: false, error: msg });

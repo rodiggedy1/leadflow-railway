@@ -7,7 +7,8 @@
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from "react";
-import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar, FileText, X, LogOut } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar, FileText, X, LogOut, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -595,6 +596,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
     { enabled: etaEnabled && !!coords, retry: false, throwOnError: false }
   );
   const statusMutation = trpc.cleaner.updateJobStatus.useMutation({ throwOnError: false });
+  const [showArrivedConfirm, setShowArrivedConfirm] = useState(false);
   // Location is fetched inside handleNavigate at tap time — never on mount.
   // Detect when user returns from maps app (tab/page becomes visible again)
   useEffect(() => {
@@ -801,17 +803,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
       </div>
       {/* Arrived CTA — pulses when user returns from maps */}
       <button
-        onClick={() => {
-          try { sessionStorage.removeItem(LAUNCHED_KEY); } catch {}
-          if (cleanerJobId) {
-            statusMutation.mutate(
-              { cleanerJobId, status: "arrived" },
-              { onSuccess: onComplete, onError: onComplete }
-            );
-          } else {
-            onComplete();
-          }
-        }}
+        onClick={() => setShowArrivedConfirm(true)}
         disabled={statusMutation.isPending}
         className={cn(
           "w-full bg-emerald-500 text-white font-black text-xl uppercase tracking-wide py-6 rounded-2xl border-2 border-emerald-400/40 shadow-xl shadow-emerald-900/50 transition-all flex items-center justify-center gap-3",
@@ -833,6 +825,66 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
           {t('v2.nav.arrivedSubhint')}
         </p>
       )}
+
+      {/* ── Arrived Confirmation Dialog ── */}
+      <Dialog open={showArrivedConfirm} onOpenChange={setShowArrivedConfirm}>
+        <DialogContent
+          className="bg-slate-900 border-0 text-white max-w-sm mx-auto rounded-2xl p-0 overflow-hidden"
+          onInteractOutside={e => e.preventDefault()}
+          onEscapeKeyDown={e => e.preventDefault()}
+        >
+          {/* Red warning header */}
+          <div className="bg-red-600 px-6 pt-6 pb-5 text-center">
+            <div className="flex justify-center mb-3">
+              <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-white" />
+              </div>
+            </div>
+            <h2 className="text-white text-xl font-black uppercase tracking-wide leading-tight">
+              {t('v2.nav.arrivedConfirmHeading')}
+            </h2>
+          </div>
+
+          {/* Body */}
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-white text-base font-bold text-center leading-snug">
+              {t('v2.nav.arrivedConfirmBody')}
+            </p>
+            <div className="bg-red-950/60 border border-red-500/50 rounded-xl px-4 py-3">
+              <p className="text-red-300 text-sm font-semibold text-center">
+                {t('v2.nav.arrivedConfirmWarning')}
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowArrivedConfirm(false);
+                try { sessionStorage.removeItem(LAUNCHED_KEY); } catch {}
+                if (cleanerJobId) {
+                  statusMutation.mutate(
+                    { cleanerJobId, status: "arrived" },
+                    { onSuccess: onComplete, onError: onComplete }
+                  );
+                } else {
+                  onComplete();
+                }
+              }}
+              disabled={statusMutation.isPending}
+              className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-4 rounded-xl transition-all flex items-center justify-center gap-2"
+            >
+              {statusMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
+              {t('v2.nav.arrivedConfirmYes')}
+            </button>
+
+            <button
+              onClick={() => setShowArrivedConfirm(false)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm py-3 rounded-xl transition-all"
+            >
+              {t('v2.nav.arrivedConfirmNo')}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
