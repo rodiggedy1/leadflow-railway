@@ -152,8 +152,9 @@ export interface QueryResultResult {
   answer: string;
   rows?: Array<{
     id: number;
+    jobDate: string | null;
     teamName: string | null;
-    cleanerName: string;
+    cleanerName: string | null;
     customerName: string | null;
     jobAddress: string | null;
     serviceDateTime: string | null;
@@ -962,52 +963,58 @@ Just write the message body.`,
 // ── Query data handler ──────────────────────────────────────────────────────
 async function handleQueryData(
   question: string,
-  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+  resolvedEntity?: { type: "cleaner"; cleanerProfileId: number; name: string }
 ): Promise<ConciergeResult> {
   const today = getTodayET();
 
-  // Step 1: extract search entities from the question
-  const extractResult = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.
+  let entities: { customerName: string | null; cleanerName: string | null; dateHint: string | null; queryType: string };
+
+  if (resolvedEntity) {
+    // Cleaner was pre-resolved by the pill — skip LLM extraction entirely
+    entities = { customerName: null, cleanerName: resolvedEntity.name, dateHint: null, queryType: "specific" };
+    console.log("[QueryData] resolvedEntity (cleaner):", JSON.stringify(resolvedEntity));
+  } else {
+    // Step 1: extract search entities from the question
+    const extractResult = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.
 Rules:
 - customerName: the name of a CLIENT/CUSTOMER (the person whose home is being cleaned)
 - cleanerName: the name of a CLEANER, TEAM, or STAFF MEMBER (the person doing the cleaning). If the question is "jobs for [name]" or "what does [name] have today" and the name sounds like a person who works there (not a client), set cleanerName.
 - When in doubt about whether a name is a customer or cleaner, set BOTH fields with the same name so the system can search both.
 - dateHint: date reference like 'today', 'tomorrow', 'yesterday', 'July 10', else null`,
-      },
-      { role: "user", content: question },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "entities",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            customerName: { type: ["string", "null"], description: "Customer/client name if mentioned, else null" },
-            cleanerName: { type: ["string", "null"], description: "Cleaner or team name if mentioned, else null" },
-            dateHint: { type: ["string", "null"], description: "Date or relative term like 'today', 'yesterday', 'last week', 'July 10', else null" },
-            queryType: { type: "string", enum: ["specific", "summary"], description: "specific = about a named person/team; summary = general counts or status across all jobs" },
+        },
+        { role: "user", content: question },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "entities",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              customerName: { type: ["string", "null"], description: "Customer/client name if mentioned, else null" },
+              cleanerName: { type: ["string", "null"], description: "Cleaner or team name if mentioned, else null" },
+              dateHint: { type: ["string", "null"], description: "Date or relative term like 'today', 'yesterday', 'last week', 'July 10', else null" },
+              queryType: { type: "string", enum: ["specific", "summary"], description: "specific = about a named person/team; summary = general counts or status across all jobs" },
+            },
+            required: ["customerName", "cleanerName", "dateHint", "queryType"],
+            additionalProperties: false,
           },
-          required: ["customerName", "cleanerName", "dateHint", "queryType"],
-          additionalProperties: false,
         },
       },
-    },
-  });
-
-  let entities: { customerName: string | null; cleanerName: string | null; dateHint: string | null; queryType: string };
-  try {
-    entities = JSON.parse(extractResult.choices[0].message.content as string);
-  } catch {
-    entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
+    });
+    try {
+      entities = JSON.parse(extractResult.choices[0].message.content as string);
+    } catch {
+      entities = { customerName: null, cleanerName: null, dateHint: null, queryType: "summary" };
+    }
+    console.log("[QueryData] entities:", JSON.stringify(entities), "question:", question);
   }
-
-  console.log("[QueryData] entities:", JSON.stringify(entities), "question:", question);
 
   // Step 2: query both cleanerJobs (scheduled/active) and completedJobs (historical)
   // and merge results so customer history is always found regardless of which table it's in.
@@ -1024,7 +1031,7 @@ Rules:
     return null;
   };
   const dateCutoff = resolveDateCutoff(entities.dateHint);
-  const hasSpecificFilter = !!(entities.customerName || entities.cleanerName);
+  const hasSpecificFilter = !!(entities.customerName || entities.cleanerName) || !!resolvedEntity;
   // Default cutoff for summary queries: last 30 days
   const defaultCutoff = (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toLocaleDateString("en-CA", { timeZone: "America/New_York" }); })();
   const effectiveCutoff = dateCutoff ?? (hasSpecificFilter ? null : defaultCutoff);
@@ -1035,7 +1042,12 @@ Rules:
     ne(cleanerJobs.bookingStatus, "rescheduled"),
   ];
   if (entities.customerName) cjConditions.push(like(cleanerJobs.customerName, `%${entities.customerName}%`));
-  if (entities.cleanerName) cjConditions.push(or(like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`), like(cleanerJobs.teamName, `%${entities.cleanerName}%`)));
+  if (resolvedEntity) {
+    // Resolved cleaner: query by cleanerProfileId — no name fallback
+    cjConditions.push(eq(cleanerJobs.cleanerProfileId, resolvedEntity.cleanerProfileId));
+  } else if (entities.cleanerName) {
+    cjConditions.push(or(like(cleanerJobs.cleanerName, `%${entities.cleanerName}%`), like(cleanerJobs.teamName, `%${entities.cleanerName}%`)));
+  }
   if (effectiveCutoff) cjConditions.push(gte(cleanerJobs.jobDate, effectiveCutoff));
 
   const scheduledJobs = await db
@@ -1045,9 +1057,9 @@ Rules:
     .orderBy(desc(cleanerJobs.jobDate))
     .limit(50);
 
-  // Query completedJobs (historical bookings) — always run; search name column against both customerName and cleanerName
+  // Query completedJobs (historical bookings) — skipped when a cleaner is resolved (completedJobs.name is customer name)
   let historicalJobs: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> = [];
-  {
+  if (!resolvedEntity) {
     const compConditions: any[] = [];
     const nameSearch = entities.customerName || entities.cleanerName;
     if (nameSearch) compConditions.push(like(completedJobs.name, `%${nameSearch}%`));
@@ -1544,6 +1556,10 @@ export const aiConciergeRouter = router({
         resolvedCallClient: z.boolean().optional(),
         resolvedCallPersonName: z.string().optional(),
         resolvedCallQuestionHint: z.string().nullable().optional(),
+        resolvedEntity: z.discriminatedUnion("type", [
+          z.object({ type: z.literal("customer"), phone: z.string(), name: z.string() }),
+          z.object({ type: z.literal("cleaner"), cleanerProfileId: z.number(), name: z.string() }),
+        ]).optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1552,6 +1568,25 @@ export const aiConciergeRouter = router({
 
       if (input.resolvedJobId) {
         return await handleEtaUpdateByJobId(input.resolvedJobId, db);
+      }
+
+      // Pill-selected entity shortcut — bypasses LLM intent classification
+      if (input.resolvedEntity) {
+        if (input.resolvedEntity.type === "customer") {
+          // Route to existing client shortcut via resolvedClientPhone
+          const re = input.resolvedEntity;
+          if (input.resolvedPaymentLink) {
+            return await handleSendPaymentLink(null, db, re.phone);
+          }
+          if (input.resolvedCallClient) {
+            return await handleCallPerson(null, input.resolvedCallQuestionHint ?? null, db, re.phone, re.name);
+          }
+          return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, re.phone);
+        }
+        if (input.resolvedEntity.type === "cleaner") {
+          // Route directly to handleQueryData with resolved cleaner — no LLM extraction
+          return await handleQueryData(input.message, db, input.resolvedEntity);
+        }
       }
 
       if (input.resolvedClientPhone) {

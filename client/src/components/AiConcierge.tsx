@@ -85,7 +85,7 @@ interface BulkSmsRecipient {
 }
 interface ClientDisambiguationCard {
   messageHint: string | null;
-  matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }>;
+  matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }>;
 }
 interface BulkSmsConfirmCard {
   targetDescription: string;
@@ -1482,8 +1482,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Focused customer (set when a customer_profile card is shown) ──────────
-  const [focusedCustomer, setFocusedCustomer] = useState<{ name: string; phone: string } | null>(null);
+  // ── Selected entity (set when a pill is confirmed or a customer_profile card is shown) ──────────
+  // Discriminated union: customer entities route via resolvedClientPhone; cleaner entities route via resolvedEntity
+  type SelectedEntity =
+    | { type: "customer"; name: string; phone: string }
+    | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
+  const [focusedCustomer, setFocusedCustomer] = useState<SelectedEntity | null>(null);
 
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
@@ -1498,7 +1502,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const acCustomers = (acData?.customers ?? []).slice(0, 4);
   const acCleaners = (acCleanerData?.cleaners ?? []).slice(0, 3);
   // Combine all matches into a unified list for the recognition pill
-  const allMatches: Array<{ name: string; phone: string; subtitle: string; isCleaner?: boolean }> = [
+  const allMatches: Array<{ name: string; phone: string; subtitle: string; isCleaner?: boolean; cleanerProfileId?: number }> = [
     ...acCustomers.map(c => ({
       name: c.name,
       phone: c.phone,
@@ -1507,8 +1511,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     ...acCleaners.map(c => ({
       name: c.name,
       phone: c.phone,
-      subtitle: [c.isActive ? "Cleaner · Active" : "Cleaner", c.phone].filter(Boolean).join(" · "),
+      subtitle: [c.isActive ? "Team · Active" : "Team", c.phone].filter(Boolean).join(" · "),
       isCleaner: true,
+      cleanerProfileId: c.cleanerProfileId,
     })),
   ];
   // Show recognition pill only when not already locked and we have results
@@ -1568,7 +1573,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           setIsThinking(false);
           setMessages((prev) => [...prev, buildAiMessage(result)]);
           if (result.type === "customer_profile") {
-            setFocusedCustomer({ name: result.profile.name, phone: result.profile.phone });
+            setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
           }
         },
         onError: (err) => {
@@ -1696,8 +1701,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     // When a customer is locked in, extract the message hint from what the user typed.
     // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
     // Also handles bare messages like "let him know you're running late" (no em-dash)
+    // For cleaner entities, skip hint extraction — they route to handleQueryData, not handleTextClient
     let focusedMessageHint: string | null = null;
-    if (focusedCustomer) {
+    if (focusedCustomer && focusedCustomer.type === "customer") {
       const emDashIdx = text.indexOf(" — ");
       if (emDashIdx !== -1) {
         focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
@@ -1707,12 +1713,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       }
     }
 
+    // Build resolvedEntity for pill-selected entities
+    const resolvedEntityPayload = focusedCustomer
+      ? focusedCustomer.type === "customer"
+        ? ({ type: "customer" as const, phone: focusedCustomer.phone, name: focusedCustomer.name })
+        : ({ type: "cleaner" as const, cleanerProfileId: focusedCustomer.cleanerProfileId, name: focusedCustomer.name })
+      : undefined;
+
     chatMutation.mutate(
       {
         message: text,
-        // If a customer is already focused/locked in, pass their phone so the server
-        // skips name disambiguation entirely
-        ...(focusedCustomer ? { resolvedClientPhone: focusedCustomer.phone } : {}),
+        // Pass resolvedEntity for pill-selected entities (customer or cleaner)
+        ...(resolvedEntityPayload ? { resolvedEntity: resolvedEntityPayload } : {}),
+        // Legacy resolvedClientPhone kept for non-pill flows (disambiguation cards, etc.)
         // Pass the message hint so the LLM uses it instead of generating a generic message
         ...(focusedMessageHint ? { resolvedClientMessageHint: focusedMessageHint } : {}),
       },
@@ -1723,7 +1736,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           setMessages((prev) => [...prev, aiMsg]);
           // Lock suggestions to this customer when a profile is shown
           if (result.type === "customer_profile") {
-            setFocusedCustomer({ name: result.profile.name, phone: result.profile.phone });
+            setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
           }
         },
         onError: (err) => {
@@ -1814,7 +1827,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
             <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
-            <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">Recognized ✓</span>
+            <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
             <button
               type="button"
               onClick={() => setShowChangePopup(v => !v)}
@@ -1837,7 +1850,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </div>
             <button
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: allMatches[0].name, phone: allMatches[0].phone }); setAcQuery(null); }}
+              onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); setAcQuery(null); }}
               className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
             >
               Confirm
@@ -1854,7 +1867,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                 <button
                   key={m.phone}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: m.name, phone: m.phone }); setAcQuery(null); }}
+                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); setAcQuery(null); }}
                   className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
@@ -1882,7 +1895,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                 <button
                   key={m.phone}
                   type="button"
-                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer({ name: m.name, phone: m.phone }); setShowChangePopup(false); }}
+                  onMouseDown={(e) => { e.preventDefault(); setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); setShowChangePopup(false); }}
                   className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
@@ -1962,10 +1975,11 @@ type ServerResult =
   | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
   | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
   | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
-  | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string; totalCleans: number; lastJobDate: string | null }> }
+  | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }> }
   | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
+  | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
   | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> }
   | { type: "customer_profile"; profile: CustomerProfileCard };
 
@@ -2122,11 +2136,20 @@ function buildAiMessage(result: ServerResult): Message {
       ts,
     };
   }
+  if (result.type === "call_client_pending") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "call_client_pending", card: { vapiCallId: "", recipientName: result.recipientName, recipientPhone: result.recipientPhone } },
+      ts,
+    };
+  }
   // workflow
+  const workflowResult = result as { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } };
   return {
     id: uid(),
     role: "ai",
-    content: { type: "workflow", workflow: { summary: result.summary, steps: result.steps, expandable: result.expandable } },
+    content: { type: "workflow", workflow: { summary: workflowResult.summary, steps: workflowResult.steps, expandable: workflowResult.expandable } },
     ts,
   };
 }

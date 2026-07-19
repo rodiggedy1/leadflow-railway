@@ -4422,6 +4422,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
       const q = `%${input.query.trim()}%`;
       const rows = await db
         .select({
+          id: cleanerProfiles.id,
           name: cleanerProfiles.name,
           phone: cleanerProfiles.phone,
           email: cleanerProfiles.email,
@@ -4434,6 +4435,7 @@ Write ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
         cleaners: rows
           .filter(r => r.phone)
           .map(r => ({
+            cleanerProfileId: r.id,
             name: r.name,
             phone: r.phone!,
             email: r.email ?? null,
