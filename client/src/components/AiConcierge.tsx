@@ -1480,7 +1480,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const [showCommands, setShowCommands] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLDivElement>(null);
 
   // ── Selected entity (set when a pill is confirmed or a customer_profile card is shown) ──────────
   // Discriminated union: customer entities route via resolvedClientPhone; cleaner entities route via resolvedEntity
@@ -1530,37 +1530,45 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
-    // Auto-fill "Name " so user just types the rest
     const prefix = `${entity.name} `;
     setInput(prefix);
-    // Focus and place cursor at end
+    // Set innerHTML with blue name span + trailing text node, then place cursor at end
     setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.setSelectionRange(prefix.length, prefix.length);
-      }
+      const el = inputRef.current;
+      if (!el) return;
+      // Build: <span style="color:#818cf8;font-weight:600">Name </span>
+      el.innerHTML = `<span style="color:#818cf8;font-weight:600;">${entity.name} </span>`;
+      el.focus();
+      // Place cursor after the span
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.setStartAfter(el.firstChild!);
+      range.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
     }, 0);
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
+  const handleContentInput = (e: React.FormEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    // Extract plain text from contenteditable (strips HTML)
+    // Normalize: replace non-breaking spaces and trim trailing newlines added by contenteditable
+    const val = (el.innerText ?? "").replace(/\u00a0/g, " ").replace(/\n$/, "");
     setInput(val);
 
     // If a person is already locked, check if their name is still in the text.
-    // If not, clear the lock.
     if (focusedCustomer) {
       const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
       if (!val.toLowerCase().includes(firstName)) {
         setFocusedCustomer(null);
         setShowChangePopup(false);
       }
-      return; // don't re-trigger search while locked
+      return;
     }
 
-    // Debounce: extract 2-4 consecutive capitalized-looking words from the input
+    // Debounce name detection
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
     acDebounceRef.current = setTimeout(() => {
-      // Match sequences of 2-3 words that start with a capital letter (likely a name)
       const nameMatch = val.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/);
       if (nameMatch) {
         setAcQuery(nameMatch[1]);
@@ -1574,6 +1582,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const handleSuggestionSelect = (fullQuestion: string) => {
     setAcQuery(null);
     setInput("");
+    if (inputRef.current) inputRef.current.innerHTML = "";
     const text = fullQuestion.trim();
     if (!text) return;
     const userMsg: Message = {
@@ -1715,6 +1724,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setInput("");
     setAcQuery(null); // always clear autocomplete on send
     setIsThinking(true);
+    // Clear contenteditable innerHTML
+    if (inputRef.current) inputRef.current.innerHTML = "";
 
     // When a person is locked in, extract the message hint from what the user typed.
     // Format is "Name message" — strip the name prefix and use the rest as the hint.
@@ -1770,7 +1781,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     );
   }, [input, isThinking, chatMutation, focusedCustomer]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -1927,16 +1938,16 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
 
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
-          {/* Text input area */}
-          <textarea
+          {/* Text input area — contenteditable for rich blue-name highlight */}
+          <div
             ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={handleContentInput}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything or type a command..."
-            rows={2}
-            className="w-full bg-transparent text-white placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-            style={{ minHeight: 52 }}
+            data-placeholder="Ask anything or type a command..."
+            className="w-full bg-transparent text-white text-sm outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] empty:before:content-[attr(data-placeholder)] empty:before:text-gray-600 empty:before:pointer-events-none"
+            style={{ minHeight: 52, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
           />
           {/* Toolbar */}
           <div className="flex items-center justify-between px-3 pb-3 pt-1">
