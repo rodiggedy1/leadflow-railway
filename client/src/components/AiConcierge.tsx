@@ -1531,7 +1531,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setAcQuery(null);
     setShowChangePopup(false);
     // Auto-fill "Name — " so user just types the rest
-    const prefix = `${entity.name} `;
+    const prefix = `${entity.name} — `;
     setInput(prefix);
     // Focus and place cursor at end
     setTimeout(() => {
@@ -1953,7 +1953,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             placeholder="Ask anything or type a command..."
             rows={2}
             className={`w-full bg-transparent placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10 ${
-              focusedCustomer ? "text-transparent caret-transparent" : "text-white"
+              focusedCustomer ? "text-transparent caret-white" : "text-white"
             }`}
             style={{ minHeight: 52 }}
           />
