@@ -1537,10 +1537,32 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     // Debounce: extract 2-4 consecutive capitalized-looking words from the input
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
     acDebounceRef.current = setTimeout(() => {
-      // Match sequences of 2-4 consecutive words (case-insensitive) that look like a name
-      const nameMatch = val.match(/\b([a-zA-Z]+(?:\s+[a-zA-Z]+){1,3})\b/);
-      if (nameMatch && nameMatch[1].length >= 4) {
-        setAcQuery(nameMatch[1]);
+      // Strip common command/filler words from the start, then extract the remaining words as the name
+      const SKIP_WORDS = new Set([
+        "text", "call", "get", "send", "show", "find", "look", "check",
+        "what", "who", "when", "where", "how", "tell", "give", "me",
+        "jobs", "for", "the", "a", "an", "is", "are", "has", "have",
+        "today", "tomorrow", "about", "that", "i'm", "im", "running",
+        "late", "early", "now", "please", "can", "you", "their", "his", "her",
+      ]);
+      const words = val.trim().split(/\s+/);
+      // Find the first word that isn't a skip word — that's where the name starts
+      const nameWords: string[] = [];
+      let inName = false;
+      for (const w of words) {
+        const lower = w.toLowerCase().replace(/[^a-z]/g, "");
+        if (!inName && SKIP_WORDS.has(lower)) continue;
+        if (/^[a-zA-Z]{2,}$/.test(w)) {
+          inName = true;
+          nameWords.push(w);
+          if (nameWords.length >= 3) break; // max 3 name words
+        } else {
+          if (inName) break; // stop at non-alpha word
+        }
+      }
+      const query = nameWords.join(" ");
+      if (query.length >= 3) {
+        setAcQuery(query);
       } else {
         setAcQuery(null);
       }
