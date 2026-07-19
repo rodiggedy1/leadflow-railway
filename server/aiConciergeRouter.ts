@@ -1584,8 +1584,9 @@ export const aiConciergeRouter = router({
           return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, re.phone);
         }
         if (input.resolvedEntity.type === "cleaner") {
-          // Route directly to handleQueryData with resolved cleaner — no LLM extraction
-          return await handleQueryData(input.message, db, input.resolvedEntity);
+          // Pill = person already resolved. Just text them.
+          const messageHint = input.resolvedClientMessageHint ?? null;
+          return await handleTextCleaners(input.resolvedEntity.name, messageHint, db);
         }
       }
 

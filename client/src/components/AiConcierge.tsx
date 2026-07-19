@@ -1698,12 +1698,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setAcQuery(null); // always clear autocomplete on send
     setIsThinking(true);
 
-    // When a customer is locked in, extract the message hint from what the user typed.
+    // When a person is locked in, extract the message hint from what the user typed.
     // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
     // Also handles bare messages like "let him know you're running late" (no em-dash)
-    // For cleaner entities, skip hint extraction — they route to handleQueryData, not handleTextClient
     let focusedMessageHint: string | null = null;
-    if (focusedCustomer && focusedCustomer.type === "customer") {
+    if (focusedCustomer) {
       const emDashIdx = text.indexOf(" — ");
       if (emDashIdx !== -1) {
         focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
