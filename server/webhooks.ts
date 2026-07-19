@@ -2211,28 +2211,15 @@ async function handleCsInboundMessage(msg: any) {
     }).catch(err => console.error("[CS] tryDetectCleanerRunningLate error:", err));
   }
 
-  // ── Client status inquiry auto-handler ───────────────────────────────────
-  // When a non-cleaner client texts asking about their job status ("Is the team
-  // on the way?", "What time will they arrive?"), automatically:
-  //   1. Send an ack SMS: "Checking with your team, will text you back shortly."
-  //   2. Place a VAPI call to the assigned cleaner asking for their ETA.
-  //   3. When the call ends, reply to the client with the ETA.
-  // This runs async — does NOT block the rest of handleCsInboundMessage.
-  if (!isCleaner && inboundText.trim()) {
-    import("./clientStatusInquiryEngine").then(({ tryHandleClientStatusInquiry }) => {
-      tryHandleClientStatusInquiry({
-        db,
-        fromPhone,
-        fromPhoneDigits,
-        clientName: resolvedName,
-        inboundText,
-      }).then(result => {
-        if (result.triggered) {
-          console.log(`[CS] Client status inquiry triggered for ${fromPhone}. Session: ${result.sessionId}, VAPI call: ${result.vapiCallId ?? "none"}`);
-        }
-      }).catch(err => console.error("[CS] tryHandleClientStatusInquiry error:", err));
-    }).catch(err => console.error("[CS] import clientStatusInquiryEngine error:", err));
-  }
+  // ── Client status inquiry auto-handler ─── DISABLED ───────────────────────
+  // Customers texting 202-888-5362 were receiving automated AI responses.
+  // Disabled so all inbound CS messages go to staff for manual reply only.
+  // if (!isCleaner && inboundText.trim()) {
+  //   import("./clientStatusInquiryEngine").then(({ tryHandleClientStatusInquiry }) => {
+  //     tryHandleClientStatusInquiry({ db, fromPhone, fromPhoneDigits, clientName: resolvedName, inboundText })
+  //       .catch(err => console.error("[CS] tryHandleClientStatusInquiry error:", err));
+  //   }).catch(err => console.error("[CS] import clientStatusInquiryEngine error:", err));
+  // }
 
   const sessionSource = isCleaner ? "cs-inbound-cleaner" : "cs-inbound";
 
