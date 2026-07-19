@@ -1488,6 +1488,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     | { type: "customer"; name: string; phone: string }
     | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
   const [focusedCustomer, setFocusedCustomer] = useState<SelectedEntity | null>(null);
+  const [lockedNameLength, setLockedNameLength] = useState(0);
 
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
@@ -1530,8 +1531,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
-    // Auto-fill "Name — " so user just types the rest
-    const prefix = `${entity.name} — `;
+    // Auto-fill "Name " so user just types the rest
+    const prefix = `${entity.name} `;
+    setLockedNameLength(prefix.length); // name + trailing space
     setInput(prefix);
     // Focus and place cursor at end
     setTimeout(() => {
@@ -1552,6 +1554,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
       if (!val.toLowerCase().includes(firstName)) {
         setFocusedCustomer(null);
+        setLockedNameLength(0);
         setShowChangePopup(false);
       }
       return; // don't re-trigger search while locked
@@ -1931,16 +1934,16 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
           {/* Highlight overlay: renders name in blue, rest in white, behind the transparent textarea */}
           {focusedCustomer && (() => {
-            const prefix = `${focusedCustomer.name} — `;
-            const rest = input.startsWith(prefix) ? input.slice(prefix.length) : input;
+            const locked = input.slice(0, lockedNameLength);
+            const remainder = input.slice(lockedNameLength);
             return (
               <div
                 aria-hidden="true"
                 className="absolute inset-0 px-4 pt-3.5 pb-2 text-sm leading-relaxed pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
                 style={{ minHeight: 52, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
               >
-                <span className="text-indigo-400 font-semibold">{input.startsWith(prefix) ? prefix : ""}</span>
-                <span className="text-white">{input.startsWith(prefix) ? rest : input}</span>
+                <span className="text-indigo-400 font-semibold">{locked}</span>
+                <span className="text-white">{remainder}</span>
               </div>
             );
           })()}
@@ -1953,7 +1956,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             placeholder="Ask anything or type a command..."
             rows={2}
             className={`w-full bg-transparent placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10 ${
-              focusedCustomer ? "text-transparent caret-white" : "text-white"
+              focusedCustomer ? "text-transparent caret-transparent" : "text-white"
             }`}
             style={{ minHeight: 52 }}
           />
