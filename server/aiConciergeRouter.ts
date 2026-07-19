@@ -971,7 +971,12 @@ async function handleQueryData(
     messages: [
       {
         role: "system",
-        content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.`,
+        content: `Extract search entities from a dispatcher's question about cleaning jobs. Return JSON only.
+Rules:
+- customerName: the name of a CLIENT/CUSTOMER (the person whose home is being cleaned)
+- cleanerName: the name of a CLEANER, TEAM, or STAFF MEMBER (the person doing the cleaning). If the question is "jobs for [name]" or "what does [name] have today" and the name sounds like a person who works there (not a client), set cleanerName.
+- When in doubt about whether a name is a customer or cleaner, set BOTH fields with the same name so the system can search both.
+- dateHint: date reference like 'today', 'tomorrow', 'yesterday', 'July 10', else null`,
       },
       { role: "user", content: question },
     ],
@@ -1320,7 +1325,8 @@ async function handleGetEtaForCustomer(
     .limit(1);
 
   if (!job) {
-    return { type: "error", message: `No job found for ${clientName} today. They may not have a scheduled job.` };
+    // Fall back: maybe clientName is a cleaner/team name, not a customer
+    return await handleEtaUpdate(clientName, db);
   }
   if (!job.cleanerPhone) {
     return { type: "error", message: `Found ${job.customerName}'s job (${job.teamName ?? job.cleanerName}) but no phone number on file for the team.` };
