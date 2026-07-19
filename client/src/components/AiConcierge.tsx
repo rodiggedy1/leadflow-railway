@@ -1488,7 +1488,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     | { type: "customer"; name: string; phone: string }
     | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
   const [focusedCustomer, setFocusedCustomer] = useState<SelectedEntity | null>(null);
-  const [lockedNameLength, setLockedNameLength] = useState(0);
+  // ── Attached label flash ──────────────────────────────────────────────
+  const [showAttachedLabel, setShowAttachedLabel] = useState(false);
+  const attachedLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cleanup on unmount
+  useEffect(() => () => { if (attachedLabelTimerRef.current) clearTimeout(attachedLabelTimerRef.current); }, []);
 
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
@@ -1523,51 +1527,48 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   // ── Name recognition debounce timer ─────────────────────────────────────
   const acDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset pill highlight index when results change or pill closes
+  // ── flashAttachedLabel helper ─────────────────────────────────────────────
+  const flashAttachedLabel = useCallback(() => {
+    if (attachedLabelTimerRef.current) clearTimeout(attachedLabelTimerRef.current);
+    setShowAttachedLabel(true);
+    attachedLabelTimerRef.current = setTimeout(() => {
+      setShowAttachedLabel(false);
+      attachedLabelTimerRef.current = null;
+    }, 1200);
+  }, []);
+
+  // ── Auto-attach useEffect ─────────────────────────────────────────────────
   useEffect(() => {
-    setPillHighlightIndex(0);
-  }, [allMatches.length, showRecognitionPill]);
+    if (focusedCustomer || !acQuery || allMatches.length !== 1) return;
+    const normalizedQuery = acQuery.trim().toLowerCase();
+    const normalizedName = allMatches[0].name.trim().toLowerCase();
+    const words = normalizedQuery.split(/\s+/);
+    const isConfident = words.length >= 2 && normalizedName.startsWith(normalizedQuery);
+    if (!isConfident) return;
+    const m = allMatches[0];
+    setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null
+      ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone }
+      : { type: "customer", name: m.name, phone: m.phone });
+    setAcQuery(null);
+    setShowChangePopup(false);
+    flashAttachedLabel();
+    // Textarea is NOT touched
+  }, [allMatches, acQuery, focusedCustomer]);
+
   // Show change popup
   const [showChangePopup, setShowChangePopup] = useState(false);
-  // Keyboard highlight index for recognition pill
-  const [pillHighlightIndex, setPillHighlightIndex] = useState(0);
 
-  // ── Confirm pill: set entity + auto-fill name into input ─────────────────
-  type SelectedEntity = { type: "customer"; name: string; phone: string } | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
+  // ── Confirm pill: set entity (textarea NOT touched) ────────────────────────
   const confirmPill = (entity: SelectedEntity) => {
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
-    // Auto-fill "Name " so user just types the rest
-    const prefix = `${entity.name} `;
-    setLockedNameLength(prefix.length); // name + trailing space
-    setInput(prefix);
-    // Focus and place cursor at end
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.setSelectionRange(prefix.length, prefix.length);
-      }
-    }, 0);
+    flashAttachedLabel();
+    // Textarea is NOT touched
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setInput(val);
-
-    // If a person is already locked, skip all entity searching.
-    if (focusedCustomer) {
-      const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
-      if (!val.toLowerCase().includes(firstName)) {
-        setFocusedCustomer(null);
-        setLockedNameLength(0);
-        setShowChangePopup(false);
-      }
-      setAcQuery(null); // keep pill closed while entity is locked
-      return;
-    }
-
-    // Command-first entity parser: identify the command, search everything after it
+  // ── updateEntityRecognition: single source of truth for command parsing ────────
+  const updateEntityRecognition = useCallback((val: string) => {
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
     acDebounceRef.current = setTimeout(() => {
       const COMMAND_RE = /^(?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+(.+)/i;
@@ -1579,6 +1580,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         setAcQuery(null);
       }
     }, 200);
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+
+    // If a person is already locked, skip all entity searching.
+    if (focusedCustomer) {
+      setAcQuery(null);
+      return;
+    }
+
+    updateEntityRecognition(val);
   };
 
   // Clicking a suggestion fills the input with a full question and sends it
@@ -1728,17 +1742,10 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setIsThinking(true);
 
     // When a person is locked in, extract the message hint from what the user typed.
-    // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
-    // Also handles bare messages like "let him know you're running late" (no em-dash)
+    // The message is the full textarea text (entity is the chip, not part of the text)
     let focusedMessageHint: string | null = null;
     if (focusedCustomer) {
-      const emDashIdx = text.indexOf(" — ");
-      if (emDashIdx !== -1) {
-        focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
-      } else {
-        // Bare message with no em-dash — use the whole text as the hint
-        focusedMessageHint = text.trim();
-      }
+      focusedMessageHint = text.trim() || null;
     }
 
     // Build resolvedEntity for pill-selected entities
@@ -1788,33 +1795,6 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       e.preventDefault();
       handleSend();
       return;
-    }
-    // Keyboard navigation for recognition pill
-    if (showRecognitionPill && allMatches.length > 0) {
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setPillHighlightIndex(i => Math.min(i + 1, allMatches.length - 1));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setPillHighlightIndex(i => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        const m = allMatches[pillHighlightIndex] ?? allMatches[0];
-        confirmPill(m.isCleaner && m.cleanerProfileId != null
-          ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone }
-          : { type: "customer", name: m.name, phone: m.phone });
-        return;
-      }
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setAcQuery(null);
-        setPillHighlightIndex(0);
-        return;
-      }
     }
   };
 
@@ -1884,17 +1864,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </div>
             <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
             <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
+            {showAttachedLabel && <span className="text-green-400 text-[10px] font-semibold mr-1 transition-opacity duration-300">✓ Attached</span>}
             <button
               type="button"
-              onClick={() => setShowChangePopup(v => !v)}
-              className="text-indigo-400 hover:text-indigo-200 text-[11px] font-medium px-2 py-0.5 rounded hover:bg-indigo-500/20 transition-colors"
+              onClick={() => { setFocusedCustomer(null); setShowAttachedLabel(false); setShowChangePopup(false); updateEntityRecognition(input); }}
+              className="text-indigo-400 hover:text-red-400 text-[13px] font-bold px-1.5 py-0.5 rounded hover:bg-red-500/10 transition-colors leading-none"
+              aria-label="Remove attached person"
             >
-              Change
+              ✕
             </button>
           </div>
         )}
 
-        {/* ── Recognition pill: multiple matches ── */}
+        {/* ── Recognition pill: single match ── */}
         {showRecognitionPill && allMatches.length === 1 && (
           <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
             <div className="w-5 h-5 rounded-md bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
@@ -1904,21 +1886,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
               <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
             </div>
-            <span className="text-indigo-400 text-[10px] font-medium mr-1 hidden sm:inline">Tab ↑</span>
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); confirmPill(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); }}
-              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-            >
-              Select
-            </button>
           </div>
         )}
         {showRecognitionPill && allMatches.length > 1 && (
           <div className="mb-2 bg-[#1e2235] border border-indigo-500/25 rounded-xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/8 flex items-center justify-between">
+            <div className="px-3 py-2 border-b border-white/8">
               <p className="text-indigo-300 text-xs font-semibold">{allMatches.length} people found — who did you mean?</p>
-              <span className="text-indigo-400 text-[10px] font-medium hidden sm:inline">↑↓ navigate · Tab to select</span>
             </div>
             <div className="flex flex-col">
               {allMatches.slice(0, 4).map((m, idx) => (
@@ -1926,9 +1899,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   key={m.phone}
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
-                  className={`flex items-center gap-2.5 px-3 py-2.5 transition-colors text-left border-b border-white/5 last:border-0 ${
-                    idx === pillHighlightIndex ? "bg-indigo-500/20" : "hover:bg-indigo-500/10"
-                  }`}
+                  className="flex items-center gap-2.5 px-3 py-2.5 transition-colors text-left border-b border-white/5 last:border-0 hover:bg-indigo-500/10"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
                     {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
@@ -1972,21 +1943,6 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
 
         <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
-          {/* Highlight overlay: renders name in blue, rest in white, behind the transparent textarea */}
-          {focusedCustomer && (() => {
-            const locked = input.slice(0, lockedNameLength);
-            const remainder = input.slice(lockedNameLength);
-            return (
-              <div
-                aria-hidden="true"
-                className="absolute inset-0 px-4 pt-3.5 pb-2 text-sm leading-relaxed pointer-events-none whitespace-pre-wrap break-words overflow-hidden"
-                style={{ minHeight: 52, fontFamily: "inherit", fontSize: "inherit", lineHeight: "inherit" }}
-              >
-                <span className="text-indigo-400 font-semibold">{locked}</span>
-                <span className="text-white">{remainder}</span>
-              </div>
-            );
-          })()}
           {/* Text input area */}
           <textarea
             ref={inputRef}
@@ -1995,9 +1951,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className={`w-full bg-transparent placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10 ${
-              focusedCustomer ? "text-transparent caret-transparent" : "text-white"
-            }`}
+            className="w-full bg-transparent placeholder-gray-600 text-white text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
             style={{ minHeight: 52 }}
           />
           {/* Toolbar */}
