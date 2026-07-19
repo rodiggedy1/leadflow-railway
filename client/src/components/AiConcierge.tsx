@@ -1530,8 +1530,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
-    // Auto-fill "Name — " so user just types the rest
-    const prefix = `${entity.name} — `;
+    // Auto-fill "Name " so user just types the rest
+    const prefix = `${entity.name} `;
     setInput(prefix);
     // Focus and place cursor at end
     setTimeout(() => {
@@ -1716,16 +1716,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setAcQuery(null); // always clear autocomplete on send
     setIsThinking(true);
 
-    // When a person is locked in, extract the message hint from what the user typed.
-    // e.g. "Text Rohan Gilkes — let him know you're running late" → hint = "let him know you're running late"
-    // Also handles bare messages like "let him know you're running late" (no em-dash)
+    // When a person is locked in, extract the message hint.
+    // Strip the name prefix ("Name ") if present, otherwise use the whole text.
     let focusedMessageHint: string | null = null;
     if (focusedCustomer) {
-      const emDashIdx = text.indexOf(" — ");
-      if (emDashIdx !== -1) {
-        focusedMessageHint = text.slice(emDashIdx + 3).trim() || null;
+      const prefix = `${focusedCustomer.name} `;
+      if (text.startsWith(prefix)) {
+        focusedMessageHint = text.slice(prefix.length).trim() || null;
       } else {
-        // Bare message with no em-dash — use the whole text as the hint
         focusedMessageHint = text.trim();
       }
     }
@@ -1953,7 +1951,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             placeholder="Ask anything or type a command..."
             rows={2}
             className={`w-full bg-transparent placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] relative z-10 ${
-              focusedCustomer ? "text-transparent caret-white" : "text-white"
+              focusedCustomer ? "text-transparent caret-transparent" : "text-white"
             }`}
             style={{ minHeight: 52 }}
           />
