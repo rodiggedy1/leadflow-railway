@@ -1488,6 +1488,11 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     | { type: "customer"; name: string; phone: string }
     | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
   const [focusedCustomer, setFocusedCustomer] = useState<SelectedEntity | null>(null);
+  // ── Attached label flash ──────────────────────────────────────────────
+  const [showAttachedLabel, setShowAttachedLabel] = useState(false);
+  const attachedLabelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cleanup on unmount
+  useEffect(() => () => { if (attachedLabelTimerRef.current) clearTimeout(attachedLabelTimerRef.current); }, []);
 
   // ── Suggestions panel ──────────────────────────────────────────────────
   const [acQuery, setAcQuery] = useState<string | null>(null);
@@ -1521,53 +1526,73 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
   // ── Name recognition debounce timer ─────────────────────────────────────
   const acDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── flashAttachedLabel helper ─────────────────────────────────────────────
+  const flashAttachedLabel = useCallback(() => {
+    if (attachedLabelTimerRef.current) clearTimeout(attachedLabelTimerRef.current);
+    setShowAttachedLabel(true);
+    attachedLabelTimerRef.current = setTimeout(() => {
+      setShowAttachedLabel(false);
+      attachedLabelTimerRef.current = null;
+    }, 1200);
+  }, []);
+
+  // ── Auto-attach useEffect ─────────────────────────────────────────────────
+  useEffect(() => {
+    if (focusedCustomer || !acQuery || allMatches.length !== 1) return;
+    const normalizedQuery = acQuery.trim().toLowerCase();
+    const normalizedName = allMatches[0].name.trim().toLowerCase();
+    const words = normalizedQuery.split(/\s+/);
+    const isConfident = words.length >= 2 && normalizedName.startsWith(normalizedQuery);
+    if (!isConfident) return;
+    const m = allMatches[0];
+    setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null
+      ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone }
+      : { type: "customer", name: m.name, phone: m.phone });
+    setAcQuery(null);
+    setShowChangePopup(false);
+    flashAttachedLabel();
+    // Textarea is NOT touched
+  }, [allMatches, acQuery, focusedCustomer]);
+
   // Show change popup
   const [showChangePopup, setShowChangePopup] = useState(false);
 
-  // ── Confirm pill: set entity + auto-fill name into input ─────────────────
-  type SelectedEntity = { type: "customer"; name: string; phone: string } | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
+  // ── Confirm pill: set entity (textarea NOT touched) ────────────────────────
   const confirmPill = (entity: SelectedEntity) => {
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
-    // Auto-fill "Name " so user just types the rest
-    const prefix = `${entity.name} `;
-    setInput(prefix);
-    // Focus and place cursor at end
-    setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-        inputRef.current.setSelectionRange(prefix.length, prefix.length);
-      }
-    }, 0);
+    flashAttachedLabel();
+    // Textarea is NOT touched
   };
+
+  // ── updateEntityRecognition: single source of truth for command parsing ────────
+  const updateEntityRecognition = useCallback((val: string) => {
+    if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
+    acDebounceRef.current = setTimeout(() => {
+      const COMMAND_RE = /^(?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+(.+)/i;
+      const cmdMatch = val.match(COMMAND_RE);
+      if (cmdMatch) {
+        const entity = cmdMatch[1].trim();
+        setAcQuery(entity.length >= 2 ? entity : null);
+      } else {
+        setAcQuery(null);
+      }
+    }, 200);
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInput(val);
 
-    // If a person is already locked, check if their name is still in the text.
-    // If not, clear the lock.
+    // If a person is already locked, skip all entity searching.
     if (focusedCustomer) {
-      const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
-      if (!val.toLowerCase().includes(firstName)) {
-        setFocusedCustomer(null);
-        setShowChangePopup(false);
-      }
-      return; // don't re-trigger search while locked
+      setAcQuery(null);
+      return;
     }
 
-    // Debounce: extract 2-4 consecutive capitalized-looking words from the input
-    if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
-    acDebounceRef.current = setTimeout(() => {
-      // Match sequences of 2-3 words that start with a capital letter (likely a name)
-      const nameMatch = val.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/);
-      if (nameMatch) {
-        setAcQuery(nameMatch[1]);
-      } else {
-        setAcQuery(null);
-      }
-    }, 200);
+    updateEntityRecognition(val);
   };
 
   // Clicking a suggestion fills the input with a full question and sends it
@@ -1717,15 +1742,10 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setIsThinking(true);
 
     // When a person is locked in, extract the message hint from what the user typed.
-    // Format is "Name message" — strip the name prefix and use the rest as the hint.
+    // The message is the full textarea text (entity is the chip, not part of the text)
     let focusedMessageHint: string | null = null;
     if (focusedCustomer) {
-      const prefix = `${focusedCustomer.name} `;
-      if (text.startsWith(prefix)) {
-        focusedMessageHint = text.slice(prefix.length).trim() || null;
-      } else {
-        focusedMessageHint = text.trim();
-      }
+      focusedMessageHint = text.trim() || null;
     }
 
     // Build resolvedEntity for pill-selected entities
@@ -1774,6 +1794,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+      return;
     }
   };
 
@@ -1843,17 +1864,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </div>
             <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
             <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
+            {showAttachedLabel && <span className="text-green-400 text-[10px] font-semibold mr-1 transition-opacity duration-300">✓ Attached</span>}
             <button
               type="button"
-              onClick={() => setShowChangePopup(v => !v)}
-              className="text-indigo-400 hover:text-indigo-200 text-[11px] font-medium px-2 py-0.5 rounded hover:bg-indigo-500/20 transition-colors"
+              onClick={() => { setFocusedCustomer(null); setShowAttachedLabel(false); setShowChangePopup(false); updateEntityRecognition(input); }}
+              className="text-indigo-400 hover:text-red-400 text-[13px] font-bold px-1.5 py-0.5 rounded hover:bg-red-500/10 transition-colors leading-none"
+              aria-label="Remove attached person"
             >
-              Change
+              ✕
             </button>
           </div>
         )}
 
-        {/* ── Recognition pill: multiple matches ── */}
+        {/* ── Recognition pill: single match ── */}
         {showRecognitionPill && allMatches.length === 1 && (
           <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
             <div className="w-5 h-5 rounded-md bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
@@ -1863,13 +1886,6 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
               <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
             </div>
-            <button
-              type="button"
-              onMouseDown={(e) => { e.preventDefault(); confirmPill(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); }}
-              className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
-            >
-              Confirm
-            </button>
           </div>
         )}
         {showRecognitionPill && allMatches.length > 1 && (
@@ -1878,12 +1894,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               <p className="text-indigo-300 text-xs font-semibold">{allMatches.length} people found — who did you mean?</p>
             </div>
             <div className="flex flex-col">
-              {allMatches.slice(0, 4).map((m) => (
+              {allMatches.slice(0, 4).map((m, idx) => (
                 <button
                   key={m.phone}
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
-                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                  className="flex items-center gap-2.5 px-3 py-2.5 transition-colors text-left border-b border-white/5 last:border-0 hover:bg-indigo-500/10"
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
                     {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
@@ -1935,7 +1951,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onKeyDown={handleKeyDown}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className="w-full bg-transparent text-white placeholder-gray-600 text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+            className="w-full bg-transparent placeholder-gray-600 text-white text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
             style={{ minHeight: 52 }}
           />
           {/* Toolbar */}
