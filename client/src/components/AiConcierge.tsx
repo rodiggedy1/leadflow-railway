@@ -1522,8 +1522,15 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
   // ── Name recognition debounce timer ─────────────────────────────────────
   const acDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset pill highlight index when results change or pill closes
+  useEffect(() => {
+    setPillHighlightIndex(0);
+  }, [allMatches.length, showRecognitionPill]);
   // Show change popup
   const [showChangePopup, setShowChangePopup] = useState(false);
+  // Keyboard highlight index for recognition pill
+  const [pillHighlightIndex, setPillHighlightIndex] = useState(0);
 
   // ── Confirm pill: set entity + auto-fill name into input ─────────────────
   type SelectedEntity = { type: "customer"; name: string; phone: string } | { type: "cleaner"; cleanerProfileId: number; name: string; phone: string };
@@ -1548,8 +1555,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     const val = e.target.value;
     setInput(val);
 
-    // If a person is already locked, check if their name is still in the text.
-    // If not, clear the lock.
+    // If a person is already locked, skip all entity searching.
     if (focusedCustomer) {
       const firstName = focusedCustomer.name.split(" ")[0].toLowerCase();
       if (!val.toLowerCase().includes(firstName)) {
@@ -1557,16 +1563,18 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         setLockedNameLength(0);
         setShowChangePopup(false);
       }
-      return; // don't re-trigger search while locked
+      setAcQuery(null); // keep pill closed while entity is locked
+      return;
     }
 
-    // Debounce: extract 2-4 consecutive capitalized-looking words from the input
+    // Command-first entity parser: identify the command, search everything after it
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current);
     acDebounceRef.current = setTimeout(() => {
-      // Match sequences of 2-3 words that start with a capital letter (likely a name)
-      const nameMatch = val.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b/);
-      if (nameMatch) {
-        setAcQuery(nameMatch[1]);
+      const COMMAND_RE = /^(?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+(.+)/i;
+      const cmdMatch = val.match(COMMAND_RE);
+      if (cmdMatch) {
+        const entity = cmdMatch[1].trim();
+        setAcQuery(entity.length >= 2 ? entity : null);
       } else {
         setAcQuery(null);
       }
@@ -1779,6 +1787,34 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+      return;
+    }
+    // Keyboard navigation for recognition pill
+    if (showRecognitionPill && allMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setPillHighlightIndex(i => Math.min(i + 1, allMatches.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setPillHighlightIndex(i => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const m = allMatches[pillHighlightIndex] ?? allMatches[0];
+        confirmPill(m.isCleaner && m.cleanerProfileId != null
+          ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone }
+          : { type: "customer", name: m.name, phone: m.phone });
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setAcQuery(null);
+        setPillHighlightIndex(0);
+        return;
+      }
     }
   };
 
@@ -1868,27 +1904,31 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
               <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
             </div>
+            <span className="text-indigo-400 text-[10px] font-medium mr-1 hidden sm:inline">Tab ↑</span>
             <button
               type="button"
               onMouseDown={(e) => { e.preventDefault(); confirmPill(allMatches[0].isCleaner && allMatches[0].cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: allMatches[0].cleanerProfileId, name: allMatches[0].name, phone: allMatches[0].phone } : { type: "customer", name: allMatches[0].name, phone: allMatches[0].phone }); }}
               className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
             >
-              Confirm
+              Select
             </button>
           </div>
         )}
         {showRecognitionPill && allMatches.length > 1 && (
           <div className="mb-2 bg-[#1e2235] border border-indigo-500/25 rounded-xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/8">
+            <div className="px-3 py-2 border-b border-white/8 flex items-center justify-between">
               <p className="text-indigo-300 text-xs font-semibold">{allMatches.length} people found — who did you mean?</p>
+              <span className="text-indigo-400 text-[10px] font-medium hidden sm:inline">↑↓ navigate · Tab to select</span>
             </div>
             <div className="flex flex-col">
-              {allMatches.slice(0, 4).map((m) => (
+              {allMatches.slice(0, 4).map((m, idx) => (
                 <button
                   key={m.phone}
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
-                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                  className={`flex items-center gap-2.5 px-3 py-2.5 transition-colors text-left border-b border-white/5 last:border-0 ${
+                    idx === pillHighlightIndex ? "bg-indigo-500/20" : "hover:bg-indigo-500/10"
+                  }`}
                 >
                   <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
                     {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
