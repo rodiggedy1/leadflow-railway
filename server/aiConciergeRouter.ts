@@ -654,7 +654,8 @@ function buildPaymentSms(firstName: string, linkUrl: string): string {
 async function handleSendPaymentLink(
   clientName: string | null,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
-  resolvedClientPhone?: string
+  resolvedClientPhone?: string,
+  resolvedClientName?: string
 ): Promise<ConciergeResult> {
   if (!clientName && !resolvedClientPhone) {
     return { type: "error", message: "Please specify a client name to send the payment link to." };
@@ -665,17 +666,41 @@ async function handleSendPaymentLink(
   let recipientAddress: string | null = null;
 
   if (resolvedClientPhone) {
-    // Agent already picked from disambiguation
-    const rows = await db
-      .select({ phone: completedJobs.phone, name: completedJobs.name, address: completedJobs.address })
-      .from(completedJobs)
-      .where(like(completedJobs.phone, `%${resolvedClientPhone}%`))
-      .limit(1);
-    const client = rows[0];
-    if (!client) return { type: "error", message: "Client not found." };
+    // TODO: Consolidate phone-based resolution into a shared resolveCustomerContext()
+    // helper used by handleCallPerson and handleSendPaymentLink to prevent this
+    // class of bug from recurring.
+
+    // Chip is the authoritative identity — use phone and name directly.
+    // Only look up the address, which the chip does not carry.
     recipientPhone = resolvedClientPhone;
-    recipientName = client.name ?? resolvedClientPhone;
-    recipientAddress = client.address ?? null;
+    recipientName = resolvedClientName ?? resolvedClientPhone;
+
+    // Normalize to last-10-digits for the address lookup (same convention used throughout)
+    const phone10 = resolvedClientPhone.replace(/\D/g, "").slice(-10);
+
+    // 1. Try completedJobs for address
+    const completedRow = await db
+      .select({ address: completedJobs.address })
+      .from(completedJobs)
+      .where(like(completedJobs.phone, `%${phone10}%`))
+      .orderBy(desc(completedJobs.jobDate))
+      .limit(1);
+    recipientAddress = completedRow[0]?.address ?? null;
+
+    // 2. Fall back to cleanerJobs if completedJobs had no address
+    if (!recipientAddress) {
+      const liveRow = await db
+        .select({ jobAddress: cleanerJobs.jobAddress })
+        .from(cleanerJobs)
+        .where(like(cleanerJobs.customerPhone, `%${phone10}%`))
+        .orderBy(desc(cleanerJobs.jobDate))
+        .limit(1);
+      recipientAddress = liveRow[0]?.jobAddress ?? null;
+    }
+
+    if (!recipientAddress) {
+      return { type: "error", message: "I found the customer but couldn't locate a service address to generate a payment link." };
+    }
   } else {
     // Search by name — same dual-table logic as searchCustomers (@ mentions)
     const q = `%${(clientName ?? "").trim()}%`;
@@ -1614,7 +1639,7 @@ export const aiConciergeRouter = router({
       if (intent.action === "send_payment_link") {
         // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
         return re?.type === "customer"
-          ? await handleSendPaymentLink(null, db, re.phone)
+          ? await handleSendPaymentLink(null, db, re.phone, re.name)
           : await handleSendPaymentLink(intent.clientName, db);
       }
 
