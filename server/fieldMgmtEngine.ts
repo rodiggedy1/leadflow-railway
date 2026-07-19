@@ -1298,7 +1298,7 @@ export async function sendClientPreJobSms(cleanerJobId: number): Promise<void> {
   const trackingLink = await ensureTrackerToken(cleanerJobId);
 
   const msg = [
-    `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} 😊`,
+    `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} with a 2 hour arrival window to allow for traffic, weather, parking, and surprises at previous projects. 😊`,
     ``,
     `You can follow your cleaning here: ${trackingLink}`,
     ``,
@@ -1396,7 +1396,7 @@ export async function runClientPreJobNotifications(): Promise<{ checked: number;
     const trackingLink = await ensureTrackerToken(job.id);
 
     const msg = [
-      `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} 😊`,
+      `Hey ${clientFirstName} — you're all set for your home cleaning today at ${timeStr} with a 2 hour arrival window to allow for traffic, weather, parking, and surprises at previous projects. 😊`,
       ``,
       `You can follow your cleaning here: ${trackingLink}`,
       ``,
