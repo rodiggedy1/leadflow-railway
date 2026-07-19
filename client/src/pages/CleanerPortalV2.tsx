@@ -841,18 +841,18 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
               </div>
             </div>
             <h2 className="text-white text-xl font-black uppercase tracking-wide leading-tight">
-              ⚠️ ARE YOU AT THE DOOR?
+              {t('v2.nav.arrivedConfirmHeading')}
             </h2>
           </div>
 
           {/* Body */}
           <div className="px-6 py-5 space-y-4">
             <p className="text-white text-base font-bold text-center leading-snug">
-              DO NOT tap Arrived until you are standing at the customer's door.
+              {t('v2.nav.arrivedConfirmBody')}
             </p>
             <div className="bg-red-950/60 border border-red-500/50 rounded-xl px-4 py-3">
               <p className="text-red-300 text-sm font-semibold text-center">
-                Tapping this button will immediately send a message to the client.
+                {t('v2.nav.arrivedConfirmWarning')}
               </p>
             </div>
 
@@ -873,14 +873,14 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
               className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-4 rounded-xl transition-all flex items-center justify-center gap-2"
             >
               {statusMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              Yes, I'm at the door
+              {t('v2.nav.arrivedConfirmYes')}
             </button>
 
             <button
               onClick={() => setShowArrivedConfirm(false)}
               className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm py-3 rounded-xl transition-all"
             >
-              Not yet — go back
+              {t('v2.nav.arrivedConfirmNo')}
             </button>
           </div>
         </DialogContent>
