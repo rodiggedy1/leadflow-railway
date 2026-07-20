@@ -597,12 +597,12 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
   // After user taps START NAVIGATION, show the pulsing "I've Arrived" CTA
   const LAUNCHED_KEY = `portal_v2_launched_${cleanerJobId ?? 'mock'}`;
   const [hasLaunched, setHasLaunched] = useState(() => {
-    try { return sessionStorage.getItem(LAUNCHED_KEY) === '1'; } catch { return false; }
+    try { return localStorage.getItem(LAUNCHED_KEY) === '1'; } catch { return false; }
   });
   // When user returns from maps (tab becomes visible again), pulse the arrived button
-  // If hasLaunched is already true on mount (restored from sessionStorage), pulse immediately
+  // If hasLaunched is already true on mount (restored from localStorage), pulse immediately
   const [returnedFromMaps, setReturnedFromMaps] = useState(() => {
-    try { return sessionStorage.getItem(LAUNCHED_KEY) === '1'; } catch { return false; }
+    try { return localStorage.getItem(LAUNCHED_KEY) === '1'; } catch { return false; }
   });
   const etaQuery = trpc.cleaner.getDriveEta.useQuery(
     { originLat: coords?.lat ?? 0, originLng: coords?.lng ?? 0, destination: jobAddress },
@@ -639,7 +639,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
     // 1. Launch maps immediately — don't block the user on GPS
     window.open(url, "_blank");
     setHasLaunched(true);
-    try { sessionStorage.setItem(LAUNCHED_KEY, '1'); } catch {}
+    try { localStorage.setItem(LAUNCHED_KEY, '1'); } catch {}
     setTimeout(() => setReturnedFromMaps(true), 1500);
     // 2. Fetch fresh GPS coords (user-gesture triggered — no auto-prompt on mount)
     const freshCoords = await requestLocation();
@@ -943,7 +943,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
             <button
               onClick={() => {
                 setShowArrivedConfirm(false);
-                try { sessionStorage.removeItem(LAUNCHED_KEY); } catch {}
+                try { localStorage.removeItem(LAUNCHED_KEY); } catch {}
                 // Delay onComplete by one frame so the dialog animates out before the
                 // parent re-renders and unmounts this component.
                 setTimeout(() => {
