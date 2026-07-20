@@ -948,6 +948,7 @@ async function handleSendPaymentLink(
   const paymentLinkUrl = `${baseUrl}/pay/${token}${qs ? `?${qs}` : ""}`;
 
   const firstName = recipientName.split(" ")[0];
+  console.log("[PaymentLink] recipientName:", JSON.stringify(recipientName), "firstName:", JSON.stringify(firstName));
   const smsText = buildPaymentSms(firstName, paymentLinkUrl);
 
   return {
