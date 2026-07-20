@@ -1426,35 +1426,43 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
 // ─── Command chip ─────────────────────────────────────────────────────────────
 
-const COMMANDS = [
-  { label: "ETA update", icon: Clock, description: "Call team + text client with ETA" },
-  { label: "Entry info", icon: MapPin, description: "Get entry info and send to team" },
-  { label: "Reschedule", icon: Calendar, description: "Reschedule a job and notify all parties" },
-  { label: "Call team", icon: Phone, description: "Initiate a call to the assigned team" },
-  { label: "Text client", icon: MessageSquare, description: "Send SMS to client" },
-  { label: "No show alert", icon: AlertTriangle, description: "Alert team about a no-show" },
+const EXAMPLES = [
+  { emoji: "🚗", label: "ETA update", example: "Update ETA for Maria's team" },
+  { emoji: "📞", label: "Call client", example: "Call Sarah about her upcoming clean" },
+  { emoji: "💬", label: "Text client", example: "Text Jennifer I'll be 15 min late" },
+  { emoji: "📨", label: "Text team", example: "Text Maria's team to bring extra supplies" },
+  { emoji: "📈", label: "Revenue today", example: "Revenue today" },
+  { emoji: "💳", label: "Payment link", example: "Send Alex a payment link" },
+  { emoji: "👤", label: "Customer profile", example: "Pull up Jennifer's profile" },
+  { emoji: "⏰", label: "Check ETA", example: "When is Sarah's cleaner arriving?" },
+];
+
+const HINT_EXAMPLES = [
+  'Try: "Update ETA for Maria\'s team"',
+  'Try: "Text Jennifer I\'ll be 15 min late"',
+  'Try: "Revenue today"',
+  'Try: "Send Alex a payment link"',
+  'Try: "Pull up Jennifer\'s profile"',
+  'Try: "Call Sarah about her upcoming clean"',
 ];
 
 function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
-    <div className="absolute bottom-full left-0 mb-2 w-80 bg-[#1a1d2e] border border-white/15 rounded-xl shadow-2xl overflow-hidden z-50">
-      <div className="px-3 py-2 border-b border-white/10">
-        <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Commands</p>
+    <div className="absolute bottom-full left-0 mb-2 w-[340px] bg-[#1a1d2e] border border-white/15 rounded-xl shadow-2xl overflow-hidden z-50">
+      <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+        <p className="text-sm text-white font-semibold">Things you can ask</p>
+        <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-lg leading-none">✕</button>
       </div>
-      <div className="py-1">
-        {COMMANDS.map((cmd) => (
+      <div className="grid grid-cols-2 gap-2 p-3">
+        {EXAMPLES.map((ex) => (
           <button
-            key={cmd.label}
-            onClick={() => { onSelect(cmd.label); onClose(); }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/8 transition-colors text-left"
+            key={ex.label}
+            onClick={() => { onSelect(ex.example); onClose(); }}
+            className="flex flex-col gap-1 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-indigo-600/15 hover:border-indigo-500/40 transition-colors text-left"
           >
-            <span className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
-              <cmd.icon className="w-3.5 h-3.5 text-indigo-400" />
-            </span>
-            <div>
-              <p className="text-sm text-white font-medium">{cmd.label}</p>
-              <p className="text-xs text-gray-500">{cmd.description}</p>
-            </div>
+            <span className="text-lg leading-none">{ex.emoji}</span>
+            <p className="text-xs text-white font-semibold mt-1">{ex.label}</p>
+            <p className="text-[11px] text-gray-400 leading-snug">{ex.example}</p>
           </button>
         ))}
       </div>
@@ -1478,6 +1486,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   ]);
   const [input, setInput] = useState("");
   const [showCommands, setShowCommands] = useState(false);
+  const [hintIdx, setHintIdx] = useState(0);
+  const inputFocused = useRef(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!inputFocused.current && !input) setHintIdx((i) => (i + 1) % HINT_EXAMPLES.length);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [input]);
   const [isThinking, setIsThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -1949,6 +1965,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
+            onFocus={() => { inputFocused.current = true; }}
+            onBlur={() => { inputFocused.current = false; }}
             placeholder="Ask anything or type a command..."
             rows={2}
             className="w-full bg-transparent placeholder-gray-600 text-white text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
@@ -1990,6 +2008,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                 : <Send className="w-3.5 h-3.5 text-white" />}
             </button>
           </div>
+        {!input && (
+          <p className="px-4 pb-2 text-[11px] text-gray-600 transition-all">💡 {HINT_EXAMPLES[hintIdx]}</p>
+        )}
         </div>
       </div>
     </div>
