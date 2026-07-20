@@ -1876,8 +1876,14 @@ export const qualityRouter = router({
               checklistItems: parsedChecklist ? JSON.stringify(parsedChecklist) : null,
               requestedTeam: booking.requestedTeam || null,
               extras: booking.extras.length > 0 ? JSON.stringify(booking.extras) : null,
+              // Payment / card status from Launch27 (additive)
+              hasStripeCard: booking.hasStripeCard ? 1 : 0,
+              stripeCustomerId: booking.stripeCustomerId ?? null,
+              paymentBrand: booking.paymentBrand ?? null,
+              paymentLast4: booking.paymentLast4 ?? null,
+              chargesOnHoldCents: booking.chargesOnHoldCents ?? 0,
+              chargesOutstandingCents: booking.chargesOutstandingCents ?? 0,
             };
-
             if (existing) {
               const previousStatus = existing.bookingStatus;
               // CRITICAL: Never let a Launch27 sync overwrite a cleaner-set terminal status.
