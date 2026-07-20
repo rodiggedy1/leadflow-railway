@@ -7,7 +7,7 @@
  * Design: Dark navy (#0f172a / #1e293b), green CTA (#22c55e), white text.
  */
 import { useState, useRef, useCallback, useEffect, useMemo, createContext, useContext } from "react";
-import { Loader2, MapPin, CheckCircle2, Camera, ChevronLeft, ChevronRight, Navigation, CalendarDays, Calendar, FileText, X, LogOut, AlertTriangle } from "lucide-react";
+import { Loader2, MapPin, CheckCircle2, Camera, Navigation, CalendarDays, Calendar, FileText, X, LogOut, AlertTriangle } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -1572,24 +1572,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
           </button>
         )}
         {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} cleanerJobId={job.cleanerJobId} onClose={() => setNotesOpen(false)} />}
-        {/* Dev nav — step through for testing; hidden when any bottom sheet is open */}
-        <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
-          <button
-            onClick={() => setStepIndex(i => Math.max(0, i - 1))}
-            className="bg-slate-700 text-white p-2 rounded-lg"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="bg-slate-700 text-white px-3 py-2 rounded-lg text-xs font-mono">
-            {stepIndex + 1}/{steps.length}
-          </span>
-          <button
-            onClick={() => setStepIndex(i => Math.min(steps.length - 1, i + 1))}
-            className="bg-slate-700 text-white p-2 rounded-lg"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+
       </div>
     </div>
   );
