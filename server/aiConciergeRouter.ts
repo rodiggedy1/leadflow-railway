@@ -948,7 +948,6 @@ async function handleSendPaymentLink(
   const paymentLinkUrl = `${baseUrl}/pay/${token}${qs ? `?${qs}` : ""}`;
 
   const firstName = recipientName.split(" ")[0];
-  console.log("[PaymentLink] recipientName:", JSON.stringify(recipientName), "firstName:", JSON.stringify(firstName));
   const smsText = buildPaymentSms(firstName, paymentLinkUrl);
 
   return {
@@ -1697,6 +1696,7 @@ export const aiConciergeRouter = router({
         resolvedClientPhone: z.string().optional(),
         resolvedClientMessageHint: z.string().nullable().optional(),
         resolvedPaymentLink: z.boolean().optional(),
+        resolvedClientName: z.string().optional(),
         resolvedCallClient: z.boolean().optional(),
         resolvedCallPersonName: z.string().optional(),
         resolvedCallQuestionHint: z.string().nullable().optional(),
@@ -1717,7 +1717,7 @@ export const aiConciergeRouter = router({
       // Legacy resolvedClientPhone path (disambiguation card flows — entity already resolved upstream)
       if (input.resolvedClientPhone) {
         if (input.resolvedPaymentLink) {
-          const plResult = await handleSendPaymentLink(null, db, input.resolvedClientPhone);
+          const plResult = await handleSendPaymentLink(null, db, input.resolvedClientPhone, input.resolvedClientName);
           if (plResult.type === "payment_link_confirm") return { ...plResult, command: input.message };
           return plResult;
         }

@@ -1690,6 +1690,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         resolvedClientPhone: phone,
         resolvedClientMessageHint: (isPaymentLink || isCallClient) ? null : messageHint,
         resolvedPaymentLink: isPaymentLink,
+        resolvedClientName: (isPaymentLink || isCallClient) ? name : undefined,
         resolvedCallClient: isCallClient,
         resolvedCallPersonName: isCallClient ? name : undefined,
         resolvedCallQuestionHint: callQuestionHint,
