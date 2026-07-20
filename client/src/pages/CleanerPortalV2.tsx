@@ -1573,7 +1573,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
         )}
         {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} cleanerJobId={job.cleanerJobId} onClose={() => setNotesOpen(false)} />}
         {/* Dev nav — step through for testing; hidden when any bottom sheet is open */}
-        <div className={`fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50 ${showEtaPicker || showConfirm ? 'hidden' : ''}`}>
+        <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
           <button
             onClick={() => setStepIndex(i => Math.max(0, i - 1))}
             className="bg-slate-700 text-white p-2 rounded-lg"
