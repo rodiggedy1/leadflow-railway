@@ -303,6 +303,53 @@ async function runStartupMigrations() {
   } catch (err) {
     console.error('[Migration] call_log bilingual transcript columns failed (non-fatal):', err);
   }
+  // ── madison_missions — AI Concierge server-persisted audit trail ───────────────
+  // CREATE TABLE IF NOT EXISTS is idempotent — safe to run on every deploy.
+  try {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS madison_missions (
+        id INT AUTO_INCREMENT NOT NULL,
+        missionId VARCHAR(64) NOT NULL,
+        agentId INT NOT NULL,
+        command TEXT NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        status_mission ENUM('completed','failed','blocked') NOT NULL,
+        source_mission ENUM('chat','scheduled','automatic','api') NOT NULL DEFAULT 'chat',
+        summary TEXT NOT NULL,
+        steps JSON NOT NULL,
+        stats JSON NOT NULL,
+        startedAt BIGINT NOT NULL,
+        completedAt BIGINT NOT NULL,
+        archivedAt TIMESTAMP NULL,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT madison_missions_id PRIMARY KEY (id),
+        CONSTRAINT madison_missions_missionId_unique UNIQUE (missionId)
+      )
+    `));
+    console.log('[Migration] madison_missions table: OK');
+  } catch (err) {
+    console.error('[Migration] madison_missions table failed (non-fatal):', err);
+  }
+  try {
+    const [idxRows] = await db.execute(sql.raw(`
+      SELECT COUNT(*) AS cnt
+      FROM information_schema.statistics
+      WHERE table_schema = DATABASE()
+        AND table_name = 'madison_missions'
+        AND index_name = 'idx_madison_missions_agent_archived_created'
+    `)) as any;
+    const idxExists = Array.isArray(idxRows) && idxRows[0]?.cnt > 0;
+    if (!idxExists) {
+      await db.execute(sql.raw(
+        `CREATE INDEX idx_madison_missions_agent_archived_created ON madison_missions (agentId, archivedAt, createdAt)`
+      ));
+      console.log('[Migration] madison_missions index: created');
+    } else {
+      console.log('[Migration] madison_missions index: already exists, skipped');
+    }
+  } catch (err) {
+    console.error('[Migration] madison_missions index failed (non-fatal):', err);
+  }
 }
 async function startServer() {
   // Run startup migrations before anything else touches the DB

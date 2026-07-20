@@ -3632,3 +3632,45 @@ export const responseTemplates = mysqlTable("response_templates", {
 });
 export type ResponseTemplate = typeof responseTemplates.$inferSelect;
 export type InsertResponseTemplate = typeof responseTemplates.$inferInsert;
+
+// ── Madison Mission History ───────────────────────────────────────────────────
+/**
+ * madisonMissions — server-persisted audit trail of every delegation completed
+ * by the AI Concierge (Madison). Rows are written by the server at the moment
+ * the action completes; the client only reads and caches them.
+ *
+ * Retrieval pattern: WHERE agentId = ? AND archivedAt IS NULL ORDER BY createdAt DESC
+ * => composite index on (agentId, archivedAt, createdAt)
+ */
+export const madisonMissions = mysqlTable("madison_missions", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Server-generated UUID -- stable identifier shared with the client */
+  missionId: varchar("missionId", { length: 64 }).notNull().unique(),
+  /** FK to agents table -- NEVER accepted from client input */
+  agentId: int("agentId").notNull(),
+  /** Original user command exactly as typed (e.g. "Text everyone working tomorrow") */
+  command: text("command").notNull(),
+  /** Human-readable mission title */
+  title: varchar("title", { length: 255 }).notNull(),
+  /** Terminal status of the mission */
+  status: mysqlEnum("status_mission", ["completed", "failed", "blocked"]).notNull(),
+  /** What triggered this mission */
+  source: mysqlEnum("source_mission", ["chat", "scheduled", "automatic", "api"]).default("chat").notNull(),
+  /** One-sentence summary shown in collapsed card */
+  summary: text("summary").notNull(),
+  /** MissionStep[] -- serialized as JSON */
+  steps: json("steps").notNull(),
+  /** MissionStats -- { total, completed, failed, skipped, waiting } */
+  stats: json("stats").notNull(),
+  /** Unix ms when the action started */
+  startedAt: bigint("startedAt", { mode: "number" }).notNull(),
+  /** Unix ms when the action completed */
+  completedAt: bigint("completedAt", { mode: "number" }).notNull(),
+  /** Set to NOW() when agent archives their mission history; NULL = active */
+  archivedAt: timestamp("archivedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => [
+  index("idx_madison_missions_agent_archived_created").on(t.agentId, t.archivedAt, t.createdAt),
+]);
+export type MadisonMission = typeof madisonMissions.$inferSelect;
+export type InsertMadisonMission = typeof madisonMissions.$inferInsert;

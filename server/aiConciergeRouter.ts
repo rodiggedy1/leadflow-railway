@@ -17,12 +17,13 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls } from "../drizzle/schema";
-import { eq, ne, and, inArray, like, or, desc, gte, sql } from "drizzle-orm";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions } from "../drizzle/schema";
+import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { randomBytes } from "crypto";
 import { sendSms } from "./openphone";
+import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 
@@ -92,6 +93,57 @@ function createMissionMetadata({
   };
 }
 
+// ── Mission persistence ──────────────────────────────────────────────────────
+
+/**
+ * Persists a completed mission to the madison_missions table.
+ * MUST be called only after the external side effect (SMS/payment) has already succeeded.
+ * If persistence fails, logs + alerts the owner but does NOT throw — the caller must
+ * return missionPersistenceError: true in that case.
+ *
+ * @returns the saved MissionMetadata on success, or null on failure.
+ */
+async function createAndSaveMission(
+  mission: MissionMetadata,
+  agentId: number,
+  command: string,
+  source: "chat" | "scheduled" | "automatic" | "api" = "chat"
+): Promise<MissionMetadata | null> {
+  try {
+    const db = await getDb();
+    if (!db) {
+      console.error("[MissionPersistence] DB unavailable — mission not saved", mission.missionId);
+      notifyOwner({
+        title: "Mission persistence failed (no DB)",
+        content: `Mission "${mission.missionTitle}" (${mission.missionId}) could not be saved — DB unavailable.`,
+      }).catch(() => {});
+      return null;
+    }
+    await db.insert(madisonMissions).values({
+      missionId: mission.missionId,
+      agentId,
+      command: command.trim().slice(0, 2000),
+      title: mission.missionTitle,
+      status: mission.missionStatus,
+      source,
+      summary: mission.missionSummary,
+      steps: mission.missionSteps as any,
+      stats: mission.missionStats as any,
+      startedAt: new Date(mission.missionStartedAt).getTime(),
+      completedAt: new Date(mission.missionCompletedAt).getTime(),
+    });
+    return mission;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[MissionPersistence] Insert failed:", msg, "missionId:", mission.missionId);
+    notifyOwner({
+      title: "Mission persistence failed",
+      content: `Mission "${mission.missionTitle}" (${mission.missionId}) by agent ${agentId} could not be saved.\nError: ${msg}`,
+    }).catch(() => {});
+    return null;
+  }
+}
+
 // ── Result types ──────────────────────────────────────────────────────────────
 
 interface EtaPendingResult {
@@ -135,6 +187,8 @@ interface BulkSmsConfirmResult {
   recipients: BulkSmsRecipient[];
   /** AI-drafted message — agent can edit before sending */
   draftMessage: string;
+  /** Original user command — carried through to sendBulkSms for mission persistence */
+  command?: string;
 }
 
 /** Returned after agent confirms and messages are sent */
@@ -147,7 +201,9 @@ interface BulkSmsSentResult {
     success: boolean;
     error?: string;
   }>;
-  mission?: MissionMetadata;
+  mission?: MissionMetadata | null;
+  /** True when SMS succeeded but DB persistence failed — client should still show success */
+  missionPersistenceError?: boolean;
 }
 
 /** Returned when a client name search returns multiple matches — agent must pick one */
@@ -175,6 +231,8 @@ export interface PaymentLinkConfirmResult {
   expiresAt: number;
   /** Pre-filled SMS text with first name and link already substituted */
   smsText: string;
+  /** Original user command — carried through to sendPaymentLinkSms for mission persistence */
+  command?: string;
 }
 
 /** Returned when concierge is about to call a client — agent must confirm script before firing */
@@ -205,7 +263,9 @@ export interface PaymentLinkSentResult {
   paymentLinkUrl: string;
   success: boolean;
   error?: string;
-  mission?: MissionMetadata;
+  mission?: MissionMetadata | null;
+  /** True when SMS succeeded but DB persistence failed — client should still show success */
+  missionPersistenceError?: boolean;
 }
 
 /** Returned when the concierge answers a natural-language query about today's jobs */
@@ -1660,12 +1720,16 @@ export const aiConciergeRouter = router({
       // Legacy resolvedClientPhone path (disambiguation card flows — entity already resolved upstream)
       if (input.resolvedClientPhone) {
         if (input.resolvedPaymentLink) {
-          return await handleSendPaymentLink(null, db, input.resolvedClientPhone);
+          const plResult = await handleSendPaymentLink(null, db, input.resolvedClientPhone);
+          if (plResult.type === "payment_link_confirm") return { ...plResult, command: input.message };
+          return plResult;
         }
         if (input.resolvedCallClient) {
           return await handleCallPerson(null, input.resolvedCallQuestionHint ?? null, db, input.resolvedClientPhone, input.resolvedCallPersonName);
         }
-        return await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
+        const textClientResult = await handleTextClient(null, input.resolvedClientMessageHint ?? null, db, input.resolvedClientPhone);
+        if (textClientResult.type === "bulk_sms_confirm") return { ...textClientResult, command: input.message };
+        return textClientResult;
       }
 
       // resolvedEntity = chip-attached person (already resolved by the UI).
@@ -1686,23 +1750,35 @@ export const aiConciergeRouter = router({
 
       if (intent.action === "text_cleaners") {
         // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
-        return re?.type === "cleaner"
+        const textCleanersResult = re?.type === "cleaner"
           ? await handleTextCleaners(re.name, intent.messageHint, db)
           : await handleTextCleaners(intent.targetHint, intent.messageHint, db);
+        if (textCleanersResult.type === "bulk_sms_confirm") {
+          return { ...textCleanersResult, command: input.message };
+        }
+        return textCleanersResult;
       }
 
       if (intent.action === "text_client") {
         // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
-        return re?.type === "customer"
+        const textClientResult = re?.type === "customer"
           ? await handleTextClient(null, intent.messageHint, db, re.phone)
           : await handleTextClient(intent.clientName, intent.messageHint, db);
+        if (textClientResult.type === "bulk_sms_confirm") {
+          return { ...textClientResult, command: input.message };
+        }
+        return textClientResult;
       }
 
       if (intent.action === "send_payment_link") {
         // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
-        return re?.type === "customer"
+        const paymentLinkResult = re?.type === "customer"
           ? await handleSendPaymentLink(null, db, re.phone, re.name)
           : await handleSendPaymentLink(intent.clientName, db);
+        if (paymentLinkResult.type === "payment_link_confirm") {
+          return { ...paymentLinkResult, command: input.message };
+        }
+        return paymentLinkResult;
       }
 
       if (intent.action === "call_client") {
@@ -1746,6 +1822,8 @@ export const aiConciergeRouter = router({
         recipientName: z.string(),
         smsText: z.string().min(1).max(1600),
         paymentLinkUrl: z.string(),
+        /** Original user command from the confirm card — used for mission persistence */
+        command: z.string().optional(),
       })
     )
         .mutation(async ({ ctx, input }) => {
@@ -1769,7 +1847,7 @@ export const aiConciergeRouter = router({
             }).catch(console.error);
           }
         }
-        const mission = createMissionMetadata({
+        const missionMeta = createMissionMetadata({
           title: `Payment Link → ${input.recipientName}`,
           startedAt,
           status: result.success ? "completed" : "failed",
@@ -1786,6 +1864,20 @@ export const aiConciergeRouter = router({
             },
           ],
         });
+        // Persist mission only after SMS side effect is complete.
+        // Persistence failure must NOT cause the action to appear failed.
+        let mission: MissionMetadata | null = missionMeta;
+        let missionPersistenceError = false;
+        if (result.success) {
+          const saved = await createAndSaveMission(
+            missionMeta,
+            ctx.agent.agentId,
+            input.command ?? `Send payment link to ${input.recipientName}`,
+            "chat"
+          );
+          if (saved === null) missionPersistenceError = true;
+          mission = saved ?? missionMeta;
+        }
         return {
           type: "payment_link_sent" as const,
           recipientName: input.recipientName,
@@ -1793,10 +1885,11 @@ export const aiConciergeRouter = router({
           paymentLinkUrl: input.paymentLinkUrl,
           success: result.success,
           mission,
+          ...(missionPersistenceError ? { missionPersistenceError: true } : {}),
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const mission = createMissionMetadata({
+        const missionMeta = createMissionMetadata({
           title: `Payment Link → ${input.recipientName}`,
           startedAt,
           status: "failed",
@@ -1806,6 +1899,13 @@ export const aiConciergeRouter = router({
             { id: crypto.randomUUID(), label: `Sent link to ${input.recipientName}`, status: "failed", detail: msg },
           ],
         });
+        // SMS failed — no side effect to protect, persist the failure record best-effort
+        createAndSaveMission(
+          missionMeta,
+          ctx.agent.agentId,
+          input.command ?? `Send payment link to ${input.recipientName}`,
+          "chat"
+        ).catch(() => {});
         return {
           type: "payment_link_sent" as const,
           recipientName: input.recipientName,
@@ -1813,7 +1913,7 @@ export const aiConciergeRouter = router({
           paymentLinkUrl: input.paymentLinkUrl,
           success: false,
           error: msg,
-          mission,
+          mission: missionMeta,
         };
       }
     }),
@@ -1831,6 +1931,8 @@ export const aiConciergeRouter = router({
         })),
         message: z.string().min(1).max(1600),
         missionTitle: z.string().optional(),
+        /** Original user command from the confirm card — used for mission persistence */
+        command: z.string().optional(),
       })
     )
         .mutation(async ({ ctx, input }) => {
@@ -1878,13 +1980,29 @@ export const aiConciergeRouter = router({
         ? `${sent} message${sent !== 1 ? "s" : ""} sent successfully.`
         : `${sent} sent, ${failed} failed.`;
 
-      const mission = createMissionMetadata({
+      const missionMeta = createMissionMetadata({
         title: input.missionTitle ?? `Text ${input.recipients.length === 1 ? input.recipients[0].name : `${input.recipients.length} Cleaners`}`,
         startedAt,
         status: overallStatus,
         summary,
         steps: missionSteps,
       });
+
+      // Persist mission only after all SMS side effects are complete.
+      // Persistence failure must NOT cause the action to appear failed.
+      const anySent = sent > 0;
+      let mission: MissionMetadata | null = missionMeta;
+      let missionPersistenceError = false;
+      if (anySent) {
+        const saved = await createAndSaveMission(
+          missionMeta,
+          ctx.agent.agentId,
+          input.command ?? input.missionTitle ?? `Text ${input.recipients.length} recipient${input.recipients.length !== 1 ? "s" : ""}`,
+          "chat"
+        );
+        if (saved === null) missionPersistenceError = true;
+        mission = saved ?? missionMeta;
+      }
 
       return {
         type: "bulk_sms_sent" as const,
@@ -1893,6 +2011,68 @@ export const aiConciergeRouter = router({
           : `Sent to ${sent}, failed for ${failed}.`,
         results,
         mission,
+        ...(missionPersistenceError ? { missionPersistenceError: true } : {}),
       };
+    }),
+
+  /**
+   * Returns the agent's active (non-archived) mission history, newest first.
+   * agentId is taken from ctx.agent — never from client input.
+   */
+  getMissions: agentProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(50),
+      before: z.number().int().optional(), // createdAt unix ms cursor for pagination
+    }))
+    .query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const rows = await db
+        .select()
+        .from(madisonMissions)
+        .where(
+          and(
+            eq(madisonMissions.agentId, ctx.agent.agentId),
+            isNull(madisonMissions.archivedAt)
+          )
+        )
+        .orderBy(desc(madisonMissions.createdAt))
+        .limit(50);
+      return rows.map(r => ({
+        id: r.id,
+        missionId: r.missionId,
+        command: r.command,
+        title: r.title,
+        status: r.status,
+        source: r.source,
+        summary: r.summary,
+        steps: r.steps as MissionStep[],
+        stats: r.stats as MissionMetadata["missionStats"],
+        startedAt: r.startedAt,
+        completedAt: r.completedAt,
+        createdAt: r.createdAt ? r.createdAt.getTime() : null,
+      }));
+    }),
+
+  /**
+   * Archives all active missions for the authenticated agent.
+   * Sets archivedAt = NOW() on all rows where agentId = ctx.agent.agentId AND archivedAt IS NULL.
+   * agentId is taken from ctx.agent — never from client input.
+   */
+  archiveMissions: agentProcedure
+    .mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const now = new Date();
+      await db
+        .update(madisonMissions)
+        .set({ archivedAt: now })
+        .where(
+          and(
+            eq(madisonMissions.agentId, ctx.agent.agentId),
+            isNull(madisonMissions.archivedAt)
+          )
+        );
+      return { archivedAt: now.getTime() };
     }),
 });

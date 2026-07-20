@@ -79,6 +79,8 @@ interface BulkSmsConfirmCard {
   targetDescription: string;
   recipients: BulkSmsRecipient[];
   draftMessage: string;
+  /** Original user command — forwarded to sendBulkSms for mission persistence */
+  command?: string;
 }
 interface BulkSmsSentCard {
   message: string;
@@ -92,6 +94,8 @@ interface PaymentLinkConfirmCard {
   paymentLinkUrl: string;
   expiresAt: number;
   smsText: string;
+  /** Original user command — forwarded to sendPaymentLinkSms for mission persistence */
+  command?: string;
 }
 interface PaymentLinkSentCard {
   recipientName: string;
@@ -300,11 +304,15 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
   function handleSend() {
     if (sent || sendMutation.isPending) return;
     sendMutation.mutate(
-      { recipients: card.recipients, message: draft },
+      {
+        recipients: card.recipients,
+        message: draft,
+        ...(card.command ? { command: card.command } : {}),
+      },
       {
         onSuccess: (result) => {
           setSent(true);
-          onSent({ message: result.message, results: result.results, mission: result.mission });
+          onSent({ message: result.message, results: result.results, mission: result.mission ?? undefined });
         },
       }
     );
@@ -416,11 +424,12 @@ function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirm
         recipientName: card.recipientName,
         smsText,
         paymentLinkUrl: card.paymentLinkUrl,
+        ...(card.command ? { command: card.command } : {}),
       },
       {
         onSuccess: (result) => {
           setSent(true);
-          onSent({ ...result, mission: result.mission });
+          onSent({ ...result, mission: result.mission ?? undefined });
         },
       }
     );
@@ -1433,8 +1442,10 @@ function MissionCard({
   const autoCollapseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const userInteractedRef = useRef(false);
 
-  // Auto-collapse after 2s for completed missions — only if user hasn't interacted
+  // Auto-collapse after 2s ONLY for newly-created missions (isNew: true).
+  // Restored missions (isNew: false/undefined) start collapsed and are never auto-collapsed.
   useEffect(() => {
+    if (!mission.isNew) return; // restored from server — already collapsed, skip
     if (mission.missionStatus !== "completed") return;
     if (viewState !== "expanded") return;
     autoCollapseRef.current = setTimeout(() => {
@@ -1445,7 +1456,7 @@ function MissionCard({
     return () => {
       if (autoCollapseRef.current) clearTimeout(autoCollapseRef.current);
     };
-  }, [mission.missionId, mission.missionStatus, viewState, onSetViewState]);
+  }, [mission.missionId, mission.missionStatus, mission.isNew, viewState, onSetViewState]);
 
   const handleToggle = () => {
     userInteractedRef.current = true;
@@ -1562,6 +1573,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     addMission,
     setViewState: setMissionViewState,
     clearHistory: clearMissionHistory,
+    isLoading: missionsLoading,
   } = useMissionHistory(user?.openId ?? undefined);
 
   const [messages, setMessages] = useState<Message[]>([
@@ -1942,26 +1954,34 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
         {/* Mission History */}
-        {missions.length > 0 && (
+        {(missions.length > 0 || missionsLoading) && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600">Mission History</p>
-              <button
-                onClick={() => clearMissionHistory()}
-                className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
-              >
-                Clear
-              </button>
+              {missions.length > 0 && (
+                <button
+                  onClick={() => clearMissionHistory()}
+                  className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                >
+                  Clear
+                </button>
+              )}
             </div>
-            {[...missions].reverse().map((mission) => (
+            {missionsLoading && missions.length === 0 && (
+              <div className="flex items-center gap-2 py-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-600 animate-pulse" />
+                <span className="text-[11px] text-gray-600">Loading history…</span>
+              </div>
+            )}
+            {missions.map((mission) => (
               <MissionCard
                 key={mission.missionId}
                 mission={mission}
-                viewState={missionViewState[mission.missionId] ?? "collapsed"}
+                viewState={missionViewState[mission.missionId] ?? (mission.isNew ? "expanded" : "collapsed")}
                 onSetViewState={setMissionViewState}
               />
             ))}
-            <div className="border-t border-white/8 pt-1" />
+            {missions.length > 0 && <div className="border-t border-white/8 pt-1" />}
           </div>
         )}
         {messages.map((msg) => (
@@ -2139,10 +2159,10 @@ type ServerResult =
   | { type: "error"; message: string }
   | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
   | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
-  | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
+  | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string; command?: string }
   | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
   | { type: "client_disambiguation"; messageHint: string | null; matches: Array<{ phone: string; name: string; city: string | null; totalCleans: number; ltv?: number; lastJobDate: string | null }> }
-  | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string }
+  | { type: "payment_link_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; paymentLinkUrl: string; expiresAt: number; smsText: string; command?: string }
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
@@ -2206,6 +2226,7 @@ function buildAiMessage(result: ServerResult): Message | null {
           targetDescription: result.targetDescription,
           recipients: result.recipients,
           draftMessage: result.draftMessage,
+          command: result.command,
         },
       },
       ts,
@@ -2235,6 +2256,7 @@ function buildAiMessage(result: ServerResult): Message | null {
           paymentLinkUrl: result.paymentLinkUrl,
           expiresAt: result.expiresAt,
           smsText: result.smsText,
+          command: result.command,
         },
       },
       ts,
