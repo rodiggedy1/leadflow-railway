@@ -935,14 +935,18 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
               onClick={() => {
                 setShowArrivedConfirm(false);
                 try { sessionStorage.removeItem(LAUNCHED_KEY); } catch {}
-                if (cleanerJobId) {
-                  statusMutation.mutate(
-                    { cleanerJobId, status: "arrived" },
-                    { onSuccess: onComplete, onError: onComplete }
-                  );
-                } else {
-                  onComplete();
-                }
+                // Delay onComplete by one frame so the dialog animates out before the
+                // parent re-renders and unmounts this component.
+                setTimeout(() => {
+                  if (cleanerJobId) {
+                    statusMutation.mutate(
+                      { cleanerJobId, status: "arrived" },
+                      { onSuccess: onComplete, onError: onComplete }
+                    );
+                  } else {
+                    onComplete();
+                  }
+                }, 50);
               }}
               disabled={statusMutation.isPending}
               className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-4 rounded-xl transition-all flex items-center justify-center gap-2"
@@ -1568,8 +1572,8 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
           </button>
         )}
         {notesOpen && <NotesPopup customerNotes={job.customerNotes} staffNotes={job.staffNotes} cleanerJobId={job.cleanerJobId} onClose={() => setNotesOpen(false)} />}
-        {/* Dev nav — step through for testing */}
-        <div className="fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50">
+        {/* Dev nav — step through for testing; hidden when any bottom sheet is open */}
+        <div className={`fixed bottom-4 right-4 flex gap-2 opacity-30 hover:opacity-100 transition-opacity z-50 ${showEtaPicker || showConfirm ? 'hidden' : ''}`}>
           <button
             onClick={() => setStepIndex(i => Math.max(0, i - 1))}
             className="bg-slate-700 text-white p-2 rounded-lg"
