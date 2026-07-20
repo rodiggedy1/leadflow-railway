@@ -467,7 +467,9 @@ async function startServer() {
         return res.end(Buffer.from(bytes));
       }
       // For public URLs (.r2.dev, storage.vapi.ai, R2_PUBLIC_URL), plain fetch
+      console.log("[media-proxy] fetching:", url.substring(0, 150));
       const upstream = await fetch(url);
+      console.log("[media-proxy] upstream status:", upstream.status, upstream.statusText);
       if (!upstream.ok) return res.status(upstream.status).end();
       const ct = upstream.headers.get("content-type") ?? "application/octet-stream";
       res.setHeader("Content-Type", ct);

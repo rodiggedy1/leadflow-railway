@@ -113,6 +113,10 @@ export interface QueryPlan {
   targetHint:   string | null;
   teamHint:     string | null;
   clientName:   string | null; // kept for backward compat with action handlers
+
+  // Target type: explicit classification of who the action targets
+  // Used by validateAndNormalizePlan() to detect and correct contradictions
+  targetType: "customer" | "cleaner" | "team" | "unknown";
 }
 
 // ── Entity resolution ─────────────────────────────────────────────────────────
