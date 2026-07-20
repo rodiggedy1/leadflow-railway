@@ -1870,7 +1870,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
+      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a] relative">
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
@@ -1978,7 +1978,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
               <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
-              <div className="relative">
+              <div>
                 <button
                   onClick={() => setShowCommands((v) => !v)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium"
@@ -1986,12 +1986,6 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   <Zap className="w-3.5 h-3.5" />
                   <span>Commands</span>
                 </button>
-                {showCommands && (
-                  <CommandPicker
-                    onSelect={(cmd) => { setInput(cmd); inputRef.current?.focus(); }}
-                    onClose={() => setShowCommands(false)}
-                  />
-                )}
               </div>
               <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
                 <AtSign className="w-3.5 h-3.5" />
@@ -2012,6 +2006,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           <p className="px-4 pb-2 text-[11px] text-gray-400 transition-all">💡 {HINT_EXAMPLES[hintIdx]}</p>
         )}
         </div>
+        {showCommands && (
+          <CommandPicker
+            onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
+            onClose={() => setShowCommands(false)}
+          />
+        )}
       </div>
     </div>
   );
