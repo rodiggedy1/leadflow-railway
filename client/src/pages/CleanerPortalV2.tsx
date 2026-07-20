@@ -474,10 +474,19 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
   );
 }
 
-function JobHeader({ job, stepIndex, totalSteps }: { job: PortalJob; stepIndex: number; totalSteps: number }) {
+function JobHeader({ job, stepIndex, totalSteps, onBack }: { job: PortalJob; stepIndex: number; totalSteps: number; onBack?: () => void }) {
   const { t } = useTranslation();
   return (
     <div className="px-4 pt-5 pb-3 bg-slate-900">
+      {onBack && (
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1 text-slate-400 hover:text-white text-sm font-semibold mb-3 -ml-1 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+          {t('v2.jobHeader.backToSchedule', 'Today\'s Jobs')}
+        </button>
+      )}
       <h1 className="text-2xl font-black text-white leading-tight">
         {t('v2.jobHeader.title', { name: job.customerName })}
       </h1>
@@ -1498,6 +1507,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
 
   const hasNotes = !!(job.customerNotes?.trim() || job.staffNotes?.trim());
   const [notesOpen, setNotesOpen] = useState(false);
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
 
   // markComplete mutation — fires when sign-off is submitted
   const utils = trpc.useUtils();
@@ -1542,7 +1552,28 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center">
       <div className="w-full max-w-[430px] min-h-screen bg-slate-900 flex flex-col relative">
-        <JobHeader job={job} stepIndex={stepIndex} totalSteps={steps.length} />
+        <JobHeader job={job} stepIndex={stepIndex} totalSteps={steps.length} onBack={onBackToSchedule ? () => setLeaveConfirm(true) : undefined} />
+        {/* Leave-job confirmation sheet */}
+        {leaveConfirm && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={() => setLeaveConfirm(false)}>
+            <div className="w-full max-w-[430px] bg-slate-800 rounded-t-3xl p-6 pb-10 space-y-4" onClick={e => e.stopPropagation()}>
+              <h2 className="text-white text-lg font-black text-center">Leave this job?</h2>
+              <p className="text-slate-400 text-sm text-center">Your progress has been saved.</p>
+              <button
+                onClick={() => setLeaveConfirm(false)}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-base py-4 rounded-2xl transition-all"
+              >
+                Continue Job
+              </button>
+              <button
+                onClick={() => { setLeaveConfirm(false); onBackToSchedule?.(); }}
+                className="w-full bg-slate-700 hover:bg-slate-600 active:bg-slate-800 text-white font-semibold text-base py-4 rounded-2xl transition-all"
+              >
+                ← Back to Schedule
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex-1 pb-10">
           {isSignoff ? (
             <SignoffCard onComplete={handleSignoffComplete} cleanerJobId={job.cleanerJobId} />
