@@ -42,6 +42,8 @@ export interface MissionStep {
   label: string;
   status: "completed" | "failed" | "skipped";
   detail?: string;
+  /** Present on call steps — used by MissionCard to poll recording + transcript */
+  vapiCallId?: string;
 }
 
 export interface MissionStats {
@@ -1694,6 +1696,7 @@ export const aiConciergeRouter = router({
         resolvedClientPhone: z.string().optional(),
         resolvedClientMessageHint: z.string().nullable().optional(),
         resolvedPaymentLink: z.boolean().optional(),
+        resolvedClientName: z.string().optional(),
         resolvedCallClient: z.boolean().optional(),
         resolvedCallPersonName: z.string().optional(),
         resolvedCallQuestionHint: z.string().nullable().optional(),
@@ -1714,7 +1717,7 @@ export const aiConciergeRouter = router({
       // Legacy resolvedClientPhone path (disambiguation card flows — entity already resolved upstream)
       if (input.resolvedClientPhone) {
         if (input.resolvedPaymentLink) {
-          const plResult = await handleSendPaymentLink(null, db, input.resolvedClientPhone);
+          const plResult = await handleSendPaymentLink(null, db, input.resolvedClientPhone, input.resolvedClientName);
           if (plResult.type === "payment_link_confirm") return { ...plResult, command: input.message };
           return plResult;
         }
@@ -1867,7 +1870,7 @@ export const aiConciergeRouter = router({
               id: crypto.randomUUID(),
               label: `Sent link to ${input.recipientName}`,
               status: result.success ? "completed" : "failed",
-              detail: result.success ? `Delivered to ...${input.recipientPhone.slice(-4)}` : "SMS delivery failed",
+              detail: result.success ? input.smsText : "SMS delivery failed",
             },
           ],
         });
@@ -1978,7 +1981,7 @@ export const aiConciergeRouter = router({
         label: `Texted ${r.name}`,
         status: r.success ? "completed" : "failed",
         detail: r.success
-          ? `Message delivered to ...${r.phone.slice(-4)}`
+          ? input.message
           : (r.error ?? "Send failed"),
       }));
 
@@ -2081,5 +2084,45 @@ export const aiConciergeRouter = router({
           )
         );
       return { archivedAt: now.getTime() };
+    }),
+  /**
+   * Persists a call mission immediately after callMatrix.startCall fires.
+   * Called by the client with the vapiCallId returned from startCall.
+   * agentId is taken from ctx.agent — never from client input.
+   */
+  saveCallMission: agentProcedure
+    .input(
+      z.object({
+        vapiCallId: z.string().min(1).max(128),
+        recipientName: z.string(),
+        recipientPhone: z.string(),
+        script: z.string(),
+        command: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const startedAt = new Date();
+      const missionMeta: MissionMetadata = createMissionMetadata({
+        title: `Call → ${input.recipientName}`,
+        startedAt,
+        status: "completed",
+        summary: `Called ${input.recipientName} (${input.recipientPhone.slice(-4)}).`,
+        steps: [
+          {
+            id: crypto.randomUUID(),
+            label: `Called ${input.recipientName}`,
+            status: "completed",
+            detail: input.script,
+            vapiCallId: input.vapiCallId,
+          },
+        ],
+      });
+      const saved = await createAndSaveMission(
+        missionMeta,
+        ctx.agent.agentId,
+        input.command ?? `Call ${input.recipientName}`,
+        "chat"
+      );
+      return { mission: saved ?? missionMeta, missionPersistenceError: saved === null };
     }),
 });
