@@ -1457,7 +1457,7 @@ function CompletedScreen({ customerName, onNextJob, nextJobName, onBackToSchedul
       )}
       {/* Dev reset — clears sessionStorage so the portal restarts from step 1 */}
       <button
-        onClick={() => { try { sessionStorage.clear(); } catch {} window.location.reload(); }}
+        onClick={() => { try { sessionStorage.clear(); localStorage.clear(); } catch {} window.location.reload(); }}
         className="mt-3 text-slate-600 text-xs underline"
       >
         {t('v2.completed.reset')}
@@ -1496,13 +1496,13 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
 
   const [stepIndex, setStepIndex] = useState(() => {
     try {
-      const saved = parseInt(sessionStorage.getItem(SESSION_KEY) ?? "0", 10) || 0;
+      const saved = parseInt(localStorage.getItem(SESSION_KEY) ?? "0", 10) || 0;
       return Math.min(saved, Math.max(0, steps.length - 1));
     } catch { return 0; }
   });
 
   const [completed, setCompleted] = useState(() => {
-    try { return sessionStorage.getItem(COMPLETED_KEY) === "1"; } catch { return false; }
+    try { return localStorage.getItem(COMPLETED_KEY) === "1"; } catch { return false; }
   });
 
   const hasNotes = !!(job.customerNotes?.trim() || job.staffNotes?.trim());
@@ -1520,7 +1520,7 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
 
   // Persist step index so navigating back from maps restores the right step
   useEffect(() => {
-    try { sessionStorage.setItem(SESSION_KEY, String(stepIndex)); } catch {}
+    try { localStorage.setItem(SESSION_KEY, String(stepIndex)); } catch {}
   }, [stepIndex, SESSION_KEY]);
 
   const currentStep = steps[stepIndex];
@@ -1535,8 +1535,8 @@ function JobRunner({ job, onNextJob, nextJobName, onBackToSchedule }: { job: Por
   }, [steps.length]);
 
   const handleSignoffComplete = useCallback(() => {
-    try { sessionStorage.setItem(COMPLETED_KEY, "1"); } catch {}
-    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+    try { localStorage.setItem(COMPLETED_KEY, "1"); } catch {}
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
     if (job.cleanerJobId) {
       markCompleteMutation.mutate(
         { cleanerJobId: job.cleanerJobId },
