@@ -206,15 +206,15 @@ function StepIcon({ status }: { status: StepStatus }) {
 
 function CompletedCardView({ card }: { card: CompletedCard }) {
   return (
-    <div className="flex items-start gap-4 bg-white/5 border border-white/10 rounded-xl px-4 py-4">
+    <div className="flex items-start gap-4 rounded-xl px-4 py-4" style={{background:"linear-gradient(135deg,#f0fdf4,#e8f5e9)",border:"1px solid #bbf7d0"}}>
       <span className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500 flex items-center justify-center">
         <CheckCircle2 className="w-6 h-6 text-white" />
       </span>
       <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-sm">Completed</p>
-        <p className="text-gray-400 text-sm mt-0.5">{card.message}</p>
+        <p className="font-semibold text-sm" style={{color:"#166534"}}>Completed</p>
+        <p className="text-sm mt-0.5" style={{color:"#4a4a5a"}}>{card.message}</p>
       </div>
-      <span className="text-xs text-gray-500 flex-shrink-0 mt-1">{card.ts}</span>
+      <span className="text-xs flex-shrink-0 mt-1" style={{color:"#8a8a9a"}}>{card.ts}</span>
     </div>
   );
 }
@@ -229,8 +229,8 @@ function ClarifyCardView({
   onPickTeam: (jobId: number, teamName: string) => void;
 }) {
   return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-      <div className="px-4 py-3 text-sm text-gray-200 leading-relaxed border-b border-white/10">
+    <div className="mt-3 rounded-xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea"}}>
+      <div className="px-4 py-3 text-sm leading-relaxed" style={{color:"#2d3039",borderBottom:"1px solid #e5d9ea"}}>
         {card.message}
       </div>
       <div className="px-4 py-3 space-y-2">
@@ -238,13 +238,13 @@ function ClarifyCardView({
           <button
             key={team.currentJobId}
             onClick={() => onPickTeam(team.currentJobId, team.name)}
-            className="w-full flex items-center justify-between rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2.5 text-left transition-colors"
+            className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-left transition-all hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
           >
             <div>
-              <p className="text-sm text-white font-semibold">{team.name}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{team.address}</p>
+              <p className="text-sm font-semibold" style={{color:"#202431"}}>{team.name}</p>
+              <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{team.address}</p>
             </div>
-            <span className="text-xs text-gray-500 flex-shrink-0 ml-3">{team.scheduled}</span>
+            <span className="text-xs flex-shrink-0 ml-3" style={{color:"#8a8a9a"}}>{team.scheduled}</span>
           </button>
         ))}
       </div>
@@ -261,23 +261,23 @@ function ClientDisambiguationCardView({
   onPick: (phone: string, name: string) => void;
 }) {
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10">
-        <p className="text-sm font-semibold text-white">Multiple matches — choose one</p>
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3" style={{borderBottom:"1px solid #e5d9ea"}}>
+        <p className="text-sm font-semibold" style={{color:"#202431"}}>Multiple matches — choose one</p>
       </div>
       <div className="px-4 py-3 space-y-2">
         {card.matches.map((m) => (
           <button
             key={m.phone}
             onClick={() => onPick(m.phone, m.name)}
-            className="w-full flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2.5 text-left transition-colors"
+            className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
           >
-            <span className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
-              <User className="w-4 h-4 text-indigo-400" />
+            <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"rgba(116,71,245,0.12)"}}>
+              <User className="w-4 h-4" style={{color:"#7447f5"}} />
             </span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-semibold">{m.name}</p>
-              <p className="text-xs text-gray-400 mt-0.5">{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
+              <p className="text-sm font-semibold" style={{color:"#202431"}}>{m.name}</p>
+              <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{m.city || m.phone}{m.totalCleans ? ` · ${m.totalCleans} cleans` : ""}{m.lastJobDate ? ` · last ${m.lastJobDate}` : ""}</p>
             </div>
           </button>
         ))}
@@ -310,33 +310,33 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
   }
 
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-        <Users className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-        <p className="text-sm font-semibold text-white">Text {card.targetDescription}</p>
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+        <Users className="w-4 h-4 flex-shrink-0" style={{color:"#7447f5"}} />
+        <p className="text-sm font-semibold" style={{color:"#202431"}}>Text {card.targetDescription}</p>
         <span className="ml-auto text-xs text-gray-500">{card.recipients.length} recipient{card.recipients.length !== 1 ? "s" : ""}</span>
       </div>
       <div className="px-4 pt-3 pb-2 flex flex-wrap gap-1.5">
         {card.recipients.map((r) => (
-          <span key={r.phone} className="inline-flex items-center gap-1.5 rounded-full bg-white/8 border border-white/10 px-2.5 py-1 text-xs text-gray-300">
-            <User className="w-3 h-3 text-gray-500" />
-            <span className="font-medium text-white">{r.name}</span>
+          <span key={r.phone} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs" style={{background:"rgba(116,71,245,0.08)",border:"1px solid #e5d9ea",color:"#4a4a5a"}}>
+            <User className="w-3 h-3" style={{color:"#9b8aaa"}} />
+            <span className="font-medium" style={{color:"#202431"}}>{r.name}</span>
             <span className="text-gray-500">·</span>
-            <span className="text-indigo-300">{r.phone}</span>
+            <span style={{color:"#7447f5"}}>{r.phone}</span>
           </span>
         ))}
       </div>
       <div className="px-4 pb-3">
         <div className="flex items-center gap-1.5 mb-1.5">
-          <Edit3 className="w-3 h-3 text-indigo-400" />
-          <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-400">Message</span>
+          <Edit3 className="w-3 h-3" style={{color:"#7447f5"}} />
+          <span className="text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>Message</span>
         </div>
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           disabled={sent || sendMutation.isPending}
           rows={3}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039"}}
         />
       </div>
       {!sent && (
@@ -344,7 +344,7 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
           <button
             onClick={handleSend}
             disabled={!draft.trim() || sendMutation.isPending}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}
           >
             {sendMutation.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
@@ -364,18 +364,18 @@ function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
   const failCount = card.results.filter(r => !r.success).length;
   const sentAt = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
       {/* Header */}
-      <div className={`px-4 py-3 border-b border-white/10 flex items-center gap-3 ${allOk ? "bg-green-500/8" : "bg-yellow-500/8"}`}>
+      <div className={`px-4 py-3 flex items-center gap-3 ${allOk ? "bg-green-50" : "bg-amber-50"}`} style={{borderBottom:"1px solid #e5d9ea"}}>
         <span className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${allOk ? "bg-green-500" : "bg-yellow-500"}`}>
           {allOk ? <CheckCircle2 className="w-5 h-5 text-white" /> : <AlertTriangle className="w-5 h-5 text-white" />}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white">{allOk ? "Message Sent" : "Partial Send"}</p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-sm font-bold" style={{color:"#202431"}}>{allOk ? "Message Sent" : "Partial Send"}</p>
+          <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>
             {successCount > 0 && <span className="text-green-400">{successCount} delivered</span>}
             {failCount > 0 && <span className="text-red-400 ml-2">{failCount} failed</span>}
-            <span className="text-gray-500 ml-2">· {sentAt}</span>
+            <span className="ml-2" style={{color:"#8a8a9a"}}>· {sentAt}</span>
           </p>
         </div>
         <MessageSquare className={`w-4 h-4 flex-shrink-0 ${allOk ? "text-green-400" : "text-yellow-400"}`} />
@@ -384,14 +384,14 @@ function BulkSmsSentCardView({ card }: { card: BulkSmsSentCard }) {
       <div className="px-4 py-3 space-y-2">
         {card.results.map((r, i) => (
           <div key={i} className={`flex items-center gap-3 p-2.5 rounded-lg ${r.success ? "bg-green-500/5 border border-green-500/15" : "bg-red-500/5 border border-red-500/15"}`}>
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${r.success ? "bg-green-500/20" : "bg-red-500/20"}`}>
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${r.success ? "bg-green-100" : "bg-red-100"}`}>
               {r.success
                 ? <CheckCircle2 className="w-4 h-4 text-green-400" />
                 : <XCircle className="w-4 h-4 text-red-400" />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-semibold truncate ${r.success ? "text-white" : "text-red-300"}`}>{r.name}</p>
-              <p className="text-xs text-gray-500 truncate">{r.phone}{r.error ? ` — ${r.error}` : ""}</p>
+              <p className={`text-sm font-semibold truncate ${r.success ? "" : "text-red-500"}`}>{r.name}</p>
+              <p className="text-xs truncate" style={{color:"#8a8a9a"}}>{r.phone}{r.error ? ` — ${r.error}` : ""}</p>
             </div>
             {r.success && <span className="text-xs text-green-400 font-medium flex-shrink-0">✓ Sent</span>}
           </div>
@@ -429,18 +429,18 @@ function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirm
   const expiryDate = new Date(card.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
-        <CreditCard className="w-4 h-4 text-violet-400 flex-shrink-0" />
-        <p className="text-sm font-semibold text-white">Send Payment Link</p>
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+        <CreditCard className="w-4 h-4 flex-shrink-0" style={{color:"#7447f5"}} />
+        <p className="text-sm font-semibold" style={{color:"#202431"}}>Send Payment Link</p>
       </div>
       <div className="px-4 pt-3 pb-2 flex items-center gap-3">
-        <span className="w-8 h-8 rounded-full bg-violet-600/30 flex items-center justify-center flex-shrink-0">
-          <User className="w-4 h-4 text-violet-400" />
+        <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"rgba(116,71,245,0.12)"}}>
+          <User className="w-4 h-4" style={{color:"#7447f5"}} />
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-white font-semibold">{card.recipientName}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone}</p>
+          <p className="text-sm font-semibold" style={{color:"#202431"}}>{card.recipientName}</p>
+          <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{card.recipientPhone}</p>
         </div>
         <a
           href={card.paymentLinkUrl}
@@ -453,19 +453,19 @@ function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirm
         </a>
       </div>
       <div className="px-4 pb-2">
-        <span className="text-[11px] text-gray-500">Link expires {expiryDate}</span>
+        <span className="text-[11px]" style={{color:"#8a8a9a"}}>Link expires {expiryDate}</span>
       </div>
       <div className="px-4 pb-3">
         <div className="flex items-center gap-1.5 mb-1.5">
-          <Edit3 className="w-3 h-3 text-violet-400" />
-          <span className="text-[11px] font-bold uppercase tracking-widest text-violet-400">Message to send</span>
+          <Edit3 className="w-3 h-3" style={{color:"#7447f5"}} />
+          <span className="text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>Message to send</span>
         </div>
         <textarea
           value={smsText}
           onChange={(e) => setSmsText(e.target.value)}
           disabled={sent || sendMutation.isPending}
           rows={8}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-violet-500/50 transition-colors disabled:opacity-60"
+          className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039"}}
         />
       </div>
       {!sent && (
@@ -473,7 +473,7 @@ function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirm
           <button
             onClick={handleSend}
             disabled={!smsText.trim() || sendMutation.isPending}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}
           >
             {sendMutation.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
@@ -489,12 +489,12 @@ function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirm
 // ─── Payment link sent card ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 function PaymentLinkSentCardView({ card }: { card: PaymentLinkSentCard }) {
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
         <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${card.success ? "bg-green-500" : "bg-red-500"}`}>
           {card.success ? <CheckCircle2 className="w-3.5 h-3.5 text-white" /> : <XCircle className="w-3.5 h-3.5 text-white" />}
         </span>
-        <p className="text-sm font-semibold text-white">
+        <p className="text-sm font-semibold" style={{color:"#202431"}}>
           {card.success ? `Payment link sent to ${card.recipientName}` : `Failed to send to ${card.recipientName}`}
         </p>
       </div>
@@ -549,8 +549,8 @@ function AudioPlayer({ url }: { url: string | null }) {
   }
   if (!url) {
     return (
-      <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-indigo-900/60 text-indigo-400">
+      <div className="flex items-center gap-3 rounded-[18px] px-3 py-3" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}>
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-indigo-500" style={{background:"rgba(116,71,245,0.12)"}}>
           <Play className="ml-0.5 h-5 w-5 fill-current" />
         </div>
         <span className="text-xs text-indigo-400 italic">Audio loading…</span>
@@ -558,7 +558,7 @@ function AudioPlayer({ url }: { url: string | null }) {
     );
   }
   return (
-    <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/5 px-3 py-3">
+    <div className="flex items-center gap-3 rounded-[18px] px-3 py-3" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}>
       <button onClick={toggle} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-900/40">
         {playing
           ? <span className="flex gap-[3px]"><span className="h-4 w-[3px] rounded-full bg-white" /><span className="h-4 w-[3px] rounded-full bg-white" /></span>
@@ -617,14 +617,14 @@ function CallClientConfirmCardView({ card, onFired, onMissionSaved }: { card: Ca
     });
   }
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center gap-3">
-        <span className="w-8 h-8 rounded-full bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
-          <Phone className="w-4 h-4 text-indigo-400" />
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3 flex items-center gap-3" style={{borderBottom:"1px solid #e5d9ea"}}>
+        <span className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{background:"rgba(116,71,245,0.12)"}}>
+          <Phone className="w-4 h-4" style={{color:"#7447f5"}} />
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-white font-semibold">{card.recipientName}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone}</p>
+          <p className="text-sm font-semibold" style={{color:"#202431"}}>{card.recipientName}</p>
+          <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{card.recipientPhone}</p>
         </div>
       </div>
       <div className="px-4 py-3">
@@ -633,7 +633,7 @@ function CallClientConfirmCardView({ card, onFired, onMissionSaved }: { card: Ca
           onChange={(e) => setScript(e.target.value)}
           disabled={fired || startCall.isPending}
           rows={4}
-          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200 placeholder-gray-500 resize-none outline-none focus:border-indigo-500/50 transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039"}}
         />
       </div>
       {callError && (
@@ -644,7 +644,7 @@ function CallClientConfirmCardView({ card, onFired, onMissionSaved }: { card: Ca
           <button
             onClick={handleCall}
             disabled={!script.trim() || startCall.isPending}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-semibold text-white transition-all" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}
           >
             {startCall.isPending ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Calling…</>
@@ -682,25 +682,25 @@ function CallClientPendingCardView({ card }: { card: CallClientPendingCard }) {
     else { step2Status = "done"; step2Label = pollResult?.summary ? `Completed — "${pollResult.summary}"` : "Call completed"; }
   }
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10">
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3" style={{borderBottom:"1px solid #e5d9ea"}}>
         <p className="text-sm font-semibold text-white">Calling {card.recipientName}</p>
-        <p className="text-xs text-gray-400 mt-0.5">{card.recipientPhone}</p>
+        <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{card.recipientPhone}</p>
       </div>
       <div className="px-4 py-3 space-y-3">
         <div className="flex items-start gap-3">
           <StepIcon status="done" />
-          <span className="flex-1 text-sm text-gray-300">Call placed to <span className="text-white font-semibold">{card.recipientName}</span></span>
+          <span className="flex-1 text-sm" style={{color:"#4a4a5a"}}>Call placed to <span className="text-white font-semibold">{card.recipientName}</span></span>
         </div>
         <div className="flex items-start gap-3">
           <StepIcon status={step2Status} />
-          <span className={`flex-1 text-sm ${step2Status === "running" ? "text-white font-semibold" : step2Status === "done" ? "text-gray-300" : "text-red-400"}`}>{step2Label}</span>
+          <span className={`flex-1 text-sm ${step2Status === "running" ? "font-semibold" : step2Status === "done" ? "" : "text-red-500"}`}>{step2Label}</span>
         </div>
       </div>
       {callDone && (
-        <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-3">
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400">
-            <MessageCircle className="h-3.5 w-3.5" /> Recording
+        <div className="px-4 pb-4 pt-3 space-y-3" style={{borderTop:"1px solid #e5d9ea"}}>
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>
+            <MessageCircle className="h-3.5 w-3.5" style={{color:"#7447f5"}} /> Recording
           </div>
           {noAnswer ? (
             <div className="flex items-center gap-2 text-sm text-red-400">
@@ -713,13 +713,13 @@ function CallClientPendingCardView({ card }: { card: CallClientPendingCard }) {
             <div>
               <button
                 onClick={() => setTranscriptOpen(v => !v)}
-                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400 hover:bg-white/10 transition-colors"
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea",color:"#7447f5"}}
               >
                 <span>Call transcript</span>
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
               </button>
               {transcriptOpen && (
-                <div className="mt-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs leading-relaxed text-gray-300 whitespace-pre-wrap">{transcript}</div>
+                <div className="mt-1.5 rounded-xl px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea",color:"#4a4a5a"}}>{transcript}</div>
               )}
             </div>
           )}
@@ -783,38 +783,38 @@ function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
     }
   }
   return (
-    <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/10">
-        <p className="text-sm font-semibold text-white">ETA Update — {card.teamName}</p>
+    <div className="rounded-2xl rounded-tl-sm overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
+      <div className="px-4 py-3" style={{borderBottom:"1px solid #e5d9ea"}}>
+        <p className="text-sm font-semibold" style={{color:"#202431"}}>ETA Update — {card.teamName}</p>
       </div>
       <div className="px-4 py-3 space-y-3">
         {/* Step 1: call placed */}
         <div className="flex items-start gap-3">
           <StepIcon status="done" />
-          <span className="flex-1 text-sm text-gray-300">
-            ETA call placed for <span className="text-white font-semibold">{card.teamName}</span> ({card.cleanerName}) — scheduled {card.scheduledTimeET}
+          <span className="flex-1 text-sm" style={{color:"#4a4a5a"}}>
+            ETA call placed for <span className="font-semibold" style={{color:"#202431"}}>{card.teamName}</span> ({card.cleanerName}) — scheduled {card.scheduledTimeET}
           </span>
         </div>
         {/* Step 2: call result */}
         <div className="flex items-start gap-3">
           <StepIcon status={step2Status} />
-          <span className={`flex-1 text-sm ${step2Status === "running" ? "text-white font-semibold" : step2Status === "done" ? "text-gray-300" : "text-red-400"}`}>
+          <span className={`flex-1 text-sm ${step2Status === "running" ? "font-semibold" : step2Status === "done" ? "" : "text-red-500"}`}>
             {step2Label}
           </span>
         </div>
         {/* Step 3: client SMS */}
         <div className="flex items-start gap-3">
           <StepIcon status={step3Status} />
-          <span className={`flex-1 text-sm ${step3Status === "pending" ? "text-gray-500" : step3Status === "done" ? "text-gray-300" : "text-red-400"}`}>
+          <span className={`flex-1 text-sm ${step3Status === "pending" ? "" : step3Status === "done" ? "" : "text-red-500"}`}>
             {step3Label}
           </span>
         </div>
       </div>
       {/* Recording + transcript once call is done */}
       {callDone && (
-        <div className="border-t border-white/10 px-4 pb-4 pt-3 space-y-3">
-          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400">
-            <MessageCircle className="h-3.5 w-3.5" /> Recording
+        <div className="px-4 pb-4 pt-3 space-y-3" style={{borderTop:"1px solid #e5d9ea"}}>
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>
+            <MessageCircle className="h-3.5 w-3.5" style={{color:"#7447f5"}} /> Recording
           </div>
           {resultType === "no_answer" || resultType === "dispatcher_needed" ? (
             <div className="flex items-center gap-2 text-sm text-red-400">
@@ -827,13 +827,13 @@ function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
             <div>
               <button
                 onClick={() => setTranscriptOpen(v => !v)}
-                className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-indigo-400 hover:bg-white/10 transition-colors"
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-widest transition-colors" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea",color:"#7447f5"}}
               >
                 <span>Call transcript</span>
                 <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-150 ${transcriptOpen ? "rotate-180" : ""}`} />
               </button>
               {transcriptOpen && (
-                <div className="mt-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs leading-relaxed text-gray-300 whitespace-pre-wrap">
+                <div className="mt-1.5 rounded-xl px-3 py-2.5 text-xs leading-relaxed whitespace-pre-wrap" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea",color:"#4a4a5a"}}>
                   {transcript}
                 </div>
               )}
@@ -864,12 +864,12 @@ function MessageBubble({
     return (
       <div className="flex items-end justify-end gap-3">
         <div className="max-w-[75%]">
-          <div className="bg-blue-600 text-white rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed">
+          <div className="rounded-2xl rounded-br-sm px-4 py-3 text-sm leading-relaxed" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)",color:"#fff"}}>
             {msg.content.type === "text" && msg.content.text}
           </div>
           <div className="text-right text-xs text-gray-500 mt-1 pr-1">
             {msg.ts}{" "}
-            <span className="text-blue-400">✓✓</span>
+            <span style={{color:"#9b6ff5"}}>✓✓</span>
           </div>
         </div>
         {agentPhotoUrl ? (
@@ -879,7 +879,7 @@ function MessageBubble({
             className="w-8 h-8 rounded-full object-cover flex-shrink-0 mb-5"
           />
         ) : (
-          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0 mb-5">
+          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mb-5" style={{background:"linear-gradient(135deg,#7447f5,#9b6ff5)"}}>
             <User className="w-4 h-4 text-white" />
           </div>
         )}
@@ -906,7 +906,7 @@ function MessageBubble({
           </div>
         )}
         {msg.content.type === "clarify" && (
-          <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
+          <div className="rounded-2xl rounded-tl-sm px-4 py-3" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea"}}>
             <ClarifyCardView card={msg.content.card} onPickTeam={onPickTeam} />
             <div className="text-right text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
@@ -1083,9 +1083,9 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
   };
 
   return (
-    <div className="rounded-xl overflow-hidden border border-white/10 bg-[#1a1f2e] text-white w-full max-w-sm">
+    <div className="rounded-xl overflow-hidden w-full max-w-sm" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 20px rgba(116,71,245,0.08)"}}>
       {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-white/10">
+      <div className="px-4 pt-4 pb-3" style={{borderBottom:"1px solid #e5d9ea"}}>
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
@@ -1103,14 +1103,14 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
         {/* AI Summary */}
         {card.aiSummary && (
-          <div className="mt-3 text-xs text-gray-300 leading-relaxed bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+          <div className="mt-3 text-xs leading-relaxed rounded-lg px-3 py-2" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea",color:"#4a4a5a"}}>
             {card.aiSummary}
           </div>
         )}
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 divide-x divide-white/10 border-b border-white/10">
+      <div className="grid grid-cols-4" style={{borderBottom:"1px solid #e5d9ea",borderTop:"1px solid #e5d9ea"}}>
         {[
           { label: "Cleans", value: card.totalBookings },
           { label: "LTV", value: card.ltv > 0 ? `$${card.ltv.toLocaleString()}` : "—" },
@@ -1126,7 +1126,7 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
       {/* Usual team */}
       {card.usualTeam && (
-        <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
+        <div className="px-4 py-2.5 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
           <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
           <span className="text-xs text-gray-400">Usual team:</span>
           <span className="text-xs font-semibold text-white">{card.usualTeam}</span>
@@ -1135,7 +1135,7 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
       {/* Upcoming job */}
       {card.upcomingJob && (
-        <div className="px-4 py-2.5 border-b border-white/10 flex items-center gap-2">
+        <div className="px-4 py-2.5 flex items-center gap-2" style={{borderBottom:"1px solid #e5d9ea"}}>
           <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" />
           <span className="text-xs text-gray-400">Next job:</span>
           <span className="text-xs font-semibold text-white">{formatDate(card.upcomingJob.jobDate)}</span>
@@ -1150,8 +1150,8 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
       {/* AI Memory bullets */}
       {card.aiMemoryBullets.length > 0 && (
-        <div className="border-b border-white/10">
-          <button onClick={() => toggle("memory")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+        <div className=""  style={{borderBottom:"1px solid #e5d9ea"}}>
+          <button onClick={() => toggle("memory")} className="w-full px-4 py-2.5 flex items-center justify-between text-left transition-all hover:bg-purple-50">
             <span className="text-xs font-semibold text-indigo-300">AI Memory ({card.aiMemoryBullets.length})</span>
             <span className="text-gray-500 text-xs">{expandedSection === "memory" ? "▲" : "▼"}</span>
           </button>
@@ -1170,8 +1170,8 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
       {/* Last 5 jobs */}
       {card.lastJobs.length > 0 && (
-        <div className="border-b border-white/10">
-          <button onClick={() => toggle("jobs")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+        <div className=""  style={{borderBottom:"1px solid #e5d9ea"}}>
+          <button onClick={() => toggle("jobs")} className="w-full px-4 py-2.5 flex items-center justify-between text-left transition-all hover:bg-purple-50">
             <span className="text-xs font-semibold text-gray-300">Job History ({card.lastJobs.length})</span>
             <span className="text-gray-500 text-xs">{expandedSection === "jobs" ? "▲" : "▼"}</span>
           </button>
@@ -1196,15 +1196,15 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
       {/* Recent messages */}
       {card.lastMessages.length > 0 && (
-        <div className="border-b border-white/10">
-          <button onClick={() => toggle("messages")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+        <div className=""  style={{borderBottom:"1px solid #e5d9ea"}}>
+          <button onClick={() => toggle("messages")} className="w-full px-4 py-2.5 flex items-center justify-between text-left transition-all hover:bg-purple-50">
             <span className="text-xs font-semibold text-gray-300">Recent Messages ({card.lastMessages.length})</span>
             <span className="text-gray-500 text-xs">{expandedSection === "messages" ? "▲" : "▼"}</span>
           </button>
           {expandedSection === "messages" && (
             <div className="px-4 pb-3 space-y-2">
               {card.lastMessages.map((m, i) => (
-                <div key={i} className="bg-white/5 rounded-lg px-3 py-2">
+                <div key={i} className="rounded-lg px-3 py-2" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #f0e8fa"}}>
                   <div className="text-xs text-gray-200 leading-relaxed">{m.content}</div>
                   {m.ts && <div className="text-[10px] text-gray-500 mt-1">{new Date(m.ts).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</div>}
                 </div>
@@ -1216,8 +1216,8 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
 
       {/* OpenPhone calls */}
       {card.openPhoneCalls.length > 0 && (
-        <div className="border-b border-white/10">
-          <button onClick={() => toggle("calls")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+        <div className=""  style={{borderBottom:"1px solid #e5d9ea"}}>
+          <button onClick={() => toggle("calls")} className="w-full px-4 py-2.5 flex items-center justify-between text-left transition-all hover:bg-purple-50">
             <span className="text-xs font-semibold text-gray-300">Calls ({card.openPhoneCalls.length})</span>
             <span className="text-gray-500 text-xs">{expandedSection === "calls" ? "▲" : "▼"}</span>
           </button>
@@ -1245,14 +1245,14 @@ function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
       {/* Vapi calls */}
       {card.vapiCalls.length > 0 && (
         <div>
-          <button onClick={() => toggle("vapi")} className="w-full px-4 py-2.5 flex items-center justify-between text-left hover:bg-white/5 transition-colors">
+          <button onClick={() => toggle("vapi")} className="w-full px-4 py-2.5 flex items-center justify-between text-left transition-all hover:bg-purple-50">
             <span className="text-xs font-semibold text-gray-300">AI Calls ({card.vapiCalls.length})</span>
             <span className="text-gray-500 text-xs">{expandedSection === "vapi" ? "▲" : "▼"}</span>
           </button>
           {expandedSection === "vapi" && (
             <div className="px-4 pb-3 space-y-2">
               {card.vapiCalls.map((c, i) => (
-                <div key={i} className="bg-white/5 rounded-lg px-3 py-2">
+                <div key={i} className="rounded-lg px-3 py-2" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #f0e8fa"}}>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-white capitalize">{(c.step ?? "call").replace(/_/g," ")}</span>
                     {c.outcome && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${c.outcome === "success" ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>{c.outcome}</span>}
@@ -1297,7 +1297,7 @@ const HINT_EXAMPLES = [
 function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
     <div className="mb-2 bg-[#1a1d2e] border border-white/15 rounded-xl">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
+      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #e5d9ea"}}>
         <p className="text-sm text-white font-semibold">Things you can ask</p>
         <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-lg leading-none">✕</button>
       </div>
@@ -1306,7 +1306,7 @@ function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void;
           <button
             key={ex.label}
             onClick={() => { onSelect(ex.example); onClose(); }}
-            className="flex flex-col gap-1 p-3 rounded-xl border border-white/10 bg-white/5 hover:bg-indigo-600/15 hover:border-indigo-500/40 transition-colors text-left"
+            className="flex flex-col gap-1 p-3 rounded-xl transition-all text-left hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
           >
             <span className="text-lg leading-none">{ex.emoji}</span>
             <p className="text-xs text-white font-semibold mt-1">{ex.label}</p>
@@ -1966,9 +1966,9 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           </div>
         )}
         {showRecognitionPill && allMatches.length > 1 && (
-          <div className="mb-2 bg-[#1e2235] border border-indigo-500/25 rounded-xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/8">
-              <p className="text-indigo-300 text-xs font-semibold">{allMatches.length} people found — who did you mean?</p>
+          <div className="mb-2 rounded-xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #c4b5fd",boxShadow:"0 4px 16px rgba(116,71,245,0.12)"}}>
+            <div className="px-3 py-2" style={{borderBottom:"1px solid #e5d9ea"}}>
+              <p className="text-xs font-semibold" style={{color:"#7447f5"}}>{allMatches.length} people found — who did you mean?</p>
             </div>
             <div className="flex flex-col">
               {allMatches.slice(0, 4).map((m, idx) => (
@@ -1976,14 +1976,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   key={m.phone}
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
-                  className="flex items-center gap-2.5 px-3 py-2.5 transition-colors text-left border-b border-white/5 last:border-0 hover:bg-indigo-500/10"
+                  className="flex items-center gap-2.5 px-3 py-2.5 transition-all text-left last:border-0 hover:bg-purple-50" style={{borderBottom:"1px solid #f0e8fa"}}
                 >
-                  <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.12)",color:"#7447f5"}}>
                     {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-semibold truncate">{m.name}</p>
-                    <p className="text-gray-400 text-[11px] truncate">{m.subtitle}</p>
+                    <p className="text-xs font-semibold truncate" style={{color:"#202431"}}>{m.name}</p>
+                    <p className="text-[11px] truncate" style={{color:"#8a8a9a"}}>{m.subtitle}</p>
                   </div>
                 </button>
               ))}
@@ -1993,10 +1993,10 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
         {/* ── Change popup: shown when user taps Change on the locked pill ── */}
         {showChangePopup && focusedCustomer && (
-          <div className="mb-2 bg-[#1e2235] border border-white/20 rounded-xl overflow-hidden">
-            <div className="px-3 py-2 border-b border-white/8 flex items-center justify-between">
-              <p className="text-white text-xs font-semibold">Who did you mean?</p>
-              <button type="button" onClick={() => setShowChangePopup(false)} className="text-gray-500 hover:text-gray-300 text-xs">✕</button>
+          <div className="mb-2 rounded-xl overflow-hidden" style={{background:"linear-gradient(135deg,#fffdf9,#f7f0ff)",border:"1px solid #e5d9ea",boxShadow:"0 4px 16px rgba(116,71,245,0.10)"}}>
+            <div className="px-3 py-2 flex items-center justify-between" style={{borderBottom:"1px solid #e5d9ea"}}>
+              <p className="text-xs font-semibold" style={{color:"#202431"}}>Who did you mean?</p>
+              <button type="button" onClick={() => setShowChangePopup(false)} className="text-xs" style={{color:"#8a8a9a"}}>✕</button>
             </div>
             <div className="flex flex-col">
               {allMatches.slice(0, 5).map((m) => (
@@ -2004,14 +2004,14 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   key={m.phone}
                   type="button"
                   onMouseDown={(e) => { e.preventDefault(); confirmPill(m.isCleaner && m.cleanerProfileId != null ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone } : { type: "customer", name: m.name, phone: m.phone }); }}
-                  className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-indigo-500/10 transition-colors text-left border-b border-white/5 last:border-0"
+                  className="flex items-center gap-2.5 px-3 py-2.5 transition-all text-left last:border-0 hover:bg-purple-50" style={{borderBottom:"1px solid #f0e8fa"}}
                 >
-                  <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.12)",color:"#7447f5"}}>
                     {m.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-xs font-semibold truncate">{m.name}</p>
-                    <p className="text-gray-400 text-[11px] truncate">{m.subtitle}</p>
+                    <p className="text-xs font-semibold truncate" style={{color:"#202431"}}>{m.name}</p>
+                    <p className="text-[11px] truncate" style={{color:"#8a8a9a"}}>{m.subtitle}</p>
                   </div>
                 </button>
               ))}
