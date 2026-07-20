@@ -734,34 +734,42 @@ export const cleanerRouter = router({
         if (input.etaTimestampOverride) {
           // Cleaner used the ETA picker — write a synthetic eta_call_result card so
           // TeamEtaModal shows the correct time instead of "Waiting for ETA".
+          // Mirror the VAPI path: send SMS first, then insert the card with the result.
           const etaTimeStr = formatTimeET(new Date(input.etaTimestampOverride));
+          // Await SMS so we know whether it was sent before writing the card
+          await sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
+            console.error("[FieldMgmt] sendClientOnTheWaySms (manual ETA) error:", err)
+          );
           const db2 = await getDb();
           if (db2) {
             await db2.insert(opsChatMessages).values({
+              channel: "command",
+              from: "System",
               cleanerJobId: input.cleanerJobId,
               authorName: "System",
               authorRole: "system",
-              body: `ETA set manually by cleaner: ${etaTimeStr}`,
+              body: `ETA confirmed: ${etaTimeStr} — client notified`,
               quickAction: "eta_call_result",
               metadata: JSON.stringify({
+                cleanerJobId: input.cleanerJobId,
+                cleanerName: job.cleanerName ?? null,
+                customerName: job.customerName ?? null,
                 step: "eta_call_1",
                 resultType: "success",
                 etaTimeStr,
                 etaStatus: "on_time",
                 cleanerStatement: "Cleaner set ETA manually via picker",
-                clientNotified: false,
-                clientSmsBody: null,
+                clientNotified: true,
+                clientSmsBody: `Your Maids in Black team is on the way and will arrive around ${etaTimeStr}. 🚗`,
                 recordingUrl: null,
                 transcript: null,
                 vapiCallId: null,
                 scheduledTime: null,
               }),
-            });
+            } as any);
+            const { broadcastOpsUpdate } = await import("./sseBroadcast");
+            broadcastOpsUpdate("new_message", { channel: "command" });
           }
-          // Send on-the-way SMS to customer with the manually selected ETA time
-          sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
-            console.error("[FieldMgmt] sendClientOnTheWaySms (manual ETA) error:", err)
-          );
         }
       }
       if (input.status === "arrived") {
