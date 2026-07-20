@@ -32,6 +32,66 @@ function getTodayET(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
+// ── Mission metadata ─────────────────────────────────────────────────────────
+
+export interface MissionStep {
+  id: string;
+  label: string;
+  status: "completed" | "failed" | "skipped";
+  detail?: string;
+}
+
+export interface MissionStats {
+  total: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  waiting: number;
+}
+
+export interface MissionMetadata {
+  missionId: string;
+  missionTitle: string;
+  missionStatus: "completed" | "failed" | "blocked";
+  missionStartedAt: string;
+  missionCompletedAt: string;
+  missionSteps: MissionStep[];
+  missionStats: MissionStats;
+  missionSummary: string;
+}
+
+function createMissionMetadata({
+  title,
+  startedAt,
+  status,
+  summary,
+  steps,
+}: {
+  title: string;
+  startedAt: Date;
+  status: "completed" | "failed" | "blocked";
+  summary: string;
+  steps: MissionStep[];
+}): MissionMetadata {
+  const stats: MissionStats = {
+    total: steps.length,
+    completed: steps.filter(s => s.status === "completed").length,
+    failed: steps.filter(s => s.status === "failed").length,
+    skipped: steps.filter(s => s.status === "skipped").length,
+    waiting: 0,
+  };
+  return {
+    missionId: crypto.randomUUID(),
+    missionTitle: title,
+    missionStatus: status,
+    missionStartedAt: startedAt.toISOString(),
+    missionCompletedAt: new Date().toISOString(),
+    missionSteps: steps,
+    missionStats: stats,
+    missionSummary: summary,
+  };
+}
+
 // ── Result types ──────────────────────────────────────────────────────────────
 
 interface EtaPendingResult {
@@ -87,6 +147,7 @@ interface BulkSmsSentResult {
     success: boolean;
     error?: string;
   }>;
+  mission?: MissionMetadata;
 }
 
 /** Returned when a client name search returns multiple matches — agent must pick one */
@@ -144,6 +205,7 @@ export interface PaymentLinkSentResult {
   paymentLinkUrl: string;
   success: boolean;
   error?: string;
+  mission?: MissionMetadata;
 }
 
 /** Returned when the concierge answers a natural-language query about today's jobs */
@@ -1687,6 +1749,7 @@ export const aiConciergeRouter = router({
       })
     )
         .mutation(async ({ ctx, input }) => {
+      const startedAt = new Date();
       try {
         const result = await sendSms({
           to: input.recipientPhone,
@@ -1706,15 +1769,43 @@ export const aiConciergeRouter = router({
             }).catch(console.error);
           }
         }
+        const mission = createMissionMetadata({
+          title: `Payment Link → ${input.recipientName}`,
+          startedAt,
+          status: result.success ? "completed" : "failed",
+          summary: result.success
+            ? `Payment link sent to ${input.recipientName} (${input.recipientPhone.slice(-4)}).`
+            : `Failed to send payment link to ${input.recipientName}.`,
+          steps: [
+            { id: crypto.randomUUID(), label: "Generated secure payment link", status: "completed" },
+            {
+              id: crypto.randomUUID(),
+              label: `Sent link to ${input.recipientName}`,
+              status: result.success ? "completed" : "failed",
+              detail: result.success ? `Delivered to ...${input.recipientPhone.slice(-4)}` : "SMS delivery failed",
+            },
+          ],
+        });
         return {
           type: "payment_link_sent" as const,
           recipientName: input.recipientName,
           recipientPhone: input.recipientPhone,
           paymentLinkUrl: input.paymentLinkUrl,
           success: result.success,
+          mission,
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const mission = createMissionMetadata({
+          title: `Payment Link → ${input.recipientName}`,
+          startedAt,
+          status: "failed",
+          summary: `Failed to send payment link to ${input.recipientName}: ${msg}`,
+          steps: [
+            { id: crypto.randomUUID(), label: "Generated secure payment link", status: "completed" },
+            { id: crypto.randomUUID(), label: `Sent link to ${input.recipientName}`, status: "failed", detail: msg },
+          ],
+        });
         return {
           type: "payment_link_sent" as const,
           recipientName: input.recipientName,
@@ -1722,6 +1813,7 @@ export const aiConciergeRouter = router({
           paymentLinkUrl: input.paymentLinkUrl,
           success: false,
           error: msg,
+          mission,
         };
       }
     }),
@@ -1738,9 +1830,11 @@ export const aiConciergeRouter = router({
           phone: z.string(),
         })),
         message: z.string().min(1).max(1600),
+        missionTitle: z.string().optional(),
       })
     )
         .mutation(async ({ ctx, input }) => {
+      const startedAt = new Date();
       const results: BulkSmsSentResult["results"] = [];
       const db = await getDb();
       for (const recipient of input.recipients) {
@@ -1770,12 +1864,35 @@ export const aiConciergeRouter = router({
       const sent = results.filter(r => r.success).length;
       const failed = results.filter(r => !r.success).length;
 
+      const missionSteps: MissionStep[] = results.map(r => ({
+        id: crypto.randomUUID(),
+        label: `Texted ${r.name}`,
+        status: r.success ? "completed" : "failed",
+        detail: r.success
+          ? `Message delivered to ...${r.phone.slice(-4)}`
+          : (r.error ?? "Send failed"),
+      }));
+
+      const overallStatus = failed === 0 ? "completed" : sent > 0 ? "completed" : "failed";
+      const summary = failed === 0
+        ? `${sent} message${sent !== 1 ? "s" : ""} sent successfully.`
+        : `${sent} sent, ${failed} failed.`;
+
+      const mission = createMissionMetadata({
+        title: input.missionTitle ?? `Text ${input.recipients.length === 1 ? input.recipients[0].name : `${input.recipients.length} Cleaners`}`,
+        startedAt,
+        status: overallStatus,
+        summary,
+        steps: missionSteps,
+      });
+
       return {
         type: "bulk_sms_sent" as const,
         message: failed === 0
           ? `Sent to ${sent} cleaner${sent !== 1 ? "s" : ""}.`
           : `Sent to ${sent}, failed for ${failed}.`,
         results,
+        mission,
       };
     }),
 });

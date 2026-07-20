@@ -43,24 +43,12 @@ import {
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useMissionHistory, type MissionMetadata, type MadisonMission, type MissionViewState } from "@/hooks/useMissionHistory";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type StepStatus = "done" | "pending" | "running" | "failed";
-
-interface WorkflowStep {
-  id: string;
-  label: string;
-  status: StepStatus;
-  ts?: string; // e.g. "9:41 AM"
-  detail?: string;
-}
-
-interface WorkflowCard {
-  summary: string;
-  steps: WorkflowStep[];
-  expandable?: { label: string; content: string };
-}
 
 interface CompletedCard {
   message: string;
@@ -95,6 +83,7 @@ interface BulkSmsConfirmCard {
 interface BulkSmsSentCard {
   message: string;
   results: Array<{ name: string; phone: string; success: boolean; error?: string }>;
+  mission?: MissionMetadata;
 }
 interface PaymentLinkConfirmCard {
   recipientName: string;
@@ -110,6 +99,7 @@ interface PaymentLinkSentCard {
   paymentLinkUrl: string;
   success: boolean;
   error?: string;
+  mission?: MissionMetadata;
 }
 interface CallClientConfirmCard {
   recipientName: string;
@@ -158,7 +148,6 @@ interface CustomerProfileCard {
 
 type MessageContent =
   | { type: "text"; text: string }
-  | { type: "workflow"; workflow: WorkflowCard }
   | { type: "completed"; card: CompletedCard }
   | { type: "clarify"; card: ClarifyCard }
   | { type: "eta_pending"; card: EtaPendingCard }
@@ -215,61 +204,6 @@ function StepIcon({ status }: { status: StepStatus }) {
     <span className="flex-shrink-0 w-6 h-6 rounded-full border-2 border-gray-500 flex items-center justify-center">
       <Circle className="w-3 h-3 text-gray-500" />
     </span>
-  );
-}
-
-// ─── Workflow card ────────────────────────────────────────────────────────────
-
-function WorkflowCardView({ workflow }: { workflow: WorkflowCard }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="mt-3 rounded-xl border border-white/10 bg-white/5 overflow-hidden">
-      {/* Summary */}
-      <div className="px-4 py-3 text-sm text-gray-200 leading-relaxed border-b border-white/10">
-        {workflow.summary}
-      </div>
-      {/* Steps */}
-      <div className="px-4 py-3 space-y-3">
-        {workflow.steps.map((step) => (
-          <div key={step.id} className="flex items-center gap-3">
-            <StepIcon status={step.status} />
-            <span
-              className={`flex-1 text-sm ${
-                step.status === "running"
-                  ? "text-white font-semibold"
-                  : step.status === "done"
-                  ? "text-gray-300"
-                  : step.status === "failed"
-                  ? "text-red-400"
-                  : "text-gray-500"
-              }`}
-            >
-              {step.label}
-            </span>
-            {step.ts && (
-              <span className="text-xs text-gray-500 flex-shrink-0">{step.ts}</span>
-            )}
-          </div>
-        ))}
-      </div>
-      {/* Expandable details */}
-      {workflow.expandable && (
-        <div className="border-t border-white/10">
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors"
-          >
-            <span>{workflow.expandable.label}</span>
-            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          {expanded && (
-            <div className="px-4 pb-4 text-sm text-gray-400 leading-relaxed whitespace-pre-wrap">
-              {workflow.expandable.content}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -370,7 +304,7 @@ function BulkSmsConfirmCardView({ card, onSent }: { card: BulkSmsConfirmCard; on
       {
         onSuccess: (result) => {
           setSent(true);
-          onSent({ message: result.message, results: result.results });
+          onSent({ message: result.message, results: result.results, mission: result.mission });
         },
       }
     );
@@ -486,7 +420,7 @@ function PaymentLinkConfirmCardView({ card, onSent }: { card: PaymentLinkConfirm
       {
         onSuccess: (result) => {
           setSent(true);
-          onSent(result);
+          onSent({ ...result, mission: result.mission });
         },
       }
     );
@@ -906,12 +840,14 @@ function MessageBubble({
   onPickTeam,
   onPickClient,
   onAddMessage,
+  onAddMission,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
   onPickTeam: (jobId: number, teamName: string) => void;
   onPickClient: (phone: string, name: string, messageHint: string | null) => void;
   onAddMessage: (m: Message) => void;
+  onAddMission: (metadata: MissionMetadata) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -952,12 +888,6 @@ function MessageBubble({
             {msg.content.text}
           </div>
         )}
-        {msg.content.type === "workflow" && (
-          <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
-            <WorkflowCardView workflow={msg.content.workflow} />
-            <div className="text-right text-xs text-gray-500 mt-2">{msg.ts}</div>
-          </div>
-        )}
         {msg.content.type === "completed" && (
           <div>
             <CompletedCardView card={msg.content.card} />
@@ -987,6 +917,7 @@ function MessageBubble({
                   content: { type: "bulk_sms_sent", card: result },
                   ts: nowTime(),
                 });
+                if (result.mission) onAddMission(result.mission);
               }}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
@@ -1021,6 +952,7 @@ function MessageBubble({
                   content: { type: "payment_link_sent", card: result },
                   ts: nowTime(),
                 });
+                if (result.mission) onAddMission(result.mission);
               }}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
@@ -1470,9 +1402,168 @@ function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void;
   );
 }
 
+// ─── Mission Card ───────────────────────────────────────────────────────────
+
+function missionTimeAgo(isoDate: string): string {
+  const d = new Date(isoDate);
+  const diffMs = Date.now() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function fmtAbsTime(isoDate: string): string {
+  return new Date(isoDate).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function MissionCard({
+  mission,
+  viewState,
+  onSetViewState,
+}: {
+  mission: MadisonMission;
+  viewState: MissionViewState;
+  onSetViewState: (id: string, state: MissionViewState) => void;
+}) {
+  const isExpanded = viewState === "expanded";
+  const autoCollapseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const userInteractedRef = useRef(false);
+
+  // Auto-collapse after 2s for completed missions — only if user hasn't interacted
+  useEffect(() => {
+    if (mission.missionStatus !== "completed") return;
+    if (viewState !== "expanded") return;
+    autoCollapseRef.current = setTimeout(() => {
+      if (!userInteractedRef.current) {
+        onSetViewState(mission.missionId, "collapsed");
+      }
+    }, 2000);
+    return () => {
+      if (autoCollapseRef.current) clearTimeout(autoCollapseRef.current);
+    };
+  }, [mission.missionId, mission.missionStatus, viewState, onSetViewState]);
+
+  const handleToggle = () => {
+    userInteractedRef.current = true;
+    if (autoCollapseRef.current) clearTimeout(autoCollapseRef.current);
+    onSetViewState(mission.missionId, isExpanded ? "collapsed" : "expanded");
+  };
+
+  const statusColor =
+    mission.missionStatus === "completed"
+      ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+      : mission.missionStatus === "failed"
+      ? "text-red-400 bg-red-500/15 border-red-500/30"
+      : "text-amber-400 bg-amber-500/15 border-amber-500/30";
+
+  const statusLabel =
+    mission.missionStatus === "completed" ? "Completed" :
+    mission.missionStatus === "failed" ? "Failed" : "Blocked";
+
+  const stepIcon = (status: MissionStep["status"]) => {
+    if (status === "completed") return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />;
+    if (status === "failed") return <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />;
+    return <Circle className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />;
+  };
+
+  return (
+    <div className="bg-[#1a1d2e] border border-white/10 rounded-2xl overflow-hidden">
+      {/* Header — always visible, click to toggle */}
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors text-left"
+      >
+        <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
+          <Zap className="w-3.5 h-3.5 text-indigo-300" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-semibold truncate">{mission.missionTitle}</p>
+          <p className="text-gray-500 text-[11px] mt-0.5">
+            {mission.missionStats.completed} action{mission.missionStats.completed !== 1 ? "s" : ""}
+            {" · "}{missionTimeAgo(mission.missionCompletedAt)}
+          </p>
+        </div>
+        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusColor}`}>
+          {statusLabel}
+        </span>
+        {isExpanded
+          ? <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />}
+      </button>
+
+      {/* Expanded body */}
+      {isExpanded && (
+        <div className="px-4 pb-4">
+          {/* Timestamps */}
+          <div className="flex items-center gap-4 mb-3 pt-1 border-t border-white/8">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-gray-500" />
+              <span className="text-[11px] text-gray-500">Started {fmtAbsTime(mission.missionStartedAt)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3 h-3 text-gray-500" />
+              <span className="text-[11px] text-gray-500">Completed {fmtAbsTime(mission.missionCompletedAt)}</span>
+            </div>
+          </div>
+
+          {/* Steps */}
+          <div className="space-y-2 mb-3">
+            {mission.missionSteps.map((step) => (
+              <div
+                key={step.id}
+                className="flex items-start gap-2.5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {stepIcon(step.status)}
+                <div className="flex-1 min-w-0">
+                  <p className="text-gray-200 text-xs leading-snug">{step.label}</p>
+                  {step.detail && (
+                    <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{step.detail}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Summary */}
+          <div
+            className="border-t border-white/8 pt-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="text-gray-400 text-[11px] leading-relaxed">{mission.missionSummary}</p>
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-[10px] text-gray-600">{mission.missionStats.total} total</span>
+              <span className="text-[10px] text-emerald-600">{mission.missionStats.completed} completed</span>
+              {mission.missionStats.failed > 0 && (
+                <span className="text-[10px] text-red-500">{mission.missionStats.failed} failed</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type MissionStep = MadisonMission["missionSteps"][number];
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?: string; onClose?: () => void }) {
+  const { user } = useAuth();
+  const {
+    missions,
+    viewState: missionViewState,
+    addMission,
+    setViewState: setMissionViewState,
+    clearHistory: clearMissionHistory,
+  } = useMissionHistory(user?.openId ?? undefined);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome",
@@ -1630,7 +1721,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       {
         onSuccess: (result) => {
           setIsThinking(false);
-          setMessages((prev) => [...prev, buildAiMessage(result)]);
+          const aiMsg0 = buildAiMessage(result);
+          if (aiMsg0) setMessages((prev) => [...prev, aiMsg0]);
           if (result.type === "customer_profile") {
             setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
           }
@@ -1680,7 +1772,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         onSuccess: (result) => {
           setIsThinking(false);
           const aiMsg = buildAiMessage(result);
-          setMessages((prev) => [...prev, aiMsg]);
+          if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1715,7 +1807,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         onSuccess: (result) => {
           setIsThinking(false);
           const aiMsg = buildAiMessage(result);
-          setMessages((prev) => [...prev, aiMsg]);
+          if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1784,7 +1876,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         onSuccess: (result) => {
           setIsThinking(false);
           const aiMsg = buildAiMessage(result);
-          setMessages((prev) => [...prev, aiMsg]);
+          if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
           // Lock suggestions to this customer when a profile is shown
           if (result.type === "customer_profile") {
             setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
@@ -1849,8 +1941,31 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+        {/* Mission History */}
+        {missions.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600">Mission History</p>
+              <button
+                onClick={() => clearMissionHistory()}
+                className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
+            {[...missions].reverse().map((mission) => (
+              <MissionCard
+                key={mission.missionId}
+                mission={mission}
+                viewState={missionViewState[mission.missionId] ?? "collapsed"}
+                onSetViewState={setMissionViewState}
+              />
+            ))}
+            <div className="border-t border-white/8 pt-1" />
+          </div>
+        )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -2023,7 +2138,6 @@ type ServerResult =
   | { type: "completed"; message: string }
   | { type: "error"; message: string }
   | { type: "clarify"; message: string; teams: Array<{ name: string; currentJobId: number; address: string; scheduled: string; etaStatus: string }> }
-  | { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } }
   | { type: "eta_pending"; jobId: number; teamName: string; cleanerName: string; scheduledTimeET: string; date: string }
   | { type: "bulk_sms_confirm"; targetDescription: string; recipients: BulkSmsRecipient[]; draftMessage: string }
   | { type: "bulk_sms_sent"; message: string; results: Array<{ name: string; phone: string; success: boolean; error?: string }> }
@@ -2035,7 +2149,7 @@ type ServerResult =
   | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> }
   | { type: "customer_profile"; profile: CustomerProfileCard };
 
-function buildAiMessage(result: ServerResult): Message {
+function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
 
   if (result.type === "completed") {
@@ -2196,12 +2310,5 @@ function buildAiMessage(result: ServerResult): Message {
       ts,
     };
   }
-  // workflow
-  const workflowResult = result as { type: "workflow"; summary: string; steps: WorkflowStep[]; expandable?: { label: string; content: string } };
-  return {
-    id: uid(),
-    role: "ai",
-    content: { type: "workflow", workflow: { summary: workflowResult.summary, steps: workflowResult.steps, expandable: workflowResult.expandable } },
-    ts,
-  };
+  return null;
 }
