@@ -1867,7 +1867,7 @@ export const aiConciergeRouter = router({
               id: crypto.randomUUID(),
               label: `Sent link to ${input.recipientName}`,
               status: result.success ? "completed" : "failed",
-              detail: result.success ? `Delivered to ...${input.recipientPhone.slice(-4)}` : "SMS delivery failed",
+              detail: result.success ? input.smsText : "SMS delivery failed",
             },
           ],
         });
@@ -1978,7 +1978,7 @@ export const aiConciergeRouter = router({
         label: `Texted ${r.name}`,
         status: r.success ? "completed" : "failed",
         detail: r.success
-          ? `Message delivered to ...${r.phone.slice(-4)}`
+          ? input.message
           : (r.error ?? "Send failed"),
       }));
 
