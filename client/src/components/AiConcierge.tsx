@@ -1567,6 +1567,10 @@ type MissionStep = MadisonMission["missionSteps"][number];
 
 export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?: string; onClose?: () => void }) {
   const { user } = useAuth();
+  // Use the agent's numeric id (from agent cookie session) as the stable userId for
+  // mission history. Agents do NOT use Manus OAuth, so user?.openId is always undefined.
+  const agentMeQuery = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 60_000, refetchOnWindowFocus: false });
+  const agentUserId = agentMeQuery.data?.id != null ? String(agentMeQuery.data.id) : undefined;
   const {
     missions,
     viewState: missionViewState,
@@ -1574,7 +1578,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setViewState: setMissionViewState,
     clearHistory: clearMissionHistory,
     isLoading: missionsLoading,
-  } = useMissionHistory(user?.openId ?? undefined);
+  } = useMissionHistory(agentUserId);
 
   const [messages, setMessages] = useState<Message[]>([
     {
