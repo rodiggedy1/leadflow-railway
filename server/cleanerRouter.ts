@@ -735,6 +735,7 @@ export const cleanerRouter = router({
           // Cleaner used the ETA picker — write a synthetic eta_call_result card so
           // TeamEtaModal shows the correct time instead of "Waiting for ETA".
           const etaTimeStr = formatTimeET(new Date(input.etaTimestampOverride));
+          const smsResult = await sendClientOnTheWaySms(input.cleanerJobId);
           const db2 = await getDb();
           if (db2) {
             await db2.insert(opsChatMessages).values({
@@ -743,7 +744,7 @@ export const cleanerRouter = router({
               cleanerJobId: input.cleanerJobId,
               authorName: "System",
               authorRole: "system",
-              body: `ETA confirmed: ${etaTimeStr} — SMS pending`,
+              body: `ETA confirmed: ${etaTimeStr} — ${smsResult.sent ? "client notified" : "SMS pending"}`,
               quickAction: "eta_call_result",
               metadata: JSON.stringify({
                 cleanerJobId: input.cleanerJobId,
@@ -754,8 +755,8 @@ export const cleanerRouter = router({
                 etaTimeStr,
                 etaStatus: "on_time",
                 cleanerStatement: "Cleaner set ETA manually via picker",
-                clientNotified: false,
-                clientSmsBody: null,
+                clientNotified: smsResult.sent,
+                clientSmsBody: smsResult.body,
                 recordingUrl: null,
                 transcript: null,
                 vapiCallId: null,

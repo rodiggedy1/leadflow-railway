@@ -567,10 +567,10 @@ export async function runPreJobReminders(): Promise<{ checked: number; sent: num
  * Called from cleanerRouter.updateJobStatus when status = "on_the_way".
  * Sends an ETA SMS to the CLIENT (not the cleaner).
  */
-export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void> {
-  if (!FIELD_MGMT_ENABLED) return;
+export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<{ sent: boolean; body: string | null }> {
+  if (!FIELD_MGMT_ENABLED) return { sent: false, body: null };
   const db = await getDb();
-  if (!db) return;
+  if (!db) return { sent: false, body: null };
 
   const jobRows = await db
     .select()
@@ -578,12 +578,12 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
     .where(eq(cleanerJobs.id, cleanerJobId))
     .limit(1);
   const job = jobRows[0];
-  if (!job) return;
+  if (!job) return { sent: false, body: null };
 
   const clientPhone = job.customerPhone;
   if (!clientPhone) {
     console.warn(`[FieldMgmt] Client on-the-way: no customer phone for job ${cleanerJobId}`);
-    return;
+    return { sent: false, body: null };
   }
 
   const clientFirstName = firstName(job.customerName);
@@ -614,16 +614,18 @@ export async function sendClientOnTheWaySms(cleanerJobId: number): Promise<void>
   ].join("\n");
 
   const claimed = await tryClaimStep({ cleanerJobId, step: "client_on_the_way", smsSent: msg, recipientPhone: clientPhone });
-  if (!claimed) return;
+  if (!claimed) return { sent: false, body: null };
 
   const result = await sendSms({ to: clientPhone, content: msg });
 
   if (result.success) {
     console.log(`[FieldMgmt] Client on-the-way SMS sent to ${clientPhone} for job ${cleanerJobId}`);
     if (result.messageId) await updateStepMessageId(cleanerJobId, "client_on_the_way", result.messageId);
+    return { sent: true, body: msg };
   } else {
     await updateStepOutcome(cleanerJobId, "client_on_the_way", false, result.error);
     console.error(`[FieldMgmt] Client on-the-way SMS FAILED for job ${cleanerJobId}:`, result.error);
+    return { sent: false, body: null };
   }
 }
 
