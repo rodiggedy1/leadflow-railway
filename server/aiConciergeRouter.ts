@@ -340,13 +340,14 @@ type ConciergeResult =
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
+type TargetType = "customer" | "cleaner" | "team" | "unknown";
 type Intent =
   | { action: "eta_update"; teamHint: string | null }
   | { action: "get_eta_for_customer"; clientName: string | null }
-  | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
-  | { action: "text_client"; clientName: string | null; messageHint: string | null }
+  | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null; targetType: TargetType }
+  | { action: "text_client"; clientName: string | null; messageHint: string | null; targetType: TargetType }
   | { action: "send_payment_link"; clientName: string | null }
-  | { action: "call_client"; clientName: string | null; questionHint: string | null }
+  | { action: "call_client"; clientName: string | null; questionHint: string | null; targetType: TargetType }
   | { action: "query_data" }
   | { action: "customer_profile"; clientName: string | null }
   | { action: "unknown" };
@@ -378,16 +379,24 @@ For get_eta_for_customer:
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
 - messageHint should be the topic/content to send
-
+- targetType: set to "cleaner" or "team" — NEVER "customer"
 For text_client:
 - clientName MUST be the exact full name of the customer as written by the user
 - messageHint should be the topic/content to send
+- targetType: set to "customer"
 For send_payment_link:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "send rohan gilkes a payment link" → clientName = "rohan gilkes")
 - messageHint is null
 For call_client:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "call rohan gilkes and ask about reschedule" → clientName = "rohan gilkes")
 - questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
+- targetType: "customer" when calling a named client/homeowner; "cleaner" when calling cleaning staff
+
+targetType classification rules:
+- "customer": the named person is a homeowner/client receiving cleaning services. A full personal name (first + last) like "Rohan Gilkes", "Mary Jones", "John Smith" is almost always a customer.
+- "cleaner": the named person is cleaning staff or a specific cleaner by name
+- "team": refers to a team label (e.g. "Team 5", "DC cleaners", "all cleaners")
+- "unknown": cannot determine
 Return JSON only:
 {
   "action": "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
@@ -395,7 +404,8 @@ Return JSON only:
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
   "messageHint": "<the message content or topic for text_client or text_cleaners, or null>",
-  "questionHint": "<the topic/question to ask for call_client, or null>"
+  "questionHint": "<the topic/question to ask for call_client, or null>",
+  "targetType": "customer" | "cleaner" | "team" | "unknown"
 }`,
       },
       { role: "user", content: message },
@@ -414,8 +424,9 @@ Return JSON only:
             clientName: { type: ["string", "null"] },
             messageHint: { type: ["string", "null"] },
             questionHint: { type: ["string", "null"] },
+            targetType: { type: "string", enum: ["customer", "cleaner", "team", "unknown"] },
           },
-          required: ["action", "teamHint", "targetHint", "clientName", "messageHint", "questionHint"],
+          required: ["action", "teamHint", "targetHint", "clientName", "messageHint", "questionHint", "targetType"],
           additionalProperties: false,
         },
       },
@@ -1756,6 +1767,22 @@ export const aiConciergeRouter = router({
       }
 
       if (intent.action === "text_cleaners") {
+        // Contradiction check: action=text_cleaners but targetType=customer or clientName is set
+        // This happens when the LLM misroutes a named customer (e.g. "text Rohan Gilkes running late")
+        const contradictionDetected =
+          intent.targetType === "customer" ||
+          (!!intent.clientName && intent.targetType !== "cleaner" && intent.targetType !== "team");
+        if (contradictionDetected) {
+          // Resolve: treat as text_client using clientName or targetHint as the customer name
+          const resolvedName = intent.clientName ?? intent.targetHint;
+          const textClientResult = re?.type === "customer"
+            ? await handleTextClient(null, intent.messageHint, db, re.phone)
+            : await handleTextClient(resolvedName, intent.messageHint, db);
+          if (textClientResult.type === "bulk_sms_confirm") {
+            return { ...textClientResult, command: input.message };
+          }
+          return textClientResult;
+        }
         // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
         const textCleanersResult = re?.type === "cleaner"
           ? await handleTextCleaners(re.name, intent.messageHint, db)
