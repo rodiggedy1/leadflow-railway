@@ -1448,7 +1448,7 @@ const HINT_EXAMPLES = [
 
 function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
-    <div className="absolute bottom-full left-0 mb-2 w-[340px] bg-[#1a1d2e] border border-white/15 rounded-xl shadow-2xl overflow-hidden z-50">
+    <div className="absolute bottom-full left-0 right-0 mb-2 bg-[#1a1d2e] border border-white/15 rounded-xl shadow-2xl z-50">
       <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
         <p className="text-sm text-white font-semibold">Things you can ask</p>
         <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-lg leading-none">✕</button>
@@ -2009,7 +2009,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </button>
           </div>
         {!input && (
-          <p className="px-4 pb-2 text-[11px] text-gray-600 transition-all">💡 {HINT_EXAMPLES[hintIdx]}</p>
+          <p className="px-4 pb-2 text-[11px] text-gray-400 transition-all">💡 {HINT_EXAMPLES[hintIdx]}</p>
         )}
         </div>
       </div>
