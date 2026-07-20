@@ -581,6 +581,10 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [etaEnabled, setEtaEnabled] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  // ETA picker — shown before the confirm sheet
+  const [showEtaPicker, setShowEtaPicker] = useState(false);
+  const [selectedEtaMins, setSelectedEtaMins] = useState(30);
+  const ETA_CHIPS = [5, 10, 15, 20, 30, 45, 60, 75, 90, 105, 120];
   // After user taps START NAVIGATION, show the pulsing "I've Arrived" CTA
   const LAUNCHED_KEY = `portal_v2_launched_${cleanerJobId ?? 'mock'}`;
   const [hasLaunched, setHasLaunched] = useState(() => {
@@ -618,7 +622,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
   const hasEta = eta?.ok;
   const utils = trpc.useUtils();
     /** Opens maps + fires on_the_way SMS. Only called on the FIRST launch. */
-  const handleNavigate = useCallback(async () => {
+  const handleNavigate = useCallback(async (manualEtaMins?: number) => {
     const dest = encodeURIComponent(jobAddress);
     const url = /iPhone|iPad|iPod/i.test(navigator.userAgent)
       ? `maps://maps.apple.com/?daddr=${dest}&dirflg=d`
@@ -636,10 +640,14 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
     } else {
       setGpsState("error");
     }
-    // 3. Resolve ETA imperatively before firing the status mutation.
+    // 3. Resolve ETA — manual picker selection takes priority over GPS.
     let etaTimestampOverride: number | undefined;
     let etaLabel: string | undefined;
-    if (freshCoords) {
+    if (manualEtaMins !== undefined) {
+      // Cleaner manually selected their ETA via the picker — use it directly.
+      etaTimestampOverride = Date.now() + manualEtaMins * 60 * 1000;
+      etaLabel = `${manualEtaMins}m`;
+    } else if (freshCoords) {
       try {
         const etaData = await utils.cleaner.getDriveEta.fetch({
           originLat: freshCoords.lat,
@@ -720,7 +728,7 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
         )}
         <div className="px-4 mt-5 pb-5">
           <button
-            onClick={() => setShowConfirm(true)}
+            onClick={() => setShowEtaPicker(true)}
             className="w-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-white font-black text-lg uppercase tracking-wide py-5 rounded-2xl border-2 border-emerald-400/30 shadow-lg shadow-emerald-900/40 transition-all flex items-center justify-center gap-3"
           >
             <Navigation className="w-6 h-6" />
@@ -730,35 +738,102 @@ function NavigateStepCard({ step, onComplete, jobAddress, cleanerJobId, jobStart
             {t('v2.nav.opensMaps')}
           </p>
         </div>
-        {/* Confirmation bottom sheet */}
-        {showConfirm && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowConfirm(false)}>
-            <div className="absolute inset-0 bg-black/60" />
+        {/* Step 1 — ETA Picker bottom sheet */}
+        {showEtaPicker && !showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowEtaPicker(false)}>
+            <div className="absolute inset-0 bg-black/70" />
             <div
-              className="relative w-full max-w-lg bg-slate-800 border border-slate-700 rounded-t-3xl px-6 pt-6 pb-10 shadow-2xl"
+              className="relative w-full max-w-lg bg-white rounded-t-3xl px-6 pt-5 pb-10 shadow-2xl"
               onClick={e => e.stopPropagation()}
             >
-              {/* Handle */}
-              <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5" />
-              <div className="text-center text-4xl mb-3">📱</div>
-              <h3 className="text-white text-xl font-black text-center leading-tight">
-                {t('v2.nav.confirmTitle', { name: customerName })}
-              </h3>
-              <p className="text-slate-400 text-sm text-center mt-3 leading-relaxed">
-                {t('v2.nav.confirmDesc')}
-              </p>
-              <div className="flex gap-3 mt-6">
+              <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-4" />
+              {/* Pill badge */}
+              <div className="flex justify-center mb-4">
+                <span className="inline-block bg-blue-100 text-blue-700 font-bold text-sm px-4 py-2 rounded-full">🚗 On My Way</span>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 text-center mb-2">Estimated Arrival Time</p>
+              {/* Hero time display */}
+              <div className="border-2 border-dashed border-slate-200 rounded-2xl py-5 px-4 text-center bg-slate-50 mb-4">
+                <div className="text-5xl font-black text-slate-900 leading-none">
+                  {(() => {
+                    const d = new Date(Date.now() + selectedEtaMins * 60000);
+                    const h = ((d.getHours() + 11) % 12) + 1;
+                    const m = String(d.getMinutes()).padStart(2, '0');
+                    const ap = d.getHours() >= 12 ? 'PM' : 'AM';
+                    return `${h}:${m} ${ap}`;
+                  })()}
+                </div>
+                <p className="text-blue-600 font-bold text-sm mt-2">Tap a time below to change your arrival</p>
+              </div>
+              {/* Time chips grid */}
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {ETA_CHIPS.map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setSelectedEtaMins(v)}
+                    className={cn(
+                      'py-3 rounded-xl font-bold text-sm border transition-all',
+                      selectedEtaMins === v
+                        ? 'bg-slate-900 text-white border-slate-900'
+                        : 'bg-white text-slate-700 border-slate-200 active:bg-slate-100'
+                    )}
+                  >
+                    {v}m
+                  </button>
+                ))}
+              </div>
+              {/* Info banner */}
+              <div className="bg-cyan-50 text-teal-700 font-bold text-sm text-center rounded-xl py-3 px-4 mb-4">
+                The customer will receive <span className="underline">this arrival time</span>.
+              </div>
+              {/* CTA */}
+              <button
+                onClick={() => { setShowEtaPicker(false); setShowConfirm(true); }}
+                className="w-full bg-blue-600 active:bg-blue-700 text-white font-black text-lg py-5 rounded-2xl shadow-lg transition-all"
+              >
+                Send Updated ETA
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Step 2 — Confirm bottom sheet */}
+        {showConfirm && (
+          <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setShowConfirm(false)}>
+            <div className="absolute inset-0 bg-black/70" />
+            <div
+              className="relative w-full max-w-lg bg-white rounded-t-3xl px-6 pt-5 pb-10 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="w-10 h-1 bg-slate-300 rounded-full mx-auto mb-4" />
+              <h3 className="text-slate-900 text-2xl font-black text-center">Confirm ETA</h3>
+              <p className="text-slate-500 text-sm text-center mt-2">You are about to send a text message to the customer with this arrival time:</p>
+              {/* Big time */}
+              <div className="text-5xl font-black text-center text-slate-900 my-5">
+                {(() => {
+                  const d = new Date(Date.now() + selectedEtaMins * 60000);
+                  const h = ((d.getHours() + 11) % 12) + 1;
+                  const m = String(d.getMinutes()).padStart(2, '0');
+                  const ap = d.getHours() >= 12 ? 'PM' : 'AM';
+                  return `${h}:${m} ${ap}`;
+                })()}
+              </div>
+              {/* Warning */}
+              <div className="bg-orange-50 border border-orange-200 text-orange-800 rounded-xl px-4 py-3 text-sm leading-relaxed mb-5">
+                <strong>The customer will immediately receive this ETA.</strong><br />
+                Please confirm this arrival time is correct before sending.
+              </div>
+              <div className="flex gap-3">
                 <button
-                  onClick={() => setShowConfirm(false)}
-                  className="flex-1 py-4 rounded-2xl bg-slate-700 text-slate-300 font-bold text-base border border-slate-600 active:bg-slate-600 transition-all"
+                  onClick={() => { setShowConfirm(false); setShowEtaPicker(true); }}
+                  className="flex-1 py-4 rounded-2xl bg-slate-100 text-slate-700 font-bold text-base active:bg-slate-200 transition-all"
                 >
-                  {t('v2.common.cancel')}
+                  Change Time
                 </button>
                 <button
-                  onClick={() => { setShowConfirm(false); handleNavigate(); }}
-                  className="flex-1 py-4 rounded-2xl bg-emerald-500 text-white font-black text-base shadow-lg shadow-emerald-900/40 active:bg-emerald-600 transition-all"
+                  onClick={() => { setShowConfirm(false); handleNavigate(selectedEtaMins); }}
+                  className="flex-1 py-4 rounded-2xl bg-blue-600 text-white font-black text-base active:bg-blue-700 transition-all"
                 >
-                  {t('v2.nav.confirmCta')}
+                  Send to Customer
                 </button>
               </div>
             </div>
