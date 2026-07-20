@@ -33,6 +33,8 @@ export interface MissionStep {
   label: string;
   status: "completed" | "failed" | "skipped";
   detail?: string;
+  /** Present on call steps — used by MissionCard to poll recording + transcript */
+  vapiCallId?: string;
 }
 
 export interface MissionStats {

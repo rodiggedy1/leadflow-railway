@@ -578,14 +578,14 @@ function AudioPlayer({ url }: { url: string | null }) {
 function todayET(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
-function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmCard; onFired: (vapiCallId: string) => void }) {
+function CallClientConfirmCardView({ card, onFired }: { card: CallClientConfirmCard; onFired: (vapiCallId: string, script: string) => void }) {
   const [script, setScript] = useState(card.script);
   const [fired, setFired] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const startCall = trpc.callMatrix.startCall.useMutation({
     onSuccess: (result) => {
       setFired(true);
-      onFired(result.vapiCallId ?? "");
+      onFired(result.vapiCallId ?? "", script);
     },
     onError: (err) => {
       setCallError(err.message);
@@ -833,7 +833,6 @@ function EtaPendingCardView({ card }: { card: EtaPendingCard }) {
   );
 }
 // ─── Message bubble ───────────────────────────────────────────────────────────
-
 function MessageBubble({
   msg,
   agentPhotoUrl,
@@ -849,6 +848,7 @@ function MessageBubble({
   onAddMessage: (m: Message) => void;
   onAddMission: (metadata: MissionMetadata) => void;
 }) {
+  const saveCallMission = trpc.aiConcierge.saveCallMission.useMutation();
   if (msg.role === "user") {
     return (
       <div className="flex items-end justify-end gap-3">
@@ -968,13 +968,22 @@ function MessageBubble({
           <div>
             <CallClientConfirmCardView
               card={msg.content.card}
-              onFired={(vapiCallId) => {
+              onFired={(vapiCallId, script) => {
+                const recipientName = msg.content.type === "call_client_confirm" ? msg.content.card.recipientName : "";
+                const recipientPhone = msg.content.type === "call_client_confirm" ? msg.content.card.recipientPhone : "";
                 onAddMessage({
                   id: uid(),
                   role: "ai",
-                  content: { type: "call_client_pending", card: { vapiCallId, recipientName: msg.content.type === "call_client_confirm" ? msg.content.card.recipientName : "", recipientPhone: msg.content.type === "call_client_confirm" ? msg.content.card.recipientPhone : "" } },
+                  content: { type: "call_client_pending", card: { vapiCallId, recipientName, recipientPhone } },
                   ts: nowTime(),
                 });
+                // Persist call mission — fire-and-forget, failure is non-blocking
+                if (vapiCallId) {
+                  saveCallMission.mutate(
+                    { vapiCallId, recipientName, recipientPhone, script },
+                    { onSuccess: (res) => { if (res.mission) onAddMission(res.mission); } }
+                  );
+                }
               }}
             />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
@@ -1428,6 +1437,11 @@ function MissionCard({
                   <p className="text-gray-200 text-xs leading-snug">{step.label}</p>
                   {step.detail && (
                     <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{step.detail}</p>
+                  )}
+                  {step.vapiCallId && (
+                    <div className="mt-2">
+                      <CallClientPendingCardView card={{ vapiCallId: step.vapiCallId, recipientName: mission.missionTitle.replace(/^Call → /, ""), recipientPhone: "" }} />
+                    </div>
                   )}
                 </div>
               </div>
