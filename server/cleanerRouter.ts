@@ -21,7 +21,7 @@ import { getDb } from "./db";
 import { storagePut, generateThumbnail } from "./storage";
 import heicConvert from "heic-convert";
 import { notifyOwner } from "./_core/notification";
-import { sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms } from "./fieldMgmtEngine";
+import { sendArrivedCheckin, sendCompletionFlow, sendRunningLateSms, sendClientOnTheWaySms, formatTimeET } from "./fieldMgmtEngine";
 import { sendCompletionReviewSms } from "./trackerReviewSms";
 import { getPayRules } from "./settingsRouter";
 import { getOrCreateProxySession, closeProxySession } from "./twilioProxy";
@@ -731,9 +731,38 @@ export const cleanerRouter = router({
       }
 
       if (input.status === "on_the_way") {
-        // on_the_way SMS intentionally removed: customer SMS is now handled exclusively
-        // by the ETA engine (eta_call_1 / eta_call_2) which fires ~30 min before the job.
-        // sendClientOnTheWaySms() is no longer called here.
+        if (input.etaTimestampOverride) {
+          // Cleaner used the ETA picker — write a synthetic eta_call_result card so
+          // TeamEtaModal shows the correct time instead of "Waiting for ETA".
+          const etaTimeStr = formatTimeET(new Date(input.etaTimestampOverride));
+          const db2 = await getDb();
+          if (db2) {
+            await db2.insert(opsChatMessages).values({
+              cleanerJobId: input.cleanerJobId,
+              authorName: "System",
+              authorRole: "system",
+              body: `ETA set manually by cleaner: ${etaTimeStr}`,
+              quickAction: "eta_call_result",
+              metadata: JSON.stringify({
+                step: "eta_call_1",
+                resultType: "success",
+                etaTimeStr,
+                etaStatus: "on_time",
+                cleanerStatement: "Cleaner set ETA manually via picker",
+                clientNotified: false,
+                clientSmsBody: null,
+                recordingUrl: null,
+                transcript: null,
+                vapiCallId: null,
+                scheduledTime: null,
+              }),
+            });
+          }
+          // Send on-the-way SMS to customer with the manually selected ETA time
+          sendClientOnTheWaySms(input.cleanerJobId).catch(err =>
+            console.error("[FieldMgmt] sendClientOnTheWaySms (manual ETA) error:", err)
+          );
+        }
       }
       if (input.status === "arrived") {
         sendArrivedCheckin(input.cleanerJobId).catch(err =>
