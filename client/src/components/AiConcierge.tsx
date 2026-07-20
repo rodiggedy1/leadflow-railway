@@ -120,16 +120,7 @@ interface CallClientPendingCard {
 }
 interface QueryResultCard {
   answer: string;
-  rows?: Array<{
-    id: number;
-    jobDate: string | null;
-    teamName: string | null;
-    cleanerName: string | null;
-    customerName: string | null;
-    jobAddress: string | null;
-    serviceDateTime: string | null;
-    jobStatus: string | null;
-  }>;
+  status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
 interface CustomerProfileCard {
   name: string;
@@ -162,8 +153,8 @@ type MessageContent =
   | { type: "payment_link_sent"; card: PaymentLinkSentCard }
   | { type: "call_client_confirm"; card: CallClientConfirmCard }
   | { type: "call_client_pending"; card: CallClientPendingCard }
-  | { type: "query_result"; card: QueryResultCard }
-  | { type: "customer_profile"; card: CustomerProfileCard };
+  | { type: "query_result"; card: QueryResultCard };
+  // customer_profile removed — all informational queries return query_result
 
 interface Message {
   id: string;
@@ -1001,12 +992,7 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
-        {msg.content.type === "customer_profile" && (
-          <div>
-            <CustomerProfileCardView card={msg.content.card} />
-            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
-          </div>
-        )}
+        {/* customer_profile branch removed — all informational queries return query_result */}
       </div>
     </div>
   );
@@ -1016,128 +1002,35 @@ function MessageBubble({
 // ─── Query result card ────────────────────────────────────────────────────────
 
 function QueryResultCardView({ card }: { card: QueryResultCard }) {
-  const rows = card.rows ?? [];
-
-  // Parse amount and status from jobStatus string
-  // completedJobs format: "completed (bi-weekly, $161)"
-  // cleanerJobs format: "not started" | "in progress" | "completed" etc.
-  type JobRow = NonNullable<QueryResultCard["rows"]>[0];
-  function parseJobRow(row: JobRow) {
-    const status = row.jobStatus ?? "";
-    // Extract dollar amount from completedJobs format: "completed (bi-weekly, $161)"
-    const amountMatch = status.match(/\$(\d+(?:\.\d+)?)/);
-    const amount = amountMatch ? `$${amountMatch[1]}` : null;
-    // Determine display status
-    const isHistorical = status.startsWith("completed (");
-    const displayStatus = isHistorical ? "completed" : (status || "scheduled");
-    // Team display
-    const team = row.teamName ?? row.cleanerName ?? null;
-    // Date formatting
-    const dateStr = row.jobDate ?? row.serviceDateTime ?? null;
-    let displayDate = "—";
-    let displayWeekday = "";
-    if (dateStr) {
-      // jobDate is YYYY-MM-DD, parse as local date
-      const parts = dateStr.split("T")[0].split("-");
-      if (parts.length === 3) {
-        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-        displayDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-        displayWeekday = d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-      }
-    }
-    return { amount, displayStatus, team, isHistorical, displayDate, displayWeekday };
-  }
-
-  function StatusBadge({ status }: { status: string }) {
-    const s = status.toLowerCase();
-    if (s === "completed") return <span style={{ background: "#064e3b", color: "#6ee7b7", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>Completed</span>;
-    if (s === "in progress" || s === "in-progress") return <span style={{ background: "#3b2a00", color: "#fbbf24", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>In Progress</span>;
-    if (s === "scheduled" || s === "not started") return <span style={{ background: "#1e3a5f", color: "#93c5fd", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap" }}>Scheduled</span>;
-    return <span style={{ background: "#2a2e47", color: "#8b8fa8", fontSize: 10, fontWeight: 600, padding: "1px 6px", borderRadius: 10, whiteSpace: "nowrap", textTransform: "capitalize" }}>{status}</span>;
-  }
+  const statusColor: Record<string, string> = {
+    complete: "#34d399",
+    partial: "#fbbf24",
+    not_found: "#6b7280",
+    ambiguous: "#a78bfa",
+    error: "#f87171",
+  };
+  const color = statusColor[card.status] ?? "#6b7280";
 
   return (
     <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
       {/* Header */}
-      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <Calendar className="w-3 h-3 text-white" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Job Lookup</p>
-          <p style={{ fontSize: 13, fontWeight: 500, color: "#c8cde8", lineHeight: 1.4 }}>{card.answer.split("\n")[0].slice(0, 120)}</p>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Operations Query</p>
         </div>
+        <span style={{ fontSize: 10, fontWeight: 600, color, background: `${color}22`, padding: "2px 8px", borderRadius: 10, textTransform: "capitalize", whiteSpace: "nowrap" }}>
+          {card.status.replace("_", " ")}
+        </span>
       </div>
 
-      {/* Summary bar */}
-      {rows.length > 0 && (
-        <div style={{ padding: "8px 14px", background: "#161929", borderBottom: "1px solid #2a2e47", display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ background: "#2a2e47", color: "#a5b4fc", fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 20 }}>{rows.length} job{rows.length !== 1 ? "s" : ""}</span>
-          <span style={{ color: "#8b8fa8", fontSize: 12 }}>
-            {rows[0].customerName ?? rows[0].cleanerName ?? ""}
-          </span>
-        </div>
-      )}
-
-      {/* Job rows */}
-      {rows.length === 0 ? (
-        <div style={{ padding: "24px 14px", textAlign: "center" }}>
-          <p style={{ color: "#3d4260", fontSize: 13 }}>No jobs found</p>
-        </div>
-      ) : (
-        <div>
-          {rows.map((row, i) => {
-            const { amount, displayStatus, team, displayDate, displayWeekday } = parseJobRow(row);
-            return (
-              <div
-                key={row.id}
-                style={{
-                  padding: "9px 14px",
-                  display: "grid",
-                  gridTemplateColumns: "80px 1fr auto",
-                  gap: 8,
-                  alignItems: "start",
-                  borderBottom: i < rows.length - 1 ? "1px solid #1e2235" : "none",
-                }}
-              >
-                {/* Date */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e5f5", whiteSpace: "nowrap" }}>{displayDate}</span>
-                  <span style={{ fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>{displayWeekday}</span>
-                </div>
-                {/* Address + team */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
-                  <span style={{ fontSize: 12, color: "#c8cde8", lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {row.jobAddress ?? "—"}
-                  </span>
-                  {team ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#4f6ef7", flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, color: "#6b7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{team}</span>
-                    </div>
-                  ) : (
-                    <span style={{ fontSize: 11, color: "#3d4260", fontStyle: "italic" }}>No team data</span>
-                  )}
-                </div>
-                {/* Amount + status */}
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-                  {amount ? (
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#34d399", whiteSpace: "nowrap" }}>{amount}</span>
-                  ) : (
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#3d4260" }}>—</span>
-                  )}
-                  <StatusBadge status={displayStatus} />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Footer */}
-      <div style={{ background: "#161929", borderTop: "1px solid #2a2e47", padding: "7px 14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 11, color: "#3d4260", fontStyle: "italic" }}>Historical jobs may not include team info</span>
-        <span style={{ fontSize: 10, color: "#3d4260" }}>cleanerJobs + completedJobs</span>
+      {/* Answer prose */}
+      <div style={{ padding: "12px 14px" }}>
+        {card.answer.split("\n").filter(Boolean).map((line, i) => (
+          <p key={i} style={{ fontSize: 13, color: "#c8cde8", lineHeight: 1.6, marginBottom: 4 }}>{line}</p>
+        ))}
       </div>
     </div>
   );
@@ -1567,6 +1460,10 @@ type MissionStep = MadisonMission["missionSteps"][number];
 
 export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?: string; onClose?: () => void }) {
   const { user } = useAuth();
+  // Use the agent's numeric id (from agent cookie session) as the stable userId for
+  // mission history. Agents do NOT use Manus OAuth, so user?.openId is always undefined.
+  const agentMeQuery = trpc.agents.me.useQuery(undefined, { retry: false, staleTime: 60_000, refetchOnWindowFocus: false });
+  const agentUserId = agentMeQuery.data?.id != null ? String(agentMeQuery.data.id) : undefined;
   const {
     missions,
     viewState: missionViewState,
@@ -1574,7 +1471,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setViewState: setMissionViewState,
     clearHistory: clearMissionHistory,
     isLoading: missionsLoading,
-  } = useMissionHistory(user?.openId ?? undefined);
+  } = useMissionHistory(agentUserId);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -1735,9 +1632,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           setIsThinking(false);
           const aiMsg0 = buildAiMessage(result);
           if (aiMsg0) setMessages((prev) => [...prev, aiMsg0]);
-          if (result.type === "customer_profile") {
-            setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
-          }
+          // customer_profile removed — all informational queries return query_result
         },
         onError: (err) => {
           setIsThinking(false);
@@ -1889,10 +1784,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           setIsThinking(false);
           const aiMsg = buildAiMessage(result);
           if (aiMsg) setMessages((prev) => [...prev, aiMsg]);
-          // Lock suggestions to this customer when a profile is shown
-          if (result.type === "customer_profile") {
-            setFocusedCustomer({ type: "customer", name: result.profile.name, phone: result.profile.phone });
-          }
+          // customer_profile removed — all informational queries return query_result
         },
         onError: (err) => {
           setIsThinking(false);
@@ -2166,8 +2058,7 @@ type ServerResult =
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
-  | { type: "query_result"; answer: string; rows?: Array<{ id: number; jobDate: string | null; teamName: string | null; cleanerName: string | null; customerName: string | null; jobAddress: string | null; serviceDateTime: string | null; jobStatus: string | null }> }
-  | { type: "customer_profile"; profile: CustomerProfileCard };
+  | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -2312,15 +2203,7 @@ function buildAiMessage(result: ServerResult): Message | null {
     return {
       id: uid(),
       role: "ai",
-      content: { type: "query_result", card: { answer: result.answer, rows: result.rows?.map(r => ({ ...r, jobDate: r.jobDate ?? null })) } },
-      ts,
-    };
-  }
-  if (result.type === "customer_profile") {
-    return {
-      id: uid(),
-      role: "ai",
-      content: { type: "customer_profile", card: result.profile },
+      content: { type: "query_result", card: { answer: result.answer, status: result.status } },
       ts,
     };
   }

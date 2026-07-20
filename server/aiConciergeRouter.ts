@@ -26,6 +26,8 @@ import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
+import { parseConciergeRequest } from "./conciergeParser";
+import { resolveQuery } from "./conciergeResolvers";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -272,16 +274,7 @@ export interface PaymentLinkSentResult {
 export interface QueryResultResult {
   type: "query_result";
   answer: string;
-  rows?: Array<{
-    id: number;
-    jobDate: string | null;
-    teamName: string | null;
-    cleanerName: string | null;
-    customerName: string | null;
-    jobAddress: string | null;
-    serviceDateTime: string | null;
-    jobStatus: string | null;
-  }>;
+  status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
 
 export interface CustomerProfileResult {
@@ -341,8 +334,8 @@ type ConciergeResult =
   | PaymentLinkSentResult
   | CallClientConfirmResult
   | CallClientPendingResult
-  | QueryResultResult
-  | CustomerProfileResult;
+  | QueryResultResult;
+  // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type Intent =
@@ -369,10 +362,11 @@ Classify the user's message into one of these actions:
 - text_client: user wants to send an SMS to a specific CUSTOMER/CLIENT by name (e.g. "text Abigail Avrick and ask if we can come early", "text John Smith about his appointment", "message Sarah Jones")
 - send_payment_link: user wants to send a Stripe payment/card link to a specific customer (e.g. "send payment link to Mary Jones", "send card link to John Smith", "send stripe link to Sarah", "send payment link for Mary")
 - call_client: user wants to call a specific customer to ask them something or deliver a message (e.g. "call rohan gilkes and ask if he wants to reschedule", "call Mary Jones and tell her we're running late", "give sarah a call about her appointment")
-- query_data: user is asking a question about job data, clients, or teams (e.g. "list all jobs today", "what jobs does Team 3 have", "show me jobs for Kara Turner", "how many jobs this week", "what's the status of the 10am job", "which teams are working today")
-- customer_profile: user wants a full profile/overview of a specific customer (e.g. "tell me about Mary Jones", "who is Rohan Gilkes", "show me Kara Turner's profile", "what do we know about Sarah Smith", "customer profile for John Doe", "give me the rundown on Dave Pringle", "tell me everything about Dave Pringle", "pull up John Smith")
+- query_data: user is asking about a job property — which cleaner or team is assigned, what time, what status, what address, what happened on a specific date — even if a customer name is mentioned. Examples: "list all jobs today", "what jobs does Team 3 have", "show me jobs for Kara Turner", "how many jobs this week", "what's the status of the 10am job", "which teams are working today", "who is assigned to Cindy today?", "who handled Cindy last time?", "what time is Cindy's cleaning?", "who's going to Cindy's house?", "who has Robert today?", "what crew has Cindy?"
+- customer_profile: user requests broad information about a customer's identity, relationship, notes, or booking history — NOT a specific job property. Use ONLY when the request is explicitly broad. Examples: "Who is Cindy?", "Pull up Cindy.", "Tell me Cindy's history.", "What do we know about Cindy?", "Give me the rundown on Dave Pringle.", "Tell me everything about Dave Pringle.", "Show me Kara Turner's profile."
 - unknown: anything else
-KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer. "customer_profile" is for viewing a customer's full history, stats, messages, and AI summary — NOT for texting or calling them.
+KEY DISTINCTION: "text_client" is for texting a specific named customer. "text_cleaners" is for texting cleaning staff/teams. "send_payment_link" is specifically for sending a Stripe card-on-file link. "call_client" is for placing an outbound VAPI call to a customer. "customer_profile" is for BROAD identity/history requests only — NOT for job-property questions. When a customer name appears alongside a job-property question (assigned, team, time, status, address, cleaning), always use query_data.
+CRITICAL ROUTING RULE: If the question asks about assignment, team, cleaner, scheduled time, job status, address, or access — even if a customer name is mentioned — classify as query_data, never customer_profile.
 
 For customer_profile:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "tell me everything about Dave Pringle" → clientName = "Dave Pringle", "who is Mary Jones" → clientName = "Mary Jones")
@@ -1738,8 +1732,18 @@ export const aiConciergeRouter = router({
       // When the chip type conflicts with the classified intent, fall back to the
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
-      const intent = await classifyIntent(input.message);
-      console.log("[Concierge] intent:", JSON.stringify(intent), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
+      // Use new unified parser — replaces classifyIntent for all intents
+      const plan = await parseConciergeRequest(input.message);
+      // Backward-compat: map plan to legacy intent shape for action handlers
+      const intent = {
+        action: plan.action === "query" ? "query_data" : plan.action,
+        teamHint: plan.teamHint,
+        targetHint: plan.targetHint,
+        clientName: plan.clientName,
+        messageHint: plan.messageHint,
+        questionHint: plan.questionHint,
+      } as const;
+      console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
 
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
@@ -1788,22 +1792,25 @@ export const aiConciergeRouter = router({
           : await handleCallPerson(intent.clientName, intent.questionHint, db);
       }
 
-      if (intent.action === "query_data") {
-        // handleQueryData only supports cleaner entities — pass chip only when it is a cleaner
-        return re?.type === "cleaner"
-          ? await handleQueryData(input.message, db, re)
-          : await handleQueryData(input.message, db);
-      }
-
-      if (intent.action === "customer_profile") {
-        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
-        if (re?.type === "customer") {
-          return await handleCustomerProfile(re.name, db);
+      if (plan.action === "query") {
+        // New unified query path — replaces both query_data and customer_profile
+        const chipEntity = re?.type === "customer"
+          ? { type: "customer" as const, name: re.name, phone: re.phone, phone10: re.phone.replace(/\D/g, "").slice(-10) }
+          : re?.type === "cleaner"
+            ? { type: "cleaner" as const, name: re.name, cleanerProfileId: re.cleanerProfileId }
+            : undefined;
+        const queryResult = await resolveQuery(plan, db, input.message, chipEntity);
+        if (queryResult.type === "clarification") {
+          return {
+            type: "error" as const,
+            message: queryResult.question,
+          };
         }
-        if (!intent.clientName) {
-          return { type: "error" as const, message: "Please include the customer's name. Example: \"Tell me about Mary Jones\"" };
-        }
-        return await handleCustomerProfile(intent.clientName, db);
+        return {
+          type: "query_result" as const,
+          answer: queryResult.answer,
+          status: queryResult.status,
+        };
       }
       return {
         type: "error" as const,
