@@ -1841,39 +1841,39 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   return (
     <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 20, padding: "28px 28px 24px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
         {/* Avatar */}
         <div style={{ position: "relative", flexShrink: 0 }}>
           <img
             src="/madison-avatar.jpg"
             alt="Madison"
-            style={{ width: 84, height: 84, borderRadius: "50%", objectFit: "cover", border: "4px solid rgba(255,255,255,0.9)", boxShadow: "0 10px 26px rgba(54,38,25,0.15), 0 0 0 1px rgba(79,59,44,0.08)" }}
+            style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(255,255,255,0.95)", boxShadow: "0 8px 20px rgba(54,38,25,0.14), 0 0 0 1px rgba(79,59,44,0.07)" }}
           />
-          <span style={{ position: "absolute", right: 3, bottom: 5, width: 18, height: 18, background: "#32bd75", border: "3px solid #fffdf9", borderRadius: "50%", display: "block" }} />
+          <span style={{ position: "absolute", right: 2, bottom: 4, width: 16, height: 16, background: "#32bd75", border: "3px solid #fffdf9", borderRadius: "50%", display: "block" }} />
         </div>
-        {/* Name + role */}
+        {/* Name + role + actions all in one column */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <h1 style={{ margin: 0, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 34, lineHeight: 1, fontWeight: 500, letterSpacing: "-0.04em", color: "#202431" }}>Madison</h1>
-            <span style={{ color: "#c9a8ff", fontSize: 26, transform: "rotate(-8deg)", display: "inline-block" }}>♡</span>
+          {/* Row 1: name + heart + BETA + Online + close */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap" }}>
+            <h1 style={{ margin: 0, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 28, lineHeight: 1, fontWeight: 500, letterSpacing: "-0.03em", color: "#202431", whiteSpace: "nowrap" }}>Madison</h1>
+            <span style={{ color: "#c9a8ff", fontSize: 20, lineHeight: 1, flexShrink: 0 }}>♡</span>
+            <span style={{ padding: "4px 11px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 11, fontWeight: 700, letterSpacing: "0.02em", flexShrink: 0 }}>BETA</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "#70737d", flexShrink: 0 }}>
+              <span style={{ width: 7, height: 7, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
+              Online
+            </div>
+            {onClose && (
+              <button
+                onClick={onClose}
+                style={{ marginLeft: "auto", width: 30, height: 30, display: "grid", placeItems: "center", color: "#7d7f85", background: "transparent", border: 0, borderRadius: "50%", cursor: "pointer", fontSize: 20, lineHeight: 1, flexShrink: 0 }}
+                title="Close"
+              >×</button>
+            )}
           </div>
-          <p style={{ margin: "12px 0 0", fontSize: 15, fontWeight: 600, color: "#3e424c" }}>Your AI Operations Concierge</p>
-          <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: 1.5, color: "#70737d" }}>Ask anything. I'll get it done.</p>
-        </div>
-        {/* Actions */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto", flexShrink: 0 }}>
-          <span style={{ padding: "6px 13px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 12, fontWeight: 700, letterSpacing: "0.02em" }}>BETA</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#70737d" }}>
-            <span style={{ width: 7, height: 7, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
-            Online
-          </div>
-          {onClose && (
-            <button
-              onClick={onClose}
-              style={{ width: 34, height: 34, display: "grid", placeItems: "center", color: "#7d7f85", background: "transparent", border: 0, borderRadius: "50%", cursor: "pointer", fontSize: 22, lineHeight: 1 }}
-              title="Close"
-            >×</button>
-          )}
+          {/* Row 2: role */}
+          <p style={{ margin: "7px 0 0", fontSize: 13.5, fontWeight: 600, color: "#3e424c" }}>Your AI Operations Concierge</p>
+          {/* Row 3: tagline */}
+          <p style={{ margin: "3px 0 0", fontSize: 13.5, color: "#70737d" }}>Ask anything. I'll get it done.</p>
         </div>
       </div>
 
