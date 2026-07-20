@@ -8040,16 +8040,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {/* ── Madison AI Concierge button ── */}
           <button
             onClick={() => setConciergeOpen(true)}
-            className="w-full flex items-center gap-3 rounded-2xl bg-[#1a1a2e] hover:bg-[#22223b] px-4 py-3 transition-colors group shadow-[0_0_24px_6px_rgba(139,92,246,0.35)] hover:shadow-[0_0_32px_8px_rgba(139,92,246,0.5)]"
+            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 transition-all group"
+            style={{ background: "linear-gradient(135deg, #fffdf9, #f7f0ff)", border: "1px solid #e5d9ea", boxShadow: "0 4px 16px rgba(116,71,245,0.10), inset 0 1px 0 rgba(255,255,255,0.9)" }}
           >
-            <span className="w-9 h-9 rounded-xl bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
-              <Sparkles className="w-4 h-4 text-indigo-300" />
+            <span className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0" style={{ border: "2px solid rgba(255,255,255,0.95)", boxShadow: "0 4px 10px rgba(54,38,25,0.12)" }}>
+              <img src="/madison-avatar.jpg" alt="Madison" className="w-full h-full object-cover" />
             </span>
             <div className="flex-1 text-left">
-              <p className="text-sm font-bold text-white leading-tight">Madison</p>
-              <p className="text-xs text-indigo-300/80 leading-tight">AI Concierge</p>
+              <p className="text-sm font-bold leading-tight" style={{ color: "#202431", fontFamily: "Georgia, serif" }}>Madison</p>
+              <p className="text-xs leading-tight" style={{ color: "#7447f5" }}>AI Concierge</p>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+            <ChevronRight className="w-4 h-4 transition-colors" style={{ color: "#c9a8ff" }} />
           </button>
           {/* ── Search bar ── */}
           <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
