@@ -28,12 +28,11 @@ import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { parseConciergeRequest, validateAndNormalizePlan } from "./conciergeParser";
 import { resolveQuery } from "./conciergeResolvers";
+import type { QueryPlan } from "./conciergeQuery";
+import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getTodayET(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
+// getTodayET and resolveServiceDateRange are imported from ./conciergeTime
 
 // ── Mission metadata ─────────────────────────────────────────────────────────
 
@@ -440,10 +439,8 @@ Return JSON only:
   }
 }
 
-// ── Fetch today's teams ───────────────────────────────────────────────────────
-async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
-  const today = getTodayET();
-
+// ── Fetch teams for a given service date ─────────────────────────────────────
+async function getTeamsForDate(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, serviceDate: string) {
   const jobs = await db
     .select({
       id: cleanerJobs.id,
@@ -460,7 +457,7 @@ async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
     .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
     .where(
       and(
-        eq(cleanerJobs.jobDate, today),
+        eq(cleanerJobs.jobDate, serviceDate),
         ne(cleanerJobs.bookingStatus, "cancelled"),
         ne(cleanerJobs.bookingStatus, "rescheduled")
       )
@@ -508,29 +505,29 @@ async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
 
 // ── Text cleaners: resolve target list ───────────────────────────────────────
 async function resolveTextTargets(
-  targetHint: string | null,
+  plan: QueryPlan,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<{ recipients: BulkSmsRecipient[]; targetDescription: string }> {
-  const today = getTodayET();
-  const hint = (targetHint ?? "").toLowerCase().trim();
+  // Date comes exclusively from the parsed plan — never from re-parsing the hint string
+  const { startDate } = resolveServiceDateRange(plan.timeScope);
+  const dateLabel = startDate === getTodayET() ? "today" : startDate;
+  const hint = (plan.targetHint ?? "").toLowerCase().trim();
 
-  // "working today" or "working right now" or no hint → cleaners with jobs today
-  if (!hint || hint.includes("today") || hint.includes("working") || hint.includes("right now")) {
-    const teams = await getTodayTeams(db);
+  // "working [date]" or "working right now" or no hint → cleaners with jobs on the resolved date
+  if (!hint || hint.includes("working") || hint.includes("right now")) {
+    const teams = await getTeamsForDate(db, startDate);
     const recipients = teams
       .filter(t => t.cleanerPhone)
       .map(t => ({ cleanerProfileId: t.cleanerProfileId, name: t.cleanerName, phone: t.cleanerPhone! }));
-    // Deduplicate by cleanerProfileId
     const seen = new Set<number>();
     const unique = recipients.filter(r => {
       if (seen.has(r.cleanerProfileId)) return false;
       seen.add(r.cleanerProfileId);
       return true;
     });
-    return { recipients: unique, targetDescription: "cleaners working today" };
+    return { recipients: unique, targetDescription: `cleaners working ${dateLabel}` };
   }
-
-  // "all active" or "everyone" → all active cleaner profiles
+  // "all active" or "everyone" → all active cleaner profiles (date-independent)
   if (hint.includes("all") || hint.includes("everyone") || hint.includes("active")) {
     const profiles = await db
       .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
@@ -541,8 +538,7 @@ async function resolveTextTargets(
       .map(p => ({ cleanerProfileId: p.id, name: p.name, phone: p.phone! }));
     return { recipients, targetDescription: "all active cleaners" };
   }
-
-  // DC / Virginia / Maryland / area-based → cleaners with jobs today in that area
+  // DC / Virginia / Maryland / area-based → cleaners with jobs on the resolved date in that area
   const areaKeywords: Record<string, string[]> = {
     "dc": ["washington", "dc", " dc", "d.c"],
     "virginia": ["virginia", " va", ", va"],
@@ -550,7 +546,7 @@ async function resolveTextTargets(
   };
   for (const [areaLabel, keywords] of Object.entries(areaKeywords)) {
     if (keywords.some(k => hint.includes(k))) {
-      const teams = await getTodayTeams(db);
+      const teams = await getTeamsForDate(db, startDate);
       const inArea = teams.filter(t =>
         t.currentJobAddress &&
         keywords.some(k => t.currentJobAddress!.toLowerCase().includes(k))
@@ -564,13 +560,12 @@ async function resolveTextTargets(
         seen.add(r.cleanerProfileId);
         return true;
       });
-      return { recipients: unique, targetDescription: `cleaners working in ${areaLabel.toUpperCase()} today` };
+      return { recipients: unique, targetDescription: `cleaners working in ${areaLabel.toUpperCase()} ${dateLabel}` };
     }
   }
-
-  // "haven't confirmed" / "schedule confirm" → cleaners with SCHEDULE_CONFIRM_SENT
+  // "haven't confirmed" / "schedule confirm" → cleaners on the resolved date
   if (hint.includes("confirm") || hint.includes("schedule")) {
-    const teams = await getTodayTeams(db);
+    const teams = await getTeamsForDate(db, startDate);
     const recipients = teams
       .filter(t => t.cleanerPhone)
       .map(t => ({ cleanerProfileId: t.cleanerProfileId, name: t.cleanerName, phone: t.cleanerPhone! }));
@@ -580,29 +575,22 @@ async function resolveTextTargets(
       seen.add(r.cleanerProfileId);
       return true;
     });
-    return { recipients: unique, targetDescription: "cleaners working today (schedule confirmation)" };
+    return { recipients: unique, targetDescription: `cleaners working ${dateLabel} (schedule confirmation)` };
   }
-
-  // Specific cleaner name → match by name in profiles
+  // Specific cleaner name → match by name in profiles (date-independent)
   const profiles = await db
     .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
     .from(cleanerProfiles)
     .where(eq(cleanerProfiles.isActive, 1));
-
-  // Try exact full-name match first, then partial
   const hintWords = hint.split(/\s+/).filter(Boolean);
   const matched = profiles.filter(p => {
     const pName = p.name.toLowerCase();
-    // Full name contains hint or hint contains full name
     if (pName.includes(hint) || hint.includes(pName)) return true;
-    // All hint words appear in the profile name
     if (hintWords.length >= 2 && hintWords.every(w => pName.includes(w))) return true;
-    // First name exact match only (must be at least 4 chars to avoid false positives)
     const firstName = pName.split(" ")[0];
     if (firstName.length >= 4 && hint === firstName) return true;
     return false;
   });
-
   if (matched.length > 0) {
     const recipients = matched
       .filter(p => p.phone)
@@ -610,9 +598,8 @@ async function resolveTextTargets(
     const names = recipients.map(r => r.name).join(", ");
     return { recipients, targetDescription: names };
   }
-
-  // Specific team name → match by teamName in today's jobs
-  const teams = await getTodayTeams(db);
+  // Specific team name → match by teamName in jobs on the resolved date
+  const teams = await getTeamsForDate(db, startDate);
   const teamMatched = teams.filter(t =>
     t.teamName.toLowerCase().includes(hint) || t.cleanerName.toLowerCase().includes(hint)
   );
@@ -628,9 +615,8 @@ async function resolveTextTargets(
     });
     return { recipients: unique, targetDescription: `cleaners on ${teamMatched[0].teamName}` };
   }
-
-  // Fallback: today's cleaners
-  const fallbackTeams = await getTodayTeams(db);
+  // Fallback: cleaners on the resolved date
+  const fallbackTeams = await getTeamsForDate(db, startDate);
   const fallbackRecipients = fallbackTeams
     .filter(t => t.cleanerPhone)
     .map(t => ({ cleanerProfileId: t.cleanerProfileId, name: t.cleanerName, phone: t.cleanerPhone! }));
@@ -640,10 +626,8 @@ async function resolveTextTargets(
     seen.add(r.cleanerProfileId);
     return true;
   });
-  return { recipients: unique, targetDescription: "cleaners working today" };
+  return { recipients: unique, targetDescription: `cleaners working ${dateLabel}` };
 }
-
-// ── Text cleaners: draft message ──────────────────────────────────────────────
 async function draftCleanerMessage(
   messageHint: string | null,
   targetDescription: string,
@@ -1436,14 +1420,14 @@ async function handleCustomerProfile(
 
 // ── Text cleaners handler ─────────────────────────────────────────────────────
 async function handleTextCleaners(
-  targetHint: string | null,
+  plan: QueryPlan,
   messageHint: string | null,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
-  const { recipients, targetDescription } = await resolveTextTargets(targetHint, db);
+  const { recipients, targetDescription } = await resolveTextTargets(plan, db);
 
   if (recipients.length === 0) {
-    return { type: "error", message: `No cleaners found matching "${targetHint ?? "your request"}". Try "working today" or a specific name.` };
+    return { type: "error", message: `No cleaners found matching "${plan.targetHint ?? "your request"}". Try "working today" or a specific name.` };
   }
 
   const draftMessage = await draftCleanerMessage(messageHint, targetDescription, recipients);
@@ -1535,7 +1519,7 @@ async function handleEtaUpdate(
   teamHint: string | null,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
-  const teams = await getTodayTeams(db);
+  const teams = await getTeamsForDate(db, today);
   const today = getTodayET();
 
   if (teams.length === 0) {
@@ -1775,8 +1759,8 @@ export const aiConciergeRouter = router({
       if (intent.action === "text_cleaners") {
         // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
         const textCleanersResult = re?.type === "cleaner"
-          ? await handleTextCleaners(re.name, intent.messageHint, db)
-          : await handleTextCleaners(intent.targetHint, intent.messageHint, db);
+          ? await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db)
+          : await handleTextCleaners(plan, intent.messageHint, db);
         if (textCleanersResult.type === "bulk_sms_confirm") {
           return { ...textCleanersResult, command: input.message };
         }
