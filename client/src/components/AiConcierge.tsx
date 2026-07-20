@@ -890,12 +890,12 @@ function MessageBubble({
   // AI message
   return (
     <div className="flex items-start gap-3">
-      <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0 mt-1">
-        <Bot className="w-5 h-5 text-white" />
+      <div className="w-9 h-9 rounded-full flex-shrink-0 mt-1 overflow-hidden" style={{ border: "2px solid rgba(255,255,255,0.9)", boxShadow: "0 4px 12px rgba(54,38,25,0.12)" }}>
+        <img src="/madison-avatar.jpg" alt="Madison" className="w-full h-full object-cover" />
       </div>
       <div className="max-w-[82%]">
         {msg.content.type === "text" && (
-          <div className="bg-white/8 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed">
+          <div className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed" style={{ background: "linear-gradient(135deg, rgba(250,244,255,0.95), rgba(244,234,250,0.85))", border: "1px solid #e5d9ea", color: "#2d3039" }}>
             {msg.content.text}
           </div>
         )}
@@ -1373,10 +1373,16 @@ function MissionCard({
 
   const statusColor =
     mission.missionStatus === "completed"
-      ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+      ? "border"
       : mission.missionStatus === "failed"
-      ? "text-red-400 bg-red-500/15 border-red-500/30"
-      : "text-amber-400 bg-amber-500/15 border-amber-500/30";
+      ? "border"
+      : "border";
+  const statusStyle =
+    mission.missionStatus === "completed"
+      ? { color: "#21aa68", background: "#edf9f2", border: "1px solid #c4ead4" }
+      : mission.missionStatus === "failed"
+      ? { color: "#e05050", background: "#fef2f2", border: "1px solid #fecaca" }
+      : { color: "#d97706", background: "#fffbeb", border: "1px solid #fde68a" };
 
   const statusLabel =
     mission.missionStatus === "completed" ? "Completed" :
@@ -1389,43 +1395,44 @@ function MissionCard({
   };
 
   return (
-    <div className="bg-[#1a1d2e] border border-white/10 rounded-2xl overflow-hidden">
+    <div style={{ background: "rgba(255,253,249,0.84)", border: "1px solid #ebe4dc", borderRadius: 20, overflow: "hidden", boxShadow: "0 6px 18px rgba(73,55,42,0.04), inset 0 1px 0 rgba(255,255,255,0.8)" }}>
       {/* Header — always visible, click to toggle */}
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 transition-colors text-left"
+        style={{ background: "transparent" }}
       >
-        <div className="w-7 h-7 rounded-lg bg-indigo-600/30 flex items-center justify-center flex-shrink-0">
-          <Zap className="w-3.5 h-3.5 text-indigo-300" />
+        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(145deg, #f1e7ff, #e6d6ff)" }}>
+          <Zap className="w-4 h-4" style={{ color: "#7447f5" }} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-semibold truncate">{mission.missionTitle}</p>
-          <p className="text-gray-500 text-[11px] mt-0.5">
+          <p className="text-sm font-bold truncate" style={{ color: "#202431" }}>{mission.missionTitle}</p>
+          <p className="text-[12px] mt-0.5" style={{ color: "#70737d" }}>
             {mission.missionStats.completed} action{mission.missionStats.completed !== 1 ? "s" : ""}
             {" · "}{missionTimeAgo(mission.missionCompletedAt)}
           </p>
         </div>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${statusColor}`}>
+        <span className="text-[11px] font-bold px-3 py-1 rounded-full" style={statusStyle}>
           {statusLabel}
         </span>
         {isExpanded
-          ? <ChevronUp className="w-4 h-4 text-gray-500 flex-shrink-0" />
-          : <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />}
+          ? <ChevronUp className="w-4 h-4 flex-shrink-0" style={{ color: "#9a96a0" }} />
+          : <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: "#9a96a0" }} />}
       </button>
 
       {/* Expanded body */}
       {isExpanded && (
         <div className="px-4 pb-4">
           {/* Timestamps */}
-          <div className="flex items-center gap-4 mb-3 pt-1 border-t border-white/8">
+          <div className="flex items-center gap-4 mb-3 pt-1" style={{ borderTop: "1px solid #ebe4dc" }}>
             <div className="flex items-center gap-1.5">
-              <Clock className="w-3 h-3 text-gray-500" />
-              <span className="text-[11px] text-gray-500">Started {fmtAbsTime(mission.missionStartedAt)}</span>
+              <Clock className="w-3 h-3" style={{ color: "#9a96a0" }} />
+              <span className="text-[11px]" style={{ color: "#9a96a0" }}>Started {fmtAbsTime(mission.missionStartedAt)}</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <CheckCircle2 className="w-3 h-3 text-gray-500" />
-              <span className="text-[11px] text-gray-500">Completed {fmtAbsTime(mission.missionCompletedAt)}</span>
+              <CheckCircle2 className="w-3 h-3" style={{ color: "#9a96a0" }} />
+              <span className="text-[11px]" style={{ color: "#9a96a0" }}>Completed {fmtAbsTime(mission.missionCompletedAt)}</span>
             </div>
           </div>
 
@@ -1439,9 +1446,9 @@ function MissionCard({
               >
                 {stepIcon(step.status)}
                 <div className="flex-1 min-w-0">
-                  <p className="text-gray-200 text-xs leading-snug">{step.label}</p>
+                  <p className="text-xs leading-snug" style={{ color: "#202431" }}>{step.label}</p>
                   {step.detail && (
-                    <p className="text-gray-500 text-[11px] mt-0.5 leading-snug">{step.detail}</p>
+                    <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "#70737d" }}>{step.detail}</p>
                   )}
                   {step.vapiCallId && (
                     <div className="mt-2">
@@ -1455,15 +1462,16 @@ function MissionCard({
 
           {/* Summary */}
           <div
-            className="border-t border-white/8 pt-3"
+            className="pt-3"
+            style={{ borderTop: "1px solid #ebe4dc" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <p className="text-gray-400 text-[11px] leading-relaxed">{mission.missionSummary}</p>
+            <p className="text-[11px] leading-relaxed" style={{ color: "#70737d" }}>{mission.missionSummary}</p>
             <div className="flex items-center gap-3 mt-2">
-              <span className="text-[10px] text-gray-600">{mission.missionStats.total} total</span>
-              <span className="text-[10px] text-emerald-600">{mission.missionStats.completed} completed</span>
+              <span className="text-[10px]" style={{ color: "#9a96a0" }}>{mission.missionStats.total} total</span>
+              <span className="text-[10px]" style={{ color: "#21aa68" }}>{mission.missionStats.completed} completed</span>
               {mission.missionStats.failed > 0 && (
-                <span className="text-[10px] text-red-500">{mission.missionStats.failed} failed</span>
+                <span className="text-[10px]" style={{ color: "#e05050" }}>{mission.missionStats.failed} failed</span>
               )}
             </div>
           </div>
@@ -1831,49 +1839,55 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0f1120] rounded-2xl overflow-hidden border border-white/10 shadow-2xl" style={{ minHeight: 600 }}>
+    <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
       {/* Header */}
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-white/10 bg-[#13162a]">
-        <div className="w-11 h-11 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
-          <Bot className="w-6 h-6 text-white" />
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 20, padding: "28px 28px 24px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
+        {/* Avatar */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <img
+            src="/madison-avatar.jpg"
+            alt="Madison"
+            style={{ width: 84, height: 84, borderRadius: "50%", objectFit: "cover", border: "4px solid rgba(255,255,255,0.9)", boxShadow: "0 10px 26px rgba(54,38,25,0.15), 0 0 0 1px rgba(79,59,44,0.08)" }}
+          />
+          <span style={{ position: "absolute", right: 3, bottom: 5, width: 18, height: 18, background: "#32bd75", border: "3px solid #fffdf9", borderRadius: "50%", display: "block" }} />
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-white font-semibold text-base">AI Operations Concierge</span>
-            <span className="text-xs bg-indigo-600/40 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded-full font-medium">BETA</span>
+        {/* Name + role */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <h1 style={{ margin: 0, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 34, lineHeight: 1, fontWeight: 500, letterSpacing: "-0.04em", color: "#202431" }}>Madison</h1>
+            <span style={{ color: "#c9a8ff", fontSize: 26, transform: "rotate(-8deg)", display: "inline-block" }}>♡</span>
           </div>
-          <p className="text-gray-400 text-xs mt-0.5">Ask anything. I'll get it done.</p>
+          <p style={{ margin: "12px 0 0", fontSize: 15, fontWeight: 600, color: "#3e424c" }}>Your AI Operations Concierge</p>
+          <p style={{ margin: "6px 0 0", fontSize: 15, lineHeight: 1.5, color: "#70737d" }}>Ask anything. I'll get it done.</p>
         </div>
-        <div className="ml-auto flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-xs text-gray-400">Online</span>
+        {/* Actions */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginLeft: "auto", flexShrink: 0 }}>
+          <span style={{ padding: "6px 13px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 12, fontWeight: 700, letterSpacing: "0.02em" }}>BETA</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#70737d" }}>
+            <span style={{ width: 7, height: 7, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
+            Online
           </div>
           {onClose && (
             <button
               onClick={onClose}
-              className="w-7 h-7 rounded-full flex items-center justify-between text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
+              style={{ width: 34, height: 34, display: "grid", placeItems: "center", color: "#7d7f85", background: "transparent", border: 0, borderRadius: "50%", cursor: "pointer", fontSize: 22, lineHeight: 1 }}
               title="Close"
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-              </svg>
-            </button>
+            >×</button>
           )}
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5" style={{ background: "transparent" }}>
         {/* Mission History */}
         {(missions.length > 0 || missionsLoading) && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600">Mission History</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#a17ccf", letterSpacing: "0.12em" }}>Mission History</p>
               {missions.length > 0 && (
                 <button
                   onClick={() => clearMissionHistory()}
-                  className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                  className="text-[10px] transition-colors" style={{ color: "#9870c9" }}
                 >
                   Clear
                 </button>
@@ -1881,8 +1895,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </div>
             {missionsLoading && missions.length === 0 && (
               <div className="flex items-center gap-2 py-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-gray-600 animate-pulse" />
-                <span className="text-[11px] text-gray-600">Loading history…</span>
+                <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#c9a8ff" }} />
+                <span className="text-[11px]" style={{ color: "#9a96a0" }}>Loading history…</span>
               </div>
             )}
             {missions.map((mission) => (
@@ -1893,7 +1907,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                 onSetViewState={setMissionViewState}
               />
             ))}
-            {missions.length > 0 && <div className="border-t border-white/8 pt-1" />}
+            {missions.length > 0 && <div className="pt-1" style={{ borderTop: "1px solid #ebe4dc" }} />}
           </div>
         )}
         {messages.map((msg) => (
@@ -1901,10 +1915,10 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0">
-              <Bot className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ border: "2px solid rgba(255,255,255,0.9)", boxShadow: "0 4px 12px rgba(54,38,25,0.12)" }}>
+              <img src="/madison-avatar.jpg" alt="Madison" className="w-full h-full object-cover" />
             </div>
-            <div className="bg-[#1e2235] border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
+            <div className="rounded-2xl rounded-tl-sm px-4 py-3" style={{ background: "linear-gradient(135deg, rgba(250,244,255,0.95), rgba(244,234,250,0.85))", border: "1px solid #e5d9ea" }}>
               <div className="flex gap-1 items-center h-5">
                 <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
                 <span className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
@@ -1917,7 +1931,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3 border-t border-white/10 bg-[#13162a]">
+      <div className="px-4 py-3" style={{ borderTop: "1px solid #ebe4dc", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)" }}>
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
@@ -2005,7 +2019,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           </div>
         )}
 
-        <div className="relative bg-[#161929] border border-white/10 rounded-2xl overflow-hidden shadow-lg focus-within:border-indigo-500/40 transition-colors">
+        <div className="relative rounded-2xl overflow-hidden transition-colors" style={{ background: "rgba(255,253,249,0.9)", border: "1px solid #ebe4dc", boxShadow: "0 14px 32px rgba(60,42,29,0.06), inset 0 1px 0 rgba(255,255,255,0.9)" }}>
           {/* Text input area */}
           <textarea
             ref={inputRef}
@@ -2016,25 +2030,25 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             onBlur={() => { inputFocused.current = false; }}
             placeholder="Ask anything or type a command..."
             rows={2}
-            className="w-full bg-transparent placeholder-gray-600 text-white text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
-            style={{ minHeight: 52 }}
+            className="w-full bg-transparent text-sm resize-none outline-none leading-relaxed px-4 pt-3.5 pb-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-[#aaa6ab]"
+            style={{ color: "#202431", minHeight: 52 }}
           />
           {/* Toolbar */}
           <div className="flex items-center justify-between px-3 pb-3 pt-1">
             <div className="flex items-center gap-0.5">
-              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: "#74757b" }}>
                 <Paperclip className="w-3.5 h-3.5" />
               </button>
               <div>
                 <button
                   onClick={() => setShowCommands((v) => !v)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: "#74757b" }}
                 >
                   <Zap className="w-3.5 h-3.5" />
                   <span>Commands</span>
                 </button>
               </div>
-              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/6 transition-colors text-xs font-medium">
+              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: "#74757b" }}>
                 <AtSign className="w-3.5 h-3.5" />
                 <span>People</span>
               </button>
@@ -2042,7 +2056,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             <button
               onClick={handleSend}
               disabled={!input.trim() || isThinking}
-              className="w-8 h-8 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all flex-shrink-0 shadow-sm"
+              className="w-9 h-9 rounded-full disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center transition-all flex-shrink-0 shadow-sm"
+              style={{ background: "linear-gradient(145deg, #7650ff, #6233eb)" }}
             >
               {isThinking
                 ? <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
@@ -2050,7 +2065,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             </button>
           </div>
         {!input && (
-          <p className="px-4 pb-2 text-[11px] text-gray-400 transition-all">💡 {HINT_EXAMPLES[hintIdx]}</p>
+          <p className="px-4 pb-2 text-[11px] transition-all" style={{ color: "#9a96a0" }}>💡 {HINT_EXAMPLES[hintIdx]}</p>
         )}
         </div>
         {showCommands && (
