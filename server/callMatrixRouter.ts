@@ -501,6 +501,7 @@ export const callMatrixRouter = router({
                 outcome === "no_answer" ? "no_answer" as const :
                 outcome === "failed"    ? "failed"    as const :
                 "completed" as const;
+              console.log("[pollCall] recordingUrl from DB:", fmRow.recordingUrl ?? null);
               return {
                 status,
                 endedReason: fmRow.endedReason ?? null,
