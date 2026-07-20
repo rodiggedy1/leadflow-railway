@@ -19,6 +19,10 @@ import type {
   TimeScopeType,
 } from "./conciergeQuery";
 
+// ── Target type ───────────────────────────────────────────────────────────────
+
+export type TargetType = "customer" | "cleaner" | "team" | "unknown";
+
 // ── LLM response shape ────────────────────────────────────────────────────────
 
 interface ParsedResponse {
@@ -40,6 +44,7 @@ interface ParsedResponse {
   targetHint: string | null;
   teamHint: string | null;
   clientName: string | null;
+  targetType: TargetType;
 }
 
 // ── Validation helpers ────────────────────────────────────────────────────────
@@ -60,6 +65,8 @@ const VALID_SCOPE_TYPES: TimeScopeType[] = [
   "last_appointment", "all_time", null,
 ];
 
+const VALID_TARGET_TYPES: TargetType[] = ["customer", "cleaner", "team", "unknown"];
+
 function sanitizeFields(raw: string[]): RequestedField[] {
   return raw.filter((f): f is RequestedField => (VALID_FIELDS as string[]).includes(f));
 }
@@ -73,6 +80,131 @@ function sanitizeScope(raw: ParsedResponse["timeScope"]): TimeScope {
     specificDate: raw.specificDate ?? null,
     originalPhrase: raw.originalPhrase ?? null,
   };
+}
+
+// ── Plan validation ───────────────────────────────────────────────────────────
+
+/**
+ * Maps each action to the set of targetTypes it is allowed to have.
+ * If the parsed plan's targetType is not in the allowed set, it is a contradiction.
+ * Data-driven: add new actions here as they are introduced.
+ */
+const ACTION_ALLOWED_TARGET_TYPES: Partial<Record<QueryPlan["action"], TargetType[]>> = {
+  text_client:      ["customer"],
+  send_payment_link:["customer"],
+  call_client:      ["customer", "cleaner"],   // could call a cleaner too
+  text_cleaners:    ["cleaner", "team"],
+  eta_update:       ["cleaner", "team"],
+  get_eta_for_customer: ["customer"],
+};
+
+/**
+ * When a contradiction is detected, this maps the action to its corrected form
+ * based on the actual targetType. Data-driven: extend as needed.
+ */
+const CONTRADICTION_CORRECTION: Partial<Record<QueryPlan["action"], Partial<Record<TargetType, QueryPlan["action"]>>>> = {
+  text_cleaners: {
+    customer: "text_client",
+  },
+  eta_update: {
+    customer: "get_eta_for_customer",
+  },
+};
+
+export interface NormalizationResult {
+  plan: QueryPlan;
+  corrected: boolean;
+  correction?: {
+    originalAction: QueryPlan["action"];
+    correctedAction: QueryPlan["action"];
+    reason: string;
+    evidenceSource: "chip_entity" | "explicit_entity" | "target_type" | "inferred";
+  };
+}
+
+/**
+ * Validate and normalize a parsed QueryPlan before dispatch.
+ *
+ * Precedence order (highest → lowest confidence):
+ *   1. chip-selected entity (re) — user explicitly picked this entity
+ *   2. explicit entity — clientName / targetHint is set and unambiguous
+ *   3. targetType — LLM's explicit classification of who is targeted
+ *   4. inferred action — the raw action field
+ *
+ * Returns the (possibly corrected) plan plus correction metadata for logging.
+ */
+export function validateAndNormalizePlan(
+  plan: QueryPlan,
+  re: { type: "customer" | "cleaner"; name: string; phone?: string; cleanerProfileId?: number } | null,
+): NormalizationResult {
+  const allowedTypes = ACTION_ALLOWED_TARGET_TYPES[plan.action];
+
+  // Actions with no target type constraint (query, unknown) — pass through
+  if (!allowedTypes) {
+    return { plan, corrected: false };
+  }
+
+  // ── 1. Chip-selected entity (highest confidence) ──────────────────────────
+  if (re) {
+    const chipTargetType: TargetType = re.type === "customer" ? "customer"
+      : re.type === "cleaner" ? "cleaner"
+      : "unknown";
+    if (!allowedTypes.includes(chipTargetType)) {
+      const correctedAction = CONTRADICTION_CORRECTION[plan.action]?.[chipTargetType];
+      if (correctedAction) {
+        return {
+          plan: { ...plan, action: correctedAction, targetType: chipTargetType },
+          corrected: true,
+          correction: {
+            originalAction: plan.action,
+            correctedAction,
+            reason: `chip entity type "${chipTargetType}" contradicts action "${plan.action}"`,
+            evidenceSource: "chip_entity",
+          },
+        };
+      }
+    }
+    // Chip is consistent — trust it, no correction needed
+    return { plan, corrected: false };
+  }
+
+  // ── 2. Explicit entity (clientName present, no chip) ─────────────────────
+  // A clientName strongly implies a customer target for text/call/payment actions
+  if (plan.clientName && plan.action === "text_cleaners") {
+    const correctedAction = CONTRADICTION_CORRECTION[plan.action]?.["customer"];
+    if (correctedAction) {
+      return {
+        plan: { ...plan, action: correctedAction, targetType: "customer" },
+        corrected: true,
+        correction: {
+          originalAction: plan.action,
+          correctedAction,
+          reason: `clientName "${plan.clientName}" is set but action is "${plan.action}"`,
+          evidenceSource: "explicit_entity",
+        },
+      };
+    }
+  }
+
+  // ── 3. targetType from LLM ────────────────────────────────────────────────
+  if (plan.targetType !== "unknown" && !allowedTypes.includes(plan.targetType)) {
+    const correctedAction = CONTRADICTION_CORRECTION[plan.action]?.[plan.targetType];
+    if (correctedAction) {
+      return {
+        plan: { ...plan, action: correctedAction },
+        corrected: true,
+        correction: {
+          originalAction: plan.action,
+          correctedAction,
+          reason: `targetType "${plan.targetType}" contradicts action "${plan.action}"`,
+          evidenceSource: "target_type",
+        },
+      };
+    }
+  }
+
+  // No contradiction detected
+  return { plan, corrected: false };
 }
 
 // ── Main parser ───────────────────────────────────────────────────────────────
@@ -141,6 +273,13 @@ Rules:
 - messageHint: message content or topic for text_client or text_cleaners
 - questionHint: topic/question to ask for call_client
 
+## targetType
+Classify who the action targets:
+- "customer" — a homeowner/client receiving cleaning services. A full personal name (first + last) like "Rohan Gilkes" or "Mary Jones" is almost always a customer.
+- "cleaner" — a cleaning staff member by name
+- "team" — a team label like "DC", "Team 5", "all cleaners", "working today"
+- "unknown" — for query/eta/informational actions, or when truly ambiguous
+
 ## Examples
 "Who is assigned to Cindy today?" → action: "query", entities: {customerName: "Cindy"}, timeScope: {type: "today"}, requestedFields: ["assignment"]
 "What time is Cindy's cleaning?" → action: "query", entities: {customerName: "Cindy"}, timeScope: {type: "today"}, requestedFields: ["scheduled_time"]
@@ -149,8 +288,9 @@ Rules:
 "Who is assigned to Cindy today and what's her entry code?" → action: "query", entities: {customerName: "Cindy"}, timeScope: {type: "today"}, requestedFields: ["assignment", "access"]
 "What jobs does Team 3 have today?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: "today"}, requestedFields: ["assignment", "scheduled_time"]
 "List all jobs today" → action: "query", entities: {customerName: null, cleanerName: null, teamName: null, jobId: null}, timeScope: {type: "today"}, requestedFields: ["assignment", "scheduled_time", "job_status"]
-"Text team 3 to hurry up" → action: "text_cleaners", targetHint: "team 3", messageHint: "hurry up", requestedFields: []
-"Send Cindy a payment link" → action: "send_payment_link", clientName: "Cindy", requestedFields: []`,
+"Text team 3 to hurry up" → action: "text_cleaners", targetHint: "team 3", messageHint: "hurry up", targetType: "team", requestedFields: []
+"Text Rohan Gilkes and let him know we're running late" → action: "text_client", clientName: "Rohan Gilkes", messageHint: "running late", targetType: "customer", requestedFields: []
+"Send Cindy a payment link" → action: "send_payment_link", clientName: "Cindy", targetType: "customer", requestedFields: []`,
       },
       { role: "user", content: message },
     ],
@@ -199,8 +339,9 @@ Rules:
             targetHint:   { type: ["string", "null"] },
             teamHint:     { type: ["string", "null"] },
             clientName:   { type: ["string", "null"] },
+            targetType:   { type: "string", enum: ["customer", "cleaner", "team", "unknown"] },
           },
-          required: ["action", "entities", "timeScope", "requestedFields", "messageHint", "questionHint", "targetHint", "teamHint", "clientName"],
+          required: ["action", "entities", "timeScope", "requestedFields", "messageHint", "questionHint", "targetHint", "teamHint", "clientName", "targetType"],
           additionalProperties: false,
         },
       },
@@ -227,7 +368,11 @@ Rules:
       ? ["summary"]
       : requestedFields;
 
-  console.log("[Parser] action:", action, "fields:", effectiveFields, "timeScope:", timeScope.type, "entities:", JSON.stringify(parsed.entities));
+  const targetType: TargetType = VALID_TARGET_TYPES.includes(parsed.targetType as TargetType)
+    ? (parsed.targetType as TargetType)
+    : "unknown";
+
+  console.log("[Parser] action:", action, "targetType:", targetType, "fields:", effectiveFields, "timeScope:", timeScope.type, "entities:", JSON.stringify(parsed.entities));
 
   return {
     action,
@@ -244,6 +389,7 @@ Rules:
     targetHint:   parsed.targetHint ?? null,
     teamHint:     parsed.teamHint ?? null,
     clientName:   parsed.clientName ?? null,
+    targetType,
   };
 }
 
@@ -258,6 +404,7 @@ function fallbackPlan(message: string): QueryPlan {
     targetHint: null,
     teamHint: null,
     clientName: null,
+    targetType: "unknown",
   };
 }
 
@@ -273,6 +420,7 @@ export interface LegacyIntent {
   clientName?: string | null;
   messageHint?: string | null;
   questionHint?: string | null;
+  targetType?: TargetType;
 }
 
 /**
@@ -290,5 +438,6 @@ export function toLegacyIntent(plan: QueryPlan): LegacyIntent {
     clientName:   plan.clientName,
     messageHint:  plan.messageHint,
     questionHint: plan.questionHint,
+    targetType:   plan.targetType,
   };
 }

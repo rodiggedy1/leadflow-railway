@@ -26,7 +26,7 @@ import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
-import { parseConciergeRequest } from "./conciergeParser";
+import { parseConciergeRequest, validateAndNormalizePlan } from "./conciergeParser";
 import { resolveQuery } from "./conciergeResolvers";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1747,7 +1747,12 @@ export const aiConciergeRouter = router({
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
       // Use new unified parser — replaces classifyIntent for all intents
-      const plan = await parseConciergeRequest(input.message);
+      const rawPlan = await parseConciergeRequest(input.message);
+      // Validate and normalize: resolve contradictions before dispatch
+      const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
+      if (corrected && correction) {
+        console.log(`[Concierge] Plan corrected: ${correction.originalAction} → ${correction.correctedAction} (${correction.reason}) [evidence: ${correction.evidenceSource}]`);
+      }
       // Backward-compat: map plan to legacy intent shape for action handlers
       const intent = {
         action: plan.action === "query" ? "query_data" : plan.action,
@@ -1756,8 +1761,9 @@ export const aiConciergeRouter = router({
         clientName: plan.clientName,
         messageHint: plan.messageHint,
         questionHint: plan.questionHint,
+        targetType: plan.targetType,
       } as const;
-      console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
+      console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, targetType: plan.targetType, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
 
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
@@ -1767,22 +1773,6 @@ export const aiConciergeRouter = router({
       }
 
       if (intent.action === "text_cleaners") {
-        // Contradiction check: action=text_cleaners but targetType=customer or clientName is set
-        // This happens when the LLM misroutes a named customer (e.g. "text Rohan Gilkes running late")
-        const contradictionDetected =
-          intent.targetType === "customer" ||
-          (!!intent.clientName && intent.targetType !== "cleaner" && intent.targetType !== "team");
-        if (contradictionDetected) {
-          // Resolve: treat as text_client using clientName or targetHint as the customer name
-          const resolvedName = intent.clientName ?? intent.targetHint;
-          const textClientResult = re?.type === "customer"
-            ? await handleTextClient(null, intent.messageHint, db, re.phone)
-            : await handleTextClient(resolvedName, intent.messageHint, db);
-          if (textClientResult.type === "bulk_sms_confirm") {
-            return { ...textClientResult, command: input.message };
-          }
-          return textClientResult;
-        }
         // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
         const textCleanersResult = re?.type === "cleaner"
           ? await handleTextCleaners(re.name, intent.messageHint, db)
