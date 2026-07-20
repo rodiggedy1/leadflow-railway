@@ -39,8 +39,14 @@ export interface Launch27Booking {
   customerNotes: string;
   staffNotes: string;
   requestedTeam: string | null;
+  // Payment / card status
+  hasStripeCard: boolean;
+  stripeCustomerId: string | null;
+  paymentBrand: string | null;
+  paymentLast4: string | null;
+  chargesOnHoldCents: number;   // sum of onhold charges in cents (L27 dollars × 100)
+  chargesOutstandingCents: number; // outstanding balance in cents
 }
-
 export interface Launch27SyncResult {
   date: string;
   fetched: number;
@@ -208,6 +214,15 @@ export async function getCompletedBookingsForDate(
         customerNotes: b.customer_notes ?? "",
         staffNotes: b.staff_notes ?? "",
         requestedTeam: b.preferred_cleaner?.name ?? null,
+        // Payment / card status (defensive — L27 may return null for any of these)
+        hasStripeCard: b.user?.is_stripe_card === true,
+        stripeCustomerId: b.user?.stripe_customer_id ?? null,
+        paymentBrand: b.payment_method_info?.brand ?? null,
+        paymentLast4: b.payment_method_info?.last4 ?? null,
+        chargesOnHoldCents: Math.round(
+          (b.charges?.onhold ?? []).reduce((sum: number, c: any) => sum + Number(c.amount ?? 0), 0) * 100
+        ),
+        chargesOutstandingCents: Math.round((b.charges?.outstanding ?? 0) * 100),
       });
     }
 
