@@ -1296,21 +1296,24 @@ const HINT_EXAMPLES = [
 
 function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
-    <div className="mb-2 bg-[#1a1d2e] border border-white/15 rounded-xl">
-      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #e5d9ea"}}>
-        <p className="text-sm text-white font-semibold">Things you can ask</p>
-        <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-lg leading-none">✕</button>
+    <div className="mb-2 rounded-xl overflow-hidden" style={{background:"#fffdf9",border:"1px solid #e8dff0",boxShadow:"0 4px 24px rgba(120,80,160,0.08)"}}>
+      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #ede6f5"}}>
+        <p className="text-sm font-semibold" style={{color:"#2d1f3d"}}>Things you can ask</p>
+        <button onClick={onClose} className="transition-colors text-lg leading-none" style={{color:"#9b8aaa"}} onMouseEnter={e=>(e.currentTarget.style.color="#6b3fa0")} onMouseLeave={e=>(e.currentTarget.style.color="#9b8aaa")}>✕</button>
       </div>
       <div className="grid grid-cols-2 gap-2 p-3">
         {EXAMPLES.map((ex) => (
           <button
             key={ex.label}
             onClick={() => { onSelect(ex.example); onClose(); }}
-            className="flex flex-col gap-1 p-3 rounded-xl transition-all text-left hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
+            className="flex flex-col gap-1 p-3 rounded-xl transition-all text-left"
+            style={{background:"rgba(255,255,255,0.85)",border:"1px solid #ede6f5"}}
+            onMouseEnter={e=>(e.currentTarget.style.background="#f3eeff")}
+            onMouseLeave={e=>(e.currentTarget.style.background="rgba(255,255,255,0.85)")}
           >
             <span className="text-lg leading-none">{ex.emoji}</span>
-            <p className="text-xs text-white font-semibold mt-1">{ex.label}</p>
-            <p className="text-[11px] text-gray-400 leading-snug">{ex.example}</p>
+            <p className="text-xs font-semibold mt-1" style={{color:"#2d1f3d"}}>{ex.label}</p>
+            <p className="text-[11px] leading-snug" style={{color:"#8b7a9e"}}>{ex.example}</p>
           </button>
         ))}
       </div>
