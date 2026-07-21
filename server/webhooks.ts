@@ -1550,8 +1550,6 @@ Respond ONLY with JSON: { "intent": "yes" | "no" | "other" }`,
           aiFlexibility: confirmationCalls.aiFlexibility,
           calledPhone: confirmationCalls.calledPhone,
           smsFollowupSent: confirmationCalls.smsFollowupSent,
-          aiOutcome: confirmationCalls.aiOutcome,
-          smsConfirmedAt: confirmationCalls.smsConfirmedAt,
         })
         .from(confirmationCalls)
         .where(eq(confirmationCalls.calledPhone, fromPhone))
@@ -1652,68 +1650,43 @@ Extract:
         console.error('[ConfirmSMS] LLM extraction failed, regex result stands:', llmErr);
       }
 
-      // ── STEP 3: Persist the result (field-specific updates) ─────────────────
-      //
-      // Each message updates only the fields it has something to say about.
-      // "unclear" means "I don't know what this message changes" — it never
-      // overwrites an existing confirmation state.
-      //
+      // ── STEP 3: Persist the result ────────────────────────────────────────────
       const existingReplies = Array.isArray(row.smsReplies) ? row.smsReplies : [];
       const updatedReplies = [...existingReplies, { text: inboundText, receivedAt: Date.now() }];
 
-      // Build the update payload field by field
-      const updatePayload: Record<string, unknown> = {
-        smsReply: inboundText,
-        smsReplies: updatedReplies,
+      const outcomeMap: Record<SmsIntent, { aiOutcome: string; aiOutcomeLabel: string }> = {
+        confirmed:    { aiOutcome: 'confirmed',    aiOutcomeLabel: 'Confirmed via SMS ✓' },
+        cancellation: { aiOutcome: 'reschedule',   aiOutcomeLabel: 'Cancellation Request ⚠️' },
+        unclear:      { aiOutcome: 'unknown',      aiOutcomeLabel: 'Reply Unclear — Review' },
       };
+      const outcomeFields = outcomeMap[intent];
 
-      // Confirmation state — only written when this message expresses a clear intent
-      if (intent === 'confirmed') {
-        updatePayload.aiOutcome = 'confirmed';
-        updatePayload.aiOutcomeLabel = 'Confirmed via SMS ✓';
-        updatePayload.smsConfirmedAt = Date.now();
-      } else if (intent === 'cancellation') {
-        // Cancellation always overrides — even a prior confirmation
-        updatePayload.aiOutcome = 'reschedule';
-        updatePayload.aiOutcomeLabel = 'Cancellation Request ⚠️';
-        updatePayload.smsConfirmedAt = null;
-      }
-      // intent === 'unclear' → confirmation fields left untouched
-
-      // Flexibility — only written if this message expressed flexibility
-      if (smsFlexibility && !row.aiFlexibility) {
-        updatePayload.aiFlexibility = smsFlexibility;
-      }
-
-      // Notes — only written if LLM found notes content
-      if (smsNotes) {
-        updatePayload.aiNotes = smsNotes;
-      }
-
-      console.log(`[ConfirmSMS] Updating confirmation_calls id=${row.id} with intent=${intent}, flexibility=${smsFlexibility}, fields=${Object.keys(updatePayload).join(',')}`);
+      console.log(`[ConfirmSMS] Updating confirmation_calls id=${row.id} with intent=${intent}, flexibility=${smsFlexibility}`);
       await db.update(confirmationCalls)
-        .set(updatePayload as Parameters<typeof db.update>[0] extends infer T ? T : never)
+        .set({
+          smsReply: inboundText,
+          smsReplies: updatedReplies,
+          smsConfirmedAt: intent === 'confirmed' ? Date.now() : null,
+          aiOutcome: outcomeFields.aiOutcome,
+          aiOutcomeLabel: outcomeFields.aiOutcomeLabel,
+          ...(smsFlexibility && !row.aiFlexibility ? { aiFlexibility: smsFlexibility } : {}),
+          ...(smsNotes ? { aiNotes: smsNotes } : {}),
+        })
         .where(eq(confirmationCalls.id, row.id));
       await markInboundSms('processed', row.id);
 
-      // ── STEP 4: Post CommandChat alert ────────────────────────────────────────
-      //
-      // Helper: is this customer currently confirmed (after this update)?
-      const isEffectivelyConfirmed = (): boolean => {
-        if (intent === 'confirmed') return true;   // just confirmed now
-        if (intent === 'cancellation') return false; // just cancelled
-        // unclear — check existing state
-        return row.aiOutcome === 'confirmed' || (row.smsConfirmedAt ?? 0) > 0;
-      };
-
-      if (intent === 'cancellation') {
-        // Always alert on cancellations
-        const alertBody = `🚨 **Cancellation Request** — ${row.clientName ?? fromPhone} (${row.jobDate})
+      // ── STEP 4: Post CommandChat alert for cancellations and unclear replies ──
+      if (intent === 'cancellation' || intent === 'unclear') {
+        const alertEmoji = intent === 'cancellation' ? '🚨' : '❓';
+        const alertTitle = intent === 'cancellation' ? 'Cancellation Request' : 'Unclear SMS Reply';
+        const alertBody = `${alertEmoji} **${alertTitle}** — ${row.clientName ?? fromPhone} (${row.jobDate})
 
 Customer replied to confirmation SMS:
 > "${inboundText}"
 
 Please review and action this in the Confirmation Calls page.`;
+
+        // Post to job thread
         await db.insert(opsChatMessages).values({
           cleanerJobId: row.cleanerJobId,
           channel: null,
@@ -1722,30 +1695,8 @@ Please review and action this in the Confirmation Calls page.`;
           body: alertBody,
           metadata: JSON.stringify({ intent, fromPhone, confirmationCallId: row.id }),
         });
-        await db.insert(opsChatMessages).values({
-          cleanerJobId: null,
-          channel: 'command',
-          authorName: '📱 Customer SMS Reply',
-          authorRole: 'system',
-          body: alertBody,
-          metadata: JSON.stringify({ intent, fromPhone, confirmationCallId: row.id }),
-        });
-      } else if (intent === 'unclear' && !isEffectivelyConfirmed()) {
-        // Only alert on unclear if the customer is NOT already confirmed
-        const alertBody = `❓ **Unclear SMS Reply** — ${row.clientName ?? fromPhone} (${row.jobDate})
 
-Customer replied to confirmation SMS:
-> "${inboundText}"
-
-Please review and action this in the Confirmation Calls page.`;
-        await db.insert(opsChatMessages).values({
-          cleanerJobId: row.cleanerJobId,
-          channel: null,
-          authorName: '📱 Customer SMS Reply',
-          authorRole: 'system',
-          body: alertBody,
-          metadata: JSON.stringify({ intent, fromPhone, confirmationCallId: row.id }),
-        });
+        // Post to command channel so ops sees it immediately
         await db.insert(opsChatMessages).values({
           cleanerJobId: null,
           channel: 'command',
