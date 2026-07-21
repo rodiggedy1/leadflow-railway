@@ -92,32 +92,91 @@ function buildScheduleSms(teamName: string | null, dateStr: string, jobs: TeamJo
   );
 }
 
-/** Detect if an inbound text is an affirmative confirmation. */
+/**
+ * Detect if an inbound text is an affirmative schedule confirmation.
+ *
+ * Strategy:
+ * 1. Normalize: lowercase, trim, collapse punctuation/whitespace
+ * 2. Reject obvious negatives first (fast exit)
+ * 3. Match affirmative intent via starts-with or contains patterns
+ *
+ * Synchronous and deterministic — no LLM.
+ */
 export function isConfirmationReply(text: string): boolean {
-  const t = text.trim().toLowerCase();
-  const patterns = [
-    /^confirm(ed)?[.!]?$/,
-    /^yes[.!]?$/,
-    /^yep[.!]?$/,
-    /^yup[.!]?$/,
-    /^ok[.!]?$/,
-    /^okay[.!]?$/,
-    /^got it[.!]?$/,
-    /^got them[.!]?$/,
-    /^received[.!]?$/,
-    /^sounds good[.!]?$/,
-    /^sure[.!]?$/,
-    /^will do[.!]?$/,
-    /^👍/,
-    /^✅/,
-    /^confirmed/,
-    /^yes.*confirm/,
-    /^confirm.*yes/,
-    /i('ll| will) be there/,
-    /on it[.!]?$/,
-    /noted[.!]?$/,
+  if (!text) return false;
+
+  // 1. Normalize
+  const t = text
+    .trim()
+    .toLowerCase()
+    .replace(/[!?.,]+/g, ' ')   // punctuation → space (keep apostrophes for contractions)
+    .replace(/\s+/g, ' ')        // collapse whitespace
+    .trim();
+
+  if (!t) return false;
+
+  // 2. Reject obvious negatives first
+  const negatives = [
+    /^no\b/,
+    /\bcancel/,
+    /\breschedul/,
+    /\bcan't\b/,
+    /\bcant\b/,
+    /\bwon't\b/,
+    /\bwont\b/,
+    /\bnot going\b/,
+    /\brunning late\b/,
+    /^what time\b/,
+    /^maybe\b/,
+    /\bnot flexible\b/,
+    /\bnot sure\b/,
+    /^i'm not\b/,
+    /^im not\b/,
   ];
-  return patterns.some((p) => p.test(t));
+  if (negatives.some((p) => p.test(t))) return false;
+
+  // 3a. Emoji shortcuts (check raw text before normalization)
+  if (/^[👍✅]/.test(text.trim())) return true;
+
+  // 3b. Starts-with affirmatives
+  if (/^yes\b/.test(t)) return true;
+  if (/^yep\b/.test(t)) return true;
+  if (/^yup\b/.test(t)) return true;
+  if (/^yeah\b/.test(t)) return true;
+  if (/^sure\b/.test(t)) return true;
+  // ok/okay: only if the message is JUST "ok" or starts with ok followed by end/punctuation
+  // "ok but I have a question" should NOT confirm
+  if (/^ok$/.test(t)) return true;
+  if (/^okay$/.test(t)) return true;
+  if (/^ok [\u{1F44D}\u{2705}]/u.test(t)) return true;
+  if (/^absolutely\b/.test(t)) return true;
+  if (/^confirmed\b/.test(t)) return true;
+  if (/^confirm\b/.test(t)) return true;
+  if (/^got it\b/.test(t)) return true;
+  if (/^got them\b/.test(t)) return true;
+  if (/^sounds good\b/.test(t)) return true;
+  if (/^will do\b/.test(t)) return true;
+  if (/^on it\b/.test(t)) return true;
+  if (/^noted\b/.test(t)) return true;
+  if (/^received\b/.test(t)) return true;
+  if (/^perfect\b/.test(t)) return true;
+  if (/^great\b/.test(t)) return true;
+  if (/^works for me\b/.test(t)) return true;
+  if (/^that works\b/.test(t)) return true;
+  if (/^all good\b/.test(t)) return true;
+
+  // 3c. Contains affirmatives (for phrases embedded in longer replies)
+  if (/\bwill be there\b/.test(t)) return true;
+  if (/\bwe'll be there\b/.test(t)) return true;
+  if (/\bwe will be there\b/.test(t)) return true;
+  if (/\bi'll be there\b/.test(t)) return true;
+  if (/\bi will be there\b/.test(t)) return true;
+  if (/\bsounds good\b/.test(t)) return true;
+  if (/\bworks for me\b/.test(t)) return true;
+  if (/\bthat works\b/.test(t)) return true;
+  if (/\ball good\b/.test(t)) return true;
+
+  return false;
 }
 
 // ─── Main send function ───────────────────────────────────────────────────────
