@@ -18,6 +18,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments } from "../drizzle/schema";
+import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { normalizePhoneLegacy } from "./utils/phone";
@@ -2257,54 +2258,22 @@ export const aiConciergeRouter = router({
         : [];
       const assignmentByJobId = new Map(assignments.map(a => [a.cleanerJobId, a]));
 
-      // ── 3. Fetch confirmation calls ───────────────────────────────────────
-      const confCalls = jobIds.length > 0
-        ? await db.select({
+      // ── 3. Fetch confirmation calls by date (immune to job ID changes) ──────
+      // Fetch by jobDate — not by cleanerJobId — so we still find calls even when
+      // a job was deleted+re-inserted with a new ID. The shared helper then matches
+      // by cleanerJobId first, then phone, then name.
+      const confCalls = await db.select({
             cleanerJobId: confirmationCalls.cleanerJobId,
+            calledPhone: confirmationCalls.calledPhone,
+            clientName: confirmationCalls.clientName,
             aiOutcome: confirmationCalls.aiOutcome,
             manualOutcome: confirmationCalls.manualOutcome,
             smsConfirmedAt: confirmationCalls.smsConfirmedAt,
             aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
             manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
           }).from(confirmationCalls)
-            .where(inArray(confirmationCalls.cleanerJobId, jobIds))
-        : [];
-      // ── JOIN AUDIT ─────────────────────────────────────────────────────
-      const confRowsByJobId = new Map<number, (typeof confCalls[0])[]>();
-      for (const c of confCalls) {
-        const arr = confRowsByJobId.get(c.cleanerJobId) ?? [];
-        arr.push(c);
-        confRowsByJobId.set(c.cleanerJobId, arr);
-      }
-      const jobsWithMatch = jobs.filter(j => confRowsByJobId.has(j.id));
-      const jobsWithoutMatch = jobs.filter(j => !confRowsByJobId.has(j.id));
-      const jobsWithDuplicates = jobs.filter(j => (confRowsByJobId.get(j.id)?.length ?? 0) > 1);
-      const orphanedRows = confCalls.filter(c => !jobIds.includes(c.cleanerJobId));
-      console.log(`[ReadinessAudit] date=${targetDate} totalJobs=${jobs.length} confRows=${confCalls.length}`);
-      console.log(`[ReadinessAudit] withMatch=${jobsWithMatch.length} withoutMatch=${jobsWithoutMatch.length} withDuplicates=${jobsWithDuplicates.length} orphaned=${orphanedRows.length}`);
-      if (jobsWithoutMatch.length > 0) {
-        console.log(`[ReadinessAudit] NO MATCH job ids: ${jobsWithoutMatch.map(j => `${j.id}(${j.customerName})`).join(', ')}`);
-      }
-      if (jobsWithDuplicates.length > 0) {
-        console.log(`[ReadinessAudit] DUPLICATE job ids: ${jobsWithDuplicates.map(j => `${j.id}(${j.customerName}) x${confRowsByJobId.get(j.id)?.length}`).join(', ')}`);
-      }
-      // ── END AUDIT ─────────────────────────────────────────────────────────
-
-      // Best call per job — prefer confirmed outcome over unclear/unknown; among equal outcomes take latest
-      const outcomeRank = (c: typeof confCalls[0]) => {
-        const eff = c.manualOutcome ?? c.aiOutcome ?? "";
-        if (eff === "confirmed") return 3;
-        if (eff === "reschedule" || eff === "cancel") return 2;
-        if (eff === "no_answer" || eff === "voicemail") return 1;
-        return 0; // unknown / null
-      };
-      const confCallByJobId = new Map<number, typeof confCalls[0]>();
-      for (const c of confCalls) {
-        const existing = confCallByJobId.get(c.cleanerJobId);
-        if (!existing || outcomeRank(c) > outcomeRank(existing)) {
-          confCallByJobId.set(c.cleanerJobId, c);
-        }
-      }
+            .where(eq(confirmationCalls.jobDate, targetDate));
+      const confCallByJobId = matchConfirmationCallsToJobs(jobs, confCalls);
 
       // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
       const totalJobs = jobs.length;
