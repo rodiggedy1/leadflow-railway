@@ -2351,7 +2351,6 @@ export const aiConciergeRouter = router({
             .where(inArray(cleanerProfiles.id, cleanerProfileIds))
         : [];
       const phoneByCleanerId = new Map(cleanerPhones.map(c => [c.id, c.phone]));
-      console.log(`[Readiness D2] targetDate=${targetDate} sessions=${scheduleConfirmSessions.length} confirmedByPhone=`, JSON.stringify(Object.fromEntries(confirmedByPhone)), 'cleanerPhones=', JSON.stringify(cleanerPhones.map(c => ({ id: c.id, phone: c.phone, norm: (c.phone ?? '').replace(/\D/g, '').slice(-10) }))));
       for (const j of jobs) {
         if (!j.cleanerProfileId) continue;
         const existing = teamMap.get(j.cleanerProfileId);
