@@ -2388,13 +2388,20 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     const isConfident = words.length >= 2 && normalizedName.startsWith(normalizedQuery);
     if (!isConfident) return;
     const m = allMatches[0];
-    setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null
+    const entity: SelectedEntity = m.isCleaner && m.cleanerProfileId != null
       ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone }
-      : { type: "customer", name: m.name, phone: m.phone });
+      : { type: "customer", name: m.name, phone: m.phone };
+    setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
     flashAttachedLabel();
-    // Textarea is NOT touched
+    // Complete the partial name in the textarea
+    setInput((prev) => {
+      const COMMAND_RE = /^((?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+)(.+)/i;
+      const match = prev.match(COMMAND_RE);
+      if (match) return match[1] + entity.name;
+      return prev;
+    });
   }, [allMatches, acQuery, focusedCustomer]);
 
   // Show change popup
@@ -2769,12 +2776,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
-          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/15 border border-indigo-500/40 rounded-xl">
-            <div className="w-5 h-5 rounded-md bg-indigo-600/50 flex items-center justify-center text-indigo-200 text-[10px] font-bold shrink-0">
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:"rgba(116,71,245,0.12)",border:"1px solid rgba(116,71,245,0.3)"}}>
+            <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.25)",color:"#5b21b6"}}>
               {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
-            <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
-            <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
+            <span className="text-xs font-semibold flex-1 truncate" style={{color:"#3b1f6e"}}>{focusedCustomer.name}</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:"rgba(116,71,245,0.15)",color:"#5b21b6"}}>{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
             {showAttachedLabel && <span className="text-green-400 text-[10px] font-semibold mr-1 transition-opacity duration-300">✓ Attached</span>}
             <button
               type="button"
