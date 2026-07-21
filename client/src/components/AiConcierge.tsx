@@ -1744,7 +1744,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
   const utils = trpc.useUtils();
 
-  const runPrepareTomorrow = useCallback(() => {
+  const runPrepareTomorrow = useCallback((dateOverride?: string) => {
     // 1. AI acknowledgement text
     const ackMsg: Message = {
       id: uid(),
@@ -1768,7 +1768,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setMessages((prev) => [...prev, ackMsg, checklistMsg]);
 
     // Fire real tRPC call immediately while animation runs
-    const fetchPromise = utils.aiConcierge.getReadinessSummary.fetch({ date: undefined });
+    const fetchPromise = utils.aiConcierge.getReadinessSummary.fetch({ date: dateOverride });
 
     // Animate steps one by one
     let step = 0;
@@ -2109,9 +2109,21 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
     // ── Intercept prepare tomorrow keywords (mock flow, no backend call) ──
     const lc = text.toLowerCase();
-    const isPrepare = lc.includes("get tomorrow ready") || lc.includes("prepare tomorrow") || lc.includes("tomorrow ready") || lc.includes("readiness check");
+    const isPrepare = lc.includes("get tomorrow ready") || lc.includes("prepare tomorrow") || lc.includes("tomorrow ready") || lc.includes("readiness check") || lc.includes("prepare for") || lc.includes("get ready for");
     if (isPrepare) {
-      runPrepareTomorrow();
+      // Try to extract a specific date like "July 21st", "July 21", "jul 21"
+      let parsedDate: string | undefined;
+      const dateMatch = text.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+      if (dateMatch) {
+        const monthNames: Record<string, number> = { jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12 };
+        const month = monthNames[dateMatch[1].toLowerCase()];
+        const day = parseInt(dateMatch[2], 10);
+        if (month && day) {
+          const year = new Date().getFullYear();
+          parsedDate = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        }
+      }
+      runPrepareTomorrow(parsedDate);
       return;
     }
 
