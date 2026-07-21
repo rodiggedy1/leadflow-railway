@@ -139,6 +139,19 @@ interface PrepareResultCard {
   rawDate?: string; // YYYY-MM-DD for drawer
 }
 
+interface TeamRatingsCard {
+  windowDays: number;
+  minRatings: number;
+  rows: Array<{
+    rank: number;
+    cleanerName: string;
+    avgRating: number;
+    ratedJobs: number;
+    totalJobs: number;
+  }>;
+  excluded: number;
+}
+
 interface CardStatusCard {
   date: string;
   rows: Array<{
@@ -182,6 +195,7 @@ type MessageContent =
   | { type: "call_client_pending"; card: CallClientPendingCard }
   | { type: "query_result"; card: QueryResultCard }
   | { type: "card_status"; card: CardStatusCard }
+  | { type: "rank_teams"; card: TeamRatingsCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
@@ -1044,6 +1058,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "rank_teams" && (
+          <div>
+            <TeamRatingsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "prepare_checklist" && (
           <div>
             <PrepareChecklistCardView card={msg.content.card} />
@@ -1250,6 +1270,68 @@ function CardStatusCardView({ card }: { card: CardStatusCard }) {
           <ExternalLink className="w-3 h-3" /> Download CSV
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Team ratings card ───────────────────────────────────────────────────────
+
+function TeamRatingsCardView({ card }: { card: TeamRatingsCard }) {
+  function stars(rating: number) {
+    const full = Math.floor(rating);
+    const half = rating - full >= 0.5;
+    return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(5 - full - (half ? 1 : 0));
+  }
+
+  const medalColor = (rank: number) => {
+    if (rank === 1) return "#fbbf24"; // gold
+    if (rank === 2) return "#9ca3af"; // silver
+    if (rank === 3) return "#cd7c3f"; // bronze
+    return "#6b7280";
+  };
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #fbbf24, #f59e0b)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Users className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Team Rankings</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>Last {card.windowDays} days · min {card.minRatings} ratings</p>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{card.rows.length} teams</span>
+      </div>
+      {/* Table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #2a2e47" }}>
+              {["#", "Team", "Rating", "Jobs Rated"].map(h => (
+                <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {card.rows.map((row, i) => (
+              <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <td style={{ padding: "9px 14px", fontSize: 13, fontWeight: 700, color: medalColor(row.rank) }}>{row.rank}</td>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.cleanerName}</td>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#fbbf24", fontWeight: 600, whiteSpace: "nowrap" }}>
+                  {row.avgRating.toFixed(1)} <span style={{ fontSize: 11, color: "#6b7280" }}>{stars(row.avgRating)}</span>
+                </td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa" }}>{row.ratedJobs} / {row.totalJobs}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {card.excluded > 0 && (
+        <div style={{ padding: "8px 14px", borderTop: "1px solid #2a2e47", fontSize: 11, color: "#6b7280" }}>
+          {card.excluded} team{card.excluded !== 1 ? "s" : ""} excluded (fewer than {card.minRatings} rated jobs)
+        </div>
+      )}
     </div>
   );
 }
@@ -2451,7 +2533,8 @@ type ServerResult =
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
   | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" }
-  | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> };
+  | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> }
+  | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -2613,6 +2696,14 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "card_status", card: { date: result.date, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "rank_teams") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "rank_teams", card: { windowDays: result.windowDays, minRatings: result.minRatings, rows: result.rows, excluded: result.excluded } },
       ts,
     };
   }

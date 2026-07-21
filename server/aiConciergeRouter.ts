@@ -279,6 +279,21 @@ export interface QueryResultResult {
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
 
+/** Returned when the concierge ranks teams/cleaners by customer rating */
+export interface TeamRatingsResult {
+  type: "rank_teams";
+  windowDays: number;
+  minRatings: number;
+  rows: Array<{
+    rank: number;
+    cleanerName: string;
+    avgRating: number;
+    ratedJobs: number;
+    totalJobs: number;
+  }>;
+  excluded: number; // cleaners with < minRatings rated jobs
+}
+
 /** Returned when the concierge shows card/payment hold status for jobs on a date */
 export interface CardStatusResult {
   type: "card_status";
@@ -350,7 +365,8 @@ type ConciergeResult =
   | CallClientConfirmResult
   | CallClientPendingResult
   | QueryResultResult
-  | CardStatusResult;
+  | CardStatusResult
+  | TeamRatingsResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
@@ -1691,7 +1707,73 @@ async function handleEtaUpdateByJobId(
   };
 }
 
-// ── Card status handler ──────────────────────────────────────────────────────
+// ── Rank teams handler ───────────────────────────────────────────────────────
+async function handleRankTeams(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<TeamRatingsResult> {
+  const WINDOW_DAYS = 90;
+  const MIN_RATINGS = 8;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - WINDOW_DAYS);
+  const fromDate = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  const jobs = await db
+    .select({
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName: cleanerJobs.cleanerName,
+      customerRating: cleanerJobs.customerRating,
+    })
+    .from(cleanerJobs)
+    .where(
+      and(
+        sql`${cleanerJobs.jobDate} >= ${fromDate}`,
+        ne(cleanerJobs.cleanerProfileId, 0),
+      )
+    );
+
+  // Group by cleanerProfileId
+  const byProfile = new Map<number, { name: string; ratings: number[]; totalJobs: number }>();
+  for (const j of jobs) {
+    if (!j.cleanerProfileId) continue;
+    const existing = byProfile.get(j.cleanerProfileId);
+    if (existing) {
+      existing.totalJobs++;
+      if (j.customerRating !== null) existing.ratings.push(j.customerRating);
+    } else {
+      byProfile.set(j.cleanerProfileId, {
+        name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
+        ratings: j.customerRating !== null ? [j.customerRating] : [],
+        totalJobs: 1,
+      });
+    }
+  }
+
+  // Filter to cleaners with >= MIN_RATINGS rated jobs, compute avg
+  const qualified: Array<{ cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }> = [];
+  let excluded = 0;
+  for (const c of byProfile.values()) {
+    if (c.ratings.length < MIN_RATINGS) {
+      excluded++;
+      continue;
+    }
+    const avg = c.ratings.reduce((s, r) => s + r, 0) / c.ratings.length;
+    qualified.push({
+      cleanerName: c.name,
+      avgRating: Math.round(avg * 10) / 10,
+      ratedJobs: c.ratings.length,
+      totalJobs: c.totalJobs,
+    });
+  }
+
+  // Sort by avgRating descending
+  qualified.sort((a, b) => b.avgRating - a.avgRating);
+
+  const rows = qualified.map((c, i) => ({ rank: i + 1, ...c }));
+
+  return { type: "rank_teams", windowDays: WINDOW_DAYS, minRatings: MIN_RATINGS, rows, excluded };
+}
+
+// ── Card status handler ───────────────────────────────────────────────────────
 async function handleCardStatus(
   plan: QueryPlan,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
@@ -1859,6 +1941,9 @@ export const aiConciergeRouter = router({
 
       if (plan.action === "card_status") {
         return await handleCardStatus(plan, db);
+      }
+      if (plan.action === "rank_teams") {
+        return await handleRankTeams(db);
       }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile

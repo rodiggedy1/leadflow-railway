@@ -51,7 +51,7 @@ interface ParsedResponse {
 
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
-  "call_client", "eta_update", "get_eta_for_customer", "card_status", "unknown",
+  "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -228,6 +228,7 @@ Choose ONE of:
 - "eta_update" — user wants to trigger an ETA call to a team
 - "get_eta_for_customer" — user wants the ETA for a specific customer's job
 - "card_status" — user wants to see credit card / payment hold status for jobs on a specific date (e.g. "show cards on hold for tomorrow", "card status for July 21", "which customers have pre-auth today")
+- "rank_teams" — user wants to rank or compare teams/cleaners by their customer rating (e.g. "rank teams by rating", "who has the best rating", "team ratings", "best cleaners", "worst rated team")
 - "unknown" — cannot determine intent
 
 ## entities (for "query" action)
@@ -293,7 +294,10 @@ Classify who the action targets:
 "Text Rohan Gilkes and let him know we're running late" → action: "text_client", clientName: "Rohan Gilkes", messageHint: "running late", targetType: "customer", requestedFields: []
 "Send Cindy a payment link" → action: "send_payment_link", clientName: "Cindy", targetType: "customer", requestedFields: []
 "Show me cards on hold for tomorrow" → action: "card_status", timeScope: {type: "tomorrow"}, requestedFields: []
-"Card status for today" → action: "card_status", timeScope: {type: "today"}, requestedFields: []`,
+"Card status for today" → action: "card_status", timeScope: {type: "today"}, requestedFields: []
+"Rank teams by rating" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
+"Who has the best rating?" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
+"Team ratings" → action: "rank_teams", timeScope: {type: null}, requestedFields: []`,
       },
       { role: "user", content: message },
     ],
@@ -307,7 +311,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "unknown"],
             },
             entities: {
               type: "object",
