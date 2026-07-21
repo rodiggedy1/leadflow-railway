@@ -2285,8 +2285,13 @@ export const aiConciergeRouter = router({
       // A cleaner is confirmed if their session messageHistory contains any role="user"
       // message that matches isConfirmationReply() — same logic the webhook uses.
       // No stage dependency — stage may lag or not update correctly.
-      // Sessions are created at ~5 PM the day before — look back 30 hours to catch them
-      const lookbackMs = Date.now() - 30 * 60 * 60 * 1000;
+      const etMidnightMs = (() => {
+        const now = new Date();
+        const etOffset = -4; // EDT
+        const etNow = new Date(now.getTime() + etOffset * 60 * 60 * 1000);
+        etNow.setUTCHours(0, 0, 0, 0);
+        return etNow.getTime() - etOffset * 60 * 60 * 1000;
+      })();
       const scheduleConfirmSessions = await db
         .select({
           leadPhone: conversationSessions.leadPhone,
@@ -2295,7 +2300,7 @@ export const aiConciergeRouter = router({
         .from(conversationSessions)
         .where(and(
           eq(conversationSessions.leadSource, 'schedule_confirm'),
-          gte(conversationSessions.createdAt, new Date(lookbackMs)),
+          gte(conversationSessions.createdAt, new Date(etMidnightMs)),
         ));
       // isConfirmationReply inline (same patterns as scheduleConfirmEngine)
       const isConfirmReply = (text: string): boolean => {
