@@ -150,17 +150,6 @@ export async function getCompletedBookingsForDate(
 
     const raw = await response.json() as RawBooking[];
     if (!Array.isArray(raw) || raw.length === 0) break;
-    // DEBUG: log raw payment fields from first booking on first page
-    if (offset === 0 && raw.length > 0) {
-      const b0 = raw[0] as any;
-      console.log('[L27-debug] user keys:', Object.keys(b0.user ?? {}));
-      console.log('[L27-debug] user.is_stripe_card:', b0.user?.is_stripe_card);
-      console.log('[L27-debug] user.stripe_customer_id:', b0.user?.stripe_customer_id);
-      console.log('[L27-debug] payment_method_info:', JSON.stringify(b0.payment_method_info));
-      console.log('[L27-debug] charges keys:', Object.keys(b0.charges ?? {}));
-      console.log('[L27-debug] charges.outstanding:', b0.charges?.outstanding);
-      console.log('[L27-debug] charges.onhold length:', (b0.charges?.onhold ?? []).length);
-    }
     for (const b of raw) {
       // Parse extras: collect all extra items across all services, map L27 IDs to internal keys
       const extras: string[] = [];
