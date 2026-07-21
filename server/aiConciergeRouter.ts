@@ -2322,7 +2322,7 @@ export const aiConciergeRouter = router({
           "no_card";
         paymentRows.push({
           customerName: j.customerName ?? "Unknown",
-          jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+          jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
           serviceType: j.serviceType ?? null,
           cardBrand: j.paymentBrand ?? null,
           last4: j.paymentLast4 ?? null,
@@ -2353,7 +2353,7 @@ export const aiConciergeRouter = router({
         const label = call?.manualOutcomeLabel ?? call?.aiOutcomeLabel ?? null;
         confirmationRows.push({
           customerName: j.customerName ?? "Unknown",
-          jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+          jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
           serviceType: j.serviceType ?? null,
           status: isConfirmed ? "confirmed" : "pending",
           outcomeLabel: label,
@@ -2379,7 +2379,7 @@ export const aiConciergeRouter = router({
         if (assignment?.isManual === 2) {
           clientRequestRows.push({
             customerName: j.customerName ?? "Unknown",
-            jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+            jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
             requestedTeam: j.requestedTeam,
             assignedTeam: assignment.teamName ?? null,
             status: "honored", // manual override = intentional
@@ -2389,7 +2389,7 @@ export const aiConciergeRouter = router({
         if (!j.cleanerProfileId || !assignment) {
           clientRequestRows.push({
             customerName: j.customerName ?? "Unknown",
-            jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+            jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
             requestedTeam: j.requestedTeam,
             assignedTeam: null,
             status: "unassigned",
@@ -2401,7 +2401,7 @@ export const aiConciergeRouter = router({
         const honored = reqNorm.includes(assignedNorm) || assignedNorm.includes(reqNorm);
         clientRequestRows.push({
           customerName: j.customerName ?? "Unknown",
-          jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+          jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
           requestedTeam: j.requestedTeam,
           assignedTeam: assignment.teamName ?? null,
           status: honored ? "honored" : "violated",
@@ -2437,7 +2437,7 @@ export const aiConciergeRouter = router({
             issueCount: jobsIssueCount,
             unassigned: unassignedJobs.map(j => ({
               customerName: j.customerName ?? "Unknown",
-              jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+              jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
             })),
           },
           teams: {
