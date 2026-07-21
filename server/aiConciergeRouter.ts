@@ -17,7 +17,7 @@ import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, conversationSessions } from "../drizzle/schema";
 import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
@@ -2281,18 +2281,60 @@ export const aiConciergeRouter = router({
       const jobsIssueCount = unassignedJobs.length;
 
       // ── DIMENSION 2: Team Confirmations ──────────────────────────────────
-      const teamMap = new Map<number, { name: string; confirmed: boolean; jobCount: number }>();
+      // Source: conversation_sessions where leadSource='schedule_confirm' created today.
+      // stage=SCHEDULE_CONFIRM_DONE → cleaner replied and confirmed.
+      // stage=SCHEDULE_CONFIRM_SENT → SMS sent but no reply yet.
+      // No session → SMS not sent yet (treat as pending).
+      // Match sessions to cleaners by phone number.
+      const etMidnightMs = (() => {
+        const now = new Date();
+        const etOffset = -4; // EDT
+        const etNow = new Date(now.getTime() + etOffset * 60 * 60 * 1000);
+        etNow.setUTCHours(0, 0, 0, 0);
+        return etNow.getTime() - etOffset * 60 * 60 * 1000; // back to UTC ms
+      })();
+      const scheduleConfirmSessions = await db
+        .select({
+          leadPhone: conversationSessions.leadPhone,
+          leadName: conversationSessions.leadName,
+          stage: conversationSessions.stage,
+        })
+        .from(conversationSessions)
+        .where(and(
+          eq(conversationSessions.leadSource, 'schedule_confirm'),
+          gte(conversationSessions.createdAt, new Date(etMidnightMs)),
+        ));
+      // Build phone → stage map (latest session wins if duplicates)
+      const sessionByPhone = new Map<string, string>();
+      for (const s of scheduleConfirmSessions) {
+        const norm = (s.leadPhone ?? '').replace(/\D/g, '').slice(-10);
+        if (norm) sessionByPhone.set(norm, s.stage);
+      }
+      // Build team map from jobs, look up confirmation by cleaner phone
+      const teamMap = new Map<number, { name: string; confirmed: boolean; jobCount: number; phone: string | null }>();
+      // We need cleaner phones — fetch from cleaner_profiles for the cleanerProfileIds in jobs
+      const cleanerProfileIds = [...new Set(jobs.map(j => j.cleanerProfileId).filter(Boolean) as number[])];
+      const cleanerPhones = cleanerProfileIds.length > 0
+        ? await db.select({ id: cleanerProfiles.id, phone: cleanerProfiles.phone })
+            .from(cleanerProfiles)
+            .where(inArray(cleanerProfiles.id, cleanerProfileIds))
+        : [];
+      const phoneByCleanerId = new Map(cleanerPhones.map(c => [c.id, c.phone]));
       for (const j of jobs) {
         if (!j.cleanerProfileId) continue;
         const existing = teamMap.get(j.cleanerProfileId);
         if (existing) {
           existing.jobCount++;
-          if (!j.scheduleConfirmed) existing.confirmed = false;
         } else {
+          const phone = phoneByCleanerId.get(j.cleanerProfileId) ?? null;
+          const normPhone = phone ? phone.replace(/\D/g, '').slice(-10) : null;
+          const sessionStage = normPhone ? sessionByPhone.get(normPhone) : undefined;
+          const confirmed = sessionStage === 'SCHEDULE_CONFIRM_DONE';
           teamMap.set(j.cleanerProfileId, {
             name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
-            confirmed: j.scheduleConfirmed === 1,
+            confirmed,
             jobCount: 1,
+            phone,
           });
         }
       }
