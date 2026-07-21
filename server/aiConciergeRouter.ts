@@ -13,7 +13,7 @@
  * - SMS        → sendSms from openphone.ts (same as everywhere else)
  */
 import { z } from "zod";
-import { router, agentProcedure } from "./_core/trpc";
+import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
@@ -2202,7 +2202,7 @@ export const aiConciergeRouter = router({
    *  4. Customer Confirmations — confirmed (call/SMS) vs pending per booking
    *  5. Client Requests    — requestedTeam honored vs violated
    */
-  getReadinessSummary: agentProcedure
+  getReadinessSummary: protectedProcedure
     .input(z.object({ date: z.string().optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
