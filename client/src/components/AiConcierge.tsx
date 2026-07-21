@@ -2400,13 +2400,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   // Show change popup
   const [showChangePopup, setShowChangePopup] = useState(false);
 
-  // ── Confirm pill: set entity (textarea NOT touched) ────────────────────────
+  // ── Confirm pill: set entity and complete the partial name in the textarea ──
   const confirmPill = (entity: SelectedEntity) => {
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
     flashAttachedLabel();
-    // Textarea is NOT touched
+    // Replace the partial name typed after the verb with the full selected name
+    setInput((prev) => {
+      const COMMAND_RE = /^((?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+)(.+)/i;
+      const m = prev.match(COMMAND_RE);
+      if (m) return m[1] + entity.name;
+      return prev;
+    });
   };
 
   // ── updateEntityRecognition: single source of truth for command parsing ────────
