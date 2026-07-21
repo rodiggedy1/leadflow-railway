@@ -1975,7 +1975,7 @@ function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void;
   return (
     <div className="mb-2 rounded-xl overflow-hidden" style={{background:"#fffdf9",border:"1px solid #e8dff0",boxShadow:"0 4px 24px rgba(120,80,160,0.08)"}}>
       <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #ede6f5"}}>
-        <p className="text-sm font-semibold" style={{color:"#2d1f3d"}}>Things you can ask</p>
+        <p className="text-sm font-semibold" style={{color:"#2d1f3d"}}>Some examples of things you can ask...</p>
         <button onClick={onClose} className="transition-colors text-lg leading-none" style={{color:"#9b8aaa"}} onMouseEnter={e=>(e.currentTarget.style.color="#6b3fa0")} onMouseLeave={e=>(e.currentTarget.style.color="#9b8aaa")}>✕</button>
       </div>
       <div className="grid grid-cols-2 gap-2 p-3">
