@@ -580,6 +580,82 @@ export function registerCronRoutes(app: Express): void {
     }
   });
 
+  // ── On-demand: reprocess schedule confirm replies ──────────────────────────────
+  // Scans schedule_confirm sessions from the last 30 hours, finds any where the
+  // cleaner replied YES (via messageHistory), and sets scheduleConfirmed=1 on their
+  // jobs for the target date. Safe to run multiple times (idempotent).
+  app.post("/api/cron/schedule-confirm-reprocess", async (req: Request, res: Response) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
+    if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
+    const dateOverride = typeof req.body?.date === "string" ? req.body.date : undefined;
+    try {
+      const db = await getDb();
+      if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
+      const { isConfirmationReply } = await import("./scheduleConfirmEngine");
+      const { and: andOp, eq: eqOp, gte: gteOp } = await import("drizzle-orm");
+      const { cleanerJobs: cjTable, cleanerProfiles: cpTable, conversationSessions: csTable } = await import("../drizzle/schema");
+
+      // Determine target date (tomorrow ET by default)
+      const targetDate = dateOverride ?? (() => {
+        const etNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+        etNow.setDate(etNow.getDate() + 1);
+        return `${etNow.getFullYear()}-${String(etNow.getMonth() + 1).padStart(2, "0")}-${String(etNow.getDate()).padStart(2, "0")}`;
+      })();
+
+      // Find all schedule_confirm sessions from the last 30 hours
+      const since = new Date(Date.now() - 30 * 60 * 60 * 1000);
+      const sessions = await db
+        .select({
+          id: csTable.id,
+          leadPhone: csTable.leadPhone,
+          leadName: csTable.leadName,
+          messageHistory: csTable.messageHistory,
+        })
+        .from(csTable)
+        .where(andOp(eqOp(csTable.leadSource, "schedule_confirm"), gteOp(csTable.createdAt, since)));
+
+      let confirmed = 0;
+      let skipped = 0;
+      let notFound = 0;
+
+      for (const session of sessions) {
+        // Parse messageHistory to find a YES reply from the cleaner
+        let history: Array<{ role: string; content: string }> = [];
+        try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { /* ignore */ }
+
+        const hasYes = history.some((m) => m.role === "user" && isConfirmationReply(m.content));
+        if (!hasYes) { skipped++; continue; }
+
+        // Find the cleaner profile by phone
+        const profileRows = await db
+          .select({ id: cpTable.id })
+          .from(cpTable)
+          .where(eqOp(cpTable.phone, session.leadPhone ?? ""));
+
+        if (profileRows.length === 0) {
+          console.warn(`[ReprocessConfirm] No profile for phone ${session.leadPhone}`);
+          notFound++;
+          continue;
+        }
+
+        const profileId = profileRows[0].id;
+        await db
+          .update(cjTable)
+          .set({ scheduleConfirmed: 1 })
+          .where(andOp(eqOp(cjTable.cleanerProfileId, profileId), eqOp(cjTable.jobDate, targetDate)));
+
+        console.log(`[ReprocessConfirm] ✅ scheduleConfirmed=1 for profileId=${profileId} (${session.leadPhone}) on ${targetDate}`);
+        confirmed++;
+      }
+
+      res.json({ ok: true, targetDate, sessionsFound: sessions.length, confirmed, skipped, notFound });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   // ── Daily 7 AM ET: post ops summary if not already posted ─────────────────
   app.post("/api/cron/ops-summary", async (req: Request, res: Response) => {
     const secret = process.env.CRON_SECRET;
