@@ -1958,6 +1958,8 @@ const EXAMPLES = [
   { emoji: "🚫", label: "Missing ETAs", example: "Which teams have no ETA?" },
   { emoji: "⭐", label: "Team rankings", example: "Rank teams by rating" },
   { emoji: "📋", label: "Customer notes", example: "Customer notes for today" },
+  { emoji: "💳", label: "Credit card status", example: "Check credit card status for today" },
+  { emoji: "📩", label: "Send confirmation texts", example: "Send confirmation texts for tomorrow" },
 ];
 
 const HINT_EXAMPLES = [
@@ -2757,7 +2759,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3" style={{ borderTop: "1px solid #ebe4dc", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)" }}>
+      <div className="px-4 py-3" style={{ borderTop: "1px solid #ebe4dc", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)", position: "relative" }}>
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
@@ -2895,10 +2897,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
         </div>
         {showCommands && (
-          <CommandPicker
-            onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
-            onClose={() => setShowCommands(false)}
-          />
+          <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, zIndex: 50, marginBottom: 6 }}>
+            <CommandPicker
+              onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
+              onClose={() => setShowCommands(false)}
+            />
+          </div>
         )}
       </div>
     </div>
