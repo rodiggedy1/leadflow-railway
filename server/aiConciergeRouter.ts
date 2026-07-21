@@ -422,8 +422,35 @@ type ConciergeResult =
   | TeamRatingsResult
   | NoEtaResult
   | ConfirmationTextsResult
-  | ConfirmationResultsResult;
+  | ConfirmationResultsResult
+  | JobStatusStreamResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
+
+/** Returned when the concierge shows the live job status stream */
+export interface JobStatusStreamResult {
+  type: "job_status_stream";
+  alerts: Array<{
+    alertType: string;
+    jobId: number;
+    title: string;
+    body: string;
+    source: string;
+    ts: number;
+    resolvedAt?: number | null;
+  }>;
+  cleanerStatuses: Array<{
+    id: number;
+    cleanerName: string;
+    status: string;
+    label: string;
+    emoji: string;
+    customerName: string | null;
+    etaLabel: string | null;
+    issueNote: string | null;
+    cleanerJobId: number | null;
+    ts: number;
+  }>;
+}
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
 type TargetType = "customer" | "cleaner" | "team" | "unknown";
@@ -2105,7 +2132,150 @@ async function handleConfirmationResults(
   }).length;
   const totalPending = totalSent - totalConfirmed;
 
-  return { type: "confirmation_results", date, dateLabel, rows, totalSent, totalConfirmed, totalPending };
+    return { type: "confirmation_results", date, dateLabel, rows, totalSent, totalConfirmed, totalPending };
+}
+
+// ── Job Status Stream handler ───────────────────────────────────────────────
+async function handleJobStatusStream(db: Awaited<ReturnType<typeof getDb>>): Promise<JobStatusStreamResult> {
+  if (!db) return { type: "job_status_stream", alerts: [], cleanerStatuses: [] };
+
+  const today = getTodayET();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const now = Date.now();
+
+  // Fetch today's jobs for alert filtering
+  const jobs = await db
+    .select({ id: cleanerJobs.id, jobStatus: cleanerJobs.jobStatus, customerName: cleanerJobs.customerName })
+    .from(cleanerJobs)
+    .where(and(eq(cleanerJobs.jobDate, today), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")));
+
+  const todayJobIds = new Set(jobs.map(j => j.id));
+  const jobStatusMap = new Map(jobs.map(j => [j.id, j.jobStatus]));
+
+  // Build alerts
+  const alerts: JobStatusStreamResult["alerts"] = [];
+
+  const staleEtaMsgs = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, cleanerJobId: opsChatMessages.cleanerJobId, createdAt: opsChatMessages.createdAt })
+    .from(opsChatMessages)
+    .where(and(eq(opsChatMessages.quickAction, "stale_eta"), gte(opsChatMessages.createdAt, new Date(todayStart.getTime()))))
+    .orderBy(opsChatMessages.createdAt);
+  for (const msg of staleEtaMsgs) {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+    const jobId = (meta.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+    if (!jobId || !todayJobIds.has(jobId)) continue;
+    const currentStatus = jobStatusMap.get(jobId);
+    if (currentStatus && currentStatus !== "on_the_way" && currentStatus !== "running_late") continue;
+    const cleanerName = (meta.cleanerName as string) ?? "Team";
+    const customerName = (meta.customerName as string | null) ?? null;
+    const etaStr = (meta.etaStr as string | null) ?? null;
+    alerts.push({
+      alertType: "stale_eta",
+      jobId,
+      title: `${cleanerName} — ETA passed`,
+      body: `${customerName ? `For ${customerName}` : "Still on the way"}${etaStr ? ` · ETA was ${etaStr}` : ""}`,
+      source: cleanerName,
+      ts: new Date(msg.createdAt).getTime(),
+    });
+  }
+
+  const noshowMsgs = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, cleanerJobId: opsChatMessages.cleanerJobId, createdAt: opsChatMessages.createdAt })
+    .from(opsChatMessages)
+    .where(and(eq(opsChatMessages.quickAction, "noshow_alert"), gte(opsChatMessages.createdAt, new Date(todayStart.getTime()))))
+    .orderBy(opsChatMessages.createdAt);
+  for (const msg of noshowMsgs) {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+    const jobId = (meta.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+    if (!jobId || !todayJobIds.has(jobId)) continue;
+    const currentStatus = jobStatusMap.get(jobId);
+    if (currentStatus && ["on_the_way", "running_late", "arrived", "in_progress", "completed"].includes(currentStatus)) continue;
+    const cleanerName = (meta.cleanerName as string) ?? "Team";
+    const customerName = (meta.customerName as string | null) ?? null;
+    const timeStr = (meta.timeStr as string | null) ?? null;
+    alerts.push({
+      alertType: "noshow_alert",
+      jobId,
+      title: `${cleanerName} — no check-in`,
+      body: `${customerName ? `For ${customerName}` : "No status update"}${timeStr ? ` · Scheduled ${timeStr}` : ""}`,
+      source: cleanerName,
+      ts: new Date(msg.createdAt).getTime(),
+    });
+  }
+
+  // Build cleaner statuses
+  const STATUS_META: Record<string, { emoji: string; label: string }> = {
+    on_the_way:        { emoji: "🚗", label: "On the way" },
+    arrived:           { emoji: "🟢", label: "Arrived" },
+    in_progress:       { emoji: "🧹", label: "In progress" },
+    running_late:      { emoji: "⏰", label: "Running late" },
+    issue_at_property: { emoji: "🚨", label: "Issue at property" },
+    completed:         { emoji: "✅", label: "Completed" },
+    finishing_up:      { emoji: "🏁", label: "Finishing up" },
+    wrapping_up:       { emoji: "📦", label: "Wrapping up" },
+  };
+
+  const cleanerStatusMsgs = await db
+    .select({
+      id: opsChatMessages.id,
+      metadata: opsChatMessages.metadata,
+      createdAt: opsChatMessages.createdAt,
+      dbCleanerJobId: opsChatMessages.cleanerJobId,
+      jobStatus: cleanerJobs.jobStatus,
+      jobCustomerName: cleanerJobs.customerName,
+      jobEtaTimestamp: cleanerJobs.etaTimestamp,
+      jobIssueNote: cleanerJobs.issueNote,
+    })
+    .from(opsChatMessages)
+    .leftJoin(cleanerJobs, sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.cleanerJobId')) = ${cleanerJobs.id}`)
+    .where(eq(opsChatMessages.quickAction, "cleaner_status"))
+    .orderBy(desc(opsChatMessages.createdAt))
+    .limit(50);
+
+  const seenCleanerJob = new Set<string>();
+  const cleanerStatuses: JobStatusStreamResult["cleanerStatuses"] = cleanerStatusMsgs
+    .filter(r => r.createdAt && new Date(r.createdAt).getTime() >= todayStart.getTime())
+    .filter(r => {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+      const jobId = r.dbCleanerJobId ?? (meta.cleanerJobId as number | null) ?? 0;
+      const cleanerName = (meta.cleanerName as string) ?? "";
+      const key = `${cleanerName}-${jobId}`;
+      if (seenCleanerJob.has(key)) return false;
+      seenCleanerJob.add(key);
+      return true;
+    })
+    .map(r => {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+      const status = r.jobStatus ?? (meta.status as string) ?? "";
+      const sm = STATUS_META[status];
+      let etaLabel: string | null = null;
+      if (r.jobEtaTimestamp && r.jobEtaTimestamp > now) {
+        etaLabel = new Date(r.jobEtaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+      } else if (meta.etaLabel as string | null) {
+        etaLabel = meta.etaLabel as string;
+      }
+      const issueNote = status === "issue_at_property" ? (r.jobIssueNote ?? null) : null;
+      return {
+        id: r.id,
+        cleanerName: (meta.cleanerName as string) ?? "Cleaner",
+        status,
+        label: sm?.label ?? (meta.label as string) ?? status,
+        emoji: sm?.emoji ?? (meta.emoji as string) ?? "🟡",
+        customerName: r.jobCustomerName ?? (meta.customerName as string | null) ?? null,
+        etaLabel,
+        issueNote,
+        cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
+        ts: r.createdAt ? new Date(r.createdAt).getTime() : now,
+      };
+    })
+    .sort((a, b) => a.ts - b.ts);
+
+  return { type: "job_status_stream", alerts, cleanerStatuses };
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -2247,6 +2417,9 @@ export const aiConciergeRouter = router({
       }
       if (plan.action === "confirmation_results") {
         return await handleConfirmationResults(plan, db);
+      }
+      if (plan.action === "job_status_stream") {
+        return await handleJobStatusStream(db);
       }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile

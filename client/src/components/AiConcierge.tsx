@@ -246,6 +246,7 @@ type MessageContent =
   | { type: "list_no_eta"; card: NoEtaCard }
   | { type: "confirmation_texts"; card: ConfirmationTextsCard }
   | { type: "confirmation_results"; card: ConfirmationResultsCard }
+  | { type: "job_status_stream"; card: JobStatusStreamCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
@@ -1132,6 +1133,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "job_status_stream" && (
+          <div>
+            <JobStatusStreamCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "prepare_checklist" && (
           <div>
             <PrepareChecklistCardView card={msg.content.card} />
@@ -1722,6 +1729,106 @@ function ConfirmationResultsCardView({ card }: { card: ConfirmationResultsCard }
 }
 
 // ─── Customer profile card ───────────────────────────────────────────────────
+
+// ─── Job Status Stream card ──────────────────────────────────────────────────
+
+interface JobStatusStreamCard {
+  alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>;
+  cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }>;
+}
+
+function JobStatusStreamCardView({ card }: { card: JobStatusStreamCard }) {
+  const fmtTime = (ts: number) =>
+    new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  const ALERT_STYLE: Record<string, { borderColor: string; badgeText: string; badgeColor: string; icon: string }> = {
+    stale_eta:    { borderColor: "#d97706", badgeText: "ETA PASSED",  badgeColor: "#d97706", icon: "🚗" },
+    noshow_alert: { borderColor: "#ef4444", badgeText: "NO CHECK-IN", badgeColor: "#ef4444", icon: "🚨" },
+  };
+
+  const STATUS_COLOR: Record<string, string> = {
+    completed:         "#22c55e",
+    in_progress:       "#6366f1",
+    arrived:           "#22c55e",
+    on_the_way:        "#f59e0b",
+    running_late:      "#ef4444",
+    issue_at_property: "#ef4444",
+    finishing_up:      "#8b5cf6",
+    wrapping_up:       "#8b5cf6",
+  };
+
+  const hasAlerts = card.alerts.length > 0;
+  const hasStatuses = card.cleanerStatuses.length > 0;
+
+  if (!hasAlerts && !hasStatuses) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", padding: "16px 14px", width: "100%" }}>
+        <p style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>No job activity yet today.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+      {hasAlerts && (
+        <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "9px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", flex: 1 }}>Live Alerts</p>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "1px 7px", borderRadius: 8 }}>{card.alerts.length}</span>
+          </div>
+          {card.alerts.map((alert, i) => {
+            const s = ALERT_STYLE[alert.alertType] ?? ALERT_STYLE.noshow_alert;
+            return (
+              <div key={i} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: i < card.alerts.length - 1 ? "1px solid #2a2e4744" : undefined, borderLeft: `3px solid ${s.borderColor}` }}>
+                <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", lineHeight: 1.3 }}>{alert.title}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: s.badgeColor, background: `${s.badgeColor}22`, padding: "1px 6px", borderRadius: 6, flexShrink: 0 }}>{s.badgeText}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{alert.body}</p>
+                </div>
+                <span style={{ fontSize: 11, color: "#6b7280", flexShrink: 0, alignSelf: "flex-start", marginTop: 2 }}>{fmtTime(alert.ts)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {hasStatuses && (
+        <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "9px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", flex: 1 }}>Team Status</p>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6b7280" }}>{card.cleanerStatuses.length} updates</span>
+          </div>
+          {card.cleanerStatuses.map((row, i) => {
+            const dotColor = STATUS_COLOR[row.status] ?? "#6b7280";
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.cleanerStatuses.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{row.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>{row.cleanerName}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: dotColor, background: `${dotColor}22`, padding: "1px 6px", borderRadius: 6, textTransform: "uppercase", letterSpacing: "0.05em", flexShrink: 0 }}>{row.label}</span>
+                  </div>
+                  {row.customerName && (
+                    <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>
+                      {row.customerName}{row.etaLabel ? ` · ETA ${row.etaLabel}` : ""}
+                    </p>
+                  )}
+                  {row.issueNote && (
+                    <p style={{ fontSize: 11, color: "#ef4444", marginTop: 1 }}>{row.issueNote}</p>
+                  )}
+                </div>
+                <span style={{ fontSize: 11, color: "#6b7280", flexShrink: 0 }}>{fmtTime(row.ts)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
   const [expandedSection, setExpandedSection] = React.useState<string | null>(null);
@@ -2943,7 +3050,8 @@ type ServerResult =
   | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number }
   | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> }
   | { type: "confirmation_texts"; date: string; dateLabel: string; rows: Array<{ cleanerJobId: number; customerName: string; customerPhone: string | null; serviceDateTime: string | null; teamName: string | null; alreadySent: boolean; smsConfirmedAt: number | null }> }
-  | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number };
+  | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number }
+  | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -3137,6 +3245,14 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "confirmation_results", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows, totalSent: result.totalSent, totalConfirmed: result.totalConfirmed, totalPending: result.totalPending } },
+      ts,
+    };
+  }
+  if (result.type === "job_status_stream") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "job_status_stream", card: { alerts: result.alerts, cleanerStatuses: result.cleanerStatuses } },
       ts,
     };
   }

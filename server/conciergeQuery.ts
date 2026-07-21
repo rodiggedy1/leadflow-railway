@@ -108,6 +108,7 @@ export interface QueryPlan {
   | "list_no_eta"
   | "confirmation_texts"
   | "confirmation_results"
+  | "job_status_stream"
   | "unknown";
 
   entities: QueryPlanEntities;
