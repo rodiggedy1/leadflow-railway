@@ -2996,9 +2996,13 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
                   <span>Commands</span>
                 </button>
               </div>
-              <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium" style={{ color: "#74757b" }}>
-                <AtSign className="w-3.5 h-3.5" />
-                <span>People</span>
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-xs font-medium"
+                style={{ color: "#74757b" }}
+                onClick={() => { setInput("what's going on today"); setTimeout(() => inputRef.current?.focus(), 0); }}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>Today</span>
               </button>
             </div>
             <button
