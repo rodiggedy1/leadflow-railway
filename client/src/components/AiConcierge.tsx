@@ -2111,7 +2111,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
     // ── Intercept prepare tomorrow keywords (mock flow, no backend call) ──
     const lc = text.toLowerCase();
-    const isPrepare = lc.includes("get tomorrow ready") || lc.includes("prepare tomorrow") || lc.includes("tomorrow ready") || lc.includes("readiness check") || lc.includes("prepare for") || lc.includes("get ready for");
+    const isPrepare = lc.includes("get tomorrow ready") || lc.includes("prepare tomorrow") || lc.includes("tomorrow ready") || lc.includes("readiness check") || lc.includes("prepare for") || lc.includes("get ready for") || lc.startsWith("prepare ") || lc === "prepare";
     if (isPrepare) {
       // Try to extract a specific date like "July 21st", "July 21", "jul 21"
       let parsedDate: string | undefined;
