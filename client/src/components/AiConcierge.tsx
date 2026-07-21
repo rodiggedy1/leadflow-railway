@@ -1732,18 +1732,17 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // ── Prepare Tomorrow mock flow ─────────────────────────────────────────────
+  // ── Prepare Tomorrow flow (real tRPC data) ────────────────────────────────
   const PREPARE_STEPS = [
     "Checking tomorrow's schedule",
     "Checking customer confirmations",
     "Checking payment methods",
     "Checking team confirmations",
-    "Checking access details",
-    "Checking route conflicts",
-    "Checking recurring jobs",
-    "Checking equipment & supplies",
+    "Checking client requests",
     "Scanning for other issues",
   ];
+
+  const utils = trpc.useUtils();
 
   const runPrepareTomorrow = useCallback(() => {
     // 1. AI acknowledgement text
@@ -1768,11 +1767,15 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
     setMessages((prev) => [...prev, ackMsg, checklistMsg]);
 
+    // Fire real tRPC call immediately while animation runs
+    const fetchPromise = utils.aiConcierge.getReadinessSummary.fetch({ date: undefined });
+
     // Animate steps one by one
     let step = 0;
-    const advance = () => {
+    const totalSteps = PREPARE_STEPS.length;
+    const advanceStep = () => {
       step++;
-      if (step < PREPARE_STEPS.length) {
+      if (step < totalSteps) {
         setMessages((prev) =>
           prev.map((m) => {
             if (m.id !== checklistId) return m;
@@ -1783,37 +1786,68 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
             return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
           })
         );
-        setTimeout(advance, 600);
+        setTimeout(advanceStep, 700);
       } else {
-        // All done — mark all steps done
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.id !== checklistId) return m;
-            const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s) => ({ ...s, status: "done" as const }));
-            return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
-          })
-        );
-        // Add summary text + result card
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const dateStr = tomorrow.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-        const summaryMsg: Message = {
-          id: uid(),
-          role: "ai",
-          content: { type: "text", text: "All set! Tomorrow is 82% ready. I found 5 things that need your attention." },
-          ts: nowTime(),
-        };
-        const resultMsg: Message = {
-          id: uid(),
-          role: "ai",
-          content: { type: "prepare_result", card: { readinessPct: 82, issueCount: 5, date: dateStr } },
-          ts: nowTime(),
-        };
-        setMessages((prev) => [...prev, summaryMsg, resultMsg]);
+        // Animation done — wait for fetch then show results
+        fetchPromise.then((summary) => {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== checklistId) return m;
+              const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s) => ({ ...s, status: "done" as const }));
+              return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+            })
+          );
+          const pct = summary.overallPct;
+          const issues = summary.totalIssues;
+          const dateStr = new Date(summary.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          const summaryMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: {
+              type: "text",
+              text: issues === 0
+                ? `All set! Tomorrow is ${pct}% ready — no issues found.`
+                : `All set! Tomorrow is ${pct}% ready. I found ${issues} thing${issues !== 1 ? "s" : ""} that need your attention.`,
+            },
+            ts: nowTime(),
+          };
+          const resultMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: { type: "prepare_result", card: { readinessPct: pct, issueCount: issues, date: dateStr } },
+            ts: nowTime(),
+          };
+          setMessages((prev) => [...prev, summaryMsg, resultMsg]);
+        }).catch(() => {
+          // Fetch failed — still complete animation and show fallback card
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== checklistId) return m;
+              const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s) => ({ ...s, status: "done" as const }));
+              return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+            })
+          );
+          const errMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: { type: "text", text: "I ran into an issue fetching tomorrow's data. You can still open the Readiness panel to try again." },
+            ts: nowTime(),
+          };
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const dateStr = tomorrow.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          const resultMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: { type: "prepare_result", card: { readinessPct: 0, issueCount: 0, date: dateStr } },
+            ts: nowTime(),
+          };
+          setMessages((prev) => [...prev, errMsg, resultMsg]);
+        });
       }
     };
-    setTimeout(advance, 700);
-  }, []);
+    setTimeout(advanceStep, 700);
+  }, [utils]);
 
   // ── Selected entity (set when a pill is confirmed or a customer_profile card is shown) ──────────
   // Discriminated union: customer entities route via resolvedClientPhone; cleaner entities route via resolvedEntity

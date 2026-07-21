@@ -17,7 +17,7 @@ import { router, agentProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments } from "../drizzle/schema";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { normalizePhoneLegacy } from "./utils/phone";
@@ -2188,5 +2188,282 @@ export const aiConciergeRouter = router({
         "chat"
       );
       return { mission: saved ?? missionMeta, missionPersistenceError: saved === null };
+    }),
+
+  /**
+   * getReadinessSummary
+   * Returns a structured readiness summary for a given date (defaults to tomorrow ET).
+   * Powers the Tomorrow Readiness drawer and AI Concierge checklist flow.
+   *
+   * Dimensions:
+   *  1. Jobs Scheduled     — total jobs, unassigned count
+   *  2. Team Confirmations — confirmed vs unconfirmed teams
+   *  3. Payment Methods    — on_hold / no_preauth / no_card per customer
+   *  4. Customer Confirmations — confirmed (call/SMS) vs pending per booking
+   *  5. Client Requests    — requestedTeam honored vs violated
+   */
+  getReadinessSummary: agentProcedure
+    .input(z.object({ date: z.string().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+
+      // Resolve target date — default to tomorrow ET
+      const targetDate = input.date ?? (() => {
+        const now = new Date();
+        const etOffset = -4; // EDT; adjust to -5 for EST if needed
+        const et = new Date(now.getTime() + etOffset * 60 * 60 * 1000);
+        et.setUTCDate(et.getUTCDate() + 1);
+        return et.toISOString().slice(0, 10);
+      })();
+
+      // ── 1. Fetch all non-cancelled/rescheduled jobs for the date ─────────
+      const jobs = await db
+        .select({
+          id: cleanerJobs.id,
+          customerName: cleanerJobs.customerName,
+          customerPhone: cleanerJobs.customerPhone,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          serviceType: cleanerJobs.serviceType,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
+          cleanerName: cleanerJobs.cleanerName,
+          teamName: cleanerJobs.teamName,
+          teamId: cleanerJobs.teamId,
+          scheduleConfirmed: cleanerJobs.scheduleConfirmed,
+          hasStripeCard: cleanerJobs.hasStripeCard,
+          chargesOnHoldCents: cleanerJobs.chargesOnHoldCents,
+          paymentBrand: cleanerJobs.paymentBrand,
+          paymentLast4: cleanerJobs.paymentLast4,
+          requestedTeam: cleanerJobs.requestedTeam,
+          bookingStatus: cleanerJobs.bookingStatus,
+        })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobDate, targetDate),
+          sql`${cleanerJobs.bookingStatus} NOT IN ('cancelled', 'rescheduled')`,
+        ));
+
+      const jobIds = jobs.map(j => j.id);
+
+      // ── 2. Fetch schedule assignments for client request check ────────────
+      const assignments = jobIds.length > 0
+        ? await db.select({
+            cleanerJobId: scheduleAssignments.cleanerJobId,
+            teamName: scheduleAssignments.teamName,
+            isManual: scheduleAssignments.isManual,
+          }).from(scheduleAssignments)
+            .where(inArray(scheduleAssignments.cleanerJobId, jobIds))
+        : [];
+      const assignmentByJobId = new Map(assignments.map(a => [a.cleanerJobId, a]));
+
+      // ── 3. Fetch confirmation calls ───────────────────────────────────────
+      const confCalls = jobIds.length > 0
+        ? await db.select({
+            cleanerJobId: confirmationCalls.cleanerJobId,
+            aiOutcome: confirmationCalls.aiOutcome,
+            manualOutcome: confirmationCalls.manualOutcome,
+            smsConfirmedAt: confirmationCalls.smsConfirmedAt,
+            aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+            manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+          }).from(confirmationCalls)
+            .where(inArray(confirmationCalls.cleanerJobId, jobIds))
+        : [];
+      // Latest call per job (first occurrence per jobId is fine since we just need any confirmed)
+      const confCallByJobId = new Map<number, typeof confCalls[0]>();
+      for (const c of confCalls) {
+        if (!confCallByJobId.has(c.cleanerJobId)) confCallByJobId.set(c.cleanerJobId, c);
+      }
+
+      // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
+      const totalJobs = jobs.length;
+      const unassignedJobs = jobs.filter(j => !j.cleanerProfileId);
+      const jobsIssueCount = unassignedJobs.length;
+
+      // ── DIMENSION 2: Team Confirmations ──────────────────────────────────
+      const teamMap = new Map<number, { name: string; confirmed: boolean; jobCount: number }>();
+      for (const j of jobs) {
+        if (!j.cleanerProfileId) continue;
+        const existing = teamMap.get(j.cleanerProfileId);
+        if (existing) {
+          existing.jobCount++;
+          if (!j.scheduleConfirmed) existing.confirmed = false;
+        } else {
+          teamMap.set(j.cleanerProfileId, {
+            name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
+            confirmed: j.scheduleConfirmed === 1,
+            jobCount: 1,
+          });
+        }
+      }
+      const teamRows = Array.from(teamMap.values());
+      const teamsConfirmed = teamRows.filter(t => t.confirmed).length;
+      const teamsTotal = teamRows.length;
+      const teamsIssueCount = teamRows.filter(t => !t.confirmed).length;
+
+      // ── DIMENSION 3: Payment Methods ─────────────────────────────────────
+      const seenCustomers = new Set<string>();
+      const paymentRows: Array<{
+        customerName: string;
+        jobTime: string | null;
+        serviceType: string | null;
+        cardBrand: string | null;
+        last4: string | null;
+        status: "on_hold" | "no_preauth" | "no_card";
+        amountCents: number;
+      }> = [];
+      for (const j of jobs) {
+        const key = j.customerName ?? "";
+        if (seenCustomers.has(key)) continue;
+        seenCustomers.add(key);
+        const status: "on_hold" | "no_preauth" | "no_card" =
+          (j.chargesOnHoldCents ?? 0) > 0 ? "on_hold" :
+          j.hasStripeCard ? "no_preauth" :
+          "no_card";
+        paymentRows.push({
+          customerName: j.customerName ?? "Unknown",
+          jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+          serviceType: j.serviceType ?? null,
+          cardBrand: j.paymentBrand ?? null,
+          last4: j.paymentLast4 ?? null,
+          status,
+          amountCents: j.chargesOnHoldCents ?? 0,
+        });
+      }
+      const paymentsOnHold = paymentRows.filter(r => r.status === "on_hold").length;
+      const paymentsTotal = paymentRows.length;
+      const paymentsIssueCount = paymentRows.filter(r => r.status !== "on_hold").length;
+
+      // ── DIMENSION 4: Customer Confirmations ──────────────────────────────
+      const seenBookings = new Set<string>();
+      const confirmationRows: Array<{
+        customerName: string;
+        jobTime: string | null;
+        serviceType: string | null;
+        status: "confirmed" | "pending";
+        outcomeLabel: string | null;
+      }> = [];
+      for (const j of jobs) {
+        const key = `${j.customerName}|${j.serviceDateTime}`;
+        if (seenBookings.has(key)) continue;
+        seenBookings.add(key);
+        const call = confCallByJobId.get(j.id);
+        const effectiveOutcome = call?.manualOutcome ?? call?.aiOutcome ?? null;
+        const isConfirmed = effectiveOutcome === "confirmed" || ((call?.smsConfirmedAt ?? 0) > 0);
+        const label = call?.manualOutcomeLabel ?? call?.aiOutcomeLabel ?? null;
+        confirmationRows.push({
+          customerName: j.customerName ?? "Unknown",
+          jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+          serviceType: j.serviceType ?? null,
+          status: isConfirmed ? "confirmed" : "pending",
+          outcomeLabel: label,
+        });
+      }
+      const confirmationsConfirmed = confirmationRows.filter(r => r.status === "confirmed").length;
+      const confirmationsTotal = confirmationRows.length;
+      const confirmationsIssueCount = confirmationRows.filter(r => r.status === "pending").length;
+
+      // ── DIMENSION 5: Client Requests ─────────────────────────────────────
+      const clientRequestRows: Array<{
+        customerName: string;
+        jobTime: string | null;
+        requestedTeam: string;
+        assignedTeam: string | null;
+        status: "honored" | "violated" | "unassigned";
+      }> = [];
+      for (const j of jobs) {
+        if (!j.requestedTeam) continue;
+        const assignment = assignmentByJobId.get(j.id);
+        // Mirror the REQUESTED_TEAM_VIOLATED logic from schedulingRouter:
+        // skip isManual === 2 (manual override), check name containment
+        if (assignment?.isManual === 2) {
+          clientRequestRows.push({
+            customerName: j.customerName ?? "Unknown",
+            jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+            requestedTeam: j.requestedTeam,
+            assignedTeam: assignment.teamName ?? null,
+            status: "honored", // manual override = intentional
+          });
+          continue;
+        }
+        if (!j.cleanerProfileId || !assignment) {
+          clientRequestRows.push({
+            customerName: j.customerName ?? "Unknown",
+            jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+            requestedTeam: j.requestedTeam,
+            assignedTeam: null,
+            status: "unassigned",
+          });
+          continue;
+        }
+        const reqNorm = j.requestedTeam.toLowerCase().trim();
+        const assignedNorm = (assignment.teamName ?? "").toLowerCase().trim();
+        const honored = reqNorm.includes(assignedNorm) || assignedNorm.includes(reqNorm);
+        clientRequestRows.push({
+          customerName: j.customerName ?? "Unknown",
+          jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+          requestedTeam: j.requestedTeam,
+          assignedTeam: assignment.teamName ?? null,
+          status: honored ? "honored" : "violated",
+        });
+      }
+      const clientRequestsHonored = clientRequestRows.filter(r => r.status === "honored").length;
+      const clientRequestsTotal = clientRequestRows.length;
+      const clientRequestsIssueCount = clientRequestRows.filter(r => r.status !== "honored").length;
+
+      // ── Overall readiness % ───────────────────────────────────────────────
+      // Weighted: confirmations 30%, payments 25%, teams 20%, clientRequests 15%, jobs 10%
+      const score = (dim: { total: number; issueCount: number }, weight: number) => {
+        if (dim.total === 0) return weight; // no data = full score
+        return weight * (1 - dim.issueCount / dim.total);
+      };
+      const overallPct = Math.round(
+        score({ total: confirmationsTotal, issueCount: confirmationsIssueCount }, 30) +
+        score({ total: paymentsTotal, issueCount: paymentsIssueCount }, 25) +
+        score({ total: teamsTotal, issueCount: teamsIssueCount }, 20) +
+        score({ total: clientRequestsTotal, issueCount: clientRequestsIssueCount }, 15) +
+        score({ total: totalJobs, issueCount: jobsIssueCount }, 10)
+      );
+
+      const totalIssues = confirmationsIssueCount + paymentsIssueCount + teamsIssueCount + clientRequestsIssueCount + jobsIssueCount;
+
+      return {
+        date: targetDate,
+        overallPct,
+        totalIssues,
+        dimensions: {
+          jobs: {
+            total: totalJobs,
+            issueCount: jobsIssueCount,
+            unassigned: unassignedJobs.map(j => ({
+              customerName: j.customerName ?? "Unknown",
+              jobTime: j.serviceDateTime ? formatTimeET(j.serviceDateTime) : null,
+            })),
+          },
+          teams: {
+            total: teamsTotal,
+            confirmed: teamsConfirmed,
+            issueCount: teamsIssueCount,
+            rows: teamRows,
+          },
+          payments: {
+            total: paymentsTotal,
+            onHold: paymentsOnHold,
+            issueCount: paymentsIssueCount,
+            rows: paymentRows,
+          },
+          confirmations: {
+            total: confirmationsTotal,
+            confirmed: confirmationsConfirmed,
+            issueCount: confirmationsIssueCount,
+            rows: confirmationRows,
+          },
+          clientRequests: {
+            total: clientRequestsTotal,
+            honored: clientRequestsHonored,
+            issueCount: clientRequestsIssueCount,
+            rows: clientRequestRows,
+          },
+        },
+      };
     }),
 });
