@@ -44,6 +44,7 @@ interface SummaryData {
       total: number;
       issueCount: number;
       unassigned: Array<{ customerName: string; jobTime: string | null }>;
+      doubleBooked: Array<{ customerName: string; jobTime: string | null; cleanerName: string }>;
     };
     teams: {
       total: number;
@@ -328,10 +329,15 @@ function buildSections(data: SummaryData): SectionDef[] {
       );
     });
 
-  // 5. Jobs — show unassigned
+  // 5. Jobs — show unassigned + double-booked
   const unassignedJobRows = d.jobs.unassigned.map((r, i) => (
     <RowBase key={i} name={r.customerName} time={r.jobTime}>
       <StatusBadge label="Unassigned" isIssue={true} />
+    </RowBase>
+  ));
+  const doubleBookedRows = d.jobs.doubleBooked.map((r, i) => (
+    <RowBase key={`db-${i}`} name={r.customerName} time={r.jobTime} detail={r.cleanerName}>
+      <StatusBadge label="Double Booked" isIssue={true} />
     </RowBase>
   ));
 
@@ -396,7 +402,7 @@ function buildSections(data: SummaryData): SectionDef[] {
       id: "jobs",
       icon: <Calendar className="w-4 h-4 text-teal-600" />,
       iconBg: "bg-teal-50",
-      title: "Schedule & Jobs",
+      title: "Scheduling Issues",
       subtitle: d.jobs.issueCount > 0
         ? `${d.jobs.issueCount} job${d.jobs.issueCount !== 1 ? "s" : ""} unassigned`
         : `${d.jobs.total} jobs scheduled`,
@@ -404,7 +410,7 @@ function buildSections(data: SummaryData): SectionDef[] {
       count: d.jobs.issueCount > 0 ? d.jobs.issueCount : null,
       actionLabel: null,
       expandedLabel: "Unassigned",
-      rows: unassignedJobRows,
+      rows: [...unassignedJobRows, ...doubleBookedRows],
     },
   ];
 }
@@ -559,7 +565,7 @@ export default function ReadinessDrawer({ open, onClose, date }: ReadinessDrawer
                     <MetricTile
                       icon={<Calendar className="w-4 h-4 text-orange-500" />}
                       iconBg="bg-orange-50"
-                      label="Jobs"
+                      label="Scheduling Issues"
                       primary={`${d.dimensions.jobs.total}`}
                       okLabel="Scheduled"
                       issueLabel={d.dimensions.jobs.issueCount > 0 ? `${d.dimensions.jobs.issueCount} unassigned` : "All assigned"}

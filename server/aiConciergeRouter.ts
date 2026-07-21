@@ -2278,7 +2278,27 @@ export const aiConciergeRouter = router({
       // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
       const totalJobs = jobs.length;
       const unassignedJobs = jobs.filter(j => !j.cleanerProfileId);
-      const jobsIssueCount = unassignedJobs.length;
+      // Double-booking: same cleaner assigned to 2+ jobs at the exact same time
+      const timeKeyMap = new Map<string, typeof jobs>();
+      for (const j of jobs) {
+        if (!j.cleanerProfileId || !j.serviceDateTime) continue;
+        const key = `${j.cleanerProfileId}::${j.serviceDateTime}`;
+        if (!timeKeyMap.has(key)) timeKeyMap.set(key, []);
+        timeKeyMap.get(key)!.push(j);
+      }
+      const doubleBookedJobs: Array<{ customerName: string; jobTime: string | null; cleanerName: string }> = [];
+      for (const group of timeKeyMap.values()) {
+        if (group.length >= 2) {
+          for (const j of group) {
+            doubleBookedJobs.push({
+              customerName: j.customerName ?? "Unknown",
+              jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+              cleanerName: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
+            });
+          }
+        }
+      }
+      const jobsIssueCount = unassignedJobs.length + doubleBookedJobs.length;
 
       // ── DIMENSION 2: Team Confirmations ──────────────────────────────────
       const teamMap = new Map<number, { name: string; confirmed: boolean; jobCount: number }>();
@@ -2439,6 +2459,7 @@ export const aiConciergeRouter = router({
               customerName: j.customerName ?? "Unknown",
               jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
             })),
+            doubleBooked: doubleBookedJobs,
           },
           teams: {
             total: teamsTotal,
