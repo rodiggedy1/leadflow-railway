@@ -294,6 +294,44 @@ export interface NoEtaResult {
   }>;
 }
 
+/** Returned when the concierge shows the list of jobs for confirmation texts (list-first, then Send All) */
+export interface ConfirmationTextsResult {
+  type: "confirmation_texts";
+  date: string; // YYYY-MM-DD
+  dateLabel: string; // human-readable e.g. "tomorrow"
+  rows: Array<{
+    cleanerJobId: number;
+    customerName: string;
+    customerPhone: string | null;
+    serviceDateTime: string | null;
+    teamName: string | null;
+    alreadySent: boolean; // true if smsFollowupSent = 1
+    smsConfirmedAt: number | null;
+  }>;
+}
+
+/** Returned when the concierge shows confirmation text results for a date */
+export interface ConfirmationResultsResult {
+  type: "confirmation_results";
+  date: string; // YYYY-MM-DD
+  dateLabel: string;
+  rows: Array<{
+    clientName: string | null;
+    calledPhone: string | null;
+    smsFollowupSent: number | null;
+    smsConfirmedAt: number | null;
+    smsReply: string | null;
+    aiOutcome: string | null;
+    aiOutcomeLabel: string | null;
+    manualOutcome: string | null;
+    manualOutcomeLabel: string | null;
+    firedAt: number | null;
+  }>;
+  totalSent: number;
+  totalConfirmed: number;
+  totalPending: number;
+}
+
 /** Returned when the concierge ranks teams/cleaners by customer rating */
 export interface TeamRatingsResult {
   type: "rank_teams";
@@ -382,7 +420,9 @@ type ConciergeResult =
   | QueryResultResult
   | CardStatusResult
   | TeamRatingsResult
-  | NoEtaResult;
+  | NoEtaResult
+  | ConfirmationTextsResult
+  | ConfirmationResultsResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
@@ -1960,6 +2000,114 @@ async function handleListNoEta(
   return { type: "list_no_eta", date: today, rows };
 }
 
+// ── Confirmation texts handler ───────────────────────────────────────────────
+
+function resolveConfirmationDate(timeScope: QueryPlan["timeScope"]): { date: string; dateLabel: string } {
+  const today = getTodayET();
+  if (!timeScope || !timeScope.type || timeScope.type === "today") return { date: today, dateLabel: "today" };
+  if (timeScope.type === "tomorrow") {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const date = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    return { date, dateLabel: "tomorrow" };
+  }
+  if (timeScope.type === "specific_date" && timeScope.specificDate) {
+    return { date: timeScope.specificDate, dateLabel: timeScope.specificDate };
+  }
+  return { date: today, dateLabel: "today" };
+}
+
+async function handleConfirmationTexts(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConfirmationTextsResult> {
+  const { date, dateLabel } = resolveConfirmationDate(plan.timeScope);
+
+  // Fetch all jobs for the date
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      teamName: cleanerJobs.teamName,
+    })
+    .from(cleanerJobs)
+    .where(and(
+      eq(cleanerJobs.jobDate, date),
+      ne(cleanerJobs.bookingStatus, "cancelled"),
+      ne(cleanerJobs.bookingStatus, "rescheduled"),
+    ))
+    .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.customerName);
+
+  if (jobs.length === 0) return { type: "confirmation_texts", date, dateLabel, rows: [] };
+
+  // Fetch existing confirmation records for this date
+  const existingCalls = await db
+    .select({
+      cleanerJobId: confirmationCalls.cleanerJobId,
+      calledPhone: confirmationCalls.calledPhone,
+      clientName: confirmationCalls.clientName,
+      id: confirmationCalls.id,
+      smsFollowupSent: confirmationCalls.smsFollowupSent,
+      smsConfirmedAt: confirmationCalls.smsConfirmedAt,
+    })
+    .from(confirmationCalls)
+    .where(eq(confirmationCalls.jobDate, date))
+    .orderBy(desc(confirmationCalls.firedAt));
+
+  const { matchConfirmationCallsToJobs } = await import("./confirmationMatchHelper");
+  const confCallByJobId = matchConfirmationCallsToJobs(jobs, existingCalls);
+
+  const rows = jobs.map(job => {
+    const cc = confCallByJobId.get(job.id) ?? null;
+    return {
+      cleanerJobId: job.id,
+      customerName: job.customerName ?? "Unknown",
+      customerPhone: job.customerPhone ?? null,
+      serviceDateTime: job.serviceDateTime ?? null,
+      teamName: job.teamName ?? null,
+      alreadySent: cc ? (cc.smsFollowupSent === 1) : false,
+      smsConfirmedAt: cc ? (cc.smsConfirmedAt ?? null) : null,
+    };
+  });
+
+  return { type: "confirmation_texts", date, dateLabel, rows };
+}
+
+async function handleConfirmationResults(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConfirmationResultsResult> {
+  const { date, dateLabel } = resolveConfirmationDate(plan.timeScope);
+
+  const rows = await db
+    .select({
+      clientName: confirmationCalls.clientName,
+      calledPhone: confirmationCalls.calledPhone,
+      smsFollowupSent: confirmationCalls.smsFollowupSent,
+      smsConfirmedAt: confirmationCalls.smsConfirmedAt,
+      smsReply: confirmationCalls.smsReply,
+      aiOutcome: confirmationCalls.aiOutcome,
+      aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+      manualOutcome: confirmationCalls.manualOutcome,
+      manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+      firedAt: confirmationCalls.firedAt,
+    })
+    .from(confirmationCalls)
+    .where(eq(confirmationCalls.jobDate, date))
+    .orderBy(desc(confirmationCalls.firedAt));
+
+  const totalSent = rows.filter(r => r.smsFollowupSent === 1).length;
+  const totalConfirmed = rows.filter(r => {
+    const outcome = r.manualOutcome ?? r.aiOutcome;
+    return outcome === "confirmed" || r.smsConfirmedAt != null;
+  }).length;
+  const totalPending = totalSent - totalConfirmed;
+
+  return { type: "confirmation_results", date, dateLabel, rows, totalSent, totalConfirmed, totalPending };
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 export const aiConciergeRouter = router({
   /**
@@ -2088,6 +2236,12 @@ export const aiConciergeRouter = router({
       }
       if (plan.action === "list_no_eta") {
         return await handleListNoEta(db);
+      }
+      if (plan.action === "confirmation_texts") {
+        return await handleConfirmationTexts(plan, db);
+      }
+      if (plan.action === "confirmation_results") {
+        return await handleConfirmationResults(plan, db);
       }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile

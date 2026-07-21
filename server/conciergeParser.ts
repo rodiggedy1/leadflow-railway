@@ -51,7 +51,8 @@ interface ParsedResponse {
 
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
-  "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "unknown",
+  "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta",
+  "confirmation_texts", "confirmation_results", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -304,6 +305,12 @@ Classify who the action targets:
 "Which teams have no ETA?" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
 "Who hasn't submitted ETA today?" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
 "Missing ETA teams" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
+"Send confirmation texts for tomorrow" → action: "confirmation_texts", timeScope: {type: "tomorrow"}, requestedFields: []
+"Fire confirmations for July 22" → action: "confirmation_texts", timeScope: {type: "specific_date", specificDate: "2026-07-22"}, requestedFields: []
+"Text all clients for today's appointments" → action: "confirmation_texts", timeScope: {type: "today"}, requestedFields: []
+"Show confirmation results for tomorrow" → action: "confirmation_results", timeScope: {type: "tomorrow"}, requestedFields: []
+"Confirmation text results for July 22" → action: "confirmation_results", timeScope: {type: "specific_date", specificDate: "2026-07-22"}, requestedFields: []
+"Who confirmed for tomorrow?" → action: "confirmation_results", timeScope: {type: "tomorrow"}, requestedFields: []
 "Last 5 ratings for maidsplus" → action: "query", entities: {cleanerName: "maidsplus", teamName: "maidsplus"}, timeScope: {type: null, originalPhrase: "last 5"}, requestedFields: ["rating"]
 "How has Team 3 been rated recently?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: null, originalPhrase: "recently"}, requestedFields: ["rating"]
 "Ratings for Pilar this month" → action: "query", entities: {cleanerName: "Pilar"}, timeScope: {type: "this_month"}, requestedFields: ["rating"]`,
@@ -320,7 +327,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "unknown"],
             },
             entities: {
               type: "object",
@@ -430,7 +437,7 @@ function fallbackPlan(message: string): QueryPlan {
 // every handler in this PR.
 
 export interface LegacyIntent {
-  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "unknown";
+  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "unknown";
   teamHint?: string | null;
   targetHint?: string | null;
   clientName?: string | null;

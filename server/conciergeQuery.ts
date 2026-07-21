@@ -106,6 +106,8 @@ export interface QueryPlan {
   | "card_status"
   | "rank_teams"
   | "list_no_eta"
+  | "confirmation_texts"
+  | "confirmation_results"
   | "unknown";
 
   entities: QueryPlanEntities;

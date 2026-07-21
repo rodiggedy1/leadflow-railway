@@ -165,6 +165,40 @@ interface NoEtaCard {
   }>;
 }
 
+interface ConfirmationTextsCard {
+  date: string;
+  dateLabel: string;
+  rows: Array<{
+    cleanerJobId: number;
+    customerName: string;
+    customerPhone: string | null;
+    serviceDateTime: string | null;
+    teamName: string | null;
+    alreadySent: boolean;
+    smsConfirmedAt: number | null;
+  }>;
+}
+
+interface ConfirmationResultsCard {
+  date: string;
+  dateLabel: string;
+  rows: Array<{
+    clientName: string | null;
+    calledPhone: string | null;
+    smsFollowupSent: number | null;
+    smsConfirmedAt: number | null;
+    smsReply: string | null;
+    aiOutcome: string | null;
+    aiOutcomeLabel: string | null;
+    manualOutcome: string | null;
+    manualOutcomeLabel: string | null;
+    firedAt: number | null;
+  }>;
+  totalSent: number;
+  totalConfirmed: number;
+  totalPending: number;
+}
+
 interface CardStatusCard {
   date: string;
   rows: Array<{
@@ -210,6 +244,8 @@ type MessageContent =
   | { type: "card_status"; card: CardStatusCard }
   | { type: "rank_teams"; card: TeamRatingsCard }
   | { type: "list_no_eta"; card: NoEtaCard }
+  | { type: "confirmation_texts"; card: ConfirmationTextsCard }
+  | { type: "confirmation_results"; card: ConfirmationResultsCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
@@ -1084,6 +1120,18 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "confirmation_texts" && (
+          <div>
+            <ConfirmationTextsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "confirmation_results" && (
+          <div>
+            <ConfirmationResultsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "prepare_checklist" && (
           <div>
             <PrepareChecklistCardView card={msg.content.card} />
@@ -1407,6 +1455,139 @@ function NoEtaCardView({ card }: { card: NoEtaCard }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: row.isPastScheduled ? "#fca5a5" : "#c8cde8", marginBottom: 1 }}>{row.teamName}</p>
                 <p style={{ fontSize: 11, color: "#6b7280" }}>{row.scheduledTime}{row.isPastScheduled ? " · past scheduled time" : ""}</p>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Confirmation texts card ────────────────────────────────────────────────
+
+function ConfirmationTextsCardView({ card }: { card: ConfirmationTextsCard }) {
+  const formatTime = (dt: string | null) => {
+    if (!dt) return "";
+    try {
+      const d = new Date(dt);
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+    } catch { return ""; }
+  };
+
+  const pending = card.rows.filter(r => !r.alreadySent);
+  const sent = card.rows.filter(r => r.alreadySent);
+
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>No jobs found for {card.dateLabel}.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <MessageSquare className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Confirmation Texts — {card.dateLabel}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>
+            {pending.length} pending · {sent.length} already sent
+          </p>
+        </div>
+      </div>
+      <div>
+        {card.rows.map((row, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+            {row.smsConfirmedAt ? (
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#22c55e" }} />
+            ) : row.alreadySent ? (
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6366f1" }} />
+            ) : (
+              <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ border: "2px solid #4b5563" }} />
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 1 }}>{row.customerName}</p>
+              <p style={{ fontSize: 11, color: "#6b7280" }}>
+                {row.teamName && <span>{row.teamName} · </span>}
+                {formatTime(row.serviceDateTime)}
+              </p>
+            </div>
+            {row.smsConfirmedAt ? (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", background: "#22c55e22", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Confirmed</span>
+            ) : row.alreadySent ? (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1", background: "#6366f122", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Sent</span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", background: "#6b728022", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Pending</span>
+            )}
+          </div>
+        ))}
+      </div>
+      {pending.length > 0 && (
+        <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47", fontSize: 11, color: "#9ca3af" }}>
+          To send texts, go to the <strong style={{ color: "#c8cde8" }}>Confirmation Calls</strong> page and click Send All.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Confirmation results card ────────────────────────────────────────────────
+
+function ConfirmationResultsCardView({ card }: { card: ConfirmationResultsCard }) {
+  const outcomeLabel = (row: ConfirmationResultsCard["rows"][0]) => {
+    const outcome = row.manualOutcome ?? row.aiOutcome;
+    if (row.smsConfirmedAt) return { label: "Confirmed", color: "#22c55e", bg: "#22c55e22" };
+    if (outcome === "confirmed") return { label: "Confirmed", color: "#22c55e", bg: "#22c55e22" };
+    if (outcome === "reschedule") return { label: "Reschedule", color: "#f59e0b", bg: "#f59e0b22" };
+    if (outcome === "cancel") return { label: "Cancel", color: "#ef4444", bg: "#ef444422" };
+    if (outcome === "no_answer" || outcome === "voicemail") return { label: "No Answer", color: "#6b7280", bg: "#6b728022" };
+    if (row.smsFollowupSent === 1) return { label: "Sent", color: "#6366f1", bg: "#6366f122" };
+    return { label: "Pending", color: "#4b5563", bg: "#4b556322" };
+  };
+
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>No confirmation texts sent for {card.dateLabel} yet.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <CheckCircle2 className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Confirmation Results — {card.dateLabel}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>
+            {card.totalConfirmed} confirmed · {card.totalPending} pending · {card.totalSent} sent
+          </p>
+        </div>
+      </div>
+      <div>
+        {card.rows.map((row, i) => {
+          const { label, color, bg } = outcomeLabel(row);
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 1 }}>{row.clientName ?? "Unknown"}</p>
+                {row.smsReply && (
+                  <p style={{ fontSize: 11, color: "#9ca3af", fontStyle: "italic", marginTop: 2 }}>\u201c{row.smsReply}\u201d</p>
+                )}
               </div>
               <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
             </div>
@@ -2620,7 +2801,9 @@ type ServerResult =
   | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" }
   | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> }
   | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number }
-  | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> };
+  | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> }
+  | { type: "confirmation_texts"; date: string; dateLabel: string; rows: Array<{ cleanerJobId: number; customerName: string; customerPhone: string | null; serviceDateTime: string | null; teamName: string | null; alreadySent: boolean; smsConfirmedAt: number | null }> }
+  | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -2798,6 +2981,22 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "list_no_eta", card: { date: result.date, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "confirmation_texts") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "confirmation_texts", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "confirmation_results") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "confirmation_results", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows, totalSent: result.totalSent, totalConfirmed: result.totalConfirmed, totalPending: result.totalPending } },
       ts,
     };
   }
