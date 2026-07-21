@@ -2385,7 +2385,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     const normalizedQuery = acQuery.trim().toLowerCase();
     const normalizedName = allMatches[0].name.trim().toLowerCase();
     const words = normalizedQuery.split(/\s+/);
-    const isConfident = words.length >= 2 && normalizedName.startsWith(normalizedQuery);
+    const isConfident = normalizedQuery.length >= 4 && normalizedName.startsWith(normalizedQuery);
     if (!isConfident) return;
     const m = allMatches[0];
     const entity: SelectedEntity = m.isCleaner && m.cleanerProfileId != null
@@ -2796,13 +2796,13 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
         {/* ── Recognition pill: single match ── */}
         {showRecognitionPill && allMatches.length === 1 && (
-          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
-            <div className="w-5 h-5 rounded-md bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:"rgba(116,71,245,0.10)",border:"1px solid rgba(116,71,245,0.25)"}}>
+            <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.2)",color:"#5b21b6"}}>
               {allMatches[0].name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
-              <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
+              <span className="text-xs font-semibold" style={{color:"#3b1f6e"}}>{allMatches[0].name}</span>
+              <span className="text-[11px] ml-1.5" style={{color:"#7447f5"}}>{allMatches[0].subtitle}</span>
             </div>
           </div>
         )}
