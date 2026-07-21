@@ -5328,7 +5328,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const MIN_CENTER = 330;
 
   const [leftWidth, setLeftWidth] = useState<number>(() => {
-    try { const v = localStorage.getItem("cmd_leftWidth_v3"); return v ? Math.max(MIN_LEFT, Math.min(MAX_LEFT, Number(v))) : 340; } catch { return 340; }
+    try { const v = localStorage.getItem("cmd_leftWidth_v4"); return v ? Math.max(MIN_LEFT, Math.min(MAX_LEFT, Number(v))) : 264; } catch { return 264; }
   });
   const [rightWidth, setRightWidth] = useState<number>(() => {
     try { const v = localStorage.getItem("cmd_rightWidth_v4"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 360; } catch { return 360; }
@@ -5343,7 +5343,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Persist to localStorage whenever values change
-  useEffect(() => { try { localStorage.setItem("cmd_leftWidth_v3",  String(leftWidth));  } catch {} }, [leftWidth]);
+  useEffect(() => { try { localStorage.setItem("cmd_leftWidth_v4",  String(leftWidth));  } catch {} }, [leftWidth]);
   useEffect(() => { try { localStorage.setItem("cmd_rightWidth_v4", String(rightWidth)); } catch {} }, [rightWidth]);
   // left panel is always open
   // Clear any stale rightCollapsed value from localStorage so it never re-hides the panel
