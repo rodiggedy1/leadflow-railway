@@ -2272,7 +2272,7 @@ type MissionStep = MadisonMission["missionSteps"][number];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?: string; onClose?: () => void }) {
+export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean }) {
   const { user } = useAuth();
   // Use the agent's numeric id (from agent cookie session) as the stable userId for
   // mission history. Agents do NOT use Manus OAuth, so user?.openId is always undefined.
@@ -2787,43 +2787,53 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
   return (
     <>
-    <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
-        {/* Avatar */}
-        <div style={{ position: "relative", flexShrink: 0 }}>
-          <img
-            src="/madison-avatar.jpg"
-            alt="Madison"
-            style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(255,255,255,0.95)", boxShadow: "0 8px 20px rgba(54,38,25,0.14), 0 0 0 1px rgba(79,59,44,0.07)" }}
-          />
-          <span style={{ position: "absolute", right: 2, bottom: 4, width: 16, height: 16, background: "#32bd75", border: "3px solid #fffdf9", borderRadius: "50%", display: "block" }} />
-        </div>
-        {/* Name + role + actions all in one column */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          {/* Row 1: name + heart + BETA + Online + close */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap" }}>
-            <h1 style={{ margin: 0, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 28, lineHeight: 1, fontWeight: 500, letterSpacing: "-0.03em", color: "#202431", whiteSpace: "nowrap" }}>Madison</h1>
-            <span style={{ color: "#c9a8ff", fontSize: 20, lineHeight: 1, flexShrink: 0 }}>♡</span>
-            <span style={{ padding: "4px 11px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 11, fontWeight: 700, letterSpacing: "0.02em", flexShrink: 0 }}>BETA</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "#70737d", flexShrink: 0 }}>
-              <span style={{ width: 7, height: 7, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
-              Online
-            </div>
-            {onClose && (
-              <button
-                onClick={onClose}
-                style={{ marginLeft: "auto", width: 30, height: 30, display: "grid", placeItems: "center", color: "#7d7f85", background: "transparent", border: 0, borderRadius: "50%", cursor: "pointer", fontSize: 20, lineHeight: 1, flexShrink: 0 }}
-                title="Close"
-              >×</button>
-            )}
+    <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: compact ? 0 : 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
+      {/* Header — compact (inline) vs full (slide-in) */}
+      {compact ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px 10px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.95)", boxShadow: "0 4px 10px rgba(54,38,25,0.12)" }} />
+            <span style={{ position: "absolute", right: 1, bottom: 2, width: 9, height: 9, background: "#32bd75", border: "2px solid #fffdf9", borderRadius: "50%", display: "block" }} />
           </div>
-          {/* Row 2: role */}
-          <p style={{ margin: "7px 0 0", fontSize: 13.5, fontWeight: 600, color: "#3e424c" }}>Your AI Operations Concierge</p>
-          {/* Row 3: tagline */}
-          <p style={{ margin: "3px 0 0", fontSize: 13.5, color: "#70737d" }}>Ask anything. I'll get it done.</p>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 500, color: "#202431", letterSpacing: "-0.02em" }}>Madison</span>
+              <span style={{ color: "#c9a8ff", fontSize: 13 }}>♡</span>
+              <span style={{ padding: "2px 7px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>BETA</span>
+            </div>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#70737d", display: "flex", alignItems: "center", gap: 4 }}>
+              Your AI Operations Concierge
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 6 }}>
+                <span style={{ width: 6, height: 6, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
+                <span>Online</span>
+              </span>
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
+          <div style={{ position: "relative", flexShrink: 0 }}>
+            <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(255,255,255,0.95)", boxShadow: "0 8px 20px rgba(54,38,25,0.14), 0 0 0 1px rgba(79,59,44,0.07)" }} />
+            <span style={{ position: "absolute", right: 2, bottom: 4, width: 16, height: 16, background: "#32bd75", border: "3px solid #fffdf9", borderRadius: "50%", display: "block" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "nowrap" }}>
+              <h1 style={{ margin: 0, fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 28, lineHeight: 1, fontWeight: 500, letterSpacing: "-0.03em", color: "#202431", whiteSpace: "nowrap" }}>Madison</h1>
+              <span style={{ color: "#c9a8ff", fontSize: 20, lineHeight: 1, flexShrink: 0 }}>♡</span>
+              <span style={{ padding: "4px 11px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 11, fontWeight: 700, letterSpacing: "0.02em", flexShrink: 0 }}>BETA</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, color: "#70737d", flexShrink: 0 }}>
+                <span style={{ width: 7, height: 7, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
+                Online
+              </div>
+              {onClose && (
+                <button onClick={onClose} style={{ marginLeft: "auto", width: 30, height: 30, display: "grid", placeItems: "center", color: "#7d7f85", background: "transparent", border: 0, borderRadius: "50%", cursor: "pointer", fontSize: 20, lineHeight: 1, flexShrink: 0 }} title="Close">×</button>
+              )}
+            </div>
+            <p style={{ margin: "7px 0 0", fontSize: 13.5, fontWeight: 600, color: "#3e424c" }}>Your AI Operations Concierge</p>
+            <p style={{ margin: "3px 0 0", fontSize: 13.5, color: "#70737d" }}>Ask anything. I'll get it done.</p>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5" style={{ background: "transparent" }}>
