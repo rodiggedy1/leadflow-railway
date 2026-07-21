@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { normalizePhoneLegacy } from "./utils/phone";
 import { router, opsChatProcedure, publicProcedure, agentProcedure } from "./_core/trpc";
+import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import {
@@ -96,24 +97,12 @@ export const confirmationCallsRouter = router({
         .where(eq(confirmationCalls.jobDate, input.date))
         .orderBy(desc(confirmationCalls.firedAt));
 
-      // Build lookup maps: phone → most recent call, name → most recent call (fallback)
-      const callByPhone = new Map<string, typeof existingCalls[number]>();
-      const callByName = new Map<string, typeof existingCalls[number]>();
-      for (const c of existingCalls) {
-        const phone = c.calledPhone?.replace(/\D/g, "");
-        if (phone && !callByPhone.has(phone)) callByPhone.set(phone, c);
-        const name = c.clientName?.trim().toLowerCase();
-        if (name && !callByName.has(name)) callByName.set(name, c);
-      }
-
-      return jobs.map((job) => {
-        const jobPhone = job.customerPhone?.replace(/\D/g, "");
-        const call =
-          (jobPhone && callByPhone.get(jobPhone)) ||
-          callByName.get(job.customerName?.trim().toLowerCase() ?? "") ||
-          null;
-        return { ...job, confirmationCall: call ?? null };
-      });
+      // Match confirmation calls to jobs using shared helper (cleanerJobId → phone → name)
+      const confCallByJobId = matchConfirmationCallsToJobs(jobs, existingCalls);
+      return jobs.map((job) => ({
+        ...job,
+        confirmationCall: confCallByJobId.get(job.id) ?? null,
+      }));
     }),
 
   /**

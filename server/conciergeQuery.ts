@@ -59,7 +59,8 @@ export type RequestedField =
   | "pricing"         // job revenue / price charged
   | "payment_status"  // paid / balance / refund — from completedJobs.lastBookingPrice + L27 status
   | "history"         // full booking history
-  | "summary";        // broad profile summary (triggers handleCustomerProfile-equivalent)
+  | "summary"         // broad profile summary (triggers handleCustomerProfile-equivalent)
+  | "rating";         // customer ratings for a team or cleaner
 
 /** Per-field default time scope when the user doesn't specify a date */
 export const DEFAULT_TIME_SCOPE: Record<RequestedField, TimeScopeType> = {
@@ -74,6 +75,7 @@ export const DEFAULT_TIME_SCOPE: Record<RequestedField, TimeScopeType> = {
   payment_status: "last_appointment",
   history:        "all_time",
   summary:        "all_time",
+  rating:         "all_time",
 };
 
 /** Job-property fields — if any of these appear in requestedFields, the query
@@ -101,7 +103,13 @@ export interface QueryPlan {
     | "call_client"
     | "eta_update"
     | "get_eta_for_customer"
-    | "unknown";
+  | "card_status"
+  | "rank_teams"
+  | "list_no_eta"
+  | "confirmation_texts"
+  | "confirmation_results"
+  | "job_status_stream"
+  | "unknown";
 
   entities: QueryPlanEntities;
   timeScope: TimeScope;
@@ -113,6 +121,10 @@ export interface QueryPlan {
   targetHint:   string | null;
   teamHint:     string | null;
   clientName:   string | null; // kept for backward compat with action handlers
+
+  // Target type: explicit classification of who the action targets
+  // Used by validateAndNormalizePlan() to detect and correct contradictions
+  targetType: "customer" | "cleaner" | "team" | "unknown";
 }
 
 // ── Entity resolution ─────────────────────────────────────────────────────────
@@ -230,6 +242,8 @@ export interface CleanerJobRow {
   delayMinutes: number | null;
   requestedTeam: string | null;
   frequency: string | null;
+  customerRating: number | null;
+  customerComplaint: string | null;
 }
 
 export interface CompletedJobRow {

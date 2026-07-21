@@ -56,6 +56,7 @@ const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 const CleanerPortalV2 = lazy(() => import("./pages/CleanerPortalV2"));
 const SmsCampaigns = lazy(() => import("./pages/SmsCampaigns"));
 const IconPicker = lazy(() => import("./pages/IconPicker"));
+const ReadinessDashboard = lazy(() => import("./pages/ReadinessDashboard"));
 
 // Minimal spinner shown while a route chunk is downloading.
 function PageLoader() {
@@ -127,6 +128,7 @@ function Router() {
         <Route path={"/pay/:token"} component={CardAuth} />
         <Route path={"/admin/payments"} component={AdminPayments} />
         <Route path={"/admin/sms-campaigns"} component={SmsCampaigns} />
+        <Route path={"/admin/readiness"} component={ReadinessDashboard} />
         <Route path={"/icon-picker"} component={IconPicker} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />

@@ -13,11 +13,12 @@
  * - SMS        → sendSms from openphone.ts (same as everywhere else)
  */
 import { z } from "zod";
-import { router, agentProcedure } from "./_core/trpc";
+import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages } from "../drizzle/schema";
+import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
 import { normalizePhoneLegacy } from "./utils/phone";
@@ -26,14 +27,13 @@ import { sendSms } from "./openphone";
 import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
-import { parseConciergeRequest } from "./conciergeParser";
+import { parseConciergeRequest, validateAndNormalizePlan } from "./conciergeParser";
 import { resolveQuery } from "./conciergeResolvers";
+import type { QueryPlan } from "./conciergeQuery";
+import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function getTodayET(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
-}
+// getTodayET and resolveServiceDateRange are imported from ./conciergeTime
 
 // ── Mission metadata ─────────────────────────────────────────────────────────
 
@@ -279,6 +279,87 @@ export interface QueryResultResult {
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
 
+/** Returned when the concierge lists teams with no confirmed ETA today */
+export interface NoEtaResult {
+  type: "list_no_eta";
+  date: string; // YYYY-MM-DD
+  rows: Array<{
+    teamName: string;
+    cleanerName: string;
+    scheduledTime: string; // formatted e.g. "8:30 AM"
+    serviceDateTime: string | null; // raw ISO for comparison
+    etaStatus: "pending" | "unclear" | "no_answer";
+    isPastScheduled: boolean; // true if serviceDateTime < now
+    currentJobId: number;
+  }>;
+}
+
+/** Returned when the concierge shows the list of jobs for confirmation texts (list-first, then Send All) */
+export interface ConfirmationTextsResult {
+  type: "confirmation_texts";
+  date: string; // YYYY-MM-DD
+  dateLabel: string; // human-readable e.g. "tomorrow"
+  rows: Array<{
+    cleanerJobId: number;
+    customerName: string;
+    customerPhone: string | null;
+    serviceDateTime: string | null;
+    teamName: string | null;
+    alreadySent: boolean; // true if smsFollowupSent = 1
+    smsConfirmedAt: number | null;
+  }>;
+}
+
+/** Returned when the concierge shows confirmation text results for a date */
+export interface ConfirmationResultsResult {
+  type: "confirmation_results";
+  date: string; // YYYY-MM-DD
+  dateLabel: string;
+  rows: Array<{
+    clientName: string | null;
+    calledPhone: string | null;
+    smsFollowupSent: number | null;
+    smsConfirmedAt: number | null;
+    smsReply: string | null;
+    aiOutcome: string | null;
+    aiOutcomeLabel: string | null;
+    manualOutcome: string | null;
+    manualOutcomeLabel: string | null;
+    firedAt: number | null;
+  }>;
+  totalSent: number;
+  totalConfirmed: number;
+  totalPending: number;
+}
+
+/** Returned when the concierge ranks teams/cleaners by customer rating */
+export interface TeamRatingsResult {
+  type: "rank_teams";
+  windowDays: number;
+  minRatings: number;
+  rows: Array<{
+    rank: number;
+    cleanerName: string;
+    avgRating: number;
+    ratedJobs: number;
+    totalJobs: number;
+  }>;
+  excluded: number; // cleaners with < minRatings rated jobs
+}
+
+/** Returned when the concierge shows card/payment hold status for jobs on a date */
+export interface CardStatusResult {
+  type: "card_status";
+  date: string; // YYYY-MM-DD
+  rows: Array<{
+    customerName: string;
+    cardBrand: string | null;
+    last4: string | null;
+    status: "on_hold" | "no_preauth" | "no_card";
+    amountCents: number;
+  }>;
+}
+
 export interface CustomerProfileResult {
   type: "customer_profile";
   profile: {
@@ -336,17 +417,50 @@ type ConciergeResult =
   | PaymentLinkSentResult
   | CallClientConfirmResult
   | CallClientPendingResult
-  | QueryResultResult;
+  | QueryResultResult
+  | CardStatusResult
+  | TeamRatingsResult
+  | NoEtaResult
+  | ConfirmationTextsResult
+  | ConfirmationResultsResult
+  | JobStatusStreamResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
+/** Returned when the concierge shows the live job status stream */
+export interface JobStatusStreamResult {
+  type: "job_status_stream";
+  alerts: Array<{
+    alertType: string;
+    jobId: number;
+    title: string;
+    body: string;
+    source: string;
+    ts: number;
+    resolvedAt?: number | null;
+  }>;
+  cleanerStatuses: Array<{
+    id: number;
+    cleanerName: string;
+    status: string;
+    label: string;
+    emoji: string;
+    customerName: string | null;
+    etaLabel: string | null;
+    issueNote: string | null;
+    cleanerJobId: number | null;
+    ts: number;
+  }>;
+}
+
 // ── Intent classifier ─────────────────────────────────────────────────────────
+type TargetType = "customer" | "cleaner" | "team" | "unknown";
 type Intent =
   | { action: "eta_update"; teamHint: string | null }
   | { action: "get_eta_for_customer"; clientName: string | null }
-  | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null }
-  | { action: "text_client"; clientName: string | null; messageHint: string | null }
+  | { action: "text_cleaners"; targetHint: string | null; messageHint: string | null; targetType: TargetType }
+  | { action: "text_client"; clientName: string | null; messageHint: string | null; targetType: TargetType }
   | { action: "send_payment_link"; clientName: string | null }
-  | { action: "call_client"; clientName: string | null; questionHint: string | null }
+  | { action: "call_client"; clientName: string | null; questionHint: string | null; targetType: TargetType }
   | { action: "query_data" }
   | { action: "customer_profile"; clientName: string | null }
   | { action: "unknown" };
@@ -378,16 +492,24 @@ For get_eta_for_customer:
 For text_cleaners:
 - targetHint should be the EXACT group or cleaner name (e.g. "working today", "DC", "team 5", "all active", or a specific cleaner's name)
 - messageHint should be the topic/content to send
-
+- targetType: set to "cleaner" or "team" — NEVER "customer"
 For text_client:
 - clientName MUST be the exact full name of the customer as written by the user
 - messageHint should be the topic/content to send
+- targetType: set to "customer"
 For send_payment_link:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "send rohan gilkes a payment link" → clientName = "rohan gilkes")
 - messageHint is null
 For call_client:
 - clientName MUST be the exact full name of the customer as written by the user (e.g. "call rohan gilkes and ask about reschedule" → clientName = "rohan gilkes")
 - questionHint should be the topic or question to ask (e.g. "ask if he wants to reschedule", "tell her we're running late")
+- targetType: "customer" when calling a named client/homeowner; "cleaner" when calling cleaning staff
+
+targetType classification rules:
+- "customer": the named person is a homeowner/client receiving cleaning services. A full personal name (first + last) like "Rohan Gilkes", "Mary Jones", "John Smith" is almost always a customer.
+- "cleaner": the named person is cleaning staff or a specific cleaner by name
+- "team": refers to a team label (e.g. "Team 5", "DC cleaners", "all cleaners")
+- "unknown": cannot determine
 Return JSON only:
 {
   "action": "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown",
@@ -395,7 +517,8 @@ Return JSON only:
   "targetHint": "<who to text for text_cleaners — exact name or group, or null>",
   "clientName": "<exact customer full name for text_client, send_payment_link, or call_client, or null>",
   "messageHint": "<the message content or topic for text_client or text_cleaners, or null>",
-  "questionHint": "<the topic/question to ask for call_client, or null>"
+  "questionHint": "<the topic/question to ask for call_client, or null>",
+  "targetType": "customer" | "cleaner" | "team" | "unknown"
 }`,
       },
       { role: "user", content: message },
@@ -414,8 +537,9 @@ Return JSON only:
             clientName: { type: ["string", "null"] },
             messageHint: { type: ["string", "null"] },
             questionHint: { type: ["string", "null"] },
+            targetType: { type: "string", enum: ["customer", "cleaner", "team", "unknown"] },
           },
-          required: ["action", "teamHint", "targetHint", "clientName", "messageHint", "questionHint"],
+          required: ["action", "teamHint", "targetHint", "clientName", "messageHint", "questionHint", "targetType"],
           additionalProperties: false,
         },
       },
@@ -429,10 +553,8 @@ Return JSON only:
   }
 }
 
-// ── Fetch today's teams ───────────────────────────────────────────────────────
-async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>) {
-  const today = getTodayET();
-
+// ── Fetch teams for a given service date ─────────────────────────────────────
+async function getTeamsForDate(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, serviceDate: string) {
   const jobs = await db
     .select({
       id: cleanerJobs.id,
@@ -449,7 +571,7 @@ async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
     .leftJoin(cleanerProfiles, eq(cleanerJobs.cleanerProfileId, cleanerProfiles.id))
     .where(
       and(
-        eq(cleanerJobs.jobDate, today),
+        eq(cleanerJobs.jobDate, serviceDate),
         ne(cleanerJobs.bookingStatus, "cancelled"),
         ne(cleanerJobs.bookingStatus, "rescheduled")
       )
@@ -497,29 +619,29 @@ async function getTodayTeams(db: NonNullable<Awaited<ReturnType<typeof getDb>>>)
 
 // ── Text cleaners: resolve target list ───────────────────────────────────────
 async function resolveTextTargets(
-  targetHint: string | null,
+  plan: QueryPlan,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<{ recipients: BulkSmsRecipient[]; targetDescription: string }> {
-  const today = getTodayET();
-  const hint = (targetHint ?? "").toLowerCase().trim();
+  // Date comes exclusively from the parsed plan — never from re-parsing the hint string
+  const { startDate } = resolveServiceDateRange(plan.timeScope);
+  const dateLabel = startDate === getTodayET() ? "today" : startDate;
+  const hint = (plan.targetHint ?? "").toLowerCase().trim();
 
-  // "working today" or "working right now" or no hint → cleaners with jobs today
-  if (!hint || hint.includes("today") || hint.includes("working") || hint.includes("right now")) {
-    const teams = await getTodayTeams(db);
+  // "working [date]" or "working right now" or no hint → cleaners with jobs on the resolved date
+  if (!hint || hint.includes("working") || hint.includes("right now")) {
+    const teams = await getTeamsForDate(db, startDate);
     const recipients = teams
       .filter(t => t.cleanerPhone)
       .map(t => ({ cleanerProfileId: t.cleanerProfileId, name: t.cleanerName, phone: t.cleanerPhone! }));
-    // Deduplicate by cleanerProfileId
     const seen = new Set<number>();
     const unique = recipients.filter(r => {
       if (seen.has(r.cleanerProfileId)) return false;
       seen.add(r.cleanerProfileId);
       return true;
     });
-    return { recipients: unique, targetDescription: "cleaners working today" };
+    return { recipients: unique, targetDescription: `cleaners working ${dateLabel}` };
   }
-
-  // "all active" or "everyone" → all active cleaner profiles
+  // "all active" or "everyone" → all active cleaner profiles (date-independent)
   if (hint.includes("all") || hint.includes("everyone") || hint.includes("active")) {
     const profiles = await db
       .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
@@ -530,8 +652,7 @@ async function resolveTextTargets(
       .map(p => ({ cleanerProfileId: p.id, name: p.name, phone: p.phone! }));
     return { recipients, targetDescription: "all active cleaners" };
   }
-
-  // DC / Virginia / Maryland / area-based → cleaners with jobs today in that area
+  // DC / Virginia / Maryland / area-based → cleaners with jobs on the resolved date in that area
   const areaKeywords: Record<string, string[]> = {
     "dc": ["washington", "dc", " dc", "d.c"],
     "virginia": ["virginia", " va", ", va"],
@@ -539,7 +660,7 @@ async function resolveTextTargets(
   };
   for (const [areaLabel, keywords] of Object.entries(areaKeywords)) {
     if (keywords.some(k => hint.includes(k))) {
-      const teams = await getTodayTeams(db);
+      const teams = await getTeamsForDate(db, startDate);
       const inArea = teams.filter(t =>
         t.currentJobAddress &&
         keywords.some(k => t.currentJobAddress!.toLowerCase().includes(k))
@@ -553,13 +674,12 @@ async function resolveTextTargets(
         seen.add(r.cleanerProfileId);
         return true;
       });
-      return { recipients: unique, targetDescription: `cleaners working in ${areaLabel.toUpperCase()} today` };
+      return { recipients: unique, targetDescription: `cleaners working in ${areaLabel.toUpperCase()} ${dateLabel}` };
     }
   }
-
-  // "haven't confirmed" / "schedule confirm" → cleaners with SCHEDULE_CONFIRM_SENT
+  // "haven't confirmed" / "schedule confirm" → cleaners on the resolved date
   if (hint.includes("confirm") || hint.includes("schedule")) {
-    const teams = await getTodayTeams(db);
+    const teams = await getTeamsForDate(db, startDate);
     const recipients = teams
       .filter(t => t.cleanerPhone)
       .map(t => ({ cleanerProfileId: t.cleanerProfileId, name: t.cleanerName, phone: t.cleanerPhone! }));
@@ -569,29 +689,22 @@ async function resolveTextTargets(
       seen.add(r.cleanerProfileId);
       return true;
     });
-    return { recipients: unique, targetDescription: "cleaners working today (schedule confirmation)" };
+    return { recipients: unique, targetDescription: `cleaners working ${dateLabel} (schedule confirmation)` };
   }
-
-  // Specific cleaner name → match by name in profiles
+  // Specific cleaner name → match by name in profiles (date-independent)
   const profiles = await db
     .select({ id: cleanerProfiles.id, name: cleanerProfiles.name, phone: cleanerProfiles.phone })
     .from(cleanerProfiles)
     .where(eq(cleanerProfiles.isActive, 1));
-
-  // Try exact full-name match first, then partial
   const hintWords = hint.split(/\s+/).filter(Boolean);
   const matched = profiles.filter(p => {
     const pName = p.name.toLowerCase();
-    // Full name contains hint or hint contains full name
     if (pName.includes(hint) || hint.includes(pName)) return true;
-    // All hint words appear in the profile name
     if (hintWords.length >= 2 && hintWords.every(w => pName.includes(w))) return true;
-    // First name exact match only (must be at least 4 chars to avoid false positives)
     const firstName = pName.split(" ")[0];
     if (firstName.length >= 4 && hint === firstName) return true;
     return false;
   });
-
   if (matched.length > 0) {
     const recipients = matched
       .filter(p => p.phone)
@@ -599,9 +712,8 @@ async function resolveTextTargets(
     const names = recipients.map(r => r.name).join(", ");
     return { recipients, targetDescription: names };
   }
-
-  // Specific team name → match by teamName in today's jobs
-  const teams = await getTodayTeams(db);
+  // Specific team name → match by teamName in jobs on the resolved date
+  const teams = await getTeamsForDate(db, startDate);
   const teamMatched = teams.filter(t =>
     t.teamName.toLowerCase().includes(hint) || t.cleanerName.toLowerCase().includes(hint)
   );
@@ -617,9 +729,8 @@ async function resolveTextTargets(
     });
     return { recipients: unique, targetDescription: `cleaners on ${teamMatched[0].teamName}` };
   }
-
-  // Fallback: today's cleaners
-  const fallbackTeams = await getTodayTeams(db);
+  // Fallback: cleaners on the resolved date
+  const fallbackTeams = await getTeamsForDate(db, startDate);
   const fallbackRecipients = fallbackTeams
     .filter(t => t.cleanerPhone)
     .map(t => ({ cleanerProfileId: t.cleanerProfileId, name: t.cleanerName, phone: t.cleanerPhone! }));
@@ -629,10 +740,8 @@ async function resolveTextTargets(
     seen.add(r.cleanerProfileId);
     return true;
   });
-  return { recipients: unique, targetDescription: "cleaners working today" };
+  return { recipients: unique, targetDescription: `cleaners working ${dateLabel}` };
 }
-
-// ── Text cleaners: draft message ──────────────────────────────────────────────
 async function draftCleanerMessage(
   messageHint: string | null,
   targetDescription: string,
@@ -1425,14 +1534,14 @@ async function handleCustomerProfile(
 
 // ── Text cleaners handler ─────────────────────────────────────────────────────
 async function handleTextCleaners(
-  targetHint: string | null,
+  plan: QueryPlan,
   messageHint: string | null,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
-  const { recipients, targetDescription } = await resolveTextTargets(targetHint, db);
+  const { recipients, targetDescription } = await resolveTextTargets(plan, db);
 
   if (recipients.length === 0) {
-    return { type: "error", message: `No cleaners found matching "${targetHint ?? "your request"}". Try "working today" or a specific name.` };
+    return { type: "error", message: `No cleaners found matching "${plan.targetHint ?? "your request"}". Try "working today" or a specific name.` };
   }
 
   const draftMessage = await draftCleanerMessage(messageHint, targetDescription, recipients);
@@ -1524,7 +1633,7 @@ async function handleEtaUpdate(
   teamHint: string | null,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>
 ): Promise<ConciergeResult> {
-  const teams = await getTodayTeams(db);
+  const teams = await getTeamsForDate(db, today);
   const today = getTodayET();
 
   if (teams.length === 0) {
@@ -1681,6 +1790,494 @@ async function handleEtaUpdateByJobId(
   };
 }
 
+// ── Rank teams handler ───────────────────────────────────────────────────────
+async function handleRankTeams(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<TeamRatingsResult> {
+  const WINDOW_DAYS = 90;
+  const MIN_RATINGS = 8;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - WINDOW_DAYS);
+  const fromDate = cutoff.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  const jobs = await db
+    .select({
+      cleanerProfileId: cleanerJobs.cleanerProfileId,
+      cleanerName: cleanerJobs.cleanerName,
+      customerRating: cleanerJobs.customerRating,
+    })
+    .from(cleanerJobs)
+    .where(
+      and(
+        sql`${cleanerJobs.jobDate} >= ${fromDate}`,
+        ne(cleanerJobs.cleanerProfileId, 0),
+      )
+    );
+
+  // Group by cleanerProfileId
+  const byProfile = new Map<number, { name: string; ratings: number[]; totalJobs: number }>();
+  for (const j of jobs) {
+    if (!j.cleanerProfileId) continue;
+    const existing = byProfile.get(j.cleanerProfileId);
+    if (existing) {
+      existing.totalJobs++;
+      if (j.customerRating !== null) existing.ratings.push(j.customerRating);
+    } else {
+      byProfile.set(j.cleanerProfileId, {
+        name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
+        ratings: j.customerRating !== null ? [j.customerRating] : [],
+        totalJobs: 1,
+      });
+    }
+  }
+
+  // Filter to cleaners with >= MIN_RATINGS rated jobs, compute avg
+  const qualified: Array<{ cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }> = [];
+  let excluded = 0;
+  for (const c of byProfile.values()) {
+    if (c.ratings.length < MIN_RATINGS) {
+      excluded++;
+      continue;
+    }
+    const avg = c.ratings.reduce((s, r) => s + r, 0) / c.ratings.length;
+    qualified.push({
+      cleanerName: c.name,
+      avgRating: Math.round(avg * 10) / 10,
+      ratedJobs: c.ratings.length,
+      totalJobs: c.totalJobs,
+    });
+  }
+
+  // Sort by avgRating descending
+  qualified.sort((a, b) => b.avgRating - a.avgRating);
+
+  const rows = qualified.map((c, i) => ({ rank: i + 1, ...c }));
+
+  return { type: "rank_teams", windowDays: WINDOW_DAYS, minRatings: MIN_RATINGS, rows, excluded };
+}
+
+// ── Card status handler ───────────────────────────────────────────────────────
+async function handleCardStatus(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<CardStatusResult> {
+  const { startDate } = resolveServiceDateRange(plan.timeScope);
+  const jobs = await db
+    .select({
+      customerName: cleanerJobs.customerName,
+      cardBrand: cleanerJobs.paymentBrand,
+      last4: cleanerJobs.paymentLast4,
+      hasStripeCard: cleanerJobs.hasStripeCard,
+      chargesOnHoldCents: cleanerJobs.chargesOnHoldCents,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.jobDate, startDate));
+
+  // Deduplicate by customerName (one row per customer per date)
+  const seen = new Set<string>();
+  const rows = jobs
+    .filter(j => {
+      const key = j.customerName ?? "";
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map(j => ({
+      customerName: j.customerName ?? "Unknown",
+      cardBrand: j.cardBrand ?? null,
+      last4: j.last4 ?? null,
+      status: (
+        j.chargesOnHoldCents > 0 ? "on_hold" :
+        j.hasStripeCard ? "no_preauth" :
+        "no_card"
+      ) as "on_hold" | "no_preauth" | "no_card",
+      amountCents: j.chargesOnHoldCents,
+    }))
+    // Sort: on_hold first, then no_preauth, then no_card
+    .sort((a, b) => {
+      const order = { on_hold: 0, no_preauth: 1, no_card: 2 };
+      return order[a.status] - order[b.status];
+    });
+
+  return { type: "card_status", date: startDate, rows };
+}
+
+// ── List teams with no confirmed ETA ──────────────────────────────────────
+async function handleListNoEta(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<NoEtaResult> {
+  const today = getTodayET();
+  const nowMs = Date.now();
+
+  // 1. Fetch all active jobs for today
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      cleanerName: cleanerJobs.cleanerName,
+      teamName: cleanerJobs.teamName,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobStatus: cleanerJobs.jobStatus,
+      etaCallFiredAt: cleanerJobs.etaCallFiredAt,
+    })
+    .from(cleanerJobs)
+    .where(and(
+      eq(cleanerJobs.jobDate, today),
+      ne(cleanerJobs.bookingStatus, "cancelled"),
+      ne(cleanerJobs.bookingStatus, "rescheduled"),
+    ))
+    .orderBy(cleanerJobs.serviceDateTime);
+
+  if (jobs.length === 0) return { type: "list_no_eta", date: today, rows: [] };
+
+  // 2. Fetch all eta_call_result cards for today's jobs
+  const jobIds = jobs.map(j => j.id);
+  const etaCardRows = await db
+    .select({
+      id: opsChatMessages.id,
+      cleanerJobId: opsChatMessages.cleanerJobId,
+      metadata: opsChatMessages.metadata,
+      createdAt: opsChatMessages.createdAt,
+    })
+    .from(opsChatMessages)
+    .where(and(
+      inArray(opsChatMessages.cleanerJobId as any, jobIds),
+      eq(opsChatMessages.quickAction as any, "eta_call_result")
+    ))
+    .orderBy(desc(opsChatMessages.createdAt), desc(opsChatMessages.id));
+
+  // 3. Priority-aware card selection (mirrors fieldMgmtRouter logic)
+  function etaCardPriority(resultType: string): number {
+    if (resultType === "success") return 0;
+    if (resultType === "no_answer" || resultType === "dispatcher_needed") return 1;
+    return 2;
+  }
+
+  const latestEtaCardByJob = new Map<number, { resultType: string; etaStatus: string | null }>();
+  for (const row of etaCardRows) {
+    if (!row.cleanerJobId) continue;
+    let meta: { resultType?: string; etaStatus?: string | null } = {};
+    try { meta = JSON.parse(row.metadata ?? "{}"); } catch { /* ignore */ }
+    const resultType = meta.resultType ?? "unclear";
+    const existing = latestEtaCardByJob.get(row.cleanerJobId);
+    if (!existing || etaCardPriority(resultType) < etaCardPriority(existing.resultType)) {
+      latestEtaCardByJob.set(row.cleanerJobId, { resultType, etaStatus: meta.etaStatus ?? null });
+    }
+  }
+
+  // 4. Group by team, pick current job per team
+  const teamMap = new Map<string, { teamName: string; cleanerName: string; jobs: typeof jobs }>();
+  for (const j of jobs) {
+    const key = j.teamName ?? j.cleanerName;
+    if (!teamMap.has(key)) {
+      teamMap.set(key, { teamName: key, cleanerName: j.cleanerName, jobs: [] });
+    }
+    teamMap.get(key)!.jobs.push(j);
+  }
+
+  const rows: NoEtaResult["rows"] = [];
+
+  for (const team of teamMap.values()) {
+    const currentJob = team.jobs.find(j =>
+      (j.jobStatus as string) !== "completed" && (j.jobStatus as string) !== "cancelled"
+    ) ?? team.jobs[team.jobs.length - 1];
+
+    // Skip teams already on-site or done
+    const jobSt = currentJob.jobStatus as string;
+    if (jobSt === "arrived" || jobSt === "in_progress" || jobSt === "completed") continue;
+
+    const card = latestEtaCardByJob.get(currentJob.id);
+
+    // If there's a confirmed success ETA, skip this team
+    if (card && card.resultType === "success" && card.etaStatus && card.etaStatus !== "unclear") {
+      continue;
+    }
+
+    let etaStatus: "pending" | "unclear" | "no_answer" = "pending";
+    if (card) {
+      if (card.resultType === "no_answer" || card.resultType === "dispatcher_needed") {
+        etaStatus = "no_answer";
+      } else {
+        etaStatus = "unclear";
+      }
+    } else if (currentJob.etaCallFiredAt) {
+      etaStatus = "unclear";
+    }
+
+    const serviceTime = currentJob.serviceDateTime ? parseServiceDateTime(currentJob.serviceDateTime) : null;
+    const scheduledTime = serviceTime ? formatTimeET(serviceTime) : "—";
+    const isPastScheduled = serviceTime ? serviceTime.getTime() < nowMs : false;
+
+    rows.push({
+      teamName: team.teamName,
+      cleanerName: team.cleanerName,
+      scheduledTime,
+      serviceDateTime: currentJob.serviceDateTime,
+      etaStatus,
+      isPastScheduled,
+      currentJobId: currentJob.id,
+    });
+  }
+
+  // Past-scheduled first, then by time
+  rows.sort((a, b) => {
+    if (a.isPastScheduled !== b.isPastScheduled) return a.isPastScheduled ? -1 : 1;
+    return (a.serviceDateTime ?? "").localeCompare(b.serviceDateTime ?? "");
+  });
+
+  return { type: "list_no_eta", date: today, rows };
+}
+
+// ── Confirmation texts handler ───────────────────────────────────────────────
+
+function resolveConfirmationDate(timeScope: QueryPlan["timeScope"]): { date: string; dateLabel: string } {
+  const today = getTodayET();
+  if (!timeScope || !timeScope.type || timeScope.type === "today") return { date: today, dateLabel: "today" };
+  if (timeScope.type === "tomorrow") {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const date = d.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+    return { date, dateLabel: "tomorrow" };
+  }
+  if (timeScope.type === "specific_date" && timeScope.specificDate) {
+    return { date: timeScope.specificDate, dateLabel: timeScope.specificDate };
+  }
+  return { date: today, dateLabel: "today" };
+}
+
+async function handleConfirmationTexts(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConfirmationTextsResult> {
+  const { date, dateLabel } = resolveConfirmationDate(plan.timeScope);
+
+  // Fetch all jobs for the date
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      teamName: cleanerJobs.teamName,
+    })
+    .from(cleanerJobs)
+    .where(and(
+      eq(cleanerJobs.jobDate, date),
+      ne(cleanerJobs.bookingStatus, "cancelled"),
+      ne(cleanerJobs.bookingStatus, "rescheduled"),
+    ))
+    .orderBy(cleanerJobs.serviceDateTime, cleanerJobs.customerName);
+
+  if (jobs.length === 0) return { type: "confirmation_texts", date, dateLabel, rows: [] };
+
+  // Fetch existing confirmation records for this date
+  const existingCalls = await db
+    .select({
+      cleanerJobId: confirmationCalls.cleanerJobId,
+      calledPhone: confirmationCalls.calledPhone,
+      clientName: confirmationCalls.clientName,
+      id: confirmationCalls.id,
+      smsFollowupSent: confirmationCalls.smsFollowupSent,
+      smsConfirmedAt: confirmationCalls.smsConfirmedAt,
+    })
+    .from(confirmationCalls)
+    .where(eq(confirmationCalls.jobDate, date))
+    .orderBy(desc(confirmationCalls.firedAt));
+
+  const { matchConfirmationCallsToJobs } = await import("./confirmationMatchHelper");
+  const confCallByJobId = matchConfirmationCallsToJobs(jobs, existingCalls);
+
+  const rows = jobs.map(job => {
+    const cc = confCallByJobId.get(job.id) ?? null;
+    return {
+      cleanerJobId: job.id,
+      customerName: job.customerName ?? "Unknown",
+      customerPhone: job.customerPhone ?? null,
+      serviceDateTime: job.serviceDateTime ?? null,
+      teamName: job.teamName ?? null,
+      alreadySent: cc ? (cc.smsFollowupSent === 1) : false,
+      smsConfirmedAt: cc ? (cc.smsConfirmedAt ?? null) : null,
+    };
+  });
+
+  return { type: "confirmation_texts", date, dateLabel, rows };
+}
+
+async function handleConfirmationResults(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>
+): Promise<ConfirmationResultsResult> {
+  const { date, dateLabel } = resolveConfirmationDate(plan.timeScope);
+
+  const rows = await db
+    .select({
+      clientName: confirmationCalls.clientName,
+      calledPhone: confirmationCalls.calledPhone,
+      smsFollowupSent: confirmationCalls.smsFollowupSent,
+      smsConfirmedAt: confirmationCalls.smsConfirmedAt,
+      smsReply: confirmationCalls.smsReply,
+      aiOutcome: confirmationCalls.aiOutcome,
+      aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+      manualOutcome: confirmationCalls.manualOutcome,
+      manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+      firedAt: confirmationCalls.firedAt,
+    })
+    .from(confirmationCalls)
+    .where(eq(confirmationCalls.jobDate, date))
+    .orderBy(desc(confirmationCalls.firedAt));
+
+  const totalSent = rows.filter(r => r.smsFollowupSent === 1).length;
+  const totalConfirmed = rows.filter(r => {
+    const outcome = r.manualOutcome ?? r.aiOutcome;
+    return outcome === "confirmed" || r.smsConfirmedAt != null;
+  }).length;
+  const totalPending = totalSent - totalConfirmed;
+
+    return { type: "confirmation_results", date, dateLabel, rows, totalSent, totalConfirmed, totalPending };
+}
+
+// ── Job Status Stream handler ───────────────────────────────────────────────
+async function handleJobStatusStream(db: Awaited<ReturnType<typeof getDb>>): Promise<JobStatusStreamResult> {
+  if (!db) return { type: "job_status_stream", alerts: [], cleanerStatuses: [] };
+
+  const today = getTodayET();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const now = Date.now();
+
+  // Fetch today's jobs for alert filtering
+  const jobs = await db
+    .select({ id: cleanerJobs.id, jobStatus: cleanerJobs.jobStatus, customerName: cleanerJobs.customerName })
+    .from(cleanerJobs)
+    .where(and(eq(cleanerJobs.jobDate, today), ne(cleanerJobs.bookingStatus, "rescheduled"), ne(cleanerJobs.bookingStatus, "cancelled")));
+
+  const todayJobIds = new Set(jobs.map(j => j.id));
+  const jobStatusMap = new Map(jobs.map(j => [j.id, j.jobStatus]));
+
+  // Build alerts
+  const alerts: JobStatusStreamResult["alerts"] = [];
+
+  const staleEtaMsgs = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, cleanerJobId: opsChatMessages.cleanerJobId, createdAt: opsChatMessages.createdAt })
+    .from(opsChatMessages)
+    .where(and(eq(opsChatMessages.quickAction, "stale_eta"), gte(opsChatMessages.createdAt, new Date(todayStart.getTime()))))
+    .orderBy(opsChatMessages.createdAt);
+  for (const msg of staleEtaMsgs) {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+    const jobId = (meta.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+    if (!jobId || !todayJobIds.has(jobId)) continue;
+    const currentStatus = jobStatusMap.get(jobId);
+    if (currentStatus && currentStatus !== "on_the_way" && currentStatus !== "running_late") continue;
+    const cleanerName = (meta.cleanerName as string) ?? "Team";
+    const customerName = (meta.customerName as string | null) ?? null;
+    const etaStr = (meta.etaStr as string | null) ?? null;
+    alerts.push({
+      alertType: "stale_eta",
+      jobId,
+      title: `${cleanerName} — ETA passed`,
+      body: `${customerName ? `For ${customerName}` : "Still on the way"}${etaStr ? ` · ETA was ${etaStr}` : ""}`,
+      source: cleanerName,
+      ts: new Date(msg.createdAt).getTime(),
+    });
+  }
+
+  const noshowMsgs = await db
+    .select({ id: opsChatMessages.id, metadata: opsChatMessages.metadata, cleanerJobId: opsChatMessages.cleanerJobId, createdAt: opsChatMessages.createdAt })
+    .from(opsChatMessages)
+    .where(and(eq(opsChatMessages.quickAction, "noshow_alert"), gte(opsChatMessages.createdAt, new Date(todayStart.getTime()))))
+    .orderBy(opsChatMessages.createdAt);
+  for (const msg of noshowMsgs) {
+    let meta: Record<string, unknown> = {};
+    try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
+    const jobId = (meta.cleanerJobId as number | null) ?? msg.cleanerJobId ?? 0;
+    if (!jobId || !todayJobIds.has(jobId)) continue;
+    const currentStatus = jobStatusMap.get(jobId);
+    if (currentStatus && ["on_the_way", "running_late", "arrived", "in_progress", "completed"].includes(currentStatus)) continue;
+    const cleanerName = (meta.cleanerName as string) ?? "Team";
+    const customerName = (meta.customerName as string | null) ?? null;
+    const timeStr = (meta.timeStr as string | null) ?? null;
+    alerts.push({
+      alertType: "noshow_alert",
+      jobId,
+      title: `${cleanerName} — no check-in`,
+      body: `${customerName ? `For ${customerName}` : "No status update"}${timeStr ? ` · Scheduled ${timeStr}` : ""}`,
+      source: cleanerName,
+      ts: new Date(msg.createdAt).getTime(),
+    });
+  }
+
+  // Build cleaner statuses
+  const STATUS_META: Record<string, { emoji: string; label: string }> = {
+    on_the_way:        { emoji: "🚗", label: "On the way" },
+    arrived:           { emoji: "🟢", label: "Arrived" },
+    in_progress:       { emoji: "🧹", label: "In progress" },
+    running_late:      { emoji: "⏰", label: "Running late" },
+    issue_at_property: { emoji: "🚨", label: "Issue at property" },
+    completed:         { emoji: "✅", label: "Completed" },
+    finishing_up:      { emoji: "🏁", label: "Finishing up" },
+    wrapping_up:       { emoji: "📦", label: "Wrapping up" },
+  };
+
+  const cleanerStatusMsgs = await db
+    .select({
+      id: opsChatMessages.id,
+      metadata: opsChatMessages.metadata,
+      createdAt: opsChatMessages.createdAt,
+      dbCleanerJobId: opsChatMessages.cleanerJobId,
+      jobStatus: cleanerJobs.jobStatus,
+      jobCustomerName: cleanerJobs.customerName,
+      jobEtaTimestamp: cleanerJobs.etaTimestamp,
+      jobIssueNote: cleanerJobs.issueNote,
+    })
+    .from(opsChatMessages)
+    .leftJoin(cleanerJobs, sql`JSON_UNQUOTE(JSON_EXTRACT(${opsChatMessages.metadata}, '$.cleanerJobId')) = ${cleanerJobs.id}`)
+    .where(eq(opsChatMessages.quickAction, "cleaner_status"))
+    .orderBy(desc(opsChatMessages.createdAt))
+    .limit(50);
+
+  const seenCleanerJob = new Set<string>();
+  const cleanerStatuses: JobStatusStreamResult["cleanerStatuses"] = cleanerStatusMsgs
+    .filter(r => r.createdAt && new Date(r.createdAt).getTime() >= todayStart.getTime())
+    .filter(r => {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+      const jobId = r.dbCleanerJobId ?? (meta.cleanerJobId as number | null) ?? 0;
+      const cleanerName = (meta.cleanerName as string) ?? "";
+      const key = `${cleanerName}-${jobId}`;
+      if (seenCleanerJob.has(key)) return false;
+      seenCleanerJob.add(key);
+      return true;
+    })
+    .map(r => {
+      let meta: Record<string, unknown> = {};
+      try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
+      const status = r.jobStatus ?? (meta.status as string) ?? "";
+      const sm = STATUS_META[status];
+      let etaLabel: string | null = null;
+      if (r.jobEtaTimestamp && r.jobEtaTimestamp > now) {
+        etaLabel = new Date(r.jobEtaTimestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+      } else if (meta.etaLabel as string | null) {
+        etaLabel = meta.etaLabel as string;
+      }
+      const issueNote = status === "issue_at_property" ? (r.jobIssueNote ?? null) : null;
+      return {
+        id: r.id,
+        cleanerName: (meta.cleanerName as string) ?? "Cleaner",
+        status,
+        label: sm?.label ?? (meta.label as string) ?? status,
+        emoji: sm?.emoji ?? (meta.emoji as string) ?? "🟡",
+        customerName: r.jobCustomerName ?? (meta.customerName as string | null) ?? null,
+        etaLabel,
+        issueNote,
+        cleanerJobId: (meta.cleanerJobId as number | null) ?? null,
+        ts: r.createdAt ? new Date(r.createdAt).getTime() : now,
+      };
+    })
+    .sort((a, b) => a.ts - b.ts);
+
+  return { type: "job_status_stream", alerts, cleanerStatuses };
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 export const aiConciergeRouter = router({
   /**
@@ -1736,7 +2333,12 @@ export const aiConciergeRouter = router({
       // unresolved handler so the LLM-extracted name is used instead.
       const re = input.resolvedEntity ?? null;
       // Use new unified parser — replaces classifyIntent for all intents
-      const plan = await parseConciergeRequest(input.message);
+      const rawPlan = await parseConciergeRequest(input.message);
+      // Validate and normalize: resolve contradictions before dispatch
+      const { plan, corrected, correction } = validateAndNormalizePlan(rawPlan, re);
+      if (corrected && correction) {
+        console.log(`[Concierge] Plan corrected: ${correction.originalAction} → ${correction.correctedAction} (${correction.reason}) [evidence: ${correction.evidenceSource}]`);
+      }
       // Backward-compat: map plan to legacy intent shape for action handlers
       const intent = {
         action: plan.action === "query" ? "query_data" : plan.action,
@@ -1745,8 +2347,9 @@ export const aiConciergeRouter = router({
         clientName: plan.clientName,
         messageHint: plan.messageHint,
         questionHint: plan.questionHint,
+        targetType: plan.targetType,
       } as const;
-      console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
+      console.log("[Concierge] plan:", JSON.stringify({ action: plan.action, targetType: plan.targetType, fields: plan.requestedFields, timeScope: plan.timeScope.type, entities: plan.entities }), "resolvedEntity:", re ? `${re.type}:${re.type === "customer" ? re.phone : re.cleanerProfileId}` : "none", "message:", input.message);
 
       if (intent.action === "eta_update") {
         return await handleEtaUpdate(intent.teamHint, db);
@@ -1758,8 +2361,8 @@ export const aiConciergeRouter = router({
       if (intent.action === "text_cleaners") {
         // Use chip only when it is a cleaner entity; customer chip → fall back to LLM name
         const textCleanersResult = re?.type === "cleaner"
-          ? await handleTextCleaners(re.name, intent.messageHint, db)
-          : await handleTextCleaners(intent.targetHint, intent.messageHint, db);
+          ? await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db)
+          : await handleTextCleaners(plan, intent.messageHint, db);
         if (textCleanersResult.type === "bulk_sms_confirm") {
           return { ...textCleanersResult, command: input.message };
         }
@@ -1767,7 +2370,12 @@ export const aiConciergeRouter = router({
       }
 
       if (intent.action === "text_client") {
-        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
+        // If locked entity is a cleaner, route to handleTextCleaners — not customer search
+        if (re?.type === "cleaner") {
+          const r = await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db);
+          if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
+          return r;
+        }
         const textClientResult = re?.type === "customer"
           ? await handleTextClient(null, intent.messageHint, db, re.phone)
           : await handleTextClient(intent.clientName, intent.messageHint, db);
@@ -1795,6 +2403,24 @@ export const aiConciergeRouter = router({
           : await handleCallPerson(intent.clientName, intent.questionHint, db);
       }
 
+      if (plan.action === "card_status") {
+        return await handleCardStatus(plan, db);
+      }
+      if (plan.action === "rank_teams") {
+        return await handleRankTeams(db);
+      }
+      if (plan.action === "list_no_eta") {
+        return await handleListNoEta(db);
+      }
+      if (plan.action === "confirmation_texts") {
+        return await handleConfirmationTexts(plan, db);
+      }
+      if (plan.action === "confirmation_results") {
+        return await handleConfirmationResults(plan, db);
+      }
+      if (plan.action === "job_status_stream") {
+        return await handleJobStatusStream(db);
+      }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile
         const chipEntity = re?.type === "customer"
@@ -2124,5 +2750,307 @@ export const aiConciergeRouter = router({
         "chat"
       );
       return { mission: saved ?? missionMeta, missionPersistenceError: saved === null };
+    }),
+
+  /**
+   * getReadinessSummary
+   * Returns a structured readiness summary for a given date (defaults to tomorrow ET).
+   * Powers the Tomorrow Readiness drawer and AI Concierge checklist flow.
+   *
+   * Dimensions:
+   *  1. Jobs Scheduled     — total jobs, unassigned count
+   *  2. Team Confirmations — confirmed vs unconfirmed teams
+   *  3. Payment Methods    — on_hold / no_preauth / no_card per customer
+   *  4. Customer Confirmations — confirmed (call/SMS) vs pending per booking
+   *  5. Client Requests    — requestedTeam honored vs violated
+   */
+  getReadinessSummary: agentProcedure
+    .input(z.object({ date: z.string().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      try {
+
+      // Resolve target date — default to tomorrow ET
+      const targetDate = input.date ?? (() => {
+        const now = new Date();
+        const etOffset = -4; // EDT; adjust to -5 for EST if needed
+        const et = new Date(now.getTime() + etOffset * 60 * 60 * 1000);
+        et.setUTCDate(et.getUTCDate() + 1);
+        return et.toISOString().slice(0, 10);
+      })();
+
+      // ── 1. Fetch all non-cancelled/rescheduled jobs for the date ─────────
+      const jobs = await db
+        .select({
+          id: cleanerJobs.id,
+          customerName: cleanerJobs.customerName,
+          customerPhone: cleanerJobs.customerPhone,
+          serviceDateTime: cleanerJobs.serviceDateTime,
+          serviceType: cleanerJobs.serviceType,
+          cleanerProfileId: cleanerJobs.cleanerProfileId,
+          cleanerName: cleanerJobs.cleanerName,
+          teamName: cleanerJobs.teamName,
+          teamId: cleanerJobs.teamId,
+          scheduleConfirmed: cleanerJobs.scheduleConfirmed,
+          hasStripeCard: cleanerJobs.hasStripeCard,
+          chargesOnHoldCents: cleanerJobs.chargesOnHoldCents,
+          paymentBrand: cleanerJobs.paymentBrand,
+          paymentLast4: cleanerJobs.paymentLast4,
+          requestedTeam: cleanerJobs.requestedTeam,
+          bookingStatus: cleanerJobs.bookingStatus,
+        })
+        .from(cleanerJobs)
+        .where(and(
+          eq(cleanerJobs.jobDate, targetDate),
+          sql`${cleanerJobs.bookingStatus} NOT IN ('cancelled', 'rescheduled')`,
+        ));
+
+      const jobIds = jobs.map(j => j.id);
+
+      // ── 2. Fetch schedule assignments for client request check ────────────
+      const assignments = jobIds.length > 0
+        ? await db.select({
+            cleanerJobId: scheduleAssignments.cleanerJobId,
+            teamName: scheduleAssignments.teamName,
+            isManual: scheduleAssignments.isManual,
+          }).from(scheduleAssignments)
+            .where(inArray(scheduleAssignments.cleanerJobId, jobIds))
+        : [];
+      const assignmentByJobId = new Map(assignments.map(a => [a.cleanerJobId, a]));
+
+      // ── 3. Fetch confirmation calls by date (immune to job ID changes) ──────
+      // Fetch by jobDate — not by cleanerJobId — so we still find calls even when
+      // a job was deleted+re-inserted with a new ID. The shared helper then matches
+      // by cleanerJobId first, then phone, then name.
+      const confCalls = await db.select({
+            cleanerJobId: confirmationCalls.cleanerJobId,
+            calledPhone: confirmationCalls.calledPhone,
+            clientName: confirmationCalls.clientName,
+            aiOutcome: confirmationCalls.aiOutcome,
+            manualOutcome: confirmationCalls.manualOutcome,
+            smsConfirmedAt: confirmationCalls.smsConfirmedAt,
+            aiOutcomeLabel: confirmationCalls.aiOutcomeLabel,
+            manualOutcomeLabel: confirmationCalls.manualOutcomeLabel,
+          }).from(confirmationCalls)
+            .where(eq(confirmationCalls.jobDate, targetDate));
+      const confCallByJobId = matchConfirmationCallsToJobs(jobs, confCalls);
+
+      // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
+      const totalJobs = jobs.length;
+      const unassignedJobs = jobs.filter(j => !j.cleanerProfileId);
+      // Double-booking: same cleaner assigned to 2+ jobs at the exact same time
+      const timeKeyMap = new Map<string, typeof jobs>();
+      for (const j of jobs) {
+        if (!j.cleanerProfileId || !j.serviceDateTime) continue;
+        const key = `${j.cleanerProfileId}::${j.serviceDateTime}`;
+        if (!timeKeyMap.has(key)) timeKeyMap.set(key, []);
+        timeKeyMap.get(key)!.push(j);
+      }
+      const doubleBookedJobs: Array<{ customerName: string; jobTime: string | null; cleanerName: string }> = [];
+      for (const group of timeKeyMap.values()) {
+        if (group.length >= 2) {
+          for (const j of group) {
+            doubleBookedJobs.push({
+              customerName: j.customerName ?? "Unknown",
+              jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+              cleanerName: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
+            });
+          }
+        }
+      }
+      const jobsIssueCount = unassignedJobs.length + doubleBookedJobs.length;
+
+      // ── DIMENSION 2: Team Confirmations ──────────────────────────────────
+      const teamMap = new Map<number, { name: string; confirmed: boolean; jobCount: number }>();
+      for (const j of jobs) {
+        if (!j.cleanerProfileId) continue;
+        const existing = teamMap.get(j.cleanerProfileId);
+        if (existing) {
+          existing.jobCount++;
+          if (!j.scheduleConfirmed) existing.confirmed = false;
+        } else {
+          teamMap.set(j.cleanerProfileId, {
+            name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
+            confirmed: j.scheduleConfirmed === 1,
+            jobCount: 1,
+          });
+        }
+      }
+      const teamRows = Array.from(teamMap.values());
+      const teamsConfirmed = teamRows.filter(t => t.confirmed).length;
+      const teamsTotal = teamRows.length;
+      const teamsIssueCount = teamRows.filter(t => !t.confirmed).length;
+
+      // ── DIMENSION 3: Payment Methods ─────────────────────────────────────
+      const seenCustomers = new Set<string>();
+      const paymentRows: Array<{
+        customerName: string;
+        jobTime: string | null;
+        serviceType: string | null;
+        cardBrand: string | null;
+        last4: string | null;
+        status: "on_hold" | "no_preauth" | "no_card";
+        amountCents: number;
+      }> = [];
+      for (const j of jobs) {
+        const key = j.customerName ?? "";
+        if (seenCustomers.has(key)) continue;
+        seenCustomers.add(key);
+        const status: "on_hold" | "no_preauth" | "no_card" =
+          (j.chargesOnHoldCents ?? 0) > 0 ? "on_hold" :
+          j.hasStripeCard ? "no_preauth" :
+          "no_card";
+        paymentRows.push({
+          customerName: j.customerName ?? "Unknown",
+          jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+          serviceType: j.serviceType ?? null,
+          cardBrand: j.paymentBrand ?? null,
+          last4: j.paymentLast4 ?? null,
+          status,
+          amountCents: j.chargesOnHoldCents ?? 0,
+        });
+      }
+      const paymentsOnHold = paymentRows.filter(r => r.status === "on_hold").length;
+      const paymentsTotal = paymentRows.length;
+      const paymentsIssueCount = paymentRows.filter(r => r.status !== "on_hold").length;
+
+      // ── DIMENSION 4: Customer Confirmations ──────────────────────────────
+      const seenBookings = new Set<string>();
+      const confirmationRows: Array<{
+        customerName: string;
+        jobTime: string | null;
+        serviceType: string | null;
+        status: "confirmed" | "pending";
+        outcomeLabel: string | null;
+      }> = [];
+      for (const j of jobs) {
+        const key = `${j.customerName}|${j.serviceDateTime}`;
+        if (seenBookings.has(key)) continue;
+        seenBookings.add(key);
+        const call = confCallByJobId.get(j.id);
+        const effectiveOutcome = call?.manualOutcome ?? call?.aiOutcome ?? null;
+        const isConfirmed = effectiveOutcome === "confirmed" || ((call?.smsConfirmedAt ?? 0) > 0);
+        const label = call?.manualOutcomeLabel ?? call?.aiOutcomeLabel ?? null;
+        confirmationRows.push({
+          customerName: j.customerName ?? "Unknown",
+          jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+          serviceType: j.serviceType ?? null,
+          status: isConfirmed ? "confirmed" : "pending",
+          outcomeLabel: label,
+        });
+      }
+      const confirmationsConfirmed = confirmationRows.filter(r => r.status === "confirmed").length;
+      const confirmationsTotal = confirmationRows.length;
+      const confirmationsIssueCount = confirmationRows.filter(r => r.status === "pending").length;
+
+      // ── DIMENSION 5: Client Requests ─────────────────────────────────────
+      const clientRequestRows: Array<{
+        customerName: string;
+        jobTime: string | null;
+        requestedTeam: string;
+        assignedTeam: string | null;
+        status: "honored" | "violated" | "unassigned";
+      }> = [];
+      for (const j of jobs) {
+        if (!j.requestedTeam) continue;
+        const assignment = assignmentByJobId.get(j.id);
+        // Mirror the REQUESTED_TEAM_VIOLATED logic from schedulingRouter:
+        // skip isManual === 2 (manual override), check name containment
+        if (assignment?.isManual === 2) {
+          clientRequestRows.push({
+            customerName: j.customerName ?? "Unknown",
+            jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+            requestedTeam: j.requestedTeam,
+            assignedTeam: assignment.teamName ?? null,
+            status: "honored", // manual override = intentional
+          });
+          continue;
+        }
+        if (!j.cleanerProfileId || !assignment) {
+          clientRequestRows.push({
+            customerName: j.customerName ?? "Unknown",
+            jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+            requestedTeam: j.requestedTeam,
+            assignedTeam: null,
+            status: "unassigned",
+          });
+          continue;
+        }
+        const reqNorm = j.requestedTeam.toLowerCase().trim();
+        const assignedNorm = (assignment.teamName ?? "").toLowerCase().trim();
+        const honored = reqNorm.includes(assignedNorm) || assignedNorm.includes(reqNorm);
+        clientRequestRows.push({
+          customerName: j.customerName ?? "Unknown",
+          jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+          requestedTeam: j.requestedTeam,
+          assignedTeam: assignment.teamName ?? null,
+          status: honored ? "honored" : "violated",
+        });
+      }
+      const clientRequestsHonored = clientRequestRows.filter(r => r.status === "honored").length;
+      const clientRequestsTotal = clientRequestRows.length;
+      const clientRequestsIssueCount = clientRequestRows.filter(r => r.status !== "honored").length;
+
+      // ── Overall readiness % ───────────────────────────────────────────────
+      // Weighted: confirmations 30%, payments 25%, teams 20%, clientRequests 15%, jobs 10%
+      const score = (dim: { total: number; issueCount: number }, weight: number) => {
+        if (dim.total === 0) return weight; // no data = full score
+        return weight * (1 - dim.issueCount / dim.total);
+      };
+      const overallPct = Math.round(
+        score({ total: confirmationsTotal, issueCount: confirmationsIssueCount }, 30) +
+        score({ total: paymentsTotal, issueCount: paymentsIssueCount }, 25) +
+        score({ total: teamsTotal, issueCount: teamsIssueCount }, 20) +
+        score({ total: clientRequestsTotal, issueCount: clientRequestsIssueCount }, 15) +
+        score({ total: totalJobs, issueCount: jobsIssueCount }, 10)
+      );
+
+      const totalIssues = confirmationsIssueCount + paymentsIssueCount + teamsIssueCount + clientRequestsIssueCount + jobsIssueCount;
+
+      return {
+        date: targetDate,
+        overallPct,
+        totalIssues,
+        dimensions: {
+          jobs: {
+            total: totalJobs,
+            issueCount: jobsIssueCount,
+            unassigned: unassignedJobs.map(j => ({
+              customerName: j.customerName ?? "Unknown",
+              jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+            })),
+            doubleBooked: doubleBookedJobs,
+          },
+          teams: {
+            total: teamsTotal,
+            confirmed: teamsConfirmed,
+            issueCount: teamsIssueCount,
+            rows: teamRows,
+          },
+          payments: {
+            total: paymentsTotal,
+            onHold: paymentsOnHold,
+            issueCount: paymentsIssueCount,
+            rows: paymentRows,
+          },
+          confirmations: {
+            total: confirmationsTotal,
+            confirmed: confirmationsConfirmed,
+            issueCount: confirmationsIssueCount,
+            rows: confirmationRows,
+          },
+          clientRequests: {
+            total: clientRequestsTotal,
+            honored: clientRequestsHonored,
+            issueCount: clientRequestsIssueCount,
+            rows: clientRequestRows,
+          },
+        },
+      };
+      } catch (err) {
+        console.error("[getReadinessSummary] ERROR:", err);
+        throw err;
+      }
     }),
 });

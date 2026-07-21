@@ -1191,6 +1191,19 @@ export const cleanerJobs = mysqlTable("cleaner_jobs", {
   customerNotes: text("customerNotes"),
   /** Set to 1 if cleaner bypassed sign-off because customer was not home */
   customerNotHome: tinyint("customerNotHome").default(0).notNull(),
+  // Payment / card status synced from Launch27
+  /** Whether the customer has a Stripe card on file in L27 */
+  hasStripeCard: tinyint("hasStripeCard").default(0).notNull(),
+  /** Stripe customer ID from L27 user object */
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  /** Card brand from L27 payment_method_info (e.g. 'visa', 'amex') */
+  paymentBrand: varchar("paymentBrand", { length: 32 }),
+  /** Card last 4 digits from L27 payment_method_info */
+  paymentLast4: varchar("paymentLast4", { length: 4 }),
+  /** Sum of on-hold pre-auth charges in cents (L27 dollars × 100) */
+  chargesOnHoldCents: int("chargesOnHoldCents").default(0).notNull(),
+  /** Outstanding balance in cents (L27 dollars × 100) */
+  chargesOutstandingCents: int("chargesOutstandingCents").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (t) => [

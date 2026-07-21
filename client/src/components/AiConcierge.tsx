@@ -40,7 +40,11 @@ import {
   Edit3,
   CreditCard,
   ExternalLink,
+  Sparkles,
+  ChevronRight,
+  Sun,
 } from "lucide-react";
+import ReadinessDrawer from "./ReadinessDrawer";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -122,6 +126,89 @@ interface QueryResultCard {
   answer: string;
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
+// ─── Prepare Tomorrow types ──────────────────────────────────────────────────
+
+interface PrepareChecklistCard {
+  steps: Array<{ label: string; status: "done" | "running" | "pending" }>;
+}
+
+interface PrepareResultCard {
+  readinessPct: number;
+  issueCount: number;
+  date: string;
+  rawDate?: string; // YYYY-MM-DD for drawer
+}
+
+interface TeamRatingsCard {
+  windowDays: number;
+  minRatings: number;
+  rows: Array<{
+    rank: number;
+    cleanerName: string;
+    avgRating: number;
+    ratedJobs: number;
+    totalJobs: number;
+  }>;
+  excluded: number;
+}
+
+interface NoEtaCard {
+  date: string;
+  rows: Array<{
+    teamName: string;
+    cleanerName: string;
+    scheduledTime: string;
+    serviceDateTime: string | null;
+    etaStatus: "pending" | "unclear" | "no_answer";
+    isPastScheduled: boolean;
+    currentJobId: number;
+  }>;
+}
+
+interface ConfirmationTextsCard {
+  date: string;
+  dateLabel: string;
+  rows: Array<{
+    cleanerJobId: number;
+    customerName: string;
+    customerPhone: string | null;
+    serviceDateTime: string | null;
+    teamName: string | null;
+    alreadySent: boolean;
+    smsConfirmedAt: number | null;
+  }>;
+}
+
+interface ConfirmationResultsCard {
+  date: string;
+  dateLabel: string;
+  rows: Array<{
+    clientName: string | null;
+    calledPhone: string | null;
+    smsFollowupSent: number | null;
+    smsConfirmedAt: number | null;
+    smsReply: string | null;
+    aiOutcome: string | null;
+    aiOutcomeLabel: string | null;
+    manualOutcome: string | null;
+    manualOutcomeLabel: string | null;
+    firedAt: number | null;
+  }>;
+  totalSent: number;
+  totalConfirmed: number;
+  totalPending: number;
+}
+
+interface CardStatusCard {
+  date: string;
+  rows: Array<{
+    customerName: string;
+    cardBrand: string | null;
+    last4: string | null;
+    status: "on_hold" | "no_preauth" | "no_card";
+    amountCents: number;
+  }>;
+}
 interface CustomerProfileCard {
   name: string;
   phone: string;
@@ -153,7 +240,15 @@ type MessageContent =
   | { type: "payment_link_sent"; card: PaymentLinkSentCard }
   | { type: "call_client_confirm"; card: CallClientConfirmCard }
   | { type: "call_client_pending"; card: CallClientPendingCard }
-  | { type: "query_result"; card: QueryResultCard };
+  | { type: "query_result"; card: QueryResultCard }
+  | { type: "card_status"; card: CardStatusCard }
+  | { type: "rank_teams"; card: TeamRatingsCard }
+  | { type: "list_no_eta"; card: NoEtaCard }
+  | { type: "confirmation_texts"; card: ConfirmationTextsCard }
+  | { type: "confirmation_results"; card: ConfirmationResultsCard }
+  | { type: "job_status_stream"; card: JobStatusStreamCard }
+  | { type: "prepare_checklist"; card: PrepareChecklistCard }
+  | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
 
 interface Message {
@@ -852,6 +947,7 @@ function MessageBubble({
   onPickClient,
   onAddMessage,
   onAddMission,
+  onOpenReadiness,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
@@ -859,6 +955,7 @@ function MessageBubble({
   onPickClient: (phone: string, name: string, messageHint: string | null) => void;
   onAddMessage: (m: Message) => void;
   onAddMission: (metadata: MissionMetadata) => void;
+  onOpenReadiness: (rawDate?: string) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -1006,12 +1103,128 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "card_status" && (
+          <div>
+            <CardStatusCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "rank_teams" && (
+          <div>
+            <TeamRatingsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "list_no_eta" && (
+          <div>
+            <NoEtaCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "confirmation_texts" && (
+          <div>
+            <ConfirmationTextsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "confirmation_results" && (
+          <div>
+            <ConfirmationResultsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "job_status_stream" && (
+          <div>
+            <JobStatusStreamCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "prepare_checklist" && (
+          <div>
+            <PrepareChecklistCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "prepare_result" && (
+          <div>
+            <PrepareResultCardView card={msg.content.card} onOpen={() => onOpenReadiness(msg.content.type === 'prepare_result' ? msg.content.card.rawDate : undefined)} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {/* customer_profile branch removed — all informational queries return query_result */}
       </div>
     </div>
   );
 }
 
+
+// ─── Prepare checklist card ──────────────────────────────────────────────────
+
+function PrepareChecklistCardView({ card }: { card: PrepareChecklistCard }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #e8e0f0", width: "100%" }}>
+      <div style={{ background: "linear-gradient(135deg, #f5f0ff, #ede8ff)", borderBottom: "1px solid #e0d8f8", padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+        <Sparkles className="w-4 h-4" style={{ color: "#7c3aed" }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#4c1d95" }}>Running tomorrow readiness checks...</span>
+      </div>
+      <div style={{ padding: "8px 0" }}>
+        {card.steps.map((step, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px" }}>
+            {step.status === "done" && (
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#22c55e" }} />
+            )}
+            {step.status === "running" && (
+              <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" style={{ color: "#7c3aed" }} />
+            )}
+            {step.status === "pending" && (
+              <Circle className="w-4 h-4 flex-shrink-0" style={{ color: "#d1d5db" }} />
+            )}
+            <span style={{ fontSize: 13, color: step.status === "pending" ? "#9ca3af" : "#1f2937", fontWeight: step.status === "running" ? 600 : 400 }}>
+              {step.label}
+            </span>
+            {step.status === "done" && (
+              <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#22c55e" }}>Done</span>
+            )}
+            {step.status === "running" && (
+              <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, color: "#7c3aed" }}>In progress</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Prepare result card ──────────────────────────────────────────────────────
+
+function PrepareResultCardView({ card, onOpen }: { card: PrepareResultCard; onOpen: (rawDate?: string) => void }) {
+  const pct = card.readinessPct;
+  const color = pct >= 90 ? "#22c55e" : pct >= 75 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #e8e0f0", width: "100%" }}>
+      {/* Top row: thumbnail + text info */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 14px 10px" }}>
+        <div style={{ width: 56, height: 56, borderRadius: 12, background: "linear-gradient(135deg, #fde68a, #fb923c, #c084fc)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
+          🌅
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Tomorrow Readiness</p>
+          <p style={{ fontSize: 24, fontWeight: 900, color, lineHeight: 1.1, marginBottom: 4 }}>{pct}% Ready</p>
+          <p style={{ fontSize: 12, color: "#9ca3af" }}>{card.issueCount} action item{card.issueCount !== 1 ? "s" : ""} need your attention</p>
+        </div>
+      </div>
+      {/* Bottom row: full-width CTA button */}
+      <div style={{ padding: "0 14px 14px" }}>
+        <button
+          onClick={() => onOpen(card.rawDate)}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "11px 16px", borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #5b21b6)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer" }}
+        >
+          Open Readiness <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Query result card ────────────────────────────────────────────────────────
 
@@ -1050,7 +1263,572 @@ function QueryResultCardView({ card }: { card: QueryResultCard }) {
   );
 }
 
+// ─── Card status card ───────────────────────────────────────────────────────
+function CardStatusCardView({ card }: { card: CardStatusCard }) {
+  const onHold = card.rows.filter(r => r.status === "on_hold");
+  const noPreauth = card.rows.filter(r => r.status === "no_preauth");
+  const noCard = card.rows.filter(r => r.status === "no_card");
+
+  function formatAmount(cents: number) {
+    return `$${(cents / 100).toFixed(2)}`;
+  }
+
+  function formatCard(brand: string | null, last4: string | null) {
+    if (!last4) return "—";
+    const b = brand ? brand.charAt(0).toUpperCase() + brand.slice(1) : "Card";
+    return `${b} ···· ${last4}`;
+  }
+
+  function downloadCsv() {
+    const header = "Customer,Card,Status,Amount";
+    const lines = card.rows.map(r => {
+      const status = r.status === "on_hold" ? `On Hold ${formatAmount(r.amountCents)}` : r.status === "no_preauth" ? "No Pre-Auth" : "No Card";
+      return `"${r.customerName}","${formatCard(r.cardBrand, r.last4)}","${status}","${r.status === "on_hold" ? formatAmount(r.amountCents) : ""}"`;
+    });
+    const csv = [header, ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `card-status-${card.date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const statusBadge = (row: CardStatusCard["rows"][0]) => {
+    if (row.status === "on_hold") return <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>On Hold · {formatAmount(row.amountCents)}</span>;
+    if (row.status === "no_preauth") return <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>No Pre-Auth</span>;
+    return <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>No Card</span>;
+  };
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <CreditCard className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Card Status</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.date} · {card.rows.length} job{card.rows.length !== 1 ? "s" : ""}</p>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {onHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{onHold.length} on hold</span>}
+          {noPreauth.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{noPreauth.length} no pre-auth</span>}
+          {noCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>{noCard.length} no card</span>}
+        </div>
+      </div>
+      {/* Table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #2a2e47" }}>
+              {["Customer", "Card", "Status"].map(h => (
+                <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {card.rows.map((row, i) => (
+              <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.customerName}</td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa", fontFamily: "monospace" }}>{formatCard(row.cardBrand, row.last4)}</td>
+                <td style={{ padding: "9px 14px" }}>{statusBadge(row)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Footer */}
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47" }}>
+        <button onClick={downloadCsv} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7447f5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <ExternalLink className="w-3 h-3" /> Download CSV
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Team ratings card ───────────────────────────────────────────────────────
+
+function TeamRatingsCardView({ card }: { card: TeamRatingsCard }) {
+  function stars(rating: number) {
+    const full = Math.floor(rating);
+    const half = rating - full >= 0.5;
+    return "★".repeat(full) + (half ? "½" : "") + "☆".repeat(5 - full - (half ? 1 : 0));
+  }
+
+  const medalColor = (rank: number) => {
+    if (rank === 1) return "#fbbf24"; // gold
+    if (rank === 2) return "#9ca3af"; // silver
+    if (rank === 3) return "#cd7c3f"; // bronze
+    return "#6b7280";
+  };
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #fbbf24, #f59e0b)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Users className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Team Rankings</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>Last {card.windowDays} days · min {card.minRatings} ratings</p>
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{card.rows.length} teams</span>
+      </div>
+      {/* Table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #2a2e47" }}>
+              {["#", "Team", "Rating", "Jobs Rated"].map(h => (
+                <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {card.rows.map((row, i) => (
+              <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <td style={{ padding: "9px 14px", fontSize: 13, fontWeight: 700, color: medalColor(row.rank) }}>{row.rank}</td>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.cleanerName}</td>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#fbbf24", fontWeight: 600, whiteSpace: "nowrap" }}>
+                  {row.avgRating.toFixed(1)} <span style={{ fontSize: 11, color: "#6b7280" }}>{stars(row.avgRating)}</span>
+                </td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa" }}>{row.ratedJobs} / {row.totalJobs}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {card.excluded > 0 && (
+        <div style={{ padding: "8px 14px", borderTop: "1px solid #2a2e47", fontSize: 11, color: "#6b7280" }}>
+          {card.excluded} team{card.excluded !== 1 ? "s" : ""} excluded (fewer than {card.minRatings} rated jobs)
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── No ETA card ────────────────────────────────────────────────────────────
+
+function NoEtaCardView({ card }: { card: NoEtaCard }) {
+  const etaStatusLabel = (s: string) => {
+    if (s === "no_answer") return { label: "No Answer", color: "#ef4444", bg: "#ef444422" };
+    if (s === "unclear") return { label: "Unclear", color: "#f59e0b", bg: "#f59e0b22" };
+    return { label: "Pending", color: "#6b7280", bg: "#6b728022" };
+  };
+
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>All teams have confirmed ETAs — you're good to go!</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #f59e0b, #ef4444)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Clock className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Missing ETAs</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.rows.length} team{card.rows.length !== 1 ? "s" : ""} without confirmed ETA</p>
+        </div>
+        {card.rows.some(r => r.isPastScheduled) && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "2px 7px", borderRadius: 8, whiteSpace: "nowrap" }}>
+            {card.rows.filter(r => r.isPastScheduled).length} OVERDUE
+          </span>
+        )}
+      </div>
+      <div>
+        {card.rows.map((row, i) => {
+          const { label, color, bg } = etaStatusLabel(row.etaStatus);
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+              {row.isPastScheduled ? (
+                <span style={{ fontSize: 16, flexShrink: 0 }}>🔥</span>
+              ) : (
+                <Clock className="w-4 h-4 flex-shrink-0" style={{ color: "#6b7280" }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: row.isPastScheduled ? "#fca5a5" : "#c8cde8", marginBottom: 1 }}>{row.teamName}</p>
+                <p style={{ fontSize: 11, color: "#6b7280" }}>{row.scheduledTime}{row.isPastScheduled ? " · past scheduled time" : ""}</p>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Confirmation texts card ────────────────────────────────────────────────
+
+function ConfirmationTextsCardView({ card }: { card: ConfirmationTextsCard }) {
+  const formatTime = (dt: string | null) => {
+    if (!dt) return "";
+    try {
+      const d = new Date(dt);
+      return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" });
+    } catch { return ""; }
+  };
+
+  const pending = card.rows.filter(r => !r.alreadySent && r.customerPhone);
+  const [selected, setSelected] = React.useState<Set<number>>(() => new Set(pending.map(r => r.cleanerJobId)));
+  const [sentIds, setSentIds] = React.useState<Set<number>>(new Set());
+  const [failedIds, setFailedIds] = React.useState<Set<number>>(new Set());
+  const [sending, setSending] = React.useState(false);
+
+  const placeCall = trpc.confirmationCalls.placeCall.useMutation();
+
+  const toggle = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === pending.length) setSelected(new Set());
+    else setSelected(new Set(pending.map(r => r.cleanerJobId)));
+  };
+
+  const sendSelected = async () => {
+    const toSend = pending.filter(r => selected.has(r.cleanerJobId));
+    if (toSend.length === 0) return;
+    setSending(true);
+    for (const row of toSend) {
+      try {
+        await placeCall.mutateAsync({
+          cleanerJobId: row.cleanerJobId,
+          jobDate: card.date,
+          clientName: row.customerName,
+          calledPhone: row.customerPhone!,
+        });
+        setSentIds(prev => new Set([...prev, row.cleanerJobId]));
+      } catch {
+        setFailedIds(prev => new Set([...prev, row.cleanerJobId]));
+      }
+    }
+    setSending(false);
+  };
+
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>No jobs found for {card.dateLabel}.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const allSent = pending.length > 0 && pending.every(r => sentIds.has(r.cleanerJobId) || r.alreadySent);
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <MessageSquare className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Confirmation Texts — {card.dateLabel}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>
+            {pending.length} pending · {card.rows.filter(r => r.alreadySent).length} already sent
+          </p>
+        </div>
+        {pending.length > 0 && !allSent && (
+          <button
+            onClick={toggleAll}
+            style={{ fontSize: 11, color: "#9ca3af", background: "none", border: "none", cursor: "pointer", padding: "2px 6px", borderRadius: 6, whiteSpace: "nowrap" }}
+          >
+            {selected.size === pending.length ? "Deselect all" : "Select all"}
+          </button>
+        )}
+      </div>
+
+      {/* Rows */}
+      <div>
+        {card.rows.map((row, i) => {
+          const isSent = sentIds.has(row.cleanerJobId);
+          const isFailed = failedIds.has(row.cleanerJobId);
+          const isAlreadySent = row.alreadySent;
+          const isConfirmed = !!row.smsConfirmedAt;
+          const isPending = !isAlreadySent && !isSent && row.customerPhone;
+          const isChecked = selected.has(row.cleanerJobId);
+
+          return (
+            <div
+              key={i}
+              onClick={() => isPending && !sending ? toggle(row.cleanerJobId) : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
+                borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined,
+                cursor: isPending && !sending ? "pointer" : "default",
+                background: isPending && isChecked ? "rgba(99,102,241,0.06)" : undefined,
+                transition: "background 0.15s",
+              }}
+            >
+              {/* Checkbox / status icon */}
+              {isConfirmed ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#22c55e" }} />
+              ) : isSent ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6366f1" }} />
+              ) : isFailed ? (
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: 9, color: "#fff", fontWeight: 700 }}>!</span>
+                </div>
+              ) : isAlreadySent ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6366f1" }} />
+              ) : isPending ? (
+                <div
+                  className="w-4 h-4 rounded flex-shrink-0"
+                  style={{
+                    border: isChecked ? "2px solid #6366f1" : "2px solid #4b5563",
+                    background: isChecked ? "#6366f1" : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {isChecked && <span style={{ fontSize: 9, color: "#fff", fontWeight: 700 }}>✓</span>}
+                </div>
+              ) : (
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ border: "2px solid #374151" }} />
+              )}
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 1 }}>{row.customerName}</p>
+                <p style={{ fontSize: 11, color: "#6b7280" }}>
+                  {row.teamName && <span>{row.teamName} · </span>}
+                  {formatTime(row.serviceDateTime)}
+                  {!row.customerPhone && <span style={{ color: "#ef4444" }}> · no phone</span>}
+                </p>
+              </div>
+
+              {/* Status badge */}
+              {isConfirmed ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", background: "#22c55e22", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Confirmed</span>
+              ) : isSent ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1", background: "#6366f122", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Sent ✓</span>
+              ) : isFailed ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#ef4444", background: "#ef444422", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Failed</span>
+              ) : isAlreadySent ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1", background: "#6366f122", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Sent</span>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Footer: Send Selected button */}
+      {pending.length > 0 && !allSent && (
+        <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            {selected.size} of {pending.length} selected
+          </span>
+          <button
+            onClick={sendSelected}
+            disabled={selected.size === 0 || sending}
+            style={{
+              fontSize: 12, fontWeight: 700, color: "#fff",
+              background: selected.size === 0 || sending ? "#374151" : "linear-gradient(135deg, #6366f1, #8b5cf6)",
+              border: "none", borderRadius: 8, padding: "6px 16px",
+              cursor: selected.size === 0 || sending ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+              transition: "all 0.15s",
+            }}
+          >
+            {sending ? (
+              <><Loader2 className="w-3 h-3 animate-spin" /> Sending...</>
+            ) : (
+              <>Send {selected.size > 0 ? selected.size : ""} Text{selected.size !== 1 ? "s" : ""}</>
+            )}
+          </button>
+        </div>
+      )}
+      {allSent && (
+        <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47", display: "flex", alignItems: "center", gap: 8 }}>
+          <CheckCircle2 className="w-4 h-4" style={{ color: "#22c55e" }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#22c55e" }}>All texts sent!</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Confirmation results card ────────────────────────────────────────────────
+
+function ConfirmationResultsCardView({ card }: { card: ConfirmationResultsCard }) {
+  const outcomeLabel = (row: ConfirmationResultsCard["rows"][0]) => {
+    const outcome = row.manualOutcome ?? row.aiOutcome;
+    if (row.smsConfirmedAt) return { label: "Confirmed", color: "#22c55e", bg: "#22c55e22" };
+    if (outcome === "confirmed") return { label: "Confirmed", color: "#22c55e", bg: "#22c55e22" };
+    if (outcome === "reschedule") return { label: "Reschedule", color: "#f59e0b", bg: "#f59e0b22" };
+    if (outcome === "cancel") return { label: "Cancel", color: "#ef4444", bg: "#ef444422" };
+    if (outcome === "no_answer" || outcome === "voicemail") return { label: "No Answer", color: "#6b7280", bg: "#6b728022" };
+    if (row.smsFollowupSent === 1) return { label: "Sent", color: "#6366f1", bg: "#6366f122" };
+    return { label: "Pending", color: "#4b5563", bg: "#4b556322" };
+  };
+
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>No confirmation texts sent for {card.dateLabel} yet.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <CheckCircle2 className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Confirmation Results — {card.dateLabel}</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>
+            {card.totalConfirmed} confirmed · {card.totalPending} pending · {card.totalSent} sent
+          </p>
+        </div>
+      </div>
+      <div>
+        {card.rows.map((row, i) => {
+          const { label, color, bg } = outcomeLabel(row);
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 1 }}>{row.clientName ?? "Unknown"}</p>
+                {row.smsReply && (
+                  <p style={{ fontSize: 11, color: "#9ca3af", fontStyle: "italic", marginTop: 2 }}>\u201c{row.smsReply}\u201d</p>
+                )}
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Customer profile card ───────────────────────────────────────────────────
+
+// ─── Job Status Stream card ──────────────────────────────────────────────────
+
+interface JobStatusStreamCard {
+  alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>;
+  cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }>;
+}
+
+function JobStatusStreamCardView({ card }: { card: JobStatusStreamCard }) {
+  const fmtTime = (ts: number) =>
+    new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+  const ALERT_STYLE: Record<string, { borderColor: string; badgeText: string; badgeColor: string; icon: string }> = {
+    stale_eta:    { borderColor: "#d97706", badgeText: "ETA PASSED",  badgeColor: "#d97706", icon: "🚗" },
+    noshow_alert: { borderColor: "#ef4444", badgeText: "NO CHECK-IN", badgeColor: "#ef4444", icon: "🚨" },
+  };
+
+  const STATUS_COLOR: Record<string, string> = {
+    completed:         "#22c55e",
+    in_progress:       "#6366f1",
+    arrived:           "#22c55e",
+    on_the_way:        "#f59e0b",
+    running_late:      "#ef4444",
+    issue_at_property: "#ef4444",
+    finishing_up:      "#8b5cf6",
+    wrapping_up:       "#8b5cf6",
+  };
+
+  const hasAlerts = card.alerts.length > 0;
+  const hasStatuses = card.cleanerStatuses.length > 0;
+
+  if (!hasAlerts && !hasStatuses) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", padding: "16px 14px", width: "100%" }}>
+        <p style={{ fontSize: 13, color: "#6b7280", textAlign: "center" }}>No job activity yet today.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+      {hasAlerts && (
+        <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "9px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", flex: 1 }}>Live Alerts</p>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "1px 7px", borderRadius: 8 }}>{card.alerts.length}</span>
+          </div>
+          {card.alerts.map((alert, i) => {
+            const s = ALERT_STYLE[alert.alertType] ?? ALERT_STYLE.noshow_alert;
+            return (
+              <div key={i} style={{ display: "flex", gap: 10, padding: "10px 14px", borderBottom: i < card.alerts.length - 1 ? "1px solid #2a2e4744" : undefined, borderLeft: `3px solid ${s.borderColor}` }}>
+                <span style={{ fontSize: 18, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>{s.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", lineHeight: 1.3 }}>{alert.title}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: s.badgeColor, background: `${s.badgeColor}22`, padding: "1px 6px", borderRadius: 6, flexShrink: 0 }}>{s.badgeText}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "#9ca3af", marginTop: 2 }}>{alert.body}</p>
+                </div>
+                <span style={{ fontSize: 11, color: "#6b7280", flexShrink: 0, alignSelf: "flex-start", marginTop: 2 }}>{fmtTime(alert.ts)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {hasStatuses && (
+        <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+          <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "9px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", flex: 1 }}>Team Status</p>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6b7280" }}>{card.cleanerStatuses.length} updates</span>
+          </div>
+          {card.cleanerStatuses.map((row, i) => {
+            const dotColor = STATUS_COLOR[row.status] ?? "#6b7280";
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.cleanerStatuses.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{row.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>{row.cleanerName}</p>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: dotColor, background: `${dotColor}22`, padding: "1px 6px", borderRadius: 6, textTransform: "uppercase", letterSpacing: "0.05em", flexShrink: 0 }}>{row.label}</span>
+                  </div>
+                  {row.customerName && (
+                    <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 1 }}>
+                      {row.customerName}{row.etaLabel ? ` · ETA ${row.etaLabel}` : ""}
+                    </p>
+                  )}
+                  {row.issueNote && (
+                    <p style={{ fontSize: 11, color: "#ef4444", marginTop: 1 }}>{row.issueNote}</p>
+                  )}
+                </div>
+                <span style={{ fontSize: 11, color: "#6b7280", flexShrink: 0 }}>{fmtTime(row.ts)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function CustomerProfileCardView({ card }: { card: CustomerProfileCard }) {
   const [expandedSection, setExpandedSection] = React.useState<string | null>(null);
@@ -1283,6 +2061,12 @@ const EXAMPLES = [
   { emoji: "💳", label: "Payment link", example: "Send Alex a payment link" },
   { emoji: "👤", label: "Customer profile", example: "Pull up Jennifer's profile" },
   { emoji: "⏰", label: "Check ETA", example: "When is Sarah's cleaner arriving?" },
+  { emoji: "📅", label: "Prepare for date", example: "Prepare for tomorrow" },
+  { emoji: "🚫", label: "Missing ETAs", example: "Which teams have no ETA?" },
+  { emoji: "⭐", label: "Team rankings", example: "Rank teams by rating" },
+  { emoji: "📋", label: "Customer notes", example: "Customer notes for today" },
+  { emoji: "💳", label: "Credit card status", example: "Check credit card status for today" },
+  { emoji: "📩", label: "Send confirmation texts", example: "Send confirmation texts for tomorrow" },
 ];
 
 const HINT_EXAMPLES = [
@@ -1296,21 +2080,24 @@ const HINT_EXAMPLES = [
 
 function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void; onClose: () => void }) {
   return (
-    <div className="mb-2 bg-[#1a1d2e] border border-white/15 rounded-xl">
-      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #e5d9ea"}}>
-        <p className="text-sm text-white font-semibold">Things you can ask</p>
-        <button onClick={onClose} className="text-gray-500 hover:text-white transition-colors text-lg leading-none">✕</button>
+    <div className="mb-2 rounded-xl overflow-hidden" style={{background:"#fffdf9",border:"1px solid #e8dff0",boxShadow:"0 4px 24px rgba(120,80,160,0.08)"}}>
+      <div className="px-4 py-3 flex items-center justify-between" style={{borderBottom:"1px solid #ede6f5"}}>
+        <p className="text-sm font-semibold" style={{color:"#2d1f3d"}}>Some examples of things you can ask...</p>
+        <button onClick={onClose} className="transition-colors text-lg leading-none" style={{color:"#9b8aaa"}} onMouseEnter={e=>(e.currentTarget.style.color="#6b3fa0")} onMouseLeave={e=>(e.currentTarget.style.color="#9b8aaa")}>✕</button>
       </div>
       <div className="grid grid-cols-2 gap-2 p-3">
         {EXAMPLES.map((ex) => (
           <button
             key={ex.label}
             onClick={() => { onSelect(ex.example); onClose(); }}
-            className="flex flex-col gap-1 p-3 rounded-xl transition-all text-left hover:bg-purple-50" style={{background:"rgba(255,255,255,0.7)",border:"1px solid #e5d9ea"}}
+            className="flex flex-col gap-1 p-3 rounded-xl transition-all text-left"
+            style={{background:"rgba(255,255,255,0.85)",border:"1px solid #ede6f5"}}
+            onMouseEnter={e=>(e.currentTarget.style.background="#f3eeff")}
+            onMouseLeave={e=>(e.currentTarget.style.background="rgba(255,255,255,0.85)")}
           >
             <span className="text-lg leading-none">{ex.emoji}</span>
-            <p className="text-xs text-white font-semibold mt-1">{ex.label}</p>
-            <p className="text-[11px] text-gray-400 leading-snug">{ex.example}</p>
+            <p className="text-xs font-semibold mt-1" style={{color:"#2d1f3d"}}>{ex.label}</p>
+            <p className="text-[11px] leading-snug" style={{color:"#8b7a9e"}}>{ex.example}</p>
           </button>
         ))}
       </div>
@@ -1522,8 +2309,127 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     return () => clearInterval(id);
   }, [input]);
   const [isThinking, setIsThinking] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+  const [readinessDate, setReadinessDate] = useState<string | undefined>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Prepare Tomorrow flow (real tRPC data) ────────────────────────────────
+  const PREPARE_STEPS = [
+    "Checking tomorrow's schedule",
+    "Checking customer confirmations",
+    "Checking payment methods",
+    "Checking team confirmations",
+    "Checking client requests",
+    "Scanning for other issues",
+  ];
+
+  const utils = trpc.useUtils();
+
+  const runPrepareTomorrow = useCallback((dateOverride?: string) => {
+    // 1. AI acknowledgement text
+    const ackMsg: Message = {
+      id: uid(),
+      role: "ai",
+      content: { type: "text", text: "On it! I'll run a full readiness check for tomorrow including customers, payments, teams, and schedule." },
+      ts: nowTime(),
+    };
+    // 2. Checklist card — starts with first step running, rest pending
+    const checklistId = uid();
+    const initialSteps = PREPARE_STEPS.map((label, i) => ({
+      label,
+      status: (i === 0 ? "running" : "pending") as "done" | "running" | "pending",
+    }));
+    const checklistMsg: Message = {
+      id: checklistId,
+      role: "ai",
+      content: { type: "prepare_checklist", card: { steps: initialSteps } },
+      ts: nowTime(),
+    };
+
+    setMessages((prev) => [...prev, ackMsg, checklistMsg]);
+
+    // Fire real tRPC call immediately while animation runs
+    const fetchPromise = utils.aiConcierge.getReadinessSummary.fetch({ date: dateOverride });
+
+    // Animate steps one by one
+    let step = 0;
+    const totalSteps = PREPARE_STEPS.length;
+    const advanceStep = () => {
+      step++;
+      if (step < totalSteps) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== checklistId) return m;
+            const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s, i) => ({
+              ...s,
+              status: (i < step ? "done" : i === step ? "running" : "pending") as "done" | "running" | "pending",
+            }));
+            return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+          })
+        );
+        setTimeout(advanceStep, 700);
+      } else {
+        // Animation done — wait for fetch then show results
+        fetchPromise.then((summary) => {
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== checklistId) return m;
+              const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s) => ({ ...s, status: "done" as const }));
+              return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+            })
+          );
+          const pct = summary.overallPct;
+          const issues = summary.totalIssues;
+          const dateStr = new Date(summary.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          const summaryMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: {
+              type: "text",
+              text: issues === 0
+                ? `All set! Tomorrow is ${pct}% ready — no issues found.`
+                : `All set! Tomorrow is ${pct}% ready. I found ${issues} thing${issues !== 1 ? "s" : ""} that need your attention.`,
+            },
+            ts: nowTime(),
+          };
+          const resultMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: { type: "prepare_result", card: { readinessPct: pct, issueCount: issues, date: dateStr, rawDate: summary.date } },
+            ts: nowTime(),
+          };
+          setMessages((prev) => [...prev, summaryMsg, resultMsg]);
+        }).catch(() => {
+          // Fetch failed — still complete animation and show fallback card
+          setMessages((prev) =>
+            prev.map((m) => {
+              if (m.id !== checklistId) return m;
+              const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s) => ({ ...s, status: "done" as const }));
+              return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+            })
+          );
+          const errMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: { type: "text", text: "I ran into an issue fetching tomorrow's data. You can still open the Readiness panel to try again." },
+            ts: nowTime(),
+          };
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const dateStr = tomorrow.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+          const resultMsg: Message = {
+            id: uid(),
+            role: "ai",
+            content: { type: "prepare_result", card: { readinessPct: 0, issueCount: 0, date: dateStr } },
+            ts: nowTime(),
+          };
+          setMessages((prev) => [...prev, errMsg, resultMsg]);
+        });
+      }
+    };
+    setTimeout(advanceStep, 700);
+  }, [utils]);
 
   // ── Selected entity (set when a pill is confirmed or a customer_profile card is shown) ──────────
   // Discriminated union: customer entities route via resolvedClientPhone; cleaner entities route via resolvedEntity
@@ -1586,28 +2492,41 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     const normalizedQuery = acQuery.trim().toLowerCase();
     const normalizedName = allMatches[0].name.trim().toLowerCase();
     const words = normalizedQuery.split(/\s+/);
-    const isConfident = words.length >= 2 && normalizedName.startsWith(normalizedQuery);
+    const isConfident = normalizedQuery.length >= 4 && normalizedName.startsWith(normalizedQuery);
     if (!isConfident) return;
     const m = allMatches[0];
-    setFocusedCustomer(m.isCleaner && m.cleanerProfileId != null
+    const entity: SelectedEntity = m.isCleaner && m.cleanerProfileId != null
       ? { type: "cleaner", cleanerProfileId: m.cleanerProfileId, name: m.name, phone: m.phone }
-      : { type: "customer", name: m.name, phone: m.phone });
+      : { type: "customer", name: m.name, phone: m.phone };
+    setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
     flashAttachedLabel();
-    // Textarea is NOT touched
+    // Complete the partial name in the textarea
+    setInput((prev) => {
+      const COMMAND_RE = /^((?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+)(.+)/i;
+      const match = prev.match(COMMAND_RE);
+      if (match) return match[1] + entity.name;
+      return prev;
+    });
   }, [allMatches, acQuery, focusedCustomer]);
 
   // Show change popup
   const [showChangePopup, setShowChangePopup] = useState(false);
 
-  // ── Confirm pill: set entity (textarea NOT touched) ────────────────────────
+  // ── Confirm pill: set entity and complete the partial name in the textarea ──
   const confirmPill = (entity: SelectedEntity) => {
     setFocusedCustomer(entity);
     setAcQuery(null);
     setShowChangePopup(false);
     flashAttachedLabel();
-    // Textarea is NOT touched
+    // Replace the partial name typed after the verb with the full selected name
+    setInput((prev) => {
+      const COMMAND_RE = /^((?:text|call|tell|ask|remind|send|notify|update|let|jobs\s+for|payment\s+for|eta\s+for|entry\s+for|schedule\s+for|reschedule)\s+)(.+)/i;
+      const m = prev.match(COMMAND_RE);
+      if (m) return m[1] + entity.name;
+      return prev;
+    });
   };
 
   // ── updateEntityRecognition: single source of truth for command parsing ────────
@@ -1782,6 +2701,34 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setAcQuery(null); // always clear autocomplete on send
+
+    // ── Intercept prepare tomorrow keywords (mock flow, no backend call) ──
+    const lc = text.toLowerCase();
+    // Try to extract a specific date like "July 21st", "July 21", "jul 21"
+    const dateMatch = text.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+    let parsedDate: string | undefined;
+    if (dateMatch) {
+      const monthNames: Record<string, number> = { jan:1,january:1,feb:2,february:2,mar:3,march:3,apr:4,april:4,may:5,jun:6,june:6,jul:7,july:7,aug:8,august:8,sep:9,september:9,oct:10,october:10,nov:11,november:11,dec:12,december:12 };
+      const month = monthNames[dateMatch[1].toLowerCase()];
+      const day = parseInt(dateMatch[2], 10);
+      if (month && day) {
+        const year = new Date().getFullYear();
+        parsedDate = `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+      }
+    }
+    const isPrepare =
+      lc.includes("get tomorrow ready") ||
+      lc.includes("prepare tomorrow") ||
+      lc.includes("tomorrow ready") ||
+      lc.includes("readiness check") ||
+      lc.includes("prepare for") ||
+      lc.includes("get ready for") ||
+      (lc.includes("prepare") && !!parsedDate);
+    if (isPrepare) {
+      runPrepareTomorrow(parsedDate);
+      return;
+    }
+
     setIsThinking(true);
 
     // When a person is locked in, extract the message hint from what the user typed.
@@ -1839,6 +2786,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   };
 
   return (
+    <>
     <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
@@ -1911,7 +2859,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={(rawDate) => { setReadinessDate(rawDate); setReadinessOpen(true); }} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -1931,16 +2879,16 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3" style={{ borderTop: "1px solid #ebe4dc", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)" }}>
+      <div className="px-4 py-3" style={{ borderTop: "1px solid #ebe4dc", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)", position: "relative" }}>
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
-          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/15 border border-indigo-500/40 rounded-xl">
-            <div className="w-5 h-5 rounded-md bg-indigo-600/50 flex items-center justify-center text-indigo-200 text-[10px] font-bold shrink-0">
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:"rgba(116,71,245,0.12)",border:"1px solid rgba(116,71,245,0.3)"}}>
+            <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.25)",color:"#5b21b6"}}>
               {focusedCustomer.name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
-            <span className="text-indigo-200 text-xs font-semibold flex-1 truncate">{focusedCustomer.name}</span>
-            <span className="text-indigo-400 text-[10px] font-medium bg-indigo-500/20 px-1.5 py-0.5 rounded-full">{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
+            <span className="text-xs font-semibold flex-1 truncate" style={{color:"#3b1f6e"}}>{focusedCustomer.name}</span>
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{background:"rgba(116,71,245,0.15)",color:"#5b21b6"}}>{focusedCustomer.type === "cleaner" ? "Team ✓" : "Recognized ✓"}</span>
             {showAttachedLabel && <span className="text-green-400 text-[10px] font-semibold mr-1 transition-opacity duration-300">✓ Attached</span>}
             <button
               type="button"
@@ -1955,13 +2903,13 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
 
         {/* ── Recognition pill: single match ── */}
         {showRecognitionPill && allMatches.length === 1 && (
-          <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-indigo-600/10 border border-indigo-500/30 rounded-xl">
-            <div className="w-5 h-5 rounded-md bg-indigo-600/40 flex items-center justify-center text-indigo-300 text-[10px] font-bold shrink-0">
+          <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl" style={{background:"rgba(116,71,245,0.10)",border:"1px solid rgba(116,71,245,0.25)"}}>
+            <div className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0" style={{background:"rgba(116,71,245,0.2)",color:"#5b21b6"}}>
               {allMatches[0].name.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <span className="text-white text-xs font-semibold">{allMatches[0].name}</span>
-              <span className="text-gray-400 text-[11px] ml-1.5">{allMatches[0].subtitle}</span>
+              <span className="text-xs font-semibold" style={{color:"#3b1f6e"}}>{allMatches[0].name}</span>
+              <span className="text-[11px] ml-1.5" style={{color:"#7447f5"}}>{allMatches[0].subtitle}</span>
             </div>
           </div>
         )}
@@ -2069,13 +3017,17 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
         </div>
         {showCommands && (
-          <CommandPicker
-            onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
-            onClose={() => setShowCommands(false)}
-          />
+          <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, zIndex: 50, marginBottom: 6 }}>
+            <CommandPicker
+              onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
+              onClose={() => setShowCommands(false)}
+            />
+          </div>
         )}
       </div>
     </div>
+    <ReadinessDrawer open={readinessOpen} onClose={() => setReadinessOpen(false)} date={readinessDate} />
+    </>
   );
 }
 
@@ -2093,7 +3045,13 @@ type ServerResult =
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
-  | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" };
+  | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" }
+  | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> }
+  | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number }
+  | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> }
+  | { type: "confirmation_texts"; date: string; dateLabel: string; rows: Array<{ cleanerJobId: number; customerName: string; customerPhone: string | null; serviceDateTime: string | null; teamName: string | null; alreadySent: boolean; smsConfirmedAt: number | null }> }
+  | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number }
+  | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -2247,6 +3205,54 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "call_client_pending", card: { vapiCallId: "", recipientName: result.recipientName, recipientPhone: result.recipientPhone } },
+      ts,
+    };
+  }
+  if (result.type === "card_status") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "card_status", card: { date: result.date, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "rank_teams") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "rank_teams", card: { windowDays: result.windowDays, minRatings: result.minRatings, rows: result.rows, excluded: result.excluded } },
+      ts,
+    };
+  }
+  if (result.type === "list_no_eta") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "list_no_eta", card: { date: result.date, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "confirmation_texts") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "confirmation_texts", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows } },
+      ts,
+    };
+  }
+  if (result.type === "confirmation_results") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "confirmation_results", card: { date: result.date, dateLabel: result.dateLabel, rows: result.rows, totalSent: result.totalSent, totalConfirmed: result.totalConfirmed, totalPending: result.totalPending } },
+      ts,
+    };
+  }
+  if (result.type === "job_status_stream") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "job_status_stream", card: { alerts: result.alerts, cleanerStatuses: result.cleanerStatuses } },
       ts,
     };
   }
