@@ -278,6 +278,19 @@ export interface QueryResultResult {
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
 
+/** Returned when the concierge shows card/payment hold status for jobs on a date */
+export interface CardStatusResult {
+  type: "card_status";
+  date: string; // YYYY-MM-DD
+  rows: Array<{
+    customerName: string;
+    cardBrand: string | null;
+    last4: string | null;
+    status: "on_hold" | "no_preauth" | "no_card";
+    amountCents: number;
+  }>;
+}
+
 export interface CustomerProfileResult {
   type: "customer_profile";
   profile: {
@@ -335,7 +348,8 @@ type ConciergeResult =
   | PaymentLinkSentResult
   | CallClientConfirmResult
   | CallClientPendingResult
-  | QueryResultResult;
+  | QueryResultResult
+  | CardStatusResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
@@ -1676,6 +1690,52 @@ async function handleEtaUpdateByJobId(
   };
 }
 
+// ── Card status handler ──────────────────────────────────────────────────────
+async function handleCardStatus(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<CardStatusResult> {
+  const { startDate } = resolveServiceDateRange(plan.timeScope);
+  const jobs = await db
+    .select({
+      customerName: cleanerJobs.customerName,
+      cardBrand: cleanerJobs.paymentBrand,
+      last4: cleanerJobs.paymentLast4,
+      hasStripeCard: cleanerJobs.hasStripeCard,
+      chargesOnHoldCents: cleanerJobs.chargesOnHoldCents,
+    })
+    .from(cleanerJobs)
+    .where(eq(cleanerJobs.jobDate, startDate));
+
+  // Deduplicate by customerName (one row per customer per date)
+  const seen = new Set<string>();
+  const rows = jobs
+    .filter(j => {
+      const key = j.customerName ?? "";
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map(j => ({
+      customerName: j.customerName ?? "Unknown",
+      cardBrand: j.cardBrand ?? null,
+      last4: j.last4 ?? null,
+      status: (
+        j.chargesOnHoldCents > 0 ? "on_hold" :
+        j.hasStripeCard ? "no_preauth" :
+        "no_card"
+      ) as "on_hold" | "no_preauth" | "no_card",
+      amountCents: j.chargesOnHoldCents,
+    }))
+    // Sort: on_hold first, then no_preauth, then no_card
+    .sort((a, b) => {
+      const order = { on_hold: 0, no_preauth: 1, no_card: 2 };
+      return order[a.status] - order[b.status];
+    });
+
+  return { type: "card_status", date: startDate, rows };
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 export const aiConciergeRouter = router({
   /**
@@ -1796,6 +1856,9 @@ export const aiConciergeRouter = router({
           : await handleCallPerson(intent.clientName, intent.questionHint, db);
       }
 
+      if (plan.action === "card_status") {
+        return await handleCardStatus(plan, db);
+      }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile
         const chipEntity = re?.type === "customer"

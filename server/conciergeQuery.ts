@@ -101,6 +101,7 @@ export interface QueryPlan {
     | "call_client"
     | "eta_update"
     | "get_eta_for_customer"
+    | "card_status"
     | "unknown";
 
   entities: QueryPlanEntities;

@@ -51,7 +51,7 @@ interface ParsedResponse {
 
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
-  "call_client", "eta_update", "get_eta_for_customer", "unknown",
+  "call_client", "eta_update", "get_eta_for_customer", "card_status", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -227,6 +227,7 @@ Choose ONE of:
 - "call_client" — user wants to place an outbound call to a customer
 - "eta_update" — user wants to trigger an ETA call to a team
 - "get_eta_for_customer" — user wants the ETA for a specific customer's job
+- "card_status" — user wants to see credit card / payment hold status for jobs on a specific date (e.g. "show cards on hold for tomorrow", "card status for July 21", "which customers have pre-auth today")
 - "unknown" — cannot determine intent
 
 ## entities (for "query" action)
@@ -290,7 +291,9 @@ Classify who the action targets:
 "List all jobs today" → action: "query", entities: {customerName: null, cleanerName: null, teamName: null, jobId: null}, timeScope: {type: "today"}, requestedFields: ["assignment", "scheduled_time", "job_status"]
 "Text team 3 to hurry up" → action: "text_cleaners", targetHint: "team 3", messageHint: "hurry up", targetType: "team", requestedFields: []
 "Text Rohan Gilkes and let him know we're running late" → action: "text_client", clientName: "Rohan Gilkes", messageHint: "running late", targetType: "customer", requestedFields: []
-"Send Cindy a payment link" → action: "send_payment_link", clientName: "Cindy", targetType: "customer", requestedFields: []`,
+"Send Cindy a payment link" → action: "send_payment_link", clientName: "Cindy", targetType: "customer", requestedFields: []
+"Show me cards on hold for tomorrow" → action: "card_status", timeScope: {type: "tomorrow"}, requestedFields: []
+"Card status for today" → action: "card_status", timeScope: {type: "today"}, requestedFields: []`,
       },
       { role: "user", content: message },
     ],
@@ -304,7 +307,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "unknown"],
             },
             entities: {
               type: "object",

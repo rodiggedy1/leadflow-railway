@@ -122,6 +122,16 @@ interface QueryResultCard {
   answer: string;
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
+interface CardStatusCard {
+  date: string;
+  rows: Array<{
+    customerName: string;
+    cardBrand: string | null;
+    last4: string | null;
+    status: "on_hold" | "no_preauth" | "no_card";
+    amountCents: number;
+  }>;
+}
 interface CustomerProfileCard {
   name: string;
   phone: string;
@@ -153,7 +163,8 @@ type MessageContent =
   | { type: "payment_link_sent"; card: PaymentLinkSentCard }
   | { type: "call_client_confirm"; card: CallClientConfirmCard }
   | { type: "call_client_pending"; card: CallClientPendingCard }
-  | { type: "query_result"; card: QueryResultCard };
+  | { type: "query_result"; card: QueryResultCard }
+  | { type: "card_status"; card: CardStatusCard };
   // customer_profile removed — all informational queries return query_result
 
 interface Message {
@@ -1006,6 +1017,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "card_status" && (
+          <div>
+            <CardStatusCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {/* customer_profile branch removed — all informational queries return query_result */}
       </div>
     </div>
@@ -1045,6 +1062,92 @@ function QueryResultCardView({ card }: { card: QueryResultCard }) {
         {card.answer.split("\n").filter(Boolean).map((line, i) => (
           <p key={i} style={{ fontSize: 13, color: "#c8cde8", lineHeight: 1.6, marginBottom: 4 }}>{line}</p>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Card status card ───────────────────────────────────────────────────────
+function CardStatusCardView({ card }: { card: CardStatusCard }) {
+  const onHold = card.rows.filter(r => r.status === "on_hold");
+  const noPreauth = card.rows.filter(r => r.status === "no_preauth");
+  const noCard = card.rows.filter(r => r.status === "no_card");
+
+  function formatAmount(cents: number) {
+    return `$${(cents / 100).toFixed(2)}`;
+  }
+
+  function formatCard(brand: string | null, last4: string | null) {
+    if (!last4) return "—";
+    const b = brand ? brand.charAt(0).toUpperCase() + brand.slice(1) : "Card";
+    return `${b} ···· ${last4}`;
+  }
+
+  function downloadCsv() {
+    const header = "Customer,Card,Status,Amount";
+    const lines = card.rows.map(r => {
+      const status = r.status === "on_hold" ? `On Hold ${formatAmount(r.amountCents)}` : r.status === "no_preauth" ? "No Pre-Auth" : "No Card";
+      return `"${r.customerName}","${formatCard(r.cardBrand, r.last4)}","${status}","${r.status === "on_hold" ? formatAmount(r.amountCents) : ""}"`;
+    });
+    const csv = [header, ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `card-status-${card.date}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const statusBadge = (row: CardStatusCard["rows"][0]) => {
+    if (row.status === "on_hold") return <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>On Hold · {formatAmount(row.amountCents)}</span>;
+    if (row.status === "no_preauth") return <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>No Pre-Auth</span>;
+    return <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>No Card</span>;
+  };
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #4f6ef7, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <CreditCard className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Card Status</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.date} · {card.rows.length} job{card.rows.length !== 1 ? "s" : ""}</p>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {onHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{onHold.length} on hold</span>}
+          {noPreauth.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{noPreauth.length} no pre-auth</span>}
+          {noCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>{noCard.length} no card</span>}
+        </div>
+      </div>
+      {/* Table */}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid #2a2e47" }}>
+              {["Customer", "Card", "Status"].map(h => (
+                <th key={h} style={{ padding: "8px 14px", textAlign: "left", fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {card.rows.map((row, i) => (
+              <tr key={i} style={{ borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+                <td style={{ padding: "9px 14px", fontSize: 13, color: "#c8cde8", fontWeight: 500 }}>{row.customerName}</td>
+                <td style={{ padding: "9px 14px", fontSize: 12, color: "#8a8aaa", fontFamily: "monospace" }}>{formatCard(row.cardBrand, row.last4)}</td>
+                <td style={{ padding: "9px 14px" }}>{statusBadge(row)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Footer */}
+      <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47" }}>
+        <button onClick={downloadCsv} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#7447f5", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+          <ExternalLink className="w-3 h-3" /> Download CSV
+        </button>
       </div>
     </div>
   );
@@ -2096,7 +2199,8 @@ type ServerResult =
   | { type: "payment_link_sent"; recipientName: string; recipientPhone: string; paymentLinkUrl: string; success: boolean; error?: string }
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
-  | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" };
+  | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" }
+  | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -2250,6 +2354,14 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "call_client_pending", card: { vapiCallId: "", recipientName: result.recipientName, recipientPhone: result.recipientPhone } },
+      ts,
+    };
+  }
+  if (result.type === "card_status") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "card_status", card: { date: result.date, rows: result.rows } },
       ts,
     };
   }
