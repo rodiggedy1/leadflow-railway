@@ -2269,6 +2269,27 @@ export const aiConciergeRouter = router({
           }).from(confirmationCalls)
             .where(inArray(confirmationCalls.cleanerJobId, jobIds))
         : [];
+      // ── JOIN AUDIT ─────────────────────────────────────────────────────
+      const confRowsByJobId = new Map<number, (typeof confCalls[0])[]>();
+      for (const c of confCalls) {
+        const arr = confRowsByJobId.get(c.cleanerJobId) ?? [];
+        arr.push(c);
+        confRowsByJobId.set(c.cleanerJobId, arr);
+      }
+      const jobsWithMatch = jobs.filter(j => confRowsByJobId.has(j.id));
+      const jobsWithoutMatch = jobs.filter(j => !confRowsByJobId.has(j.id));
+      const jobsWithDuplicates = jobs.filter(j => (confRowsByJobId.get(j.id)?.length ?? 0) > 1);
+      const orphanedRows = confCalls.filter(c => !jobIds.includes(c.cleanerJobId));
+      console.log(`[ReadinessAudit] date=${targetDate} totalJobs=${jobs.length} confRows=${confCalls.length}`);
+      console.log(`[ReadinessAudit] withMatch=${jobsWithMatch.length} withoutMatch=${jobsWithoutMatch.length} withDuplicates=${jobsWithDuplicates.length} orphaned=${orphanedRows.length}`);
+      if (jobsWithoutMatch.length > 0) {
+        console.log(`[ReadinessAudit] NO MATCH job ids: ${jobsWithoutMatch.map(j => `${j.id}(${j.customerName})`).join(', ')}`);
+      }
+      if (jobsWithDuplicates.length > 0) {
+        console.log(`[ReadinessAudit] DUPLICATE job ids: ${jobsWithDuplicates.map(j => `${j.id}(${j.customerName}) x${confRowsByJobId.get(j.id)?.length}`).join(', ')}`);
+      }
+      // ── END AUDIT ─────────────────────────────────────────────────────────
+
       // Best call per job — prefer confirmed outcome over unclear/unknown; among equal outcomes take latest
       const outcomeRank = (c: typeof confCalls[0]) => {
         const eff = c.manualOutcome ?? c.aiOutcome ?? "";
