@@ -5387,7 +5387,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ paddingLeft: 12, paddingRight: 12 }}>
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
@@ -5810,10 +5810,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </div>
       {/* ── Left drag handle ── */}
       <div
-        className="relative flex-none"
-        style={{ width: leftCollapsed ? 0 : 12, cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
+        className="relative flex-none flex items-center justify-center"
+        style={{ width: leftCollapsed ? 0 : 16, cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={leftCollapsed ? undefined : startDrag("left")}
-      />
+      >
+        <div className="w-[4px] h-full" />
+      </div>
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
       <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
@@ -7866,10 +7868,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </div>
       {/* ── Right drag handle ── */}
       <div
-        className="relative flex-none"
-        style={{ width: rightCollapsed ? 0 : 12, cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
+        className="relative flex-none flex items-center justify-center"
+        style={{ width: rightCollapsed ? 0 : 16, cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
-      />
+      >
+        <div className="w-[4px] h-full" />
+      </div>
 
       {/* ── RIGHT PANEL: AI Concierge (always open) ── */}
       <div
