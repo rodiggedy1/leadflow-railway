@@ -2200,7 +2200,12 @@ export const aiConciergeRouter = router({
       }
 
       if (intent.action === "text_client") {
-        // Use chip only when it is a customer entity; cleaner chip → fall back to LLM name
+        // If locked entity is a cleaner, route to handleTextCleaners — not customer search
+        if (re?.type === "cleaner") {
+          const r = await handleTextCleaners({ ...plan, targetHint: re.name }, intent.messageHint, db);
+          if (r.type === "bulk_sms_confirm") return { ...r, command: input.message };
+          return r;
+        }
         const textClientResult = re?.type === "customer"
           ? await handleTextClient(null, intent.messageHint, db, re.phone)
           : await handleTextClient(intent.clientName, intent.messageHint, db);
