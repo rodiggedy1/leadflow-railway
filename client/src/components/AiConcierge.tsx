@@ -1476,8 +1476,46 @@ function ConfirmationTextsCardView({ card }: { card: ConfirmationTextsCard }) {
     } catch { return ""; }
   };
 
-  const pending = card.rows.filter(r => !r.alreadySent);
-  const sent = card.rows.filter(r => r.alreadySent);
+  const pending = card.rows.filter(r => !r.alreadySent && r.customerPhone);
+  const [selected, setSelected] = React.useState<Set<number>>(() => new Set(pending.map(r => r.cleanerJobId)));
+  const [sentIds, setSentIds] = React.useState<Set<number>>(new Set());
+  const [failedIds, setFailedIds] = React.useState<Set<number>>(new Set());
+  const [sending, setSending] = React.useState(false);
+
+  const placeCall = trpc.confirmationCalls.placeCall.useMutation();
+
+  const toggle = (id: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === pending.length) setSelected(new Set());
+    else setSelected(new Set(pending.map(r => r.cleanerJobId)));
+  };
+
+  const sendSelected = async () => {
+    const toSend = pending.filter(r => selected.has(r.cleanerJobId));
+    if (toSend.length === 0) return;
+    setSending(true);
+    for (const row of toSend) {
+      try {
+        await placeCall.mutateAsync({
+          cleanerJobId: row.cleanerJobId,
+          jobDate: card.date,
+          clientName: row.customerName,
+          calledPhone: row.customerPhone!,
+        });
+        setSentIds(prev => new Set([...prev, row.cleanerJobId]));
+      } catch {
+        setFailedIds(prev => new Set([...prev, row.cleanerJobId]));
+      }
+    }
+    setSending(false);
+  };
 
   if (card.rows.length === 0) {
     return (
@@ -1492,8 +1530,11 @@ function ConfirmationTextsCardView({ card }: { card: ConfirmationTextsCard }) {
     );
   }
 
+  const allSent = pending.length > 0 && pending.every(r => sentIds.has(r.cleanerJobId) || r.alreadySent);
+
   return (
     <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      {/* Header */}
       <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <MessageSquare className="w-3 h-3 text-white" />
@@ -1501,40 +1542,122 @@ function ConfirmationTextsCardView({ card }: { card: ConfirmationTextsCard }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Confirmation Texts — {card.dateLabel}</p>
           <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>
-            {pending.length} pending · {sent.length} already sent
+            {pending.length} pending · {card.rows.filter(r => r.alreadySent).length} already sent
           </p>
         </div>
+        {pending.length > 0 && !allSent && (
+          <button
+            onClick={toggleAll}
+            style={{ fontSize: 11, color: "#9ca3af", background: "none", border: "none", cursor: "pointer", padding: "2px 6px", borderRadius: 6, whiteSpace: "nowrap" }}
+          >
+            {selected.size === pending.length ? "Deselect all" : "Select all"}
+          </button>
+        )}
       </div>
+
+      {/* Rows */}
       <div>
-        {card.rows.map((row, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
-            {row.smsConfirmedAt ? (
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#22c55e" }} />
-            ) : row.alreadySent ? (
-              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6366f1" }} />
-            ) : (
-              <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ border: "2px solid #4b5563" }} />
-            )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 1 }}>{row.customerName}</p>
-              <p style={{ fontSize: 11, color: "#6b7280" }}>
-                {row.teamName && <span>{row.teamName} · </span>}
-                {formatTime(row.serviceDateTime)}
-              </p>
+        {card.rows.map((row, i) => {
+          const isSent = sentIds.has(row.cleanerJobId);
+          const isFailed = failedIds.has(row.cleanerJobId);
+          const isAlreadySent = row.alreadySent;
+          const isConfirmed = !!row.smsConfirmedAt;
+          const isPending = !isAlreadySent && !isSent && row.customerPhone;
+          const isChecked = selected.has(row.cleanerJobId);
+
+          return (
+            <div
+              key={i}
+              onClick={() => isPending && !sending ? toggle(row.cleanerJobId) : undefined}
+              style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "9px 14px",
+                borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined,
+                cursor: isPending && !sending ? "pointer" : "default",
+                background: isPending && isChecked ? "rgba(99,102,241,0.06)" : undefined,
+                transition: "background 0.15s",
+              }}
+            >
+              {/* Checkbox / status icon */}
+              {isConfirmed ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#22c55e" }} />
+              ) : isSent ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6366f1" }} />
+              ) : isFailed ? (
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: 9, color: "#fff", fontWeight: 700 }}>!</span>
+                </div>
+              ) : isAlreadySent ? (
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#6366f1" }} />
+              ) : isPending ? (
+                <div
+                  className="w-4 h-4 rounded flex-shrink-0"
+                  style={{
+                    border: isChecked ? "2px solid #6366f1" : "2px solid #4b5563",
+                    background: isChecked ? "#6366f1" : "transparent",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {isChecked && <span style={{ fontSize: 9, color: "#fff", fontWeight: 700 }}>✓</span>}
+                </div>
+              ) : (
+                <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ border: "2px solid #374151" }} />
+              )}
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 1 }}>{row.customerName}</p>
+                <p style={{ fontSize: 11, color: "#6b7280" }}>
+                  {row.teamName && <span>{row.teamName} · </span>}
+                  {formatTime(row.serviceDateTime)}
+                  {!row.customerPhone && <span style={{ color: "#ef4444" }}> · no phone</span>}
+                </p>
+              </div>
+
+              {/* Status badge */}
+              {isConfirmed ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", background: "#22c55e22", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Confirmed</span>
+              ) : isSent ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1", background: "#6366f122", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Sent ✓</span>
+              ) : isFailed ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#ef4444", background: "#ef444422", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Failed</span>
+              ) : isAlreadySent ? (
+                <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1", background: "#6366f122", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Sent</span>
+              ) : null}
             </div>
-            {row.smsConfirmedAt ? (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#22c55e", background: "#22c55e22", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Confirmed</span>
-            ) : row.alreadySent ? (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#6366f1", background: "#6366f122", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Sent</span>
-            ) : (
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", background: "#6b728022", padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>Pending</span>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
-      {pending.length > 0 && (
-        <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47", fontSize: 11, color: "#9ca3af" }}>
-          To send texts, go to the <strong style={{ color: "#c8cde8" }}>Confirmation Calls</strong> page and click Send All.
+
+      {/* Footer: Send Selected button */}
+      {pending.length > 0 && !allSent && (
+        <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <span style={{ fontSize: 11, color: "#6b7280" }}>
+            {selected.size} of {pending.length} selected
+          </span>
+          <button
+            onClick={sendSelected}
+            disabled={selected.size === 0 || sending}
+            style={{
+              fontSize: 12, fontWeight: 700, color: "#fff",
+              background: selected.size === 0 || sending ? "#374151" : "linear-gradient(135deg, #6366f1, #8b5cf6)",
+              border: "none", borderRadius: 8, padding: "6px 16px",
+              cursor: selected.size === 0 || sending ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", gap: 6,
+              transition: "all 0.15s",
+            }}
+          >
+            {sending ? (
+              <><Loader2 className="w-3 h-3 animate-spin" /> Sending...</>
+            ) : (
+              <>Send {selected.size > 0 ? selected.size : ""} Text{selected.size !== 1 ? "s" : ""}</>
+            )}
+          </button>
+        </div>
+      )}
+      {allSent && (
+        <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2e47", display: "flex", alignItems: "center", gap: 8 }}>
+          <CheckCircle2 className="w-4 h-4" style={{ color: "#22c55e" }} />
+          <span style={{ fontSize: 12, fontWeight: 600, color: "#22c55e" }}>All texts sent!</span>
         </div>
       )}
     </div>
