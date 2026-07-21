@@ -3949,7 +3949,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [followUpsOpen, setFollowUpsOpen] = useState(false);
   const [faqOpen, setFaqOpen] = useState(false);
-  const [conciergeOpen, setConciergeOpen] = useState(false);
+  // conciergeOpen removed — AiConcierge is always inline in right panel
   const [objectionOpen, setObjectionOpen] = useState(false);
   const [followUpsInitialId, setFollowUpsInitialId] = useState<number | null>(null);
   const [fuPanelExpanded, setFuPanelExpanded] = useState(true);
@@ -5323,15 +5323,15 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   // ── Panel resize & collapse ──────────────────────────────────────────────
   const MIN_LEFT  = 200;
   const MAX_LEFT  = 420;
-  const MIN_RIGHT = 180;
-  const MAX_RIGHT = 400;
-  const MIN_CENTER = 380;
+  const MIN_RIGHT = 220;
+  const MAX_RIGHT = 500;
+  const MIN_CENTER = 320;
 
   const [leftWidth, setLeftWidth] = useState<number>(() => {
     try { const v = localStorage.getItem("cmd_leftWidth"); return v ? Math.max(MIN_LEFT, Math.min(MAX_LEFT, Number(v))) : 300; } catch { return 300; }
   });
   const [rightWidth, setRightWidth] = useState<number>(() => {
-    try { const v = localStorage.getItem("cmd_rightWidth"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 280; } catch { return 280; }
+    try { const v = localStorage.getItem("cmd_rightWidth"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 400; } catch { return 400; }
   });
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
@@ -5571,400 +5571,241 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         </div>
       )}
 
-      {/* ── LEFT PANEL: Ops Snapshot + Live Alerts ── */}
+      {/* ── LEFT PANEL: Leads & Issues ── */}
       <div
         className="shrink-0 flex flex-col overflow-hidden transition-[width] duration-200"
         style={{ width: leftCollapsed ? 0 : leftWidth, minWidth: leftCollapsed ? 0 : MIN_LEFT, overflow: leftCollapsed ? "hidden" : undefined }}
       >
         {/* Single scrollable area — header + content all scroll together */}
+        {/* Single scrollable area */}
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-          {/* Design card: rounded-[32px] border backdrop-blur */}
-          <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur overflow-hidden">
-          <div className="px-6 pt-6 pb-5">
-            <div className="mb-5 flex items-start justify-between">
-              <div>
-                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">General Command Chat</p>
-                <h2 className="text-[28px] font-semibold leading-tight tracking-tight text-slate-900">Ship Control</h2>
-              </div>
-            </div>
-
-            {/* 4 Stat Tiles */}
-            {cmdLoading ? (
-              <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2.5 mb-4">
-                {/* Needs action */}
-                <div className="rounded-2xl border bg-gradient-to-br from-rose-500/15 to-rose-500/5 border-rose-200 p-3.5">
-                  <p className="text-xs font-semibold text-rose-700">Needs action</p>
-                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-rose-700">{snapshot.issue}</p>
-                </div>
-                {/* In progress */}
-                <div className="rounded-2xl border bg-gradient-to-br from-sky-500/15 to-sky-500/5 border-sky-200 p-3.5">
-                  <p className="text-xs font-semibold text-sky-700">In progress</p>
-                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-sky-700">{snapshot.progress}</p>
-                </div>
-                {/* Starting soon */}
-                <div className="rounded-2xl border bg-gradient-to-br from-amber-500/15 to-amber-500/5 border-amber-200 p-3.5">
-                  <p className="text-xs font-semibold text-amber-700">Starting soon</p>
-                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-amber-700">{snapshot.soon}</p>
-                </div>
-                {/* Completed */}
-                <div className="rounded-2xl border bg-gradient-to-br from-emerald-500/15 to-emerald-500/5 border-emerald-200 p-3.5">
-                  <p className="text-xs font-semibold text-emerald-700">Completed</p>
-                  <p className="mt-1.5 text-3xl font-semibold tracking-tight text-emerald-700">{snapshot.complete}</p>
-                </div>
-              </div>
+        <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
+                <div className="px-5 py-4 space-y-4">
+          {/* Madison AI Concierge is now always open in the right panel */}
+          {/* ── Search bar ── */}
+          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <input
+              type="text"
+              value={rightSearch}
+              onChange={(e) => setRightSearch(e.target.value)}
+              placeholder="Search leads, issues, people"
+              className="flex-1 bg-transparent text-xs text-slate-700 placeholder:text-slate-400 outline-none"
+            />
+            {rightSearch && (
+              <button onClick={() => setRightSearch("")} className="text-slate-400 hover:text-slate-600">
+                <X className="h-3 w-3" />
+              </button>
             )}
-
-            {/* Command priority card — shows unassigned jobs as max-priority alert */}
-            {unassignedJobs.length > 0 ? (
-              <div className="mb-4 rounded-2xl border-2 border-red-500 bg-red-50 p-3.5 shadow-lg shadow-red-500/20 animate-pulse">
-                <div className="mb-2 flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-600 text-white shadow-md shadow-red-500/30 shrink-0">
-                    <TriangleAlert className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-red-700 uppercase tracking-wide">⚠ Unassigned Job</div>
-                    <div className="text-[10px] font-semibold text-red-500 uppercase tracking-widest">Action required now</div>
-                  </div>
-                  <span className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">{unassignedJobs.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {unassignedJobs.slice(0, 2).map(job => (
-                    <button
-                      key={job.id}
-                      onClick={() => onJumpToJob(job.id)}
-                      className="w-full text-left rounded-xl border border-red-200 bg-white p-2.5 hover:bg-red-50 transition"
-                    >
-                      <div className="flex items-start justify-between gap-1">
-                        <span className="text-xs font-bold text-red-700 leading-tight">{job.customerName}</span>
-                        {job.startTime && (
-                          <span className={cn(
-                            "shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                            job.minutesUntil !== null && job.minutesUntil <= 60
-                              ? "bg-red-600 text-white"
-                              : "bg-red-100 text-red-700"
-                          )}>{job.minutesUntil !== null && job.minutesUntil < 0 ? `${Math.abs(job.minutesUntil)}m ago` : job.startTime}</span>
-                        )}
-                      </div>
-                      <div className="mt-0.5 text-[10px] text-red-500 font-medium truncate">{job.jobAddress || job.serviceType}</div>
-                      <div className="mt-1 text-[10px] font-bold text-red-600 uppercase tracking-widest">No team assigned → Tap to assign</div>
-                    </button>
-                  ))}
-                  {unassignedJobs.length > 2 && (
-                    <p className="text-[10px] text-red-500 font-semibold text-center">+{unassignedJobs.length - 2} more unassigned</p>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="mb-4 rounded-2xl border border-indigo-100 bg-[linear-gradient(135deg,rgba(99,102,241,0.08),rgba(255,255,255,0.7))] p-3.5">
-                <div className="mb-1.5 flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/20">
-                    <Sparkles className="h-4 w-4" />
-                  </div>
-                  <div className="text-sm font-semibold">Command priority</div>
-                </div>
-                <p className="text-xs leading-5 text-slate-600">All jobs assigned. General chat stays lightweight — issues only appear when risk, money, or schedule confidence drops.</p>
-              </div>
-            )}
-
-            {/* Chat / Issues tab switcher */}
-            <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-2">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { setLeftTab("chat"); setCenterView("chat"); }}
-                  className={cn(
-                    "rounded-[18px] px-4 py-3 text-sm font-semibold transition",
-                    leftTab === "chat" ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10" : "text-slate-500"
-                  )}
-                >
-                  Command chat
-                </button>
-                <button
-                  onClick={() => { setLeftTab("issues"); setCenterView("issues"); }}
-                  className={cn(
-                    "rounded-[18px] px-4 py-3 text-sm font-semibold transition relative",
-                    leftTab === "issues" ? "bg-slate-900 text-white shadow-lg shadow-slate-900/10" : "text-slate-500"
-                  )}
-                >
-                  Issues
-                  {unresolvedIssueCount > 0 && (
-                    <span className="ml-1 inline-flex items-center justify-center rounded-full text-[10px] font-bold min-w-[18px] h-[18px] px-1 leading-none bg-red-500 text-white">
-                      {unresolvedIssueCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
           </div>
 
-          {/* Rest of scrollable content */}
-          <div className="px-4 pb-4 space-y-4">
+          {/* ── Hot leads / Follow-ups tab toggle ── */}
+          <div className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1 gap-1">
+            <button
+              onClick={() => setRightTab("leads")}
+              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "leads" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
+            >
+              Hot leads
+            </button>
+            <button
+              onClick={() => setRightTab("followups")}
+              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "followups" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
+            >
+              Follow-ups
+            </button>
+          </div>
 
-          {/* Issues section — shown above Live Alerts when Issues tab is active */}
-          {leftTab === "issues" && (() => {
-            const allIssues: Array<{ key: string; title: string; body: string; sourceBody?: string | null; source: string; ts: number; type: "alert" | "manual" }> = [
-              ...alerts
-                .filter(a => a.type !== "general_issue")
-                .map(a => ({ key: `alert-${a.jobId}-${a.ts}`, title: a.title, body: a.body, sourceBody: null, source: a.source, ts: a.ts, type: "alert" as const })),
-              ...manualIssues.map(m => ({ key: `manual-${m.messageId}`, title: m.title, body: m.note ?? "", sourceBody: m.sourceBody ?? null, source: m.authorName, ts: m.ts, type: "manual" as const })),
-            ].sort((a, b) => Number(b.ts) - Number(a.ts));
-            if (allIssues.length === 0) return (
-              <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
-                <CheckCheck className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
-                <p className="text-xs text-slate-400">No open issues</p>
-              </div>
-            );
-            return (
-              <div>
-                <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Open Issues</p>
-                <div className="space-y-2">
-                  {allIssues.map(issue => {
-                    const isResolved = issueResolved[issue.key];
-                    const owner = issueOwners[issue.key];
-                    return (
-                      <div
-                        key={issue.key}
-                        className={cn(
-                          "rounded-xl border p-3 transition",
-                          isResolved ? "bg-emerald-50 border-emerald-100 opacity-60" : issue.type === "alert" ? "bg-red-50 border-red-100" : "bg-orange-50 border-orange-100"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={cn("text-sm font-semibold leading-tight", isResolved ? "text-emerald-700 line-through" : issue.type === "alert" ? "text-red-700" : "text-orange-700")}>
-                            {issue.title}
-                          </p>
-                          <span className={cn("text-[10px] font-medium shrink-0 mt-0.5", isResolved ? "text-emerald-400" : issue.type === "alert" ? "text-red-400" : "text-orange-400")}>
-                            {fmt12(issue.ts)}
-                          </span>
-                        </div>
-                        {issue.body && (
-                          <p className={cn("text-xs mt-1 leading-snug", isResolved ? "text-emerald-600" : issue.type === "alert" ? "text-red-600" : "text-orange-600")}>
-                            {issue.body}
-                          </p>
-                        )}
-                        <div className="flex items-center justify-between mt-2 gap-2">
-                          {owner ? (
-                            <span className="text-[10px] font-semibold text-slate-500 border border-slate-200 rounded-full px-2 py-0.5">
-                              Owner: {owner}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{issue.source}</span>
-                          )}
-                          {!isResolved && (
-                            <button
-                              onClick={() => {
-                                if (!owner) {
-                                  setIssueOwners(prev => ({ ...prev, [issue.key]: callerName }));
-                                  claimIssueMutation.mutate({ issueKey: issue.key, claimedBy: callerName });
-                                } else {
-                                  setResolveIssueKey(issue.key);
-                                  setResolveIssueMessageId(null);
-                                  setResolveIssueTitle(issue.title);
-                                  setResolveIssueNote(issue.body ?? "");
-                                  setResolveIssueNoteText("");
-                                  setResolveIssueOpen(true);
-                                }
-                              }}
-                              className={cn(
-                                "text-[10px] font-semibold rounded-full px-2.5 py-1 transition shrink-0",
-                                owner ? "bg-emerald-500 text-white hover:bg-emerald-600" : "bg-slate-900 text-white hover:bg-slate-700"
-                              )}
-                            >
-                              {owner ? "Resolve" : "Claim"}
-                            </button>
-                          )}
-                          {isResolved && (
-                            <span className="text-[10px] font-semibold text-emerald-600">Resolved ✓</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })()}
+          {/* ── Hot Leads Tray (shown when rightTab === "leads") ── */}
+          {rightTab === "leads" && (
+          <HotLeadsTray
+            channelMsgs={channelMsgs}
+            claimLeadMutation={claimLeadMutation}
+            searchQuery={rightSearch}
+            onCollapse={() => {/* right column is always visible */}}
+            onOpenFirstMsg={(details) => {
+              setFirstMsgDetails(details);
+              setFirstMsgResult("");
+              setFirstMsgCopied(false);
+              setFirstMsgOpen(true);
+            }}
+          />
+          )}
 
-          {/* Live Alerts & Escalations */}
+          {rightTab === "leads" && (
+          <>
+          <div className="border-t border-slate-200" />
+
+          {/* Auto-Raised Issues — only under leads tab */}
           <div>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Live Alerts & Escalations</p>
+            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Auto-Raised Issues</p>
             {cmdLoading ? (
-              <div className="flex items-center justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-            ) : alerts.length === 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 p-4 text-center">
-                <CheckCheck className="h-5 w-5 text-emerald-400 mx-auto mb-1" />
-                <p className="text-xs text-slate-400">All clear — no active alerts</p>
+              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+            ) : autoRaised.length === 0 ? (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-center">
+                <CheckCheck className="h-4 w-4 text-emerald-500 mx-auto mb-1" />
+                <p className="text-xs text-emerald-600 font-medium">No open issues</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {alerts.map((alert, i) => {
-                  // general_issue cards are shown in the right panel under "Manual Issues"
-                  if (alert.type === "general_issue") return null;
-                  const alertKey = `alert-${alert.jobId}-${alert.ts}`;
-                  const isResolved = !!issueResolved[alertKey];
-                  const owner = issueOwners[alertKey];
-                  return (
-                    <div
-                      key={i}
-                      onClick={() => !isResolved && onJumpToJob(alert.jobId)}
-                      className={cn(
-                        "w-full text-left rounded-xl border p-3 transition",
-                        isResolved
-                          ? "bg-emerald-50 border-emerald-100 opacity-60"
-                          : alert.type === "issue"
-                          ? "bg-red-50 border-red-100 hover:bg-red-100 hover:shadow-sm cursor-pointer"
-                          : "bg-amber-50 border-amber-100 hover:bg-amber-100 hover:shadow-sm cursor-pointer"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <p className={cn(
-                          "text-sm font-semibold leading-tight",
-                          isResolved ? "text-emerald-700 line-through" : alert.type === "issue" ? "text-red-700" : "text-amber-700"
-                        )}>
-                          {alert.title}
-                        </p>
-                        <span className={cn(
-                          "text-[10px] font-medium shrink-0 mt-0.5",
-                          isResolved ? "text-emerald-400" : alert.type === "issue" ? "text-red-500" : "text-amber-500"
-                        )}>
-                          {fmt12(alert.ts)}
-                        </span>
-                      </div>
-                      <p className={cn(
-                        "text-xs mt-1 leading-snug",
-                        isResolved ? "text-emerald-600" : alert.type === "issue" ? "text-red-600" : "text-amber-600"
-                      )}>
-                        {alert.body}
-                      </p>
-                      <div className="flex items-center justify-between mt-1.5 gap-2">
-                        <p className={cn(
-                          "text-[10px] font-semibold uppercase tracking-wide",
-                          isResolved ? "text-emerald-500" : alert.type === "issue" ? "text-red-400" : "text-amber-400"
-                        )}>
-                          {owner ? `Owner: ${owner}` : alert.source}
-                        </p>
-                        {isResolved && (
-                          <span className="text-[10px] font-semibold text-emerald-600">Resolved ✓</span>
-                        )}
-                      </div>
+                {autoRaised.map((issue) => (
+                  <div key={issue.flagId} className="rounded-xl bg-red-50 border border-red-100 p-3">
+                    <div className="flex items-start justify-between gap-1">
+                      <p className="text-sm font-bold text-red-700 leading-snug">{issue.jobName}</p>
+                      <button
+                        title="Edit note"
+                        onClick={() => {
+                          setEditingNoteId(issue.flagId);
+                          setEditingNoteText(issue.note ?? "");
+                        }}
+                        className="shrink-0 mt-0.5 text-red-400 hover:text-red-600 transition"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
+                          <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                        </svg>
+                      </button>
                     </div>
-                  );
-                })}
+                    {editingNoteId === issue.flagId ? (
+                      <div className="mt-2 space-y-1.5">
+                        <textarea
+                          value={editingNoteText}
+                          onChange={(e) => setEditingNoteText(e.target.value)}
+                          rows={3}
+                          className="w-full rounded-lg border border-red-200 bg-white text-xs text-slate-700 px-2.5 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
+                          placeholder="Add a note about this issue..."
+                          autoFocus
+                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => updateIssueNoteMutation.mutate({ flagId: issue.flagId, note: editingNoteText })}
+                            disabled={updateIssueNoteMutation.isPending}
+                            className="flex-1 rounded-lg bg-red-600 text-white text-[10px] font-semibold py-1.5 hover:bg-red-700 transition disabled:opacity-50"
+                          >
+                            {updateIssueNoteMutation.isPending ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            onClick={() => setEditingNoteId(null)}
+                            className="flex-1 rounded-lg bg-white border border-red-200 text-red-600 text-[10px] font-semibold py-1.5 hover:bg-red-50 transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-red-600 mt-0.5 leading-snug">{issue.note || <span className="italic text-red-400">No note — click pencil to add</span>}</p>
+                    )}
+                    <button
+                      onClick={() => onJumpToJob(issue.jobId)}
+                      className="mt-2 text-[10px] font-bold tracking-widest text-red-500 uppercase hover:text-red-700 transition"
+                    >
+                      Jump to Job Thread →
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>
-
-          {/* Cleaner Status Updates */}
-          {cleanerStatuses.length > 0 && (
-            <div className="mt-4">
-              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-2">Team Status</p>
-              <div className="space-y-1.5">
-                {cleanerStatuses.map((cs) => {
-                  const etaTs = (cs as any).etaTimestamp as number | null;
-                  const isStaleEta = cs.status === "on_the_way" && etaTs && etaTs < Date.now();
-                  const isUrgent = cs.status === "issue_at_property" || cs.status === "running_late";
-                  const isCompleted = cs.status === "completed";
-                  // Detect auto-detected-from-SMS cards
-                  const detectedFromSms = !!(cs as any).detectedFromSms;
-                  const smsText: string | null = (cs as any).smsText ?? null;
-                  const arrivalLine = etaTs && etaTs > Date.now()
-                    ? `Arrives: ${new Date(etaTs).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}`
-                    : cs.etaLabel ? `ETA: ${cs.etaLabel}` : null;
-                  const tooltipLines = [
-                    `${cs.emoji} ${cs.cleanerName} — ${cs.label}`,
-                    cs.customerName ? `Customer: ${cs.customerName}` : null,
-                    cs.jobAddress ? `Address: ${cs.jobAddress}` : null,
-                    arrivalLine,
-                    isStaleEta ? `⚠️ ETA passed — check in` : null,
-                    cs.issueNote ? `Issue: ${cs.issueNote}` : null,
-                    detectedFromSms && smsText ? `SMS: "${smsText}"` : null,
-                  ].filter(Boolean) as string[];
-                  const cardBg = isUrgent
-                    ? "bg-red-50 border-red-100 hover:bg-red-100"
-                    : isStaleEta
-                    ? "bg-amber-50 border-amber-200 hover:bg-amber-100"
-                    : isCompleted
-                    ? "bg-emerald-50 border-emerald-100 hover:bg-emerald-100"
-                    : "bg-slate-50 border-slate-200 hover:bg-slate-100";
-                  const nameColor = isUrgent ? "text-red-700" : isStaleEta ? "text-amber-700" : isCompleted ? "text-emerald-700" : "text-slate-700";
-                  const subColor = isUrgent ? "text-red-500" : isStaleEta ? "text-amber-600" : isCompleted ? "text-emerald-600" : "text-slate-500";
-                  return (
-                    <Tooltip key={cs.id} delayDuration={300}>
-                      <TooltipTrigger asChild>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => cs.cleanerJobId ? onJumpToJob(cs.cleanerJobId) : undefined}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') cs.cleanerJobId && onJumpToJob(cs.cleanerJobId); }}
-                          className={`w-full text-left rounded-xl border px-3 py-2 transition hover:shadow-sm cursor-pointer ${cardBg}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="text-sm leading-none shrink-0">{cs.emoji}</span>
-                              <span className={`text-xs font-semibold truncate ${nameColor}`}>
-                                <span className="font-bold">{cs.cleanerName}</span>
-                                <span className="font-normal"> — {cs.label}</span>
-                              </span>
-                              {isStaleEta && <span className="text-[10px] text-amber-500 shrink-0">⚠️</span>}
-                              {/* Amber badge for auto-detected SMS cards */}
-                              {detectedFromSms && (
-                                <span className="shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-amber-100 text-amber-700 border border-amber-300 leading-none">
-                                  📱 via SMS
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[10px] text-slate-400 shrink-0">{fmt12(cs.ts)}</span>
-                          </div>
-                          {(cs.customerName || cs.etaLabel || cs.issueNote) && (
-                            <p className={`text-[11px] mt-0.5 truncate ${subColor}`}>
-                              {cs.customerName && <span>{cs.customerName}</span>}
-                              {cs.etaLabel && <span className="ml-1">· ETA {cs.etaLabel}</span>}
-                              {cs.issueNote && cs.status === "issue_at_property" && <span className="ml-1">· {cs.issueNote}</span>}
-                            </p>
-                          )}
-                          {/* AI Call Command Center — ⚠ button for any job with a cleanerJobId */}
-                          {cs.cleanerJobId && (
-                            <div className="mt-1.5 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setIssueDialogJob({ id: cs.cleanerJobId!, date: todayDateStr });
-                                }}
-                                className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-orange-500 text-white hover:bg-orange-600 transition"
-                                title="Raise issue & fire AI call"
-                              >
-                                <PhoneCall className="h-2.5 w-2.5" />
-                                Call with AI
-                              </button>
-                              {callLogByJobId.has(cs.cleanerJobId!) && (
-                                <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
-                                  Called {fmt12(callLogByJobId.get(cs.cleanerJobId!)!)}
-                                </span>
-                              )}
-
-                            </div>
-                          )}
-                          {/* HIDDEN: "Call Client" button replaced by the ⚠ AI Call button above.
-                               The underlying callClientRunningLate mutation, callConfirmState, clientCallDone,
-                               and callingClientJobId state are all still present for easy revert.
-                               To restore: uncomment the original block from git history. */}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-[240px] space-y-0.5 text-xs">
-                        {tooltipLines.map((line, i) => (
-                          <p key={i} className={i === 0 ? "font-semibold" : i === tooltipLines.length - 1 && detectedFromSms ? "text-amber-300 italic" : "text-slate-300"}>{line}</p>
-                        ))}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                })}
-              </div>
-            </div>
+          </>
           )}
-          </div>{/* end inner content */}
-          </div>{/* end white card */}
+
+          {/* Follow-ups + Manual Issues — only under followups tab */}
+          {rightTab === "followups" && (
+          <>
+            <div>
+              <button
+                onClick={() => setFuPanelExpanded((v) => !v)}
+                className="w-full flex items-center justify-between mb-3 group"
+              >
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="h-3.5 w-3.5 text-violet-500" />
+                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Follow-ups</p>
+                  {fuPanelItems.length > 0 && (
+                    <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">{fuPanelItems.length}</span>
+                  )}
+                </div>
+                <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fuPanelExpanded && "rotate-180")} />
+              </button>
+              {fuPanelExpanded && (
+                fuPanelItems.length === 0 ? (
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
+                    <p className="text-xs text-slate-400">No active follow-ups</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(fuPanelItems as any[]).filter((fu) => !rightSearch.trim() || fu.name?.toLowerCase().includes(rightSearch.toLowerCase()) || fu.nextStep?.toLowerCase().includes(rightSearch.toLowerCase()) || fu.owner?.toLowerCase().includes(rightSearch.toLowerCase())).map((fu) => {
+                      const isOverdue = fu.dueAt < Date.now();
+                      const d = new Date(fu.dueAt);
+                      const dueStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+                      return (
+                        <button
+                          key={fu.id}
+                          onClick={() => { setFollowUpsInitialId(fu.id); setFollowUpsOpen(true); }}
+                          className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:shadow-sm transition"
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-1">
+                            <span className="text-sm font-semibold text-slate-900 leading-tight truncate">{fu.name}</span>
+                            {fu.priority === "High" && (
+                              <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">High</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 mb-1.5 line-clamp-2 leading-relaxed">{fu.nextStep}</p>
+                          <div className="flex flex-wrap gap-1">
+                            <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", isOverdue ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600")}>{dueStr}</span>
+                            <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{fu.owner}</span>
+                            <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">{fu.type}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </div>
+
+            <div className="border-t border-slate-200" />
+
+            <div>
+              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
+              {cmdLoading ? (
+                <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
+              ) : manualIssues.length === 0 ? (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
+                  <p className="text-xs text-slate-400">No open manual issues</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {manualIssues.map((issue) => (
+                    <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
+                      <div className="flex items-start justify-between gap-1">
+                        <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
+                        <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
+                      </div>
+                      {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
+                      {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
+                        <button
+                          onClick={() => {
+                            setResolveIssueMessageId(issue.messageId);
+                            setResolveIssueTitle(issue.title);
+                            setResolveIssueNote(issue.note ?? "");
+                            setResolveIssueNoteText("");
+                            setResolveIssueOpen(true);
+                          }}
+                          className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
+                        >
+                          Resolve
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+          )}
+
+        </div>
+        </div>{/* end white card */}
         </div>{/* end single scrollable area */}
       </div>
       {/* ── Left drag handle ── */}
@@ -6827,7 +6668,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           emailUnreadCount={emailUnreadCount}
           mentionPhoneMap={mentionPhoneMapRef.current}
           openIssueEngine={(id) => { setIssueEngineInitialId(id); setIssueEngineOverlayOpen(true); }}
-          onOpenConcierge={() => setConciergeOpen(true)}
+          onOpenConcierge={() => { /* concierge always open */ }}
         />
         {/* New-message badge — shown when user is scrolled up */}
         {newMsgCount > 0 && (
@@ -8030,252 +7871,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
       />
 
-      {/* ── RIGHT PANEL: Rules + Auto-Raised Issues + Suggested Widgets ── */}
+      {/* ── RIGHT PANEL: AI Concierge (always open) ── */}
       <div
         className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-                <div className="px-5 py-4 space-y-4">
-          {/* ── Madison AI Concierge button ── */}
-          <button
-            onClick={() => setConciergeOpen(true)}
-            className="w-full flex items-center gap-3 rounded-2xl px-4 py-3 transition-all group"
-            style={{ background: "linear-gradient(135deg, #fffdf9, #f7f0ff)", border: "1px solid #e5d9ea", boxShadow: "0 4px 16px rgba(116,71,245,0.10), inset 0 1px 0 rgba(255,255,255,0.9)" }}
-          >
-            <span className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0" style={{ border: "2px solid rgba(255,255,255,0.95)", boxShadow: "0 4px 10px rgba(54,38,25,0.12)" }}>
-              <img src="/madison-avatar.jpg" alt="Madison" className="w-full h-full object-cover" />
-            </span>
-            <div className="flex-1 text-left">
-              <p className="text-sm font-bold leading-tight" style={{ color: "#202431", fontFamily: "Georgia, serif" }}>Madison</p>
-              <p className="text-xs leading-tight" style={{ color: "#7447f5" }}>AI Concierge</p>
-            </div>
-            <ChevronRight className="w-4 h-4 transition-colors" style={{ color: "#c9a8ff" }} />
-          </button>
-          {/* ── Search bar ── */}
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-            <input
-              type="text"
-              value={rightSearch}
-              onChange={(e) => setRightSearch(e.target.value)}
-              placeholder="Search leads, issues, people"
-              className="flex-1 bg-transparent text-xs text-slate-700 placeholder:text-slate-400 outline-none"
-            />
-            {rightSearch && (
-              <button onClick={() => setRightSearch("")} className="text-slate-400 hover:text-slate-600">
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-
-          {/* ── Hot leads / Follow-ups tab toggle ── */}
-          <div className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1 gap-1">
-            <button
-              onClick={() => setRightTab("leads")}
-              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "leads" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
-            >
-              Hot leads
-            </button>
-            <button
-              onClick={() => setRightTab("followups")}
-              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "followups" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
-            >
-              Follow-ups
-            </button>
-          </div>
-
-          {/* ── Hot Leads Tray (shown when rightTab === "leads") ── */}
-          {rightTab === "leads" && (
-          <HotLeadsTray
-            channelMsgs={channelMsgs}
-            claimLeadMutation={claimLeadMutation}
-            searchQuery={rightSearch}
-            onCollapse={() => {/* right column is always visible */}}
-            onOpenFirstMsg={(details) => {
-              setFirstMsgDetails(details);
-              setFirstMsgResult("");
-              setFirstMsgCopied(false);
-              setFirstMsgOpen(true);
-            }}
-          />
-          )}
-
-          {rightTab === "leads" && (
-          <>
-          <div className="border-t border-slate-200" />
-
-          {/* Auto-Raised Issues — only under leads tab */}
-          <div>
-            <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Auto-Raised Issues</p>
-            {cmdLoading ? (
-              <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-            ) : autoRaised.length === 0 ? (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 text-center">
-                <CheckCheck className="h-4 w-4 text-emerald-500 mx-auto mb-1" />
-                <p className="text-xs text-emerald-600 font-medium">No open issues</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {autoRaised.map((issue) => (
-                  <div key={issue.flagId} className="rounded-xl bg-red-50 border border-red-100 p-3">
-                    <div className="flex items-start justify-between gap-1">
-                      <p className="text-sm font-bold text-red-700 leading-snug">{issue.jobName}</p>
-                      <button
-                        title="Edit note"
-                        onClick={() => {
-                          setEditingNoteId(issue.flagId);
-                          setEditingNoteText(issue.note ?? "");
-                        }}
-                        className="shrink-0 mt-0.5 text-red-400 hover:text-red-600 transition"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5">
-                          <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
-                        </svg>
-                      </button>
-                    </div>
-                    {editingNoteId === issue.flagId ? (
-                      <div className="mt-2 space-y-1.5">
-                        <textarea
-                          value={editingNoteText}
-                          onChange={(e) => setEditingNoteText(e.target.value)}
-                          rows={3}
-                          className="w-full rounded-lg border border-red-200 bg-white text-xs text-slate-700 px-2.5 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
-                          placeholder="Add a note about this issue..."
-                          autoFocus
-                        />
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={() => updateIssueNoteMutation.mutate({ flagId: issue.flagId, note: editingNoteText })}
-                            disabled={updateIssueNoteMutation.isPending}
-                            className="flex-1 rounded-lg bg-red-600 text-white text-[10px] font-semibold py-1.5 hover:bg-red-700 transition disabled:opacity-50"
-                          >
-                            {updateIssueNoteMutation.isPending ? "Saving..." : "Save"}
-                          </button>
-                          <button
-                            onClick={() => setEditingNoteId(null)}
-                            className="flex-1 rounded-lg bg-white border border-red-200 text-red-600 text-[10px] font-semibold py-1.5 hover:bg-red-50 transition"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-red-600 mt-0.5 leading-snug">{issue.note || <span className="italic text-red-400">No note — click pencil to add</span>}</p>
-                    )}
-                    <button
-                      onClick={() => onJumpToJob(issue.jobId)}
-                      className="mt-2 text-[10px] font-bold tracking-widest text-red-500 uppercase hover:text-red-700 transition"
-                    >
-                      Jump to Job Thread →
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          </>
-          )}
-
-          {/* Follow-ups + Manual Issues — only under followups tab */}
-          {rightTab === "followups" && (
-          <>
-            <div>
-              <button
-                onClick={() => setFuPanelExpanded((v) => !v)}
-                className="w-full flex items-center justify-between mb-3 group"
-              >
-                <div className="flex items-center gap-2">
-                  <ClipboardList className="h-3.5 w-3.5 text-violet-500" />
-                  <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase">Follow-ups</p>
-                  {fuPanelItems.length > 0 && (
-                    <span className="text-[10px] font-bold bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded-full">{fuPanelItems.length}</span>
-                  )}
-                </div>
-                <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform", fuPanelExpanded && "rotate-180")} />
-              </button>
-              {fuPanelExpanded && (
-                fuPanelItems.length === 0 ? (
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
-                    <p className="text-xs text-slate-400">No active follow-ups</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {(fuPanelItems as any[]).filter((fu) => !rightSearch.trim() || fu.name?.toLowerCase().includes(rightSearch.toLowerCase()) || fu.nextStep?.toLowerCase().includes(rightSearch.toLowerCase()) || fu.owner?.toLowerCase().includes(rightSearch.toLowerCase())).map((fu) => {
-                      const isOverdue = fu.dueAt < Date.now();
-                      const d = new Date(fu.dueAt);
-                      const dueStr = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }) + " · " + d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
-                      return (
-                        <button
-                          key={fu.id}
-                          onClick={() => { setFollowUpsInitialId(fu.id); setFollowUpsOpen(true); }}
-                          className="w-full text-left rounded-xl border border-slate-200 bg-white p-3 hover:border-violet-300 hover:shadow-sm transition"
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <span className="text-sm font-semibold text-slate-900 leading-tight truncate">{fu.name}</span>
-                            {fu.priority === "High" && (
-                              <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded-full shrink-0">High</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-500 mb-1.5 line-clamp-2 leading-relaxed">{fu.nextStep}</p>
-                          <div className="flex flex-wrap gap-1">
-                            <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", isOverdue ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-600")}>{dueStr}</span>
-                            <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{fu.owner}</span>
-                            <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-2 py-0.5 rounded-full">{fu.type}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )
-              )}
-            </div>
-
-            <div className="border-t border-slate-200" />
-
-            <div>
-              <p className="text-[10px] font-semibold tracking-widest text-slate-400 uppercase mb-3">Manual Issues</p>
-              {cmdLoading ? (
-                <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-slate-400" /></div>
-              ) : manualIssues.length === 0 ? (
-                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3 text-center">
-                  <p className="text-xs text-slate-400">No open manual issues</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {manualIssues.map((issue) => (
-                    <div key={issue.messageId} className="rounded-xl bg-orange-50 border border-orange-100 p-3">
-                      <div className="flex items-start justify-between gap-1">
-                        <p className="text-sm font-bold text-orange-700 leading-snug">{issue.title}</p>
-                        <span className="text-[10px] text-orange-400 shrink-0 mt-0.5">{fmt12(issue.ts)}</span>
-                      </div>
-                      {issue.note && <p className="text-xs text-orange-600 mt-0.5 leading-snug">{issue.note}</p>}
-                      {issue.jobTitle && <p className="text-[10px] text-orange-400 mt-0.5">Job: {issue.jobTitle}</p>}
-                      <div className="flex items-center justify-between mt-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-orange-400">{issue.authorName}</p>
-                        <button
-                          onClick={() => {
-                            setResolveIssueMessageId(issue.messageId);
-                            setResolveIssueTitle(issue.title);
-                            setResolveIssueNote(issue.note ?? "");
-                            setResolveIssueNoteText("");
-                            setResolveIssueOpen(true);
-                          }}
-                          className="text-[10px] font-semibold text-orange-500 hover:text-orange-700 underline"
-                        >
-                          Resolve
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-          )}
-
-        </div>
-        </div>{/* end white card */}
+        <AiConcierge />
+        {/* end right panel */}
       </div>
 
       {/* ── Team ETA Modal ── */}
@@ -9309,15 +8911,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
         </div>
       )}
-      {/* AI Concierge slide-in panel */}
-      {conciergeOpen && (
-        <div
-          className="fixed inset-y-0 right-0 z-[200] flex flex-col bg-[#0f1120] shadow-2xl border-l border-slate-700 animate-in slide-in-from-right-2 duration-200"
-          style={{ width: "420px", maxWidth: "90vw" }}
-        >
-          <AiConcierge onClose={() => setConciergeOpen(false)} />
-        </div>
-      )}
+      {/* AI Concierge is now inline in the right panel */}
       {/* Email Inbox slide-in panel */}
       {emailsOpen && (
         <div
