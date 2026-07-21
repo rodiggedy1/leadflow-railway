@@ -136,6 +136,7 @@ interface PrepareResultCard {
   readinessPct: number;
   issueCount: number;
   date: string;
+  rawDate?: string; // YYYY-MM-DD for drawer
 }
 
 interface CardStatusCard {
@@ -889,7 +890,7 @@ function MessageBubble({
   onPickClient: (phone: string, name: string, messageHint: string | null) => void;
   onAddMessage: (m: Message) => void;
   onAddMission: (metadata: MissionMetadata) => void;
-  onOpenReadiness: () => void;
+  onOpenReadiness: (rawDate?: string) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -1051,7 +1052,7 @@ function MessageBubble({
         )}
         {msg.content.type === "prepare_result" && (
           <div>
-            <PrepareResultCardView card={msg.content.card} onOpen={onOpenReadiness} />
+            <PrepareResultCardView card={msg.content.card} onOpen={() => onOpenReadiness(msg.content.type === 'prepare_result' ? msg.content.card.rawDate : undefined)} />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1101,7 +1102,7 @@ function PrepareChecklistCardView({ card }: { card: PrepareChecklistCard }) {
 
 // ─── Prepare result card ──────────────────────────────────────────────────────
 
-function PrepareResultCardView({ card, onOpen }: { card: PrepareResultCard; onOpen: () => void }) {
+function PrepareResultCardView({ card, onOpen }: { card: PrepareResultCard; onOpen: (rawDate?: string) => void }) {
   const pct = card.readinessPct;
   const color = pct >= 90 ? "#22c55e" : pct >= 75 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
   return (
@@ -1120,7 +1121,7 @@ function PrepareResultCardView({ card, onOpen }: { card: PrepareResultCard; onOp
       {/* Bottom row: full-width CTA button */}
       <div style={{ padding: "0 14px 14px" }}>
         <button
-          onClick={onOpen}
+          onClick={() => onOpen(card.rawDate)}
           style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "11px 16px", borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #5b21b6)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer" }}
         >
           Open Readiness <ChevronRight className="w-4 h-4" />
@@ -1729,6 +1730,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   }, [input]);
   const [isThinking, setIsThinking] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
+  const [readinessDate, setReadinessDate] = useState<string | undefined>(undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1814,7 +1816,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           const resultMsg: Message = {
             id: uid(),
             role: "ai",
-            content: { type: "prepare_result", card: { readinessPct: pct, issueCount: issues, date: dateStr } },
+            content: { type: "prepare_result", card: { readinessPct: pct, issueCount: issues, date: dateStr, rawDate: summary.date } },
             ts: nowTime(),
           };
           setMessages((prev) => [...prev, summaryMsg, resultMsg]);
@@ -2257,7 +2259,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={() => setReadinessOpen(true)} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={(rawDate) => { setReadinessDate(rawDate); setReadinessOpen(true); }} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -2422,7 +2424,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
       </div>
     </div>
-    <ReadinessDrawer open={readinessOpen} onClose={() => setReadinessOpen(false)} />
+    <ReadinessDrawer open={readinessOpen} onClose={() => setReadinessOpen(false)} date={readinessDate} />
     </>
   );
 }
