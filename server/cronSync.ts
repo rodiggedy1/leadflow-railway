@@ -589,6 +589,7 @@ export function registerCronRoutes(app: Express): void {
     if (!secret) { res.status(503).json({ error: "CRON_SECRET missing" }); return; }
     if (req.headers["x-cron-secret"] !== secret) { res.status(401).json({ error: "Unauthorized" }); return; }
     const dateOverride = typeof req.body?.date === "string" ? req.body.date : undefined;
+    const forceAll = req.body?.forceAll === true;
     try {
       const db = await getDb();
       if (!db) { res.status(503).json({ error: "DB unavailable" }); return; }
@@ -624,7 +625,7 @@ export function registerCronRoutes(app: Express): void {
         let history: Array<{ role: string; content: string }> = [];
         try { history = JSON.parse(session.messageHistory ?? "[]"); } catch { /* ignore */ }
 
-        const hasYes = history.some((m) => m.role === "user" && isConfirmationReply(m.content));
+        const hasYes = forceAll || history.some((m) => m.role === "user" && isConfirmationReply(m.content));
         if (!hasYes) { skipped++; continue; }
 
         // Find the cleaner profile by phone
