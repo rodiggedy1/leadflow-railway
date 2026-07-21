@@ -403,13 +403,16 @@ function buildSections(data: SummaryData): SectionDef[] {
       icon: <Calendar className="w-4 h-4 text-teal-600" />,
       iconBg: "bg-teal-50",
       title: "Scheduling Issues",
-      subtitle: d.jobs.issueCount > 0
-        ? `${d.jobs.issueCount} job${d.jobs.issueCount !== 1 ? "s" : ""} unassigned`
-        : `${d.jobs.total} jobs scheduled`,
+      subtitle: (() => {
+        const parts: string[] = [];
+        if (d.jobs.unassigned.length > 0) parts.push(`${d.jobs.unassigned.length} unassigned`);
+        if (d.jobs.doubleBooked.length > 0) parts.push(`${d.jobs.doubleBooked.length} double-booked`);
+        return parts.length > 0 ? parts.join(', ') : `${d.jobs.total} jobs scheduled`;
+      })(),
       dotColor: d.jobs.issueCount > 0 ? "amber" : "green",
       count: d.jobs.issueCount > 0 ? d.jobs.issueCount : null,
       actionLabel: null,
-      expandedLabel: "Unassigned",
+      expandedLabel: "Issues",
       rows: [...unassignedJobRows, ...doubleBookedRows],
     },
   ];
