@@ -2202,11 +2202,12 @@ export const aiConciergeRouter = router({
    *  4. Customer Confirmations — confirmed (call/SMS) vs pending per booking
    *  5. Client Requests    — requestedTeam honored vs violated
    */
-  getReadinessSummary: protectedProcedure
+  getReadinessSummary: agentProcedure
     .input(z.object({ date: z.string().optional() }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      try {
 
       // Resolve target date — default to tomorrow ET
       const targetDate = input.date ?? (() => {
@@ -2465,5 +2466,9 @@ export const aiConciergeRouter = router({
           },
         },
       };
+      } catch (err) {
+        console.error("[getReadinessSummary] ERROR:", err);
+        throw err;
+      }
     }),
 });
