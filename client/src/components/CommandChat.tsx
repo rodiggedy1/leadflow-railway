@@ -5328,10 +5328,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const MIN_CENTER = 330;
 
   const [leftWidth, setLeftWidth] = useState<number>(() => {
-    try { const v = localStorage.getItem("cmd_leftWidth_v2"); return v ? Math.max(MIN_LEFT, Math.min(MAX_LEFT, Number(v))) : 280; } catch { return 280; }
+    try { const v = localStorage.getItem("cmd_leftWidth_v3"); return v ? Math.max(MIN_LEFT, Math.min(MAX_LEFT, Number(v))) : 340; } catch { return 340; }
   });
   const [rightWidth, setRightWidth] = useState<number>(() => {
-    try { const v = localStorage.getItem("cmd_rightWidth_v3"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 410; } catch { return 410; }
+    try { const v = localStorage.getItem("cmd_rightWidth_v4"); return v ? Math.max(MIN_RIGHT, Math.min(MAX_RIGHT, Number(v))) : 360; } catch { return 360; }
   });
   const [leftCollapsed] = useState<boolean>(false);
   const [awayOpen, setAwayOpen] = useState(false);
@@ -5343,8 +5343,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Persist to localStorage whenever values change
-  useEffect(() => { try { localStorage.setItem("cmd_leftWidth_v2",  String(leftWidth));  } catch {} }, [leftWidth]);
-  useEffect(() => { try { localStorage.setItem("cmd_rightWidth_v3", String(rightWidth)); } catch {} }, [rightWidth]);
+  useEffect(() => { try { localStorage.setItem("cmd_leftWidth_v3",  String(leftWidth));  } catch {} }, [leftWidth]);
+  useEffect(() => { try { localStorage.setItem("cmd_rightWidth_v4", String(rightWidth)); } catch {} }, [rightWidth]);
   // left panel is always open
   // Clear any stale rightCollapsed value from localStorage so it never re-hides the panel
   useEffect(() => { try { localStorage.removeItem("cmd_rightCollapsed"); } catch {} }, []);
@@ -5387,7 +5387,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ padding: 14, gap: 14 }}>
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
