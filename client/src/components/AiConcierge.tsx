@@ -1106,19 +1106,22 @@ function PrepareResultCardView({ card, onOpen }: { card: PrepareResultCard; onOp
   const color = pct >= 90 ? "#22c55e" : pct >= 75 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
   return (
     <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #e8e0f0", width: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px" }}>
-        {/* Sunrise thumbnail */}
-        <div style={{ width: 64, height: 64, borderRadius: 12, background: "linear-gradient(135deg, #fde68a, #fb923c, #c084fc)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+      {/* Top row: thumbnail + text info */}
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 14px 10px" }}>
+        <div style={{ width: 56, height: 56, borderRadius: 12, background: "linear-gradient(135deg, #fde68a, #fb923c, #c084fc)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
           🌅
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 2, letterSpacing: "0.04em", textTransform: "uppercase" }}>Tomorrow Readiness</p>
-          <p style={{ fontSize: 22, fontWeight: 900, color, lineHeight: 1.1, marginBottom: 3 }}>{pct}% Ready</p>
+          <p style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", marginBottom: 2, letterSpacing: "0.08em", textTransform: "uppercase" }}>Tomorrow Readiness</p>
+          <p style={{ fontSize: 24, fontWeight: 900, color, lineHeight: 1.1, marginBottom: 4 }}>{pct}% Ready</p>
           <p style={{ fontSize: 12, color: "#9ca3af" }}>{card.issueCount} action item{card.issueCount !== 1 ? "s" : ""} need your attention</p>
         </div>
+      </div>
+      {/* Bottom row: full-width CTA button */}
+      <div style={{ padding: "0 14px 14px" }}>
         <button
           onClick={onOpen}
-          style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #5b21b6)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}
+          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "11px 16px", borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #5b21b6)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer" }}
         >
           Open Readiness <ChevronRight className="w-4 h-4" />
         </button>
