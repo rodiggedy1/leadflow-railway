@@ -59,7 +59,8 @@ export type RequestedField =
   | "pricing"         // job revenue / price charged
   | "payment_status"  // paid / balance / refund — from completedJobs.lastBookingPrice + L27 status
   | "history"         // full booking history
-  | "summary";        // broad profile summary (triggers handleCustomerProfile-equivalent)
+  | "summary"         // broad profile summary (triggers handleCustomerProfile-equivalent)
+  | "rating";         // customer ratings for a team or cleaner
 
 /** Per-field default time scope when the user doesn't specify a date */
 export const DEFAULT_TIME_SCOPE: Record<RequestedField, TimeScopeType> = {
@@ -74,6 +75,7 @@ export const DEFAULT_TIME_SCOPE: Record<RequestedField, TimeScopeType> = {
   payment_status: "last_appointment",
   history:        "all_time",
   summary:        "all_time",
+  rating:         "all_time",
 };
 
 /** Job-property fields — if any of these appear in requestedFields, the query
@@ -237,6 +239,8 @@ export interface CleanerJobRow {
   delayMinutes: number | null;
   requestedTeam: string | null;
   frequency: string | null;
+  customerRating: number | null;
+  customerComplaint: string | null;
 }
 
 export interface CompletedJobRow {

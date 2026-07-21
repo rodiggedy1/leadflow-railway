@@ -56,7 +56,7 @@ const VALID_ACTIONS = [
 
 const VALID_FIELDS: RequestedField[] = [
   "assignment", "scheduled_time", "job_status", "eta", "address",
-  "access", "notes", "pricing", "payment_status", "history", "summary",
+  "access", "notes", "pricing", "payment_status", "history", "summary", "rating",
 ];
 
 const VALID_SCOPE_TYPES: TimeScopeType[] = [
@@ -258,6 +258,7 @@ Array of information types the user is asking for. Choose from:
 - "payment_status" — payment status (paid, balance due, etc.)
 - "history" — booking history, past jobs
 - "summary" — full customer profile / overview
+- "rating" — customer ratings/reviews for a specific team or cleaner (e.g. "last 5 ratings for maidsplus", "how has Team 3 been rated", "ratings for Pilar this month")
 
 Rules:
 - "who is assigned" → ["assignment"]
@@ -266,6 +267,7 @@ Rules:
 - "entry code" / "lockbox" / "gate code" / "how do I get in" → ["access"]
 - "tell me about [customer]" / "who is [customer]" / "pull up [customer]" → ["summary"]
 - "history" / "past jobs" → ["history"]
+- "ratings" / "how rated" / "last N ratings" / "review score" → ["rating"]
 - Multiple fields in one question → include all relevant fields
 - For non-query actions, return []
 
@@ -301,7 +303,10 @@ Classify who the action targets:
 "Team ratings" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
 "Which teams have no ETA?" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
 "Who hasn't submitted ETA today?" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
-"Missing ETA teams" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []`,
+"Missing ETA teams" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
+"Last 5 ratings for maidsplus" → action: "query", entities: {cleanerName: "maidsplus", teamName: "maidsplus"}, timeScope: {type: null, originalPhrase: "last 5"}, requestedFields: ["rating"]
+"How has Team 3 been rated recently?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: null, originalPhrase: "recently"}, requestedFields: ["rating"]
+"Ratings for Pilar this month" → action: "query", entities: {cleanerName: "Pilar"}, timeScope: {type: "this_month"}, requestedFields: ["rating"]`,
       },
       { role: "user", content: message },
     ],
@@ -342,7 +347,7 @@ Classify who the action targets:
               type: "array",
               items: {
                 type: "string",
-                enum: ["assignment", "scheduled_time", "job_status", "eta", "address", "access", "notes", "pricing", "payment_status", "history", "summary"],
+                enum: ["assignment", "scheduled_time", "job_status", "eta", "address", "access", "notes", "pricing", "payment_status", "history", "summary", "rating"],
               },
             },
             messageHint:  { type: ["string", "null"] },

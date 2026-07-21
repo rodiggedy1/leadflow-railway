@@ -311,6 +311,8 @@ async function loadContextForEntity(
       delayMinutes: cleanerJobs.delayMinutes,
       requestedTeam: cleanerJobs.requestedTeam,
       frequency: cleanerJobs.frequency,
+      customerRating: cleanerJobs.customerRating,
+      customerComplaint: cleanerJobs.customerComplaint,
     })
     .from(cleanerJobs)
     .where(and(...cjConds))
@@ -741,6 +743,37 @@ async function resolveSummary(
   return { field: "summary", status: "resolved", data };
 }
 
+function resolveRating(fr: FieldRequest, ctx: SharedContext): ResolvedField {
+  // Extract all rated jobs (customerRating is 1–5, null means not yet rated)
+  const ratedJobs = ctx.cleanerJobRows
+    .filter(j => j.customerRating != null)
+    .map(j => ({
+      jobDate: j.jobDate,
+      customerName: j.customerName,
+      rating: j.customerRating as number,
+      complaint: j.customerComplaint ?? null,
+      teamName: j.teamName ?? j.cleanerName,
+    }));
+
+  if (ratedJobs.length === 0) {
+    return { field: "rating", status: "not_found", data: null };
+  }
+
+  const avg = ratedJobs.reduce((s, j) => s + j.rating, 0) / ratedJobs.length;
+  const complaints = ratedJobs.filter(j => j.complaint).length;
+
+  return {
+    field: "rating",
+    status: "resolved",
+    data: {
+      ratedJobs,
+      totalRated: ratedJobs.length,
+      avgRating: Math.round(avg * 10) / 10,
+      complaints,
+    },
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Resolver registry
 // ─────────────────────────────────────────────────────────────────────────────
@@ -759,6 +792,7 @@ const RESOLVER_REGISTRY: Record<RequestedField, ResolverFn> = {
   payment_status: resolvePaymentStatus,
   history:        resolveHistory,
   summary:        resolveSummary,
+  rating:         resolveRating,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
