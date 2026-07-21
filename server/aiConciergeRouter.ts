@@ -2282,37 +2282,68 @@ export const aiConciergeRouter = router({
 
       // ── DIMENSION 2: Team Confirmations ──────────────────────────────────
       // Source: conversation_sessions where leadSource='schedule_confirm' created today.
-      // stage=SCHEDULE_CONFIRM_DONE → cleaner replied and confirmed.
-      // stage=SCHEDULE_CONFIRM_SENT → SMS sent but no reply yet.
-      // No session → SMS not sent yet (treat as pending).
-      // Match sessions to cleaners by phone number.
+      // A cleaner is confirmed if their session messageHistory contains any role="user"
+      // message that matches isConfirmationReply() — same logic the webhook uses.
+      // No stage dependency — stage may lag or not update correctly.
       const etMidnightMs = (() => {
         const now = new Date();
         const etOffset = -4; // EDT
         const etNow = new Date(now.getTime() + etOffset * 60 * 60 * 1000);
         etNow.setUTCHours(0, 0, 0, 0);
-        return etNow.getTime() - etOffset * 60 * 60 * 1000; // back to UTC ms
+        return etNow.getTime() - etOffset * 60 * 60 * 1000;
       })();
       const scheduleConfirmSessions = await db
         .select({
           leadPhone: conversationSessions.leadPhone,
-          leadName: conversationSessions.leadName,
-          stage: conversationSessions.stage,
+          messageHistory: conversationSessions.messageHistory,
         })
         .from(conversationSessions)
         .where(and(
           eq(conversationSessions.leadSource, 'schedule_confirm'),
           gte(conversationSessions.createdAt, new Date(etMidnightMs)),
         ));
-      // Build phone → stage map (latest session wins if duplicates)
-      const sessionByPhone = new Map<string, string>();
+      // isConfirmationReply inline (same patterns as scheduleConfirmEngine)
+      const isConfirmReply = (text: string): boolean => {
+        const t = text.trim().toLowerCase();
+        return [
+          /^confirm(ed)?[.!]?$/,
+          /^yes[.!]?$/,
+          /^yep[.!]?$/,
+          /^yup[.!]?$/,
+          /^ok[.!]?$/,
+          /^okay[.!]?$/,
+          /^got it[.!]?$/,
+          /^got them[.!]?$/,
+          /^received[.!]?$/,
+          /^sounds good[.!]?$/,
+          /^sure[.!]?$/,
+          /^will do[.!]?$/,
+          /^👍/,
+          /^✅/,
+          /^confirmed/,
+          /^yes.*confirm/,
+          /^confirm.*yes/,
+          /i('ll| will) be there/,
+          /on it[.!]?$/,
+          /noted[.!]?$/,
+        ].some(p => p.test(t));
+      };
+      // Build phone → confirmed map: true if any user message in history is a YES
+      const confirmedByPhone = new Map<string, boolean>();
       for (const s of scheduleConfirmSessions) {
         const norm = (s.leadPhone ?? '').replace(/\D/g, '').slice(-10);
-        if (norm) sessionByPhone.set(norm, s.stage);
+        if (!norm) continue;
+        try {
+          const history: Array<{ role: string; content: string }> = JSON.parse(s.messageHistory ?? '[]');
+          const hasYes = history.some(m => m.role === 'user' && isConfirmReply(m.content ?? ''));
+          // Once confirmed, keep confirmed (latest session wins otherwise)
+          if (hasYes || !confirmedByPhone.has(norm)) {
+            confirmedByPhone.set(norm, hasYes);
+          }
+        } catch { /* malformed JSON — treat as no reply */ }
       }
       // Build team map from jobs, look up confirmation by cleaner phone
       const teamMap = new Map<number, { name: string; confirmed: boolean; jobCount: number; phone: string | null }>();
-      // We need cleaner phones — fetch from cleaner_profiles for the cleanerProfileIds in jobs
       const cleanerProfileIds = [...new Set(jobs.map(j => j.cleanerProfileId).filter(Boolean) as number[])];
       const cleanerPhones = cleanerProfileIds.length > 0
         ? await db.select({ id: cleanerProfiles.id, phone: cleanerProfiles.phone })
@@ -2328,8 +2359,7 @@ export const aiConciergeRouter = router({
         } else {
           const phone = phoneByCleanerId.get(j.cleanerProfileId) ?? null;
           const normPhone = phone ? phone.replace(/\D/g, '').slice(-10) : null;
-          const sessionStage = normPhone ? sessionByPhone.get(normPhone) : undefined;
-          const confirmed = sessionStage === 'SCHEDULE_CONFIRM_DONE';
+          const confirmed = normPhone ? (confirmedByPhone.get(normPhone) ?? false) : false;
           teamMap.set(j.cleanerProfileId, {
             name: j.cleanerName ?? `Cleaner #${j.cleanerProfileId}`,
             confirmed,
