@@ -5387,7 +5387,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ ['--workspace-gutter' as string]: '16px' } as React.CSSProperties}>
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
@@ -5811,7 +5811,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Left drag handle ── */}
       <div
         className="relative flex-none flex items-center justify-center"
-        style={{ width: leftCollapsed ? 0 : 16, cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
+        style={{ width: leftCollapsed ? 0 : 'var(--workspace-gutter)', cursor: leftCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={leftCollapsed ? undefined : startDrag("left")}
       >
         <div className="w-[4px] h-full" />
@@ -7869,7 +7869,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       {/* ── Right drag handle ── */}
       <div
         className="relative flex-none flex items-center justify-center"
-        style={{ width: rightCollapsed ? 0 : 16, cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
+        style={{ width: rightCollapsed ? 0 : 'var(--workspace-gutter)', cursor: rightCollapsed ? "default" : "col-resize", zIndex: 10 }}
         onMouseDown={rightCollapsed ? undefined : startDrag("right")}
       >
         <div className="w-[4px] h-full" />
