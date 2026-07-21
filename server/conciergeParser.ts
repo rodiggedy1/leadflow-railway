@@ -51,7 +51,7 @@ interface ParsedResponse {
 
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
-  "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "unknown",
+  "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -229,6 +229,7 @@ Choose ONE of:
 - "get_eta_for_customer" — user wants the ETA for a specific customer's job
 - "card_status" — user wants to see credit card / payment hold status for jobs on a specific date (e.g. "show cards on hold for tomorrow", "card status for July 21", "which customers have pre-auth today")
 - "rank_teams" — user wants to rank or compare teams/cleaners by their customer rating (e.g. "rank teams by rating", "who has the best rating", "team ratings", "best cleaners", "worst rated team")
+- "list_no_eta" — user wants to see which teams/cleaners have not yet submitted an ETA today (e.g. "which teams have no ETA", "who hasn't submitted ETA", "missing ETA", "no ETA teams", "teams with no ETA", "who still needs to send ETA")
 - "unknown" — cannot determine intent
 
 ## entities (for "query" action)
@@ -297,7 +298,10 @@ Classify who the action targets:
 "Card status for today" → action: "card_status", timeScope: {type: "today"}, requestedFields: []
 "Rank teams by rating" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
 "Who has the best rating?" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
-"Team ratings" → action: "rank_teams", timeScope: {type: null}, requestedFields: []`,
+"Team ratings" → action: "rank_teams", timeScope: {type: null}, requestedFields: []
+"Which teams have no ETA?" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
+"Who hasn't submitted ETA today?" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []
+"Missing ETA teams" → action: "list_no_eta", timeScope: {type: null}, requestedFields: []`,
       },
       { role: "user", content: message },
     ],
@@ -311,7 +315,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "unknown"],
             },
             entities: {
               type: "object",
@@ -421,7 +425,7 @@ function fallbackPlan(message: string): QueryPlan {
 // every handler in this PR.
 
 export interface LegacyIntent {
-  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "unknown";
+  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "unknown";
   teamHint?: string | null;
   targetHint?: string | null;
   clientName?: string | null;

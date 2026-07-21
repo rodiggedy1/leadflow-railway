@@ -103,6 +103,7 @@ export interface QueryPlan {
     | "get_eta_for_customer"
   | "card_status"
   | "rank_teams"
+  | "list_no_eta"
   | "unknown";
 
   entities: QueryPlanEntities;

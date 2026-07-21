@@ -152,6 +152,19 @@ interface TeamRatingsCard {
   excluded: number;
 }
 
+interface NoEtaCard {
+  date: string;
+  rows: Array<{
+    teamName: string;
+    cleanerName: string;
+    scheduledTime: string;
+    serviceDateTime: string | null;
+    etaStatus: "pending" | "unclear" | "no_answer";
+    isPastScheduled: boolean;
+    currentJobId: number;
+  }>;
+}
+
 interface CardStatusCard {
   date: string;
   rows: Array<{
@@ -196,6 +209,7 @@ type MessageContent =
   | { type: "query_result"; card: QueryResultCard }
   | { type: "card_status"; card: CardStatusCard }
   | { type: "rank_teams"; card: TeamRatingsCard }
+  | { type: "list_no_eta"; card: NoEtaCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
@@ -1064,6 +1078,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "list_no_eta" && (
+          <div>
+            <NoEtaCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "prepare_checklist" && (
           <div>
             <PrepareChecklistCardView card={msg.content.card} />
@@ -1332,6 +1352,67 @@ function TeamRatingsCardView({ card }: { card: TeamRatingsCard }) {
           {card.excluded} team{card.excluded !== 1 ? "s" : ""} excluded (fewer than {card.minRatings} rated jobs)
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── No ETA card ────────────────────────────────────────────────────────────
+
+function NoEtaCardView({ card }: { card: NoEtaCard }) {
+  const etaStatusLabel = (s: string) => {
+    if (s === "no_answer") return { label: "No Answer", color: "#ef4444", bg: "#ef444422" };
+    if (s === "unclear") return { label: "Unclear", color: "#f59e0b", bg: "#f59e0b22" };
+    return { label: "Pending", color: "#6b7280", bg: "#6b728022" };
+  };
+
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>All teams have confirmed ETAs — you're good to go!</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #f59e0b, #ef4444)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Clock className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Missing ETAs</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.rows.length} team{card.rows.length !== 1 ? "s" : ""} without confirmed ETA</p>
+        </div>
+        {card.rows.some(r => r.isPastScheduled) && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: "#ef4444", background: "#ef444422", padding: "2px 7px", borderRadius: 8, whiteSpace: "nowrap" }}>
+            {card.rows.filter(r => r.isPastScheduled).length} OVERDUE
+          </span>
+        )}
+      </div>
+      <div>
+        {card.rows.map((row, i) => {
+          const { label, color, bg } = etaStatusLabel(row.etaStatus);
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+              {row.isPastScheduled ? (
+                <span style={{ fontSize: 16, flexShrink: 0 }}>🔥</span>
+              ) : (
+                <Clock className="w-4 h-4 flex-shrink-0" style={{ color: "#6b7280" }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: row.isPastScheduled ? "#fca5a5" : "#c8cde8", marginBottom: 1 }}>{row.teamName}</p>
+                <p style={{ fontSize: 11, color: "#6b7280" }}>{row.scheduledTime}{row.isPastScheduled ? " · past scheduled time" : ""}</p>
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 600, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2534,7 +2615,8 @@ type ServerResult =
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
   | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" }
   | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> }
-  | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number };
+  | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number }
+  | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -2704,6 +2786,14 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "rank_teams", card: { windowDays: result.windowDays, minRatings: result.minRatings, rows: result.rows, excluded: result.excluded } },
+      ts,
+    };
+  }
+  if (result.type === "list_no_eta") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "list_no_eta", card: { date: result.date, rows: result.rows } },
       ts,
     };
   }

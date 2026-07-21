@@ -17,7 +17,7 @@ import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages } from "../drizzle/schema";
 import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
@@ -279,6 +279,21 @@ export interface QueryResultResult {
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
 
+/** Returned when the concierge lists teams with no confirmed ETA today */
+export interface NoEtaResult {
+  type: "list_no_eta";
+  date: string; // YYYY-MM-DD
+  rows: Array<{
+    teamName: string;
+    cleanerName: string;
+    scheduledTime: string; // formatted e.g. "8:30 AM"
+    serviceDateTime: string | null; // raw ISO for comparison
+    etaStatus: "pending" | "unclear" | "no_answer";
+    isPastScheduled: boolean; // true if serviceDateTime < now
+    currentJobId: number;
+  }>;
+}
+
 /** Returned when the concierge ranks teams/cleaners by customer rating */
 export interface TeamRatingsResult {
   type: "rank_teams";
@@ -366,7 +381,8 @@ type ConciergeResult =
   | CallClientPendingResult
   | QueryResultResult
   | CardStatusResult
-  | TeamRatingsResult;
+  | TeamRatingsResult
+  | NoEtaResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 // ── Intent classifier ─────────────────────────────────────────────────────────
@@ -1819,6 +1835,131 @@ async function handleCardStatus(
   return { type: "card_status", date: startDate, rows };
 }
 
+// ── List teams with no confirmed ETA ──────────────────────────────────────
+async function handleListNoEta(
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<NoEtaResult> {
+  const today = getTodayET();
+  const nowMs = Date.now();
+
+  // 1. Fetch all active jobs for today
+  const jobs = await db
+    .select({
+      id: cleanerJobs.id,
+      cleanerName: cleanerJobs.cleanerName,
+      teamName: cleanerJobs.teamName,
+      serviceDateTime: cleanerJobs.serviceDateTime,
+      jobStatus: cleanerJobs.jobStatus,
+      etaCallFiredAt: cleanerJobs.etaCallFiredAt,
+    })
+    .from(cleanerJobs)
+    .where(and(
+      eq(cleanerJobs.jobDate, today),
+      ne(cleanerJobs.bookingStatus, "cancelled"),
+      ne(cleanerJobs.bookingStatus, "rescheduled"),
+    ))
+    .orderBy(cleanerJobs.serviceDateTime);
+
+  if (jobs.length === 0) return { type: "list_no_eta", date: today, rows: [] };
+
+  // 2. Fetch all eta_call_result cards for today's jobs
+  const jobIds = jobs.map(j => j.id);
+  const etaCardRows = await db
+    .select({
+      id: opsChatMessages.id,
+      cleanerJobId: opsChatMessages.cleanerJobId,
+      metadata: opsChatMessages.metadata,
+      createdAt: opsChatMessages.createdAt,
+    })
+    .from(opsChatMessages)
+    .where(and(
+      inArray(opsChatMessages.cleanerJobId as any, jobIds),
+      eq(opsChatMessages.quickAction as any, "eta_call_result")
+    ))
+    .orderBy(desc(opsChatMessages.createdAt), desc(opsChatMessages.id));
+
+  // 3. Priority-aware card selection (mirrors fieldMgmtRouter logic)
+  function etaCardPriority(resultType: string): number {
+    if (resultType === "success") return 0;
+    if (resultType === "no_answer" || resultType === "dispatcher_needed") return 1;
+    return 2;
+  }
+
+  const latestEtaCardByJob = new Map<number, { resultType: string; etaStatus: string | null }>();
+  for (const row of etaCardRows) {
+    if (!row.cleanerJobId) continue;
+    let meta: { resultType?: string; etaStatus?: string | null } = {};
+    try { meta = JSON.parse(row.metadata ?? "{}"); } catch { /* ignore */ }
+    const resultType = meta.resultType ?? "unclear";
+    const existing = latestEtaCardByJob.get(row.cleanerJobId);
+    if (!existing || etaCardPriority(resultType) < etaCardPriority(existing.resultType)) {
+      latestEtaCardByJob.set(row.cleanerJobId, { resultType, etaStatus: meta.etaStatus ?? null });
+    }
+  }
+
+  // 4. Group by team, pick current job per team
+  const teamMap = new Map<string, { teamName: string; cleanerName: string; jobs: typeof jobs }>();
+  for (const j of jobs) {
+    const key = j.teamName ?? j.cleanerName;
+    if (!teamMap.has(key)) {
+      teamMap.set(key, { teamName: key, cleanerName: j.cleanerName, jobs: [] });
+    }
+    teamMap.get(key)!.jobs.push(j);
+  }
+
+  const rows: NoEtaResult["rows"] = [];
+
+  for (const team of teamMap.values()) {
+    const currentJob = team.jobs.find(j =>
+      (j.jobStatus as string) !== "completed" && (j.jobStatus as string) !== "cancelled"
+    ) ?? team.jobs[team.jobs.length - 1];
+
+    // Skip teams already on-site or done
+    const jobSt = currentJob.jobStatus as string;
+    if (jobSt === "arrived" || jobSt === "in_progress" || jobSt === "completed") continue;
+
+    const card = latestEtaCardByJob.get(currentJob.id);
+
+    // If there's a confirmed success ETA, skip this team
+    if (card && card.resultType === "success" && card.etaStatus && card.etaStatus !== "unclear") {
+      continue;
+    }
+
+    let etaStatus: "pending" | "unclear" | "no_answer" = "pending";
+    if (card) {
+      if (card.resultType === "no_answer" || card.resultType === "dispatcher_needed") {
+        etaStatus = "no_answer";
+      } else {
+        etaStatus = "unclear";
+      }
+    } else if (currentJob.etaCallFiredAt) {
+      etaStatus = "unclear";
+    }
+
+    const serviceTime = currentJob.serviceDateTime ? parseServiceDateTime(currentJob.serviceDateTime) : null;
+    const scheduledTime = serviceTime ? formatTimeET(serviceTime) : "—";
+    const isPastScheduled = serviceTime ? serviceTime.getTime() < nowMs : false;
+
+    rows.push({
+      teamName: team.teamName,
+      cleanerName: team.cleanerName,
+      scheduledTime,
+      serviceDateTime: currentJob.serviceDateTime,
+      etaStatus,
+      isPastScheduled,
+      currentJobId: currentJob.id,
+    });
+  }
+
+  // Past-scheduled first, then by time
+  rows.sort((a, b) => {
+    if (a.isPastScheduled !== b.isPastScheduled) return a.isPastScheduled ? -1 : 1;
+    return (a.serviceDateTime ?? "").localeCompare(b.serviceDateTime ?? "");
+  });
+
+  return { type: "list_no_eta", date: today, rows };
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 export const aiConciergeRouter = router({
   /**
@@ -1944,6 +2085,9 @@ export const aiConciergeRouter = router({
       }
       if (plan.action === "rank_teams") {
         return await handleRankTeams(db);
+      }
+      if (plan.action === "list_no_eta") {
+        return await handleListNoEta(db);
       }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile
