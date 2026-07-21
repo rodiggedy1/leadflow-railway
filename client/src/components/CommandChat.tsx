@@ -5387,7 +5387,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   }
 
   return (
-    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden" style={{ padding: 14, gap: 14 }}>
+    <div ref={containerRef} className="flex flex-1 min-h-0 overflow-hidden">
       {showGlitter && <GlitterBurst onDone={() => { glitterRunning.current = false; setShowGlitter(false); }} />}
 
       {/* ── My Assigned Leads Modal ────────────────────────────────────────────────────────────────────────────────── */}
