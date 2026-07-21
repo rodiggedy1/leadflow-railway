@@ -1650,6 +1650,10 @@ const EXAMPLES = [
   { emoji: "💳", label: "Payment link", example: "Send Alex a payment link" },
   { emoji: "👤", label: "Customer profile", example: "Pull up Jennifer's profile" },
   { emoji: "⏰", label: "Check ETA", example: "When is Sarah's cleaner arriving?" },
+  { emoji: "📅", label: "Prepare for date", example: "Prepare for tomorrow" },
+  { emoji: "🚫", label: "Missing ETAs", example: "Which teams have no ETA?" },
+  { emoji: "⭐", label: "Team rankings", example: "Rank teams by rating" },
+  { emoji: "📋", label: "Customer notes", example: "Customer notes for today" },
 ];
 
 const HINT_EXAMPLES = [
