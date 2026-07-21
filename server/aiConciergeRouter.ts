@@ -2269,10 +2269,20 @@ export const aiConciergeRouter = router({
           }).from(confirmationCalls)
             .where(inArray(confirmationCalls.cleanerJobId, jobIds))
         : [];
-      // Latest call per job (first occurrence per jobId is fine since we just need any confirmed)
+      // Best call per job — prefer confirmed outcome over unclear/unknown; among equal outcomes take latest
+      const outcomeRank = (c: typeof confCalls[0]) => {
+        const eff = c.manualOutcome ?? c.aiOutcome ?? "";
+        if (eff === "confirmed") return 3;
+        if (eff === "reschedule" || eff === "cancel") return 2;
+        if (eff === "no_answer" || eff === "voicemail") return 1;
+        return 0; // unknown / null
+      };
       const confCallByJobId = new Map<number, typeof confCalls[0]>();
       for (const c of confCalls) {
-        if (!confCallByJobId.has(c.cleanerJobId)) confCallByJobId.set(c.cleanerJobId, c);
+        const existing = confCallByJobId.get(c.cleanerJobId);
+        if (!existing || outcomeRank(c) > outcomeRank(existing)) {
+          confCallByJobId.set(c.cleanerJobId, c);
+        }
       }
 
       // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
