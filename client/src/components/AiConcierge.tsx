@@ -40,7 +40,11 @@ import {
   Edit3,
   CreditCard,
   ExternalLink,
+  Sparkles,
+  ChevronRight,
+  Sun,
 } from "lucide-react";
+import ReadinessDrawer from "./ReadinessDrawer";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -122,6 +126,18 @@ interface QueryResultCard {
   answer: string;
   status: "complete" | "partial" | "not_found" | "ambiguous" | "error";
 }
+// ─── Prepare Tomorrow types ──────────────────────────────────────────────────
+
+interface PrepareChecklistCard {
+  steps: Array<{ label: string; status: "done" | "running" | "pending" }>;
+}
+
+interface PrepareResultCard {
+  readinessPct: number;
+  issueCount: number;
+  date: string;
+}
+
 interface CardStatusCard {
   date: string;
   rows: Array<{
@@ -164,7 +180,9 @@ type MessageContent =
   | { type: "call_client_confirm"; card: CallClientConfirmCard }
   | { type: "call_client_pending"; card: CallClientPendingCard }
   | { type: "query_result"; card: QueryResultCard }
-  | { type: "card_status"; card: CardStatusCard };
+  | { type: "card_status"; card: CardStatusCard }
+  | { type: "prepare_checklist"; card: PrepareChecklistCard }
+  | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
 
 interface Message {
@@ -863,6 +881,7 @@ function MessageBubble({
   onPickClient,
   onAddMessage,
   onAddMission,
+  onOpenReadiness,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
@@ -870,6 +889,7 @@ function MessageBubble({
   onPickClient: (phone: string, name: string, messageHint: string | null) => void;
   onAddMessage: (m: Message) => void;
   onAddMission: (metadata: MissionMetadata) => void;
+  onOpenReadiness: () => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -1023,12 +1043,89 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "prepare_checklist" && (
+          <div>
+            <PrepareChecklistCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
+        {msg.content.type === "prepare_result" && (
+          <div>
+            <PrepareResultCardView card={msg.content.card} onOpen={onOpenReadiness} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {/* customer_profile branch removed — all informational queries return query_result */}
       </div>
     </div>
   );
 }
 
+
+// ─── Prepare checklist card ──────────────────────────────────────────────────
+
+function PrepareChecklistCardView({ card }: { card: PrepareChecklistCard }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #e8e0f0", width: "100%" }}>
+      <div style={{ background: "linear-gradient(135deg, #f5f0ff, #ede8ff)", borderBottom: "1px solid #e0d8f8", padding: "10px 14px", display: "flex", alignItems: "center", gap: 8 }}>
+        <Sparkles className="w-4 h-4" style={{ color: "#7c3aed" }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#4c1d95" }}>Running tomorrow readiness checks...</span>
+      </div>
+      <div style={{ padding: "8px 0" }}>
+        {card.steps.map((step, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 14px" }}>
+            {step.status === "done" && (
+              <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: "#22c55e" }} />
+            )}
+            {step.status === "running" && (
+              <Loader2 className="w-4 h-4 flex-shrink-0 animate-spin" style={{ color: "#7c3aed" }} />
+            )}
+            {step.status === "pending" && (
+              <Circle className="w-4 h-4 flex-shrink-0" style={{ color: "#d1d5db" }} />
+            )}
+            <span style={{ fontSize: 13, color: step.status === "pending" ? "#9ca3af" : "#1f2937", fontWeight: step.status === "running" ? 600 : 400 }}>
+              {step.label}
+            </span>
+            {step.status === "done" && (
+              <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 700, color: "#22c55e" }}>Done</span>
+            )}
+            {step.status === "running" && (
+              <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 600, color: "#7c3aed" }}>In progress</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Prepare result card ──────────────────────────────────────────────────────
+
+function PrepareResultCardView({ card, onOpen }: { card: PrepareResultCard; onOpen: () => void }) {
+  const pct = card.readinessPct;
+  const color = pct >= 90 ? "#22c55e" : pct >= 75 ? "#22c55e" : pct >= 50 ? "#f59e0b" : "#ef4444";
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, overflow: "hidden", border: "1px solid #e8e0f0", width: "100%" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px" }}>
+        {/* Sunrise thumbnail */}
+        <div style={{ width: 64, height: 64, borderRadius: 12, background: "linear-gradient(135deg, #fde68a, #fb923c, #c084fc)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
+          🌅
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", marginBottom: 2, letterSpacing: "0.04em", textTransform: "uppercase" }}>Tomorrow Readiness</p>
+          <p style={{ fontSize: 22, fontWeight: 900, color, lineHeight: 1.1, marginBottom: 3 }}>{pct}% Ready</p>
+          <p style={{ fontSize: 12, color: "#9ca3af" }}>{card.issueCount} action item{card.issueCount !== 1 ? "s" : ""} need your attention</p>
+        </div>
+        <button
+          onClick={onOpen}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 10, background: "linear-gradient(135deg, #7c3aed, #5b21b6)", color: "#fff", fontSize: 13, fontWeight: 700, border: "none", cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap" }}
+        >
+          Open Readiness <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Query result card ────────────────────────────────────────────────────────
 
@@ -1628,8 +1725,92 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     return () => clearInterval(id);
   }, [input]);
   const [isThinking, setIsThinking] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Prepare Tomorrow mock flow ─────────────────────────────────────────────
+  const PREPARE_STEPS = [
+    "Checking tomorrow's schedule",
+    "Checking customer confirmations",
+    "Checking payment methods",
+    "Checking team confirmations",
+    "Checking access details",
+    "Checking route conflicts",
+    "Checking recurring jobs",
+    "Checking equipment & supplies",
+    "Scanning for other issues",
+  ];
+
+  const runPrepareTomorrow = useCallback(() => {
+    // 1. AI acknowledgement text
+    const ackMsg: Message = {
+      id: uid(),
+      role: "ai",
+      content: { type: "text", text: "On it! I'll run a full readiness check for tomorrow including customers, payments, teams, and schedule." },
+      ts: nowTime(),
+    };
+    // 2. Checklist card — starts with first step running, rest pending
+    const checklistId = uid();
+    const initialSteps = PREPARE_STEPS.map((label, i) => ({
+      label,
+      status: (i === 0 ? "running" : "pending") as "done" | "running" | "pending",
+    }));
+    const checklistMsg: Message = {
+      id: checklistId,
+      role: "ai",
+      content: { type: "prepare_checklist", card: { steps: initialSteps } },
+      ts: nowTime(),
+    };
+
+    setMessages((prev) => [...prev, ackMsg, checklistMsg]);
+
+    // Animate steps one by one
+    let step = 0;
+    const advance = () => {
+      step++;
+      if (step < PREPARE_STEPS.length) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== checklistId) return m;
+            const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s, i) => ({
+              ...s,
+              status: (i < step ? "done" : i === step ? "running" : "pending") as "done" | "running" | "pending",
+            }));
+            return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+          })
+        );
+        setTimeout(advance, 600);
+      } else {
+        // All done — mark all steps done
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== checklistId) return m;
+            const newSteps = (m.content as { type: "prepare_checklist"; card: PrepareChecklistCard }).card.steps.map((s) => ({ ...s, status: "done" as const }));
+            return { ...m, content: { type: "prepare_checklist" as const, card: { steps: newSteps } } };
+          })
+        );
+        // Add summary text + result card
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const dateStr = tomorrow.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+        const summaryMsg: Message = {
+          id: uid(),
+          role: "ai",
+          content: { type: "text", text: "All set! Tomorrow is 82% ready. I found 5 things that need your attention." },
+          ts: nowTime(),
+        };
+        const resultMsg: Message = {
+          id: uid(),
+          role: "ai",
+          content: { type: "prepare_result", card: { readinessPct: 82, issueCount: 5, date: dateStr } },
+          ts: nowTime(),
+        };
+        setMessages((prev) => [...prev, summaryMsg, resultMsg]);
+      }
+    };
+    setTimeout(advance, 700);
+  }, []);
 
   // ── Selected entity (set when a pill is confirmed or a customer_profile card is shown) ──────────
   // Discriminated union: customer entities route via resolvedClientPhone; cleaner entities route via resolvedEntity
@@ -1888,6 +2069,15 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setAcQuery(null); // always clear autocomplete on send
+
+    // ── Intercept prepare tomorrow keywords (mock flow, no backend call) ──
+    const lc = text.toLowerCase();
+    const isPrepare = lc.includes("get tomorrow ready") || lc.includes("prepare tomorrow") || lc.includes("tomorrow ready") || lc.includes("readiness check");
+    if (isPrepare) {
+      runPrepareTomorrow();
+      return;
+    }
+
     setIsThinking(true);
 
     // When a person is locked in, extract the message hint from what the user typed.
@@ -1945,6 +2135,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
   };
 
   return (
+    <>
     <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
@@ -2017,7 +2208,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={() => setReadinessOpen(true)} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
@@ -2182,6 +2373,8 @@ export default function AiConcierge({ agentPhotoUrl, onClose }: { agentPhotoUrl?
         )}
       </div>
     </div>
+    <ReadinessDrawer open={readinessOpen} onClose={() => setReadinessOpen(false)} />
+    </>
   );
 }
 
