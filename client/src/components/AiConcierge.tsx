@@ -2187,25 +2187,25 @@ function MissionCard({
       <button
         type="button"
         onClick={handleToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 transition-colors text-left"
+        className="w-full flex items-center gap-2 px-3 py-2.5 transition-colors text-left"
         style={{ background: "transparent" }}
       >
-        <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(145deg, #f1e7ff, #e6d6ff)" }}>
-          <Zap className="w-4 h-4" style={{ color: "#7447f5" }} />
+        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "linear-gradient(145deg, #f1e7ff, #e6d6ff)" }}>
+          <Zap className="w-3.5 h-3.5" style={{ color: "#7447f5" }} />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold truncate" style={{ color: "#202431" }}>{mission.missionTitle}</p>
-          <p className="text-[12px] mt-0.5" style={{ color: "#70737d" }}>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <p className="text-[13px] font-bold truncate leading-tight" style={{ color: "#202431" }}>{mission.missionTitle}</p>
+          <p className="text-[11px] mt-0.5 truncate" style={{ color: "#70737d" }}>
             {mission.missionStats.completed} action{mission.missionStats.completed !== 1 ? "s" : ""}
             {" · "}{missionTimeAgo(mission.missionCompletedAt)}
           </p>
         </div>
-        <span className="text-[11px] font-bold px-3 py-1 rounded-full" style={statusStyle}>
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap" style={statusStyle}>
           {statusLabel}
         </span>
         {isExpanded
-          ? <ChevronUp className="w-4 h-4 flex-shrink-0" style={{ color: "#9a96a0" }} />
-          : <ChevronDown className="w-4 h-4 flex-shrink-0" style={{ color: "#9a96a0" }} />}
+          ? <ChevronUp className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#9a96a0" }} />
+          : <ChevronDown className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "#9a96a0" }} />}
       </button>
 
       {/* Expanded body */}
