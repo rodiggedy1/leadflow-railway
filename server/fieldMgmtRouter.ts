@@ -1532,6 +1532,7 @@ export const fieldMgmtRouter = router({
       const jobIds = jobs.map(j => j.id);
       const etaCardRows = jobIds.length > 0 ? await db
         .select({
+          id: opsChatMessages.id,
           cleanerJobId: opsChatMessages.cleanerJobId,
           metadata: opsChatMessages.metadata,
           createdAt: opsChatMessages.createdAt,
@@ -1541,7 +1542,9 @@ export const fieldMgmtRouter = router({
           inArray(opsChatMessages.cleanerJobId as any, jobIds),
           eq(opsChatMessages.quickAction as any, "eta_call_result")
         ))
-        .orderBy(desc(opsChatMessages.createdAt)) : [];
+        // Fetch all cards; priority-aware selection happens in JS below.
+        // Do not rely on DB ordering alone — same-second inserts are nondeterministic.
+        .orderBy(desc(opsChatMessages.createdAt), desc(opsChatMessages.id)) : [];
 
       // Map latest eta_call_result card per job — parse metadata JSON
       type EtaCardMeta = {
@@ -1557,15 +1560,47 @@ export const fieldMgmtRouter = router({
         vapiCallId: string | null;
         scheduledTime: string | null;
       };
-      const latestEtaCardByJob = new Map<number, { meta: EtaCardMeta; createdAt: Date }>();
+
+      /**
+       * Priority-aware ETA card selection.
+       *
+       * A delayed "unclear" callback (e.g. voicemail noise) must never overwrite
+       * a valid manual or AI "success" ETA, regardless of insertion order.
+       *
+       * Priority tiers (lower number = higher priority):
+       *   0 — success with a valid etaStatus (the canonical ETA)
+       *   1 — no_answer / dispatcher_needed (terminal, actionable)
+       *   2 — unclear (ambiguous, lowest priority)
+       *
+       * Within the same tier, prefer newest createdAt then highest id.
+       */
+      function etaCardPriority(meta: EtaCardMeta): number {
+        if (meta.resultType === "success" && meta.etaStatus) return 0;
+        if (meta.resultType === "no_answer" || meta.resultType === "dispatcher_needed") return 1;
+        return 2; // unclear or success without etaStatus
+      }
+
+      const latestEtaCardByJob = new Map<number, { meta: EtaCardMeta; createdAt: Date; id: number; priority: number }>();
       for (const row of etaCardRows) {
         const jobId = row.cleanerJobId as number | null;
         if (!jobId) continue;
-        if (latestEtaCardByJob.has(jobId)) continue; // already have latest
+        let meta: EtaCardMeta;
         try {
-          const meta = JSON.parse(row.metadata ?? "{}") as EtaCardMeta;
-          latestEtaCardByJob.set(jobId, { meta, createdAt: row.createdAt });
-        } catch { /* ignore malformed */ }
+          meta = JSON.parse(row.metadata ?? "{}") as EtaCardMeta;
+        } catch { continue; /* ignore malformed */ }
+        const priority = etaCardPriority(meta);
+        const existing = latestEtaCardByJob.get(jobId);
+        if (!existing) {
+          latestEtaCardByJob.set(jobId, { meta, createdAt: row.createdAt, id: row.id as number, priority });
+          continue;
+        }
+        // Replace if: higher priority tier, or same tier with newer timestamp, or same tier+time with higher id
+        const betterPriority = priority < existing.priority;
+        const samePriorityNewerTime = priority === existing.priority && row.createdAt > existing.createdAt;
+        const samePriorityTimeHigherId = priority === existing.priority && row.createdAt.getTime() === existing.createdAt.getTime() && (row.id as number) > existing.id;
+        if (betterPriority || samePriorityNewerTime || samePriorityTimeHigherId) {
+          latestEtaCardByJob.set(jobId, { meta, createdAt: row.createdAt, id: row.id as number, priority });
+        }
       }
 
       // 2b. Fetch arrived + completed timestamps from jobStatusHistory
