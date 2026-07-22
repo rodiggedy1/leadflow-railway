@@ -5827,7 +5827,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command ✦</h2>
+                  <h2 className="font-bold text-slate-900 leading-none mr-2 whitespace-nowrap" style={{fontSize:"14px",fontFamily:"inherit"}}>MIB Command ✦</h2>
                   {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
@@ -5835,7 +5835,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                         onClick={() => onSwitchToLeadOps?.()}
                         className="flex flex-col items-start px-2.5 py-1 bg-white border border-[#e4e7f0] rounded-xl hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition-colors cursor-pointer min-w-0 shadow-sm"
                       >
-                        <span className="text-sm font-bold text-[#2c70ff] leading-tight">{todayStats?.total ?? 0}</span>
+                        <span className="font-bold text-[#2c70ff] leading-tight" style={{fontSize:"13px"}}>{todayStats?.total ?? 0}</span>
                         <span className="text-[8px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">New Leads</span>
                       </button>
                     </TooltipTrigger>
@@ -5872,7 +5872,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
                           <span className="flex flex-col items-start px-2.5 py-1 bg-white border border-[#e4e7f0] rounded-xl cursor-default min-w-0 shadow-sm">
-                            <span className="text-sm font-bold text-[#2c70ff] leading-tight">{todayBookingCount}</span>
+                            <span className="font-bold text-[#2c70ff] leading-tight" style={{fontSize:"13px"}}>{todayBookingCount}</span>
                             <span className="text-[8px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">Booked</span>
                           </span>
                         </TooltipTrigger>
@@ -5895,7 +5895,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {/* CVR card */}
                   {(todayStats?.total ?? 0) > 0 && (
                     <span className="flex flex-col items-start px-2.5 py-1 bg-white border border-[#e4e7f0] rounded-xl cursor-default min-w-0 shadow-sm">
-                      <span className="text-sm font-bold text-[#2c70ff] leading-tight">{Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}%</span>
+                      <span className="font-bold text-[#2c70ff] leading-tight" style={{fontSize:"13px"}}>{Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}%</span>
                       <span className="text-[8px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">CVR</span>
                     </span>
                   )}
@@ -5903,7 +5903,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <span className="flex flex-col items-start px-2.5 py-1 bg-white border border-[#e4e7f0] rounded-xl cursor-default min-w-0 shadow-sm">
-                        <span className="text-sm font-bold text-emerald-600 leading-tight">${todayRevenue.toLocaleString()}</span>
+                        <span className="font-bold text-emerald-600 leading-tight" style={{fontSize:"13px"}}>${todayRevenue.toLocaleString()}</span>
                         <span className="text-[8px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">Today</span>
                       </span>
                     </TooltipTrigger>
@@ -5937,7 +5937,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                       onClick={() => setShowMyLeads(v => !v)}
                       className="flex flex-col items-start px-2.5 py-1 bg-white border border-[#e4e7f0] rounded-xl hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition-colors cursor-pointer min-w-0 shadow-sm"
                     >
-                      <span className="text-sm font-bold text-amber-500 leading-tight">{myAssignedLeads.length}</span>
+                      <span className="font-bold text-amber-500 leading-tight" style={{fontSize:"13px"}}>{myAssignedLeads.length}</span>
                       <span className="text-[8px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">My Leads</span>
                     </button>
                   )}
@@ -6321,9 +6321,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 className={cn(
                   "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition border whitespace-nowrap",
                   leadRepliesOpen
-                    ? "bg-[#f0ebff] text-[#6f3cff] border-[#c7b8ff]"
-                    : "bg-white text-[#6f3cff] border-[#c7b8ff]"
+                    ? "bg-[#f0ebff] border-[#c7b8ff]"
+                    : "bg-white border-[#c7b8ff]"
                 )}
+              style={{color:"#6f3cff"}}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 Lead Chats
