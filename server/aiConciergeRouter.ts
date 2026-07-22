@@ -1863,7 +1863,11 @@ async function handleCardStatus(
       chargesOnHoldCents: cleanerJobs.chargesOnHoldCents,
     })
     .from(cleanerJobs)
-    .where(eq(cleanerJobs.jobDate, startDate));
+    .where(and(
+      eq(cleanerJobs.jobDate, startDate),
+      ne(cleanerJobs.bookingStatus, "rescheduled"),
+      ne(cleanerJobs.bookingStatus, "cancelled"),
+    ));
 
   // Deduplicate by customerName (one row per customer per date)
   const seen = new Set<string>();
