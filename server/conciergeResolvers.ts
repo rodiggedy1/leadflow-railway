@@ -605,6 +605,8 @@ function resolveAccess(fr: FieldRequest, ctx: SharedContext): ResolvedField {
 }
 
 function resolveNotes(fr: FieldRequest, ctx: SharedContext): ResolvedField {
+  console.log("[resolveNotes] mergedJobs count:", ctx.mergedJobs.length, "entity:", JSON.stringify(ctx.entity), "timeScope:", JSON.stringify(ctx.timeScope));
+  console.log("[resolveNotes] first 3 jobs:", JSON.stringify(ctx.mergedJobs.slice(0, 3).map(j => ({ customerName: j.customerName, jobDate: j.jobDate, customerNotes: j.customerNotes?.slice(0, 80), staffNotes: j.staffNotes?.slice(0, 80) }))));
   const matches = ctx.mergedJobs.slice(0, 5).map(j => ({
     customerName: j.customerName,
     jobDate: j.jobDate,
@@ -859,7 +861,9 @@ export async function resolveQuery(
   chipEntity?: { type: "customer"; name: string; phone: string; phone10: string } | { type: "cleaner"; name: string; cleanerProfileId: number }
 ): Promise<QueryResult | ClarificationResult> {
   // 1. Resolve entities
+  console.log("[resolveQuery] plan entities:", JSON.stringify(plan.entities), "fields:", plan.requestedFields, "timeScope:", JSON.stringify(plan.timeScope));
   let entityMap = await resolveEntities(plan, db);
+  console.log("[resolveQuery] entityMap:", JSON.stringify(entityMap));
 
   // Override with chip entity if provided
   if (chipEntity) {

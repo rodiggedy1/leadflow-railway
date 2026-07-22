@@ -6989,21 +6989,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* iMessage-style tap-to-edit bubble */}
               {voiceConfirmAction !== "remind" && !voiceNeedsSearch && (
                 <div className="px-5 pb-5">
-                  <div className="flex justify-end min-h-[260px] items-start pt-1">
+                  <div className="flex justify-end min-h-[360px] items-start pt-1">
                     {voiceBubbleEditing ? (
                       <textarea
                         autoFocus
                         value={voiceConfirmMsg}
                         onChange={e => setVoiceConfirmMsg(e.target.value)}
                         onBlur={() => setVoiceBubbleEditing(false)}
-                        rows={9}
-                        className="w-full max-w-[90%] text-[15px] leading-relaxed bg-[#007AFF] text-white rounded-[20px] rounded-br-[6px] px-5 py-4 resize-none focus:outline-none shadow-sm placeholder:text-blue-200 caret-white"
+                        rows={14}
+                        className="w-full text-[15px] leading-relaxed bg-[#007AFF] text-white rounded-[20px] rounded-br-[6px] px-5 py-4 resize-none focus:outline-none shadow-sm placeholder:text-blue-200 caret-white"
                         style={{colorScheme: "dark"}}
                       />
                     ) : (
                       <button
                         onClick={() => setVoiceBubbleEditing(true)}
-                        className="max-w-[90%] bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-5 py-4 shadow-sm text-left group relative"
+                        className="w-full bg-[#007AFF] rounded-[20px] rounded-br-[6px] px-5 py-4 shadow-sm text-left group relative"
                         title="Tap to edit"
                       >
                         <p className="text-white text-[15px] leading-relaxed whitespace-pre-wrap">{voiceConfirmMsg || "\u2026"}</p>
