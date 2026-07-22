@@ -1201,3 +1201,8 @@
 .chat-scroll-inset::-webkit-scrollbar-thumb:hover {
   background: #6f3cff;
 }
+
+/* Unanswered SMS card — custom message preview tooltip */
+.sms-preview-wrap:hover .sms-preview-tooltip {
+  display: block !important;
+}
