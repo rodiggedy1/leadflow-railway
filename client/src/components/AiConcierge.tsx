@@ -2212,7 +2212,7 @@ function MissionCard({
       {isExpanded && (
         <div className="px-4 pb-4">
           {/* Timestamps */}
-          <div className="flex items-center gap-4 mb-3 pt-1" style={{ borderTop: "1px solid #ebe4dc" }}>
+          <div className="flex items-center gap-4 mb-3 pt-1" style={{ borderTop: "1px solid #e2e5ee" }}>
             <div className="flex items-center gap-1.5">
               <Clock className="w-3 h-3" style={{ color: "#9a96a0" }} />
               <span className="text-[11px]" style={{ color: "#9a96a0" }}>Started {fmtAbsTime(mission.missionStartedAt)}</span>
@@ -2250,7 +2250,7 @@ function MissionCard({
           {/* Summary */}
           <div
             className="pt-3"
-            style={{ borderTop: "1px solid #ebe4dc" }}
+            style={{ borderTop: "1px solid #e2e5ee" }}
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-[11px] leading-relaxed" style={{ color: "#70737d" }}>{mission.missionSummary}</p>
@@ -2790,7 +2790,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
     <div className="flex flex-col h-full overflow-hidden" style={{ minHeight: compact ? 0 : 600, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(255,255,255,0.72)", borderRadius: 28, boxShadow: "0 20px 55px rgba(42,48,82,0.10)" }}>
       {/* Header — compact (inline) vs full (slide-in) */}
       {compact ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px 10px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px 10px", borderBottom: "1px solid #e2e5ee", background: "transparent" }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
             <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid #ffffff", boxShadow: "0 0 0 3px #ffffff, 0 0 0 4px #e8e0ff, 0 4px 10px rgba(42,48,82,0.12)" }} />
             <span style={{ position: "absolute", right: 1, bottom: 2, width: 9, height: 9, background: "#32bd75", border: "2px solid #fffdf9", borderRadius: "50%", display: "block" }} />
@@ -2811,7 +2811,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, padding: "20px 22px 18px", borderBottom: "1px solid #e2e5ee", background: "transparent" }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
             <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", border: "3px solid rgba(255,255,255,0.95)", boxShadow: "0 8px 20px rgba(54,38,25,0.14), 0 0 0 1px rgba(79,59,44,0.07)" }} />
             <span style={{ position: "absolute", right: 2, bottom: 4, width: 16, height: 16, background: "#32bd75", border: "3px solid #fffdf9", borderRadius: "50%", display: "block" }} />
@@ -2865,7 +2865,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
                 onSetViewState={setMissionViewState}
               />
             ))}
-            {missions.length > 0 && <div className="pt-1" style={{ borderTop: "1px solid #ebe4dc" }} />}
+            {missions.length > 0 && <div className="pt-1" style={{ borderTop: "1px solid #e2e5ee" }} />}
           </div>
         )}
         {messages.map((msg) => (
@@ -2889,7 +2889,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3" style={{ borderTop: "1px solid #ebe4dc", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)", position: "relative" }}>
+      <div className="px-4 py-3" style={{ borderTop: "1px solid #e2e5ee", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)", position: "relative" }}>
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (

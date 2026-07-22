@@ -7397,9 +7397,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           {/* WhatsApp single-row composer: [+] [textarea] [emoji] */}
           <div
             className={cn(
-              "rounded-2xl border px-3 py-2 transition flex items-center gap-2",
-              isDragging ? "border-slate-300 bg-slate-200 ring-2 ring-slate-900/10" : "border-slate-200 bg-slate-50"
+              "transition flex items-center gap-2",
+              isDragging ? "ring-2 ring-slate-900/10" : ""
             )}
+            style={{ margin: "0 16px 16px", padding: "10px 12px", border: isDragging ? "1px solid #b0b8cc" : "1px solid #e3e6ef", borderRadius: 18, background: isDragging ? "#f0f2f7" : "#fff", gap: 10 }}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files) stageFiles(e.dataTransfer.files); }}
