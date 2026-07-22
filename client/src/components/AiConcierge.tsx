@@ -2889,7 +2889,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
       </div>
 
       {/* Composer */}
-      <div className="px-4 py-3" style={{ borderTop: "1px solid #e2e5ee", background: "rgba(251,248,243,0.96)", backdropFilter: "blur(16px)", position: "relative" }}>
+      <div className="px-4 py-3" style={{ borderTop: "1px solid #e2e5ee", background: "#ffffff", backdropFilter: "blur(16px)", position: "relative" }}>
 
         {/* ── Recognition pill: locked person ── */}
         {focusedCustomer && (
