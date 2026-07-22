@@ -207,7 +207,7 @@ interface CardStatusCard {
     last4: string | null;
     status: "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card";
     amountCents: number;
-  };
+  }>;
 }
 interface CustomerProfileCard {
   name: string;
