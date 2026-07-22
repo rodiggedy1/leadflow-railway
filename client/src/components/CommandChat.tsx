@@ -5822,7 +5822,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* White card wrapper with grey showing on sides */}
         <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Header */}
-        <div className="px-5 pt-3 pb-3 border-b border-slate-200 bg-slate-50 shadow-sm shrink-0">
+        <div className="px-5 pt-3 pb-3 border-b border-slate-200 bg-white shrink-0">
           {/* Compact single-row header */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
@@ -5833,10 +5833,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onSwitchToLeadOps?.()}
-                        className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer min-w-[64px]"
+                        className="flex flex-col items-start px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-[14px] hover:border-[#c7b8ff] hover:bg-slate-50 transition-colors cursor-pointer min-w-[64px]"
                       >
-                        <span className="text-lg font-bold text-blue-600 leading-tight">{todayStats?.total ?? 0}</span>
-                        <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">New Leads</span>
+                        <span className="text-lg font-bold text-[#2c70ff] leading-tight">{todayStats?.total ?? 0}</span>
+                        <span className="text-[9px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">New Leads</span>
                       </button>
                     </TooltipTrigger>
                     {todayStats?.leadList && todayStats.leadList.length > 0 && (
@@ -5871,9 +5871,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[56px]">
-                            <span className="text-lg font-bold text-emerald-600 leading-tight">{todayBookingCount}</span>
-                            <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">Booked</span>
+                          <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-[14px] cursor-default min-w-[56px]">
+                            <span className="text-lg font-bold text-[#2c70ff] leading-tight">{todayBookingCount}</span>
+                            <span className="text-[9px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">Booked</span>
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" align="start" className="p-0 overflow-hidden min-w-[180px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -5894,17 +5894,17 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   })()}
                   {/* CVR card */}
                   {(todayStats?.total ?? 0) > 0 && (
-                    <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[56px]">
-                      <span className="text-lg font-bold text-blue-500 leading-tight">{Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}%</span>
-                      <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">CVR</span>
+                    <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-[14px] cursor-default min-w-[56px]">
+                      <span className="text-lg font-bold text-[#2c70ff] leading-tight">{Math.round((todayBookingCount / (todayStats?.total ?? 1)) * 100)}%</span>
+                      <span className="text-[9px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">CVR</span>
                     </span>
                   )}
                   {/* Revenue card */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl cursor-default min-w-[72px]">
+                      <span className="flex flex-col items-start px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-[14px] cursor-default min-w-[72px]">
                         <span className="text-lg font-bold text-emerald-600 leading-tight">${todayRevenue.toLocaleString()}</span>
-                        <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">Today</span>
+                        <span className="text-[9px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">Today</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[230px] max-w-[290px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -5935,10 +5935,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {myAssignedLeads.length > 0 && (
                     <button
                       onClick={() => setShowMyLeads(v => !v)}
-                      className="flex flex-col items-start px-3 py-1.5 bg-white border border-slate-200 rounded-xl hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer min-w-[56px]"
+                      className="flex flex-col items-start px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-[14px] hover:border-[#c7b8ff] hover:bg-slate-50 transition-colors cursor-pointer min-w-[56px]"
                     >
                       <span className="text-lg font-bold text-amber-500 leading-tight">{myAssignedLeads.length}</span>
-                      <span className="text-[9px] font-semibold tracking-widest text-slate-400 uppercase leading-none mt-0.5">My Leads</span>
+                      <span className="text-[9px] font-bold tracking-widest text-[#8791a8] uppercase leading-none mt-0.5">My Leads</span>
                     </button>
                   )}
                 </div>
@@ -6263,7 +6263,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="shrink-0 flex items-center gap-2 px-5 py-1.5 bg-slate-50 border-b border-slate-200 overflow-x-auto">
+            <div className="shrink-0 flex items-center gap-2 px-5 py-1.5 bg-white border-b border-slate-200 overflow-x-auto">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
@@ -6301,7 +6301,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {activeThreadCount > 0 && (
                 <button
                   onClick={() => setAllThreadsOpen(true)}
-                  className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition"
+                  className="relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold bg-white text-[#4b5770] border border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff] transition"
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
                   Threads
@@ -6322,7 +6322,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   leadRepliesOpen
                     ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
@@ -6341,7 +6341,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   emailsOpen
                     ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
               >
                 <Mail className="h-3.5 w-3.5" />
@@ -6363,7 +6363,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   missedCallsOpen
                     ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
               >
                 <PhoneMissed className="h-3.5 w-3.5" />
@@ -6385,7 +6385,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     ? "bg-slate-900 text-white border-slate-900"
                     : csUnansweredUrgent > 0
                     ? "bg-white text-red-600 border-red-200 hover:bg-red-50"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
                 title={
                   csUnansweredUrgent > 0
@@ -6414,7 +6414,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   "relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition border",
                   tasksOpen
                     ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
                 title="Tasks"
               >
