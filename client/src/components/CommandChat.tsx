@@ -1861,10 +1861,10 @@ const MessageList = memo(function MessageList({
                   const amount = (meta.amount as string | null) ?? null;
                   const note = (meta.note as string | null) ?? null;
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-violet-200 shadow-md" style={{ background: "linear-gradient(135deg, #fdf4ff 0%, #f5f3ff 50%, #ede9fe 100%)" }}>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
                         {/* Confetti header with burst animation */}
-                        <div className="relative flex items-center gap-2 px-4 py-2 overflow-hidden" style={{ background: "linear-gradient(90deg, #7c3aed, #a855f7, #ec4899)" }}>
+                        <div className="relative flex items-center gap-2 px-3 py-1.5 overflow-hidden border-b border-slate-700/50">
                           {/* Glitter confetti particles — burst outward then fade */}
                           {[...Array(18)].map((_, i) => {
                             const angle = (i / 18) * 360;
@@ -1896,19 +1896,19 @@ const MessageList = memo(function MessageList({
                           <span className="ml-auto text-[10px] text-purple-200 relative z-10">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         {/* Body */}
-                        <div className="px-4 py-3">
+                        <div className="px-3 py-2.5">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-400 to-pink-400 flex items-center justify-center text-white font-bold text-base shrink-0">
+                            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-violet-500 to-pink-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
                               {(msg.from ?? "?").charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="text-base font-bold text-slate-900">Congrats to {msg.from}!</p>
-                              {amount && <p className="text-sm font-semibold text-violet-700 mt-0.5">{amount}</p>}
-                              {personName && <p className="text-xs text-slate-500 mt-0.5">Client: {personName}</p>}
+                              <p className="text-sm font-bold text-violet-300">Congrats to {msg.from}!</p>
+                              {amount && <p className="text-sm font-semibold text-pink-300 mt-0.5">{amount}</p>}
+                              {personName && <p className="text-xs text-slate-400 mt-0.5">Client: {personName}</p>}
                             </div>
                           </div>
-                          {note && <p className="text-xs text-slate-500 mt-2 leading-relaxed">{note}</p>}
-                          <p className="text-[10px] text-slate-400 mt-2">Announced by {msg.from}</p>
+                          {note && <p className="text-xs text-slate-400 mt-2 leading-relaxed">{note}</p>}
+                          <p className="text-[10px] text-slate-500 mt-2">Announced by {msg.from}</p>
                         </div>
                       </div>
                     </div>
@@ -2013,29 +2013,27 @@ const MessageList = memo(function MessageList({
                   const resNote = (meta.resolutionNote as string | null) ?? null;
                   const resolvedBy = (meta.resolvedBy as string) ?? msg.from;
                   return (
-                    <div key={msg.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-emerald-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
-                          <CheckCheck className="h-3 w-3 text-emerald-100" />
-                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">✅ Issue Resolved</span>
-                          {jobTitle && <span className="ml-1.5 text-[10px] bg-emerald-700 text-emerald-200 rounded-full px-2 py-0.5">{jobTitle}</span>}
-                          <span className="ml-auto text-[10px] text-emerald-300">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className={cn("flex my-1 px-1", isMine ? "justify-end" : "justify-start")}>
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
+                          <CheckCheck className="h-3 w-3 text-emerald-400" />
+                          <span className="text-[10px] text-slate-400 font-medium">Issue Resolved · Dispatch</span>
+                          {jobTitle && <span className="ml-1.5 text-[10px] bg-slate-700 text-slate-300 rounded-full px-2 py-0.5">{jobTitle}</span>}
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        <div className="px-3 py-2.5 bg-white">
-                          {/* Original issue context */}
-                          <div className="rounded-lg bg-red-50 border border-red-100 px-2.5 py-1.5 mb-2">
-                            <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-0.5">Original Issue</p>
-                            <p className="text-xs text-slate-700 font-medium">{issTitle}</p>
-                            {issNote && <p className="text-xs text-slate-500 mt-0.5">{issNote}</p>}
+                        <div className="px-3 py-2.5">
+                          <div className="rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1.5 mb-2">
+                            <p className="text-[10px] font-semibold text-red-400 uppercase tracking-wide mb-0.5">Original Issue</p>
+                            <p className="text-xs text-slate-300 font-medium">{issTitle}</p>
+                            {issNote && <p className="text-xs text-slate-400 mt-0.5">{issNote}</p>}
                           </div>
-                          {/* Resolution note */}
                           {resNote && (
-                            <div className="rounded-lg bg-emerald-50 border border-emerald-100 px-2.5 py-1.5 mb-2">
-                              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide mb-0.5">Resolution</p>
-                              <p className="text-xs text-slate-700">{resNote}</p>
+                            <div className="rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1.5 mb-2">
+                              <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide mb-0.5">Resolution</p>
+                              <p className="text-xs text-slate-300">{resNote}</p>
                             </div>
                           )}
-                          <p className="text-[10px] text-slate-400">Resolved by {resolvedBy}</p>
+                          <p className="text-[10px] text-slate-500">Resolved by {resolvedBy}</p>
                         </div>
                       </div>
                     </div>
@@ -2059,27 +2057,27 @@ const MessageList = memo(function MessageList({
                   };
                   const pClass = priorityColor[fuPriority] ?? priorityColor["Normal"];
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-violet-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600">
-                          <ClipboardList className="h-3 w-3 text-violet-100" />
-                          <span className="text-[10px] font-semibold text-violet-100 uppercase tracking-widest">Follow-up Created</span>
-                          {fuType && <span className="ml-1.5 text-[10px] bg-violet-700 text-violet-200 rounded-full px-2 py-0.5">{fuType}</span>}
-                          <span className="ml-auto text-[10px] text-violet-300">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
+                          <ClipboardList className="h-3 w-3 text-violet-400" />
+                          <span className="text-[10px] text-slate-400 font-medium">Follow-up Created · Dispatch</span>
+                          {fuType && <span className="ml-1.5 text-[10px] bg-slate-700 text-slate-300 rounded-full px-2 py-0.5">{fuType}</span>}
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        <div className="px-3 py-2.5 bg-white">
-                          <p className="text-sm font-semibold text-slate-900">{fuName}</p>
-                          {fuNextStep && <p className="text-xs text-slate-600 mt-0.5">{fuNextStep}</p>}
+                        <div className="px-3 py-2.5">
+                          <p className="text-sm font-bold text-violet-300 leading-snug">{fuName}</p>
+                          {fuNextStep && <p className="text-xs text-slate-300 mt-0.5">{fuNextStep}</p>}
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
                             {fuDueLabel && (
-                              <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
+                              <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
                                 <Clock className="h-3 w-3" /> {fuDueLabel}
                               </span>
                             )}
-                            <span className={`text-[10px] font-medium border rounded-full px-2 py-0.5 ${pClass}`}>{fuPriority}</span>
+                            <span className="text-[10px] font-medium border border-slate-600 rounded-full px-2 py-0.5 text-slate-300">{fuPriority}</span>
                           </div>
                           {fuNote && <p className="text-xs text-slate-400 mt-1.5 italic">{fuNote}</p>}
-                          <p className="text-[10px] text-slate-400 mt-2">Assigned to {fuOwner}</p>
+                          <p className="text-[10px] text-slate-500 mt-2">Assigned to {fuOwner}</p>
                         </div>
                       </div>
                     </div>
@@ -2415,25 +2413,25 @@ const MessageList = memo(function MessageList({
                   const date = (meta.date as string | null) ?? "";
                   const count = (meta.count as number | null) ?? 0;
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-emerald-300 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600">
-                          <CheckCheck className="h-3 w-3 text-emerald-100" />
-                          <span className="text-[10px] font-semibold text-emerald-100 uppercase tracking-widest">Sync OK</span>
-                          <span className="ml-auto text-[10px] text-emerald-200">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
+                          <CheckCheck className="h-3 w-3 text-emerald-400" />
+                          <span className="text-[10px] text-slate-400 font-medium">Sync OK · System</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                           <button
-                            className="ml-1 text-emerald-200 hover:text-white transition-colors"
+                            className="ml-2 text-slate-500 hover:text-slate-300 transition-colors"
                             title="Dismiss"
                             onClick={() => dismissSystemCard(msg.id)}
                           >
                             <X className="h-3 w-3" />
                           </button>
                         </div>
-                        <div className="px-3 py-2 bg-emerald-50">
-                          <p className="text-sm font-semibold text-slate-900">
+                        <div className="px-3 py-2.5">
+                          <p className="text-sm font-bold text-emerald-400 leading-snug">
                             {date} — all {count} job{count !== 1 ? "s" : ""} synced
                           </p>
-                          <p className="text-xs text-emerald-700 mt-0.5">
+                          <p className="text-xs text-slate-400 mt-0.5">
                             Launch27 and LeadFlow counts match.
                           </p>
                         </div>
@@ -2683,19 +2681,19 @@ const MessageList = memo(function MessageList({
                   const laAssignedByName = (meta.assignedByName as string) ?? "";
                   const laNotes = (meta.notes as string | null) ?? null;
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-orange-300 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500">
-                          <Briefcase className="h-3 w-3 text-orange-100" />
-                          <span className="text-[10px] font-semibold text-orange-100 uppercase tracking-widest">Lead Assigned</span>
-                          <span className="ml-auto text-[10px] text-orange-200">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
+                          <Briefcase className="h-3 w-3 text-orange-400" />
+                          <span className="text-[10px] text-slate-400 font-medium">Lead Assigned · Dispatch</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        <div className="px-3 py-2.5 bg-orange-50">
-                          <p className="text-sm font-semibold text-slate-900">{laLeadName}</p>
-                          {laLeadPhone && <p className="text-xs text-slate-500 mt-0.5">📞 {laLeadPhone}</p>}
-                          <p className="text-xs text-orange-700 mt-0.5">Assigned to <span className="font-semibold">{laAgentName}</span></p>
-                          {laAssignedByName && <p className="text-[10px] text-slate-400 mt-0.5">By {laAssignedByName}</p>}
-                          {laNotes && <p className="text-xs text-slate-500 mt-1 italic border-t border-orange-100 pt-1">{laNotes}</p>}
+                        <div className="px-3 py-2.5">
+                          <p className="text-sm font-bold text-orange-400 leading-snug">{laLeadName}</p>
+                          {laLeadPhone && <p className="text-xs text-slate-300 mt-0.5">📞 {laLeadPhone}</p>}
+                          <p className="text-xs text-slate-300 mt-0.5">Assigned to <span className="font-semibold text-orange-300">{laAgentName}</span></p>
+                          {laAssignedByName && <p className="text-[10px] text-slate-500 mt-0.5">By {laAssignedByName}</p>}
+                          {laNotes && <p className="text-xs text-slate-400 mt-1 italic border-l-2 border-slate-600 pl-2">{laNotes}</p>}
                         </div>
                       </div>
                     </div>
@@ -2710,19 +2708,19 @@ const MessageList = memo(function MessageList({
                   const vtMsg = (meta.message as string) ?? "";
                   const vtBy = (meta.triggeredBy as string) ?? msg.from ?? "";
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[80%] rounded-xl overflow-hidden border border-blue-200 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#007AFF]">
-                          <MessageSquare className="h-3 w-3 text-blue-100" />
-                          <span className="text-[10px] font-semibold text-blue-100 uppercase tracking-widest">Text Sent</span>
-                          <span className="ml-auto text-[10px] text-blue-200">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
+                          <MessageSquare className="h-3 w-3 text-blue-400" />
+                          <span className="text-[10px] text-slate-400 font-medium">Text Sent · Dispatch</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        <div className="px-3 py-2.5 bg-blue-50">
-                          <p className="text-sm font-semibold text-slate-900">{vtName}</p>
+                        <div className="px-3 py-2.5">
+                          <p className="text-sm font-bold text-blue-400 leading-snug">{vtName}</p>
                           {vtMsg && (
-                            <p className="text-xs text-slate-600 mt-1 leading-relaxed border-l-2 border-blue-300 pl-2">&ldquo;{vtMsg}&rdquo;</p>
+                            <p className="text-xs text-slate-400 mt-1 leading-relaxed italic border-l-2 border-slate-600 pl-2">&ldquo;{vtMsg}&rdquo;</p>
                           )}
-                          {vtBy && <p className="text-[10px] text-slate-400 mt-1.5">via voice command by {vtBy}</p>}
+                          {vtBy && <p className="text-[10px] text-slate-500 mt-1.5">via voice command by {vtBy}</p>}
                         </div>
                       </div>
                     </div>
