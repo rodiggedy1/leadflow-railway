@@ -3100,30 +3100,28 @@ const MessageList = memo(function MessageList({
                             <button
                               type="button"
                               onClick={() => setOpenThreadId(msg.threadParentId!)}
-                              className={cn(
-                                "mb-2.5 w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors group/thread",
-                                isMine ? "bg-violet-900/40 border border-violet-700/50 hover:bg-violet-900/60" : "bg-violet-50 border border-violet-200 hover:bg-violet-100"
-                              )}
+                              className="mb-2.5 w-full flex items-center gap-2 rounded-lg text-left group/thread"
+                              style={{background:"#f5f1ff",border:"1px solid #d8ccff",borderRadius:"12px",padding:"9px 10px"}}
                             >
-                              <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", isMine ? "text-violet-400" : "text-violet-500")} />
+                              <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", "text-[#673fe4]")} />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <span className={cn("text-[10px] font-bold uppercase tracking-wider", isMine ? "text-violet-400" : "text-violet-600")}>
+                                  <span className={cn("text-[10px] font-bold uppercase tracking-wider", "text-[#673fe4]")}>
                                     Thread reply
                                   </span>
                                   {msg.threadParentFrom && (
-                                    <span className={cn("text-[10px]", isMine ? "text-violet-500" : "text-violet-500")}>· {msg.threadParentFrom}</span>
+                                    <span className={cn("text-[10px]", "text-[#673fe4]")}>· {msg.threadParentFrom}</span>
                                   )}
                                 </div>
                                 {msg.threadParentBody && (
-                                  <p className={cn("text-xs truncate mt-0.5 leading-snug", isMine ? "text-violet-300" : "text-violet-700")}>
+                                  <p className={cn("text-xs truncate mt-0.5 leading-snug", "text-[#673fe4]")}>
                                     {msg.threadParentBody.length > 80 ? msg.threadParentBody.slice(0, 80) + "…" : msg.threadParentBody}
                                   </p>
                                 )}
                               </div>
                               <span className={cn(
                                 "text-[10px] shrink-0 transition-colors whitespace-nowrap",
-                                isMine ? "text-violet-500 group-hover/thread:text-violet-300" : "text-violet-400 group-hover/thread:text-violet-600"
+                                "text-[#673fe4] group-hover/thread:text-[#4d26d7]"
                               )}>
                                 Open thread →
                               </span>
@@ -6318,13 +6316,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               )}
               <button
                 onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
-                className={cn(
-                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
-                  leadRepliesOpen
-                    ? "bg-[#faf8ff] border-[#c7b8ff]"
-                    : "bg-white border-[#c7b8ff]"
-                )}
-              style={{padding:"7px 10px",fontSize:"12px",color:"#6f3cff"}}
+                className="relative flex items-center gap-1.5 whitespace-nowrap transition"
+              style={{padding:"7px 10px",fontSize:"12px",color:"#673fe4",background:leadRepliesOpen?"#f5f1ff":"#fff",border:"1px solid #d8ccff",borderRadius:"999px"}}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 Lead Chats
