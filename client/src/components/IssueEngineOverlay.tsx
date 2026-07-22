@@ -1101,10 +1101,10 @@ export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
   return (
     <button
       onClick={onClick}
-      className="issue-pill relative flex flex-col items-start bg-white border border-slate-200 rounded-2xl px-4 py-2 shadow-sm shrink-0 overflow-hidden min-w-[160px]"
+      className="issue-pill relative flex items-center bg-white border border-slate-200 rounded-2xl px-4 py-2 shadow-sm shrink-0 overflow-hidden min-w-0"
     >
       <span className="live-dot" />
-      <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-0.5">Attention Needed</span>
+
       <div className="flex items-center gap-1.5">
         <span className="text-[16px]">🔥</span>
         <span className="text-slate-900 font-black text-sm">
