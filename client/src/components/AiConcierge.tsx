@@ -1762,9 +1762,14 @@ function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
   const fmtWait = (ms: number) => {
     const totalMins = Math.floor(ms / 60000);
     if (totalMins < 60) return `${totalMins}m`;
-    const h = Math.floor(totalMins / 60);
-    const m = totalMins % 60;
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    const totalHours = Math.floor(totalMins / 60);
+    if (totalHours < 24) {
+      const m = totalMins % 60;
+      return m > 0 ? `${totalHours}h ${m}m` : `${totalHours}h`;
+    }
+    const d = Math.floor(totalHours / 24);
+    const h = totalHours % 24;
+    return h > 0 ? `${d}d ${h}h` : `${d}d`;
   };
   const waitColor = (ms: number) => {
     const mins = ms / 60000;
@@ -1784,6 +1789,7 @@ function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
       </div>
     );
   }
+  const sorted = [...card.rows].sort((a, b) => a.waitMs - b.waitMs);
   return (
     <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
       <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
@@ -1796,7 +1802,7 @@ function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
         </div>
       </div>
       <div>
-        {card.rows.map((row, i) => {
+        {sorted.map((row, i) => {
           const { color, bg } = waitColor(row.waitMs);
           const displayName = row.leadName || row.leadPhone;
           return (
