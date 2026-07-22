@@ -731,16 +731,18 @@ function HotLeadCard({
     <div
       onAnimationEnd={() => setShaking(false)}
       className={cn(
-        "relative rounded-2xl border overflow-hidden transition-all",
+        "relative rounded-[18px] overflow-hidden transition-all",
         !isClaimed && shaking && "animate-lead-shake",
-        cardBg,
       )}
+      style={{background:"#fff",border:"1px solid #e6e9f2",boxShadow:"0 10px 24px rgba(35,40,73,.08)",marginBottom:"10px"}}
     >
       {/* Pulsing glow ring for unclaimed */}
       {!isClaimed && !isResolved && (
         <span className={cn("absolute inset-0 rounded-2xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
       )}
 
+      {/* Purple left accent bar — always visible, matches prototype .lead-card.selected:before */}
+      <div className="absolute left-0 top-4 bottom-4 w-1 rounded-r-[6px]" style={{background:"#6f3cff",opacity:0.18}} />
       {/* Thumbtack label */}
       {isThumbSms && (
         <div className="flex items-center gap-1.5 px-3 pt-2.5">
@@ -760,7 +762,7 @@ function HotLeadCard({
             {pillLabel}
           </span>
           {price && (
-            <span className="text-xl font-bold text-emerald-700 shrink-0 leading-none">${price}</span>
+            <span className="text-xl font-bold shrink-0 leading-none" style={{color:"#6f3cff"}}>${price}</span>
           )}
         </div>
 
@@ -5573,11 +5575,11 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Single scrollable area — header + content all scroll together */}
         {/* Single scrollable area */}
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-        <div className="rounded-[32px] border border-white/70 bg-white/80 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-                <div className="px-5 py-4 space-y-4">
+        <div className="rounded-[28px] overflow-hidden" style={{background:"rgba(255,255,255,.88)",backdropFilter:"blur(18px)",border:"1px solid rgba(255,255,255,.72)",boxShadow:"0 20px 55px rgba(42,48,82,.10)",padding:"18px 14px"}}>
+                <div className="space-y-4">
           {/* Madison AI Concierge is now always open in the right panel */}
           {/* ── Search bar ── */}
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+          <div className="flex items-center gap-2 px-3 py-2" style={{borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff"}}>
             <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
             <input
               type="text"
@@ -5594,16 +5596,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
 
           {/* ── Hot leads / Follow-ups tab toggle ── */}
-          <div className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1 gap-1">
+          <div className="flex gap-[7px]" style={{margin:"10px 0"}}>
             <button
               onClick={() => setRightTab("leads")}
-              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "leads" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
+              className="flex-1 rounded-[999px] px-[10px] py-[7px] text-xs font-semibold transition" style={rightTab === "leads" ? {background:"#fff",border:"1px solid #dfe3ef",color:"#17213a",boxShadow:"0 5px 12px rgba(40,46,75,.07)"} : {background:"transparent",color:"#64708b",border:"none"}}
             >
               Hot leads
             </button>
             <button
               onClick={() => setRightTab("followups")}
-              className={cn("flex-1 rounded-xl px-3 py-1.5 text-xs font-semibold transition", rightTab === "followups" ? "bg-white text-slate-900 shadow-sm border border-blue-500" : "text-slate-500")}
+              className="flex-1 rounded-[999px] px-[10px] py-[7px] text-xs font-semibold transition" style={rightTab === "followups" ? {background:"#fff",border:"1px solid #dfe3ef",color:"#17213a",boxShadow:"0 5px 12px rgba(40,46,75,.07)"} : {background:"transparent",color:"#64708b",border:"none"}}
             >
               Follow-ups
             </button>
