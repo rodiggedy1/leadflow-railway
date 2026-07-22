@@ -2177,11 +2177,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-0 w-full">
             {([
-              { id: "channels"    as const, Icon: Radio,     color: "#a78bfa", line1: "Command",   line2: "Chat" },
-              { id: "cs"          as const, Icon: UserCheck, color: "#10b981", line1: "Customer",  line2: "Service SMS" },
-              { id: "leadops"     as const, Icon: Workflow,  color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
-              { id: "leads-inbox" as const, Icon: Rocket,    color: "#3b82f6", line1: "Lead",      line2: "Chat" },
-              { id: "today"       as const, Icon: Activity,  color: "#8b5cf6", line1: "Operations",line2: "" },
+              { id: "channels"    as const, icon: "◉", color: "#a78bfa", line1: "Command",   line2: "Chat" },
+              { id: "cs"          as const, icon: "♧", color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+              { id: "leadops"     as const, icon: "⌘", color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+              { id: "leads-inbox" as const, icon: "🚀", color: "#3b82f6", line1: "Lead",      line2: "Chat" },
+              { id: "today"       as const, icon: "⌁", color: "#8b5cf6", line1: "Operations",line2: "" },
             ]).map((ws) => {
               const isActive = activeTab === ws.id;
               return (
@@ -2192,9 +2192,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                   style={{ opacity: isActive ? 1 : 0.65 }}
                 >
                   {ws.id === "channels" ? (
-                    /* Command Chat — white circle with colored icon */
+                    /* Command Chat — white circle with prototype icon */
                     <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
-                      <ws.Icon size={22} style={{ color: ws.color }} strokeWidth={2} />
+                      {/* .rail-item .icon { font-size:21px } */}
+                      <span style={{fontSize:"21px",lineHeight:1}}>{ws.icon}</span>
                       <CmdMentionBadge
                         callerName={callerName}
                         hidden={activeTab === "channels"}
@@ -2204,7 +2205,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                     </div>
                   ) : (
                     <div className="relative flex items-center justify-center">
-                      <ws.Icon size={28} style={{ color: ws.color }} strokeWidth={1.75} />
+                      {/* .rail-item .icon { font-size:21px } */}
+                      <span style={{fontSize:"21px",lineHeight:1,color:ws.color}}>{ws.icon}</span>
                       {ws.id === "cs" && <CsUnreadBadge hidden={activeTab === "cs"} />}
                     </div>
                   )}
@@ -2221,11 +2223,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           {/* ── Page navigation shortcuts ── */}
           <div className="flex flex-col items-center gap-0 w-full">
             {([
-              { href: "/admin/field-management",  Icon: Wrench,        color: "#64748b", line1: "Field",    line2: "Mgmt" },
-              { href: "/admin/quality",           Icon: ClipboardList, color: "#0ea5e9", line1: "Jobs",     line2: "" },
-              { href: "/admin/sms-campaigns",     Icon: Megaphone,     color: "#f43f5e", line1: "Campaigns",line2: "" },
-              { href: "/admin/confirmation-calls",Icon: PhoneIncoming, color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
-              { href: "/admin/payments",          Icon: CreditCard,    color: "#f59e0b", line1: "Payments", line2: "" },
+              { href: "/admin/field-management",  icon: "🔧", color: "#64748b", line1: "Field",    line2: "Mgmt" },
+              { href: "/admin/quality",           icon: "▣",  color: "#0ea5e9", line1: "Jobs",     line2: "" },
+              { href: "/admin/sms-campaigns",     icon: "📣", color: "#f43f5e", line1: "Campaigns",line2: "" },
+              { href: "/admin/confirmation-calls",icon: "☎",  color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+              { href: "/admin/payments",          icon: "▤",  color: "#f59e0b", line1: "Payments", line2: "" },
             ]).map((nav) => (
               <a
                 key={nav.href}
@@ -2234,7 +2236,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                 rel="noopener noreferrer"
                 className="flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
               >
-                <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                {/* .rail-item .icon { font-size:21px } */}
+                <span style={{fontSize:"21px",lineHeight:1}}>{nav.icon}</span>
                 <span className="text-[10px] text-white font-medium leading-tight text-center">
                   {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
                 </span>
@@ -3198,7 +3201,8 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                         rel="noopener noreferrer"
                         className="flex flex-col items-center gap-1 w-full py-2.5 px-2 transition-all opacity-65 hover:opacity-100 shrink-0"
                       >
-                        <nav.Icon size={22} style={{ color: nav.color }} strokeWidth={1.75} />
+                        {/* .rail-item .icon { font-size:21px } */}
+                <span style={{fontSize:"21px",lineHeight:1}}>{nav.icon}</span>
                         <span className="text-[10px] text-white font-medium leading-tight text-center">
                           {nav.line1}{nav.line2 ? <><br />{nav.line2}</> : null}
                         </span>
