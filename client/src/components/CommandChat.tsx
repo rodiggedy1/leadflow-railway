@@ -595,11 +595,13 @@ type SessionStatus = {
 
 function HotLeadCard({
   msg,
+  isFirst = false,
   claimLeadMutation,
   sessionStatus,
   onOpenFirstMsg,
 }: {
   msg: LeadMsg;
+  isFirst?: boolean;
   claimLeadMutation: ClaimMutation;
   sessionStatus?: SessionStatus | null;
   onOpenFirstMsg?: (details: string) => void;
@@ -758,15 +760,19 @@ function HotLeadCard({
         "relative overflow-hidden",
         !isClaimed && shaking && "animate-lead-shake",
       )}
-      style={{background:"#fff",border:"1px solid #e6e9f2",borderRadius:"18px",padding:"13px 13px 11px",marginBottom:"10px",boxShadow:"0 10px 24px rgba(35,40,73,.08)",transition:".18s ease",position:"relative"}}
+            style={{
+        background:"#fff",
+        border: isFirst ? "1px solid #cfc3ff" : "1px solid #e6e9f2",
+        borderRadius:"18px",
+        padding:"13px 13px 11px",
+        marginBottom:"10px",
+        boxShadow: isFirst ? "0 14px 30px rgba(111,60,255,.13)" : "0 10px 24px rgba(35,40,73,.08)",
+        transition:".18s ease",
+        position:"relative"
+      }}
     >
-      {/* Pulsing glow ring for unclaimed */}
-      {!isClaimed && !isResolved && (
-        <span className={cn("absolute inset-0 rounded-2xl ring-2 ring-offset-0 animate-pulse pointer-events-none", urgencyRing)} />
-      )}
-
-      {/* Purple left accent bar — always visible, matches prototype .lead-card.selected:before */}
-      <div className="absolute left-0 top-4 bottom-4 w-1 rounded-r-[6px]" style={{background:"#6f3cff",opacity:0.18}} />
+      {/* Purple left accent bar — only on selected (first) card, exact prototype .lead-card.selected:before */}
+      {isFirst && <div className="absolute left-0 top-4 bottom-4 w-1 rounded-r-[6px]" style={{background:"#6f3cff"}} />}
       {/* Thumbtack label */}
       {isThumbSms && (
         <div className="flex items-center gap-1.5 px-3 pt-2.5">
@@ -898,10 +904,11 @@ function HotLeadsTray({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {leads.map((msg) => (
+          {leads.map((msg, idx) => (
             <HotLeadCard
               key={msg.id}
               msg={msg}
+              isFirst={idx === 0}
               claimLeadMutation={claimLeadMutation}
               onOpenFirstMsg={onOpenFirstMsg}
               sessionStatus={(() => {
@@ -5546,10 +5553,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
           {/* .search { display:flex; gap:8px; margin-bottom:12px } */}
           {/* input { width:100%; padding:11px 14px; border-radius:14px; border:1px solid #dfe3ee; background:#fff; outline:none } */}
-          {/* .icon-btn { width:42px; border-radius:14px; border:1px solid #e0e4ef; background:#fff; color:#6e7890 } */}
+
           <div style={{display:"flex",gap:"8px",marginBottom:"12px"}}>
             <input type="text" value={rightSearch} onChange={(e) => setRightSearch(e.target.value)} placeholder="Search leads..." style={{width:"100%",padding:"11px 14px",borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff",outline:"none"}} />
-            <button style={{width:"42px",borderRadius:"14px",border:"1px solid #e0e4ef",background:"#fff",color:"#6e7890",cursor:"pointer"}}>⌄</button>
+
           </div>
           {/* ── Hot Leads Tray (shown when rightTab === "leads") ── */}
           {rightTab === "leads" && (
