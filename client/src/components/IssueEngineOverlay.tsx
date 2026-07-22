@@ -1092,28 +1092,16 @@ export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
   const latestTitle: string | null = (data as any)?.latestTitle ?? null;
   const latestType: string | null = (data as any)?.latestType ?? null;
 
-  const firstName = latestTitle ? latestTitle.split(" ")[0] : null;
-  const typeLabel = latestType ? (PILL_TYPE_LABELS[latestType] ?? "Issue") : null;
-  const extraCount = count - 1;
-
   if (count === 0) return null;
 
   return (
     <button
       onClick={onClick}
-      className="issue-pill relative flex items-center bg-white border border-slate-200 rounded-2xl px-4 py-2 shadow-sm shrink-0 overflow-hidden min-w-0"
+      className="issue-pill relative flex items-center gap-1.5 bg-white border border-slate-200 rounded-2xl px-4 py-2 shadow-sm shrink-0 overflow-hidden"
     >
       <span className="live-dot" />
-
-      <div className="flex items-center gap-1.5">
-        <span className="text-[16px]">🔥</span>
-        <span className="text-slate-900 font-black text-sm">
-          {`${count} ${count === 1 ? "Issue" : "Issues"}`}
-        </span>
-        {extraCount > 0 && (
-          <span className="text-orange-500 font-black text-sm">+{extraCount}</span>
-        )}
-      </div>
+      <span className="text-[16px]">🔥</span>
+      <span className="text-slate-900 font-black text-sm">Issues {count}</span>
     </button>
   );
 }
