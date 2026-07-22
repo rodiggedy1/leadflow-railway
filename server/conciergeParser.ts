@@ -52,7 +52,7 @@ interface ParsedResponse {
 const VALID_ACTIONS = [
   "query", "text_cleaners", "text_client", "send_payment_link",
   "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta",
-  "confirmation_texts", "confirmation_results", "job_status_stream", "unknown",
+  "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "unknown",
 ] as const;
 
 const VALID_FIELDS: RequestedField[] = [
@@ -232,6 +232,7 @@ Choose ONE of:
 - "rank_teams" — user wants to rank or compare teams/cleaners by their customer rating (e.g. "rank teams by rating", "who has the best rating", "team ratings", "best cleaners", "worst rated team")
 - "list_no_eta" — user wants to see which teams/cleaners have not yet submitted an ETA today (e.g. "which teams have no ETA", "who hasn't submitted ETA", "missing ETA", "no ETA teams", "teams with no ETA", "who still needs to send ETA")
 - "job_status_stream" — user wants to see the live status stream of all today's jobs and alerts (e.g. "show me today's jobs", "job status", "what's going on today", "status stream", "show all jobs", "live status", "team status")
+- "unanswered_sms" — user wants to see CS inbox conversations where the customer's last message has been sitting unanswered for longer than a time threshold (e.g. "unanswered texts over 30 minutes", "any SMS over an hour", "who's been waiting more than 45 minutes", "unanswered messages"). Use questionHint to store the threshold in minutes as a plain number string (e.g. "30", "60", "120"). Default to "30" if no threshold is specified.
 - "unknown" — cannot determine intent
 
 ## entities (for "query" action)
@@ -278,7 +279,7 @@ Rules:
 - targetHint: who to text for text_cleaners (exact name or group like "all", "DC", "team 5")
 - clientName: exact customer full name for text_client, send_payment_link, call_client
 - messageHint: message content or topic for text_client or text_cleaners
-- questionHint: topic/question to ask for call_client
+- questionHint: topic/question to ask for call_client; for unanswered_sms, the wait threshold in minutes as a plain number string (e.g. "30", "60")
 
 ## targetType
 Classify who the action targets:
@@ -316,6 +317,10 @@ Classify who the action targets:
 "What's going on today?" → action: "job_status_stream", timeScope: {type: "today"}, requestedFields: []
 "Status stream" → action: "job_status_stream", timeScope: {type: "today"}, requestedFields: []
 "Team status" → action: "job_status_stream", timeScope: {type: "today"}, requestedFields: []
+"Unanswered texts over 30 minutes" → action: "unanswered_sms", questionHint: "30", timeScope: {type: null}, requestedFields: []
+"Any SMS over an hour" → action: "unanswered_sms", questionHint: "60", timeScope: {type: null}, requestedFields: []
+"Who's been waiting more than 45 minutes" → action: "unanswered_sms", questionHint: "45", timeScope: {type: null}, requestedFields: []
+"Unanswered messages" → action: "unanswered_sms", questionHint: "30", timeScope: {type: null}, requestedFields: []
 "Last 5 ratings for maidsplus" → action: "query", entities: {cleanerName: "maidsplus", teamName: "maidsplus"}, timeScope: {type: null, originalPhrase: "last 5"}, requestedFields: ["rating"]
 "How has Team 3 been rated recently?" → action: "query", entities: {teamName: "Team 3"}, timeScope: {type: null, originalPhrase: "recently"}, requestedFields: ["rating"]
 "Ratings for Pilar this month" → action: "query", entities: {cleanerName: "Pilar"}, timeScope: {type: "this_month"}, requestedFields: ["rating"]`,
@@ -332,7 +337,7 @@ Classify who the action targets:
           properties: {
             action: {
               type: "string",
-              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unknown"],
+              enum: ["query", "text_cleaners", "text_client", "send_payment_link", "call_client", "eta_update", "get_eta_for_customer", "card_status", "rank_teams", "list_no_eta", "confirmation_texts", "confirmation_results", "job_status_stream", "unanswered_sms", "unknown"],
             },
             entities: {
               type: "object",
@@ -442,7 +447,7 @@ function fallbackPlan(message: string): QueryPlan {
 // every handler in this PR.
 
 export interface LegacyIntent {
-  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unknown";
+  action: "eta_update" | "get_eta_for_customer" | "text_cleaners" | "text_client" | "send_payment_link" | "call_client" | "query_data" | "customer_profile" | "list_no_eta" | "rank_teams" | "card_status" | "confirmation_texts" | "confirmation_results" | "job_status_stream" | "unanswered_sms" | "unknown";
   teamHint?: string | null;
   targetHint?: string | null;
   clientName?: string | null;

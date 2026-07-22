@@ -109,6 +109,7 @@ export interface QueryPlan {
   | "confirmation_texts"
   | "confirmation_results"
   | "job_status_stream"
+  | "unanswered_sms"
   | "unknown";
 
   entities: QueryPlanEntities;

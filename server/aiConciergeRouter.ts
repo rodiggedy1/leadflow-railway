@@ -17,7 +17,7 @@ import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages, stripeCustomers, paymentAuthorizations } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages, stripeCustomers, paymentAuthorizations, conversationSessions } from "../drizzle/schema";
 import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
@@ -424,7 +424,8 @@ type ConciergeResult =
   | NoEtaResult
   | ConfirmationTextsResult
   | ConfirmationResultsResult
-  | JobStatusStreamResult;
+  | JobStatusStreamResult
+  | UnansweredSmsResult;
   // CustomerProfileResult removed — all informational queries now go through resolveQuery()
 
 /** Returned when the concierge shows the live job status stream */
@@ -2227,6 +2228,62 @@ async function handleConfirmationResults(
     return { type: "confirmation_results", date, dateLabel, rows, totalSent, totalConfirmed, totalPending };
 }
 
+// ── Unanswered SMS handler ───────────────────────────────────────────────
+export interface UnansweredSmsResult {
+  type: "unanswered_sms";
+  thresholdMinutes: number;
+  rows: Array<{
+    sessionId: number;
+    leadName: string | null;
+    leadPhone: string;
+    lastMessagePreview: string;
+    waitMs: number;
+  }>;
+}
+async function handleUnansweredSms(
+  plan: QueryPlan,
+  db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
+): Promise<UnansweredSmsResult> {
+  const thresholdMinutes = Math.max(1, parseInt(plan.questionHint ?? "30", 10) || 30);
+  const cutoffMs = Date.now() - thresholdMinutes * 60 * 1000;
+  const rows = await db
+    .select({
+      id: conversationSessions.id,
+      leadName: conversationSessions.leadName,
+      leadPhone: conversationSessions.leadPhone,
+      messageHistory: conversationSessions.messageHistory,
+      lastCustomerReplyAt: conversationSessions.lastCustomerReplyAt,
+      lastMessageRole: conversationSessions.lastMessageRole,
+      csResolvedAt: conversationSessions.csResolvedAt,
+    })
+    .from(conversationSessions)
+    .where(
+      and(
+        eq(conversationSessions.lastMessageRole, "user"),
+        isNull(conversationSessions.csResolvedAt),
+        lt(conversationSessions.lastCustomerReplyAt, cutoffMs),
+      )
+    )
+    .orderBy(conversationSessions.lastCustomerReplyAt);
+  const result: UnansweredSmsResult["rows"] = rows.map((r) => {
+    let lastMessagePreview = "";
+    try {
+      const msgs = JSON.parse(r.messageHistory) as Array<{ role: string; content: string }>;
+      const lastCustomer = [...msgs].reverse().find((m) => m.role === "user");
+      lastMessagePreview = lastCustomer?.content?.slice(0, 120) ?? "";
+    } catch {
+      lastMessagePreview = "";
+    }
+    return {
+      sessionId: r.id,
+      leadName: r.leadName ?? null,
+      leadPhone: r.leadPhone,
+      lastMessagePreview,
+      waitMs: Date.now() - (r.lastCustomerReplyAt ?? 0),
+    };
+  });
+  return { type: "unanswered_sms", thresholdMinutes, rows: result };
+}
 // ── Job Status Stream handler ───────────────────────────────────────────────
 async function handleJobStatusStream(db: Awaited<ReturnType<typeof getDb>>): Promise<JobStatusStreamResult> {
   if (!db) return { type: "job_status_stream", alerts: [], cleanerStatuses: [] };
@@ -2512,6 +2569,9 @@ export const aiConciergeRouter = router({
       }
       if (plan.action === "job_status_stream") {
         return await handleJobStatusStream(db);
+      }
+      if (plan.action === "unanswered_sms") {
+        return await handleUnansweredSms(plan, db);
       }
       if (plan.action === "query") {
         // New unified query path — replaces both query_data and customer_profile

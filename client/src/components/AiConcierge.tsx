@@ -247,6 +247,7 @@ type MessageContent =
   | { type: "confirmation_texts"; card: ConfirmationTextsCard }
   | { type: "confirmation_results"; card: ConfirmationResultsCard }
   | { type: "job_status_stream"; card: JobStatusStreamCard }
+  | { type: "unanswered_sms"; card: UnansweredSmsCard }
   | { type: "prepare_checklist"; card: PrepareChecklistCard }
   | { type: "prepare_result"; card: PrepareResultCard };
   // customer_profile removed — all informational queries return query_result
@@ -1143,6 +1144,12 @@ function MessageBubble({
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
+        {msg.content.type === "unanswered_sms" && (
+          <div>
+            <UnansweredSmsCardView card={msg.content.card} />
+            <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
+          </div>
+        )}
         {msg.content.type === "prepare_checklist" && (
           <div>
             <PrepareChecklistCardView card={msg.content.card} />
@@ -1740,6 +1747,77 @@ function ConfirmationResultsCardView({ card }: { card: ConfirmationResultsCard }
 
 // ─── Customer profile card ───────────────────────────────────────────────────
 
+// ─── Unanswered SMS card ─────────────────────────────────────────────────────
+interface UnansweredSmsCard {
+  thresholdMinutes: number;
+  rows: Array<{
+    sessionId: number;
+    leadName: string | null;
+    leadPhone: string;
+    lastMessagePreview: string;
+    waitMs: number;
+  }>;
+}
+function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
+  const fmtWait = (ms: number) => {
+    const totalMins = Math.floor(ms / 60000);
+    if (totalMins < 60) return `${totalMins}m`;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  };
+  const waitColor = (ms: number) => {
+    const mins = ms / 60000;
+    if (mins >= 120) return { color: "#ef4444", bg: "#ef444422" };
+    if (mins >= 60) return { color: "#f97316", bg: "#f9731622" };
+    return { color: "#f59e0b", bg: "#f59e0b22" };
+  };
+  if (card.rows.length === 0) {
+    return (
+      <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+        <div style={{ background: "#1e2235", padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <CheckCircle2 className="w-3 h-3 text-white" />
+          </div>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8" }}>No unanswered texts over {card.thresholdMinutes} minutes — all caught up!</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ background: "#1a1d30", borderRadius: 14, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)", width: "100%" }}>
+      <div style={{ background: "#1e2235", borderBottom: "1px solid #2a2e47", padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "linear-gradient(135deg, #f97316, #ef4444)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <MessageSquare className="w-3 h-3 text-white" />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Unanswered SMS</p>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.rows.length} conversation{card.rows.length !== 1 ? "s" : ""} waiting over {card.thresholdMinutes} min</p>
+        </div>
+      </div>
+      <div>
+        {card.rows.map((row, i) => {
+          const { color, bg } = waitColor(row.waitMs);
+          const displayName = row.leadName || row.leadPhone;
+          return (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#2a2e47", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                <User className="w-3.5 h-3.5" style={{ color: "#6b7280" }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 2 }}>{displayName}</p>
+                {row.lastMessagePreview && (
+                  <p style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.lastMessagePreview}</p>
+                )}
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 // ─── Job Status Stream card ──────────────────────────────────────────────────
 
 interface JobStatusStreamCard {
@@ -3075,7 +3153,8 @@ type ServerResult =
   | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> }
   | { type: "confirmation_texts"; date: string; dateLabel: string; rows: Array<{ cleanerJobId: number; customerName: string; customerPhone: string | null; serviceDateTime: string | null; teamName: string | null; alreadySent: boolean; smsConfirmedAt: number | null }> }
   | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number }
-  | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> };
+  | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> }
+  | { type: "unanswered_sms"; thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -3277,6 +3356,14 @@ function buildAiMessage(result: ServerResult): Message | null {
       id: uid(),
       role: "ai",
       content: { type: "job_status_stream", card: { alerts: result.alerts, cleanerStatuses: result.cleanerStatuses } },
+      ts,
+    };
+  }
+  if (result.type === "unanswered_sms") {
+    return {
+      id: uid(),
+      role: "ai",
+      content: { type: "unanswered_sms", card: { thresholdMinutes: result.thresholdMinutes, rows: result.rows } },
       ts,
     };
   }
