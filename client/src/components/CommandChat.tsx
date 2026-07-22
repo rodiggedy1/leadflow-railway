@@ -6857,7 +6857,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             </div>
           )}
           {voiceConfirm && !voiceCardMinimized && (
-            <div className="mb-2 mx-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[480px] flex flex-col" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
+            <div className="mb-2 mx-auto w-full max-w-md rounded-3xl border border-slate-200 bg-white shadow-2xl overflow-hidden min-h-[600px] flex flex-col" style={{boxShadow: "0 8px 40px rgba(0,0,0,0.13)"}}>
               {/* Header — contact identity */}
               <div className="flex items-start gap-4 px-5 pt-5 pb-4">
                 {/* Avatar */}
@@ -6989,14 +6989,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* iMessage-style tap-to-edit bubble */}
               {voiceConfirmAction !== "remind" && !voiceNeedsSearch && (
                 <div className="px-5 pb-5">
-                  <div className="flex justify-end min-h-[180px] items-start pt-1">
+                  <div className="flex justify-end min-h-[260px] items-start pt-1">
                     {voiceBubbleEditing ? (
                       <textarea
                         autoFocus
                         value={voiceConfirmMsg}
                         onChange={e => setVoiceConfirmMsg(e.target.value)}
                         onBlur={() => setVoiceBubbleEditing(false)}
-                        rows={6}
+                        rows={9}
                         className="w-full max-w-[90%] text-[15px] leading-relaxed bg-[#007AFF] text-white rounded-[20px] rounded-br-[6px] px-5 py-4 resize-none focus:outline-none shadow-sm placeholder:text-blue-200 caret-white"
                         style={{colorScheme: "dark"}}
                       />

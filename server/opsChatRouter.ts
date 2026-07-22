@@ -4002,12 +4002,42 @@ Examples:
 
       const actionType = parsed.action as "text" | "call" | "remind";
 
+      // Auto-rewrite text messages with the gold-standard CS prompt before returning
+      let finalMessage = parsed.message;
+      if (actionType === "text" && parsed.message) {
+        try {
+          const { invokeLLM } = await import("./_core/llm");
+          const csSystemPrompt = buildSystemPrompt();
+          const toneOverride = `=== TONE OVERRIDE FOR THIS REWRITE ===
+This is a FRIENDLY rewrite. Be warm, personal, and upbeat. Use the customer's name.
+You MUST include at least 1 emoji (1–2 max) placed naturally — e.g. 😊 👋 🙏 💛 ✨ 💪.
+A friendly message with ZERO emoji is WRONG. Do not skip the emoji.
+Write until the message feels complete and warm — not like a ticket being closed.`;
+          const systemPrompt = `${csSystemPrompt}\n\n${toneOverride}\n\nWrite ONLY the SMS text. No explanation, no quotes around it, no preamble.`;
+          const customerName = matchesWithJob.length > 0 ? matchesWithJob[0].name : (parsed.name ?? "Customer");
+          const userPrompt = `Customer name: ${customerName}\n${parsed.scenario ? `Context: ${parsed.scenario}` : ""}\nOriginal message to rewrite: ${parsed.message}\nTone: friendly`;
+          const rewriteResult = await invokeLLM({
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+          });
+          let rewritten = ((rewriteResult.choices[0].message.content as string) ?? "").trim();
+          // Guarantee emoji for friendly tone
+          const emojiRegex = /\p{Emoji_Presentation}|\p{Extended_Pictographic}/u;
+          if (!emojiRegex.test(rewritten)) rewritten = rewritten + " 😊";
+          finalMessage = rewritten;
+        } catch {
+          // Fall back to original parsed message if rewrite fails
+        }
+      }
+
       // If no matches found, return needsSearch=true so frontend shows a search box
       if (matchesWithJob.length === 0) {
         return {
           action: actionType,
           matches: [] as Array<{ sessionId: number; name: string; phone: string; lastJobDate: string | null; lastJobTime: string | null; lastJobTeam: string | null }>,
-          message: parsed.message,
+          message: finalMessage,
           needsSearch: true,
           detectedName: parsed.name,
           scenario: parsed.scenario,
@@ -4017,7 +4047,7 @@ Examples:
       return {
         action: actionType,
         matches: matchesWithJob,
-        message: parsed.message,
+        message: finalMessage,
         needsSearch: false,
         detectedName: parsed.name,
         scenario: parsed.scenario,
