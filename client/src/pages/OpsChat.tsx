@@ -2192,10 +2192,13 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
                   style={{ opacity: isActive ? 1 : 0.65 }}
                 >
                   {ws.id === "channels" ? (
-                    /* Command Chat — white circle with prototype icon */
+                    /* Command Chat — white circle with centered disc icon */
                     <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-md">
-                      {/* .rail-item .icon { font-size:21px } */}
-                      <span style={{fontSize:"21px",lineHeight:1}}>{ws.icon}</span>
+                      <svg width="22" height="22" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="11" cy="11" r="10" stroke="#1e1b4b" strokeWidth="2" fill="none"/>
+                        <circle cx="11" cy="11" r="4" fill="#7c3aed"/>
+                        <circle cx="11" cy="11" r="2" fill="white"/>
+                      </svg>
                       <CmdMentionBadge
                         callerName={callerName}
                         hidden={activeTab === "channels"}
