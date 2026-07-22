@@ -2293,7 +2293,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
       role: "ai",
       content: {
         type: "text",
-        text: "Hi! I'm your AI Operations Concierge. I can run workflows like sending ETA updates, getting entry info to teams, rescheduling jobs, and more. What do you need?",
+        text: "Hi! I'm Madison 👋. I can run workflows like getting ETA updates, getting entry info for teams, sending payment links, and more. What do you need?",
       },
       ts: nowTime(),
     },
@@ -2802,7 +2802,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
               <span style={{ padding: "2px 7px", color: "#7447f5", background: "#eee5ff", border: "1px solid #d8c5ff", borderRadius: 999, fontSize: 10, fontWeight: 700 }}>BETA</span>
             </div>
             <p style={{ margin: "2px 0 0", fontSize: 11, color: "#70737d", display: "flex", alignItems: "center", gap: 4 }}>
-              Your AI Operations Concierge
+              Madison
               <span style={{ display: "inline-flex", alignItems: "center", gap: 3, marginLeft: 6 }}>
                 <span style={{ width: 6, height: 6, background: "#32bd75", borderRadius: "50%", display: "inline-block" }} />
                 <span>Online</span>
@@ -2829,7 +2829,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
                 <button onClick={onClose} style={{ marginLeft: "auto", width: 30, height: 30, display: "grid", placeItems: "center", color: "#7d7f85", background: "transparent", border: 0, borderRadius: "50%", cursor: "pointer", fontSize: 20, lineHeight: 1, flexShrink: 0 }} title="Close">×</button>
               )}
             </div>
-            <p style={{ margin: "7px 0 0", fontSize: 13.5, fontWeight: 600, color: "#3e424c" }}>Your AI Operations Concierge</p>
+            <p style={{ margin: "7px 0 0", fontSize: 13.5, fontWeight: 600, color: "#3e424c" }}>Madison</p>
             <p style={{ margin: "3px 0 0", fontSize: 13.5, color: "#70737d" }}>Ask anything. I'll get it done.</p>
           </div>
         </div>
