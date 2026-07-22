@@ -837,7 +837,8 @@ Rules:
 - For "payment_status": note that only pricing data is available, not live payment status
 - Do not include job IDs, phone numbers, or internal database fields
 - Be concise and direct
-- Today is ${today}`;
+- Today is ${today}
+- IMPORTANT: All timestamps in the data are UTC ISO strings (e.g. "2026-07-22T16:30:00Z"). Always convert them to Eastern Time (ET) and display as human-readable 12-hour time (e.g. "12:30 PM"). Never show raw ISO timestamps or UTC labels to the user.`;
 
   const llmResult = await invokeLLM({
     messages: [
