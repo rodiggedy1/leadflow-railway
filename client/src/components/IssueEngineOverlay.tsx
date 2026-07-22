@@ -1108,7 +1108,7 @@ export function ActiveIssuesPill({ onClick }: ActiveIssuesPillProps) {
       <div className="flex items-center gap-1.5">
         <span className="text-[16px]">🔥</span>
         <span className="text-slate-900 font-black text-sm">
-          {firstName && typeLabel ? `${firstName} • ${typeLabel}` : `${count} ${count === 1 ? "Issue" : "Issues"}`}
+          {`${count} ${count === 1 ? "Issue" : "Issues"}`}
         </span>
         {extraCount > 0 && (
           <span className="text-orange-500 font-black text-sm">+{extraCount}</span>
