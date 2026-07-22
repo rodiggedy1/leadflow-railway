@@ -7645,8 +7645,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {/* Send button — exact prototype .send */}
               <button
                 onClick={handleSend}
-                disabled={!composer.trim() && stagedFiles.length === 0}
-                style={{ width: 40, height: 40, borderRadius: "50%", border: 0, background: "linear-gradient(145deg,#6f3cff,#8f6bff)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0, cursor: "pointer", opacity: (!composer.trim() && stagedFiles.length === 0) ? 0.4 : 1, transition: "opacity .15s" }}
+                disabled={!composer.trim() && stagedPhotos.length === 0}
+                style={{ width: 40, height: 40, borderRadius: "50%", border: 0, background: "linear-gradient(145deg,#6f3cff,#8f6bff)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0, cursor: "pointer", opacity: (!composer.trim() && stagedPhotos.length === 0) ? 0.4 : 1, transition: "opacity .15s" }}
               >
                 ➤
               </button>
