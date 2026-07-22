@@ -1844,10 +1844,10 @@ function UnansweredSmsCardView({ card, onSwitchToCSSession }: { card: Unanswered
               <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
               <button
                 title="Resolve conversation"
-                onClick={() => resolveSession.mutate({ sessionId: row.sessionId })}
+                onClick={e => { e.stopPropagation(); resolveSession.mutate({ sessionId: row.sessionId }); }}
                 style={{ background: "transparent", border: "none", cursor: "pointer", padding: "2px 4px", flexShrink: 0, opacity: 0.5, transition: "opacity 0.15s" }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                onMouseLeave={e => (e.currentTarget.style.opacity = "0.5")}
+                onMouseEnter={e => { e.stopPropagation(); e.currentTarget.style.opacity = "1"; }}
+                onMouseLeave={e => { e.stopPropagation(); e.currentTarget.style.opacity = "0.5"; }}
               >
                 <XCircle className="w-4 h-4" style={{ color: "#6b7280" }} />
               </button>
