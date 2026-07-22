@@ -3067,12 +3067,12 @@ const MessageList = memo(function MessageList({
                             )}
                           </div>
                         )}
-                        <div className={"rounded-2xl " + (isAlert ? "max-w-[560px] px-4 py-2.5 bg-[#fff8f0] border border-[#ffe4b5] text-slate-800" : isMine ? "max-w-[75%] ml-auto px-5 py-4 bg-[#6f3cff] text-white" : "w-full px-5 py-4 bg-white border border-[#e6e8ef] text-slate-800")}>
+                        <div className={"rounded-2xl " + (isAlert ? "max-w-[560px] px-4 py-2.5 bg-[#0f172a] text-white" : isMine ? "max-w-[75%] ml-auto px-5 py-4 bg-[#0f172a] text-white" : "w-full px-5 py-4 bg-[#f1f5f9] text-slate-900")}>
                           {/* Top row: sender label + role + time */}
                           <div className="flex items-center justify-between mb-2">
                             <span className={cn(
                               "text-xs",
-                              isAlert ? "text-slate-500 font-normal" : isMine ? "text-white/70 font-semibold" : "font-semibold"
+                              isAlert ? "text-slate-400 font-normal" : isMine ? "text-slate-400 font-semibold" : "font-semibold"
                             )} style={{ color: isAlert || isMine ? undefined : authorColor }}>
                               {isAlert
                                 ? `${msg.from}${msg.role && msg.role !== "alert" ? " · " + (msg.role === "office" ? "Office" : msg.role === "cleaner" ? "Cleaner" : "Dispatch") : ""}`
@@ -3090,7 +3090,7 @@ const MessageList = memo(function MessageList({
                                   <Zap className="h-2.5 w-2.5" /> SUPER
                                 </span>
                               )}
-                              <span className={cn("text-xs", isAlert ? "text-slate-500" : isMine ? "text-white/60" : "text-slate-400")}>
+                              <span className={cn("text-xs", isAlert || isMine ? "text-slate-500" : "text-slate-400")}>
                                 {fmtMsgTime(msg.createdAt)}
                               </span>
                             </div>
@@ -3102,7 +3102,7 @@ const MessageList = memo(function MessageList({
                               onClick={() => setOpenThreadId(msg.threadParentId!)}
                               className={cn(
                                 "mb-2.5 w-full flex items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors group/thread",
-                                isMine ? "bg-[#5a30cc]/20 border border-[#c7b8ff] hover:bg-[#5a30cc]/30" : "bg-violet-50 border border-violet-200 hover:bg-violet-100"
+                                isMine ? "bg-violet-900/40 border border-violet-700/50 hover:bg-violet-900/60" : "bg-violet-50 border border-violet-200 hover:bg-violet-100"
                               )}
                             >
                               <MessageSquare className={cn("h-3.5 w-3.5 shrink-0", isMine ? "text-violet-400" : "text-violet-500")} />
@@ -3136,13 +3136,13 @@ const MessageList = memo(function MessageList({
                               onClick={() => msg.replyToId && scrollToCmdMsg(msg.replyToId)}
                               className={cn(
                                 "mb-2.5 rounded-lg overflow-hidden flex w-full text-left cursor-pointer hover:brightness-95 transition-all",
-                                isMine ? "bg-[#5a30cc]" : "bg-[#f5f3ff]"
+                                isMine ? "bg-slate-700" : "bg-slate-100"
                               )}
                             >
                               <div className="w-1 shrink-0 rounded-l-lg" style={{ backgroundColor: senderHex(msg.replyToAuthor ?? "") }} />
                               <div className="px-2.5 py-2 min-w-0">
                                 <p className="text-xs font-semibold mb-0.5 truncate" style={{ color: senderHex(msg.replyToAuthor ?? "") }}>{msg.replyToAuthor ?? "Unknown"}</p>
-                                <p className={cn("text-xs line-clamp-2 leading-snug break-words", isMine ? "text-white/80" : "text-slate-600")}>{msg.replyToBody}</p>
+                                <p className={cn("text-xs line-clamp-2 leading-snug break-words", isMine ? "text-slate-300" : "text-slate-500")}>{msg.replyToBody}</p>
                               </div>
                             </button>
                           )}
@@ -5818,7 +5818,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
       </div>
 
       {/* ── CENTER PANEL: Pinned Day Status + Conversation ── */}
-      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f7f8fc] min-h-0" style={{ minWidth: MIN_CENTER }}>
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-slate-100 min-h-0" style={{ minWidth: MIN_CENTER }}>
         {/* White card wrapper with grey showing on sides */}
         <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Header */}
@@ -7460,7 +7460,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div
             className={cn(
               "rounded-2xl border px-3 py-2 transition flex items-center gap-2",
-              isDragging ? "border-slate-300 bg-slate-100 ring-2 ring-slate-900/10" : "border-[#e2e5ee] bg-white"
+              isDragging ? "border-slate-300 bg-slate-200 ring-2 ring-slate-900/10" : "border-slate-200 bg-slate-50"
             )}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
