@@ -2195,7 +2195,7 @@ const MessageList = memo(function MessageList({
                     />
                   );
                 }
-                // ── Stale ETA alert card (amber) ──────────────────────────────────
+                // ── Stale ETA alert card (dark) ──────────────────────────────────
                 if (msg.quickAction === "stale_eta") {
                   let meta: Record<string, unknown> = {};
                   try { meta = JSON.parse(msg.metadata ?? "{}"); } catch { /* ignore */ }
@@ -2203,17 +2203,17 @@ const MessageList = memo(function MessageList({
                   const customerName = (meta.customerName as string | null) ?? null;
                   const etaStr = (meta.etaStr as string | null) ?? null;
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-xl overflow-hidden border border-amber-300 shadow-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500">
-                          <TriangleAlert className="h-3 w-3 text-amber-100" />
-                          <span className="text-[10px] font-semibold text-amber-100 uppercase tracking-widest">ETA Passed</span>
-                          <span className="ml-auto text-[10px] text-amber-200">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-amber-500/30" style={{ background: "rgba(120,53,15,0.15)" }}>
+                          <TriangleAlert className="h-3 w-3 text-amber-400" />
+                          <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-widest">ETA Passed</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        <div className="px-3 py-2.5 bg-amber-50">
-                          <p className="text-sm font-semibold text-slate-900">{cleanerName} — still on the way</p>
-                          {customerName && <p className="text-xs text-slate-500 mt-0.5">For {customerName}</p>}
-                          {etaStr && <p className="text-xs text-amber-700 mt-0.5">ETA was {etaStr}</p>}
+                        <div className="px-3 py-2.5">
+                          <p className="text-sm font-semibold text-slate-100">{cleanerName} — still on the way</p>
+                          {customerName && <p className="text-xs text-slate-400 mt-0.5">For {customerName}</p>}
+                          {etaStr && <p className="text-xs text-amber-400 mt-0.5">ETA was {etaStr}</p>}
                         </div>
                       </div>
                     </div>
