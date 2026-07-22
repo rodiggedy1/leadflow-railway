@@ -2085,17 +2085,17 @@ function CommandPicker({ onSelect, onClose }: { onSelect: (cmd: string) => void;
         <p className="text-sm font-semibold" style={{color:"#2d1f3d"}}>Some examples of things you can ask...</p>
         <button onClick={onClose} className="transition-colors text-lg leading-none" style={{color:"#9b8aaa"}} onMouseEnter={e=>(e.currentTarget.style.color="#6b3fa0")} onMouseLeave={e=>(e.currentTarget.style.color="#9b8aaa")}>✕</button>
       </div>
-      <div className="grid grid-cols-2 gap-2 p-3">
+      <div className="grid grid-cols-2 gap-1.5 p-2">
         {EXAMPLES.map((ex) => (
           <button
             key={ex.label}
             onClick={() => { onSelect(ex.example); onClose(); }}
-            className="flex flex-col gap-1 p-3 rounded-xl transition-all text-left"
+            className="flex flex-col gap-1 p-2 rounded-xl transition-all text-left"
             style={{background:"rgba(255,255,255,0.85)",border:"1px solid #ede6f5"}}
             onMouseEnter={e=>(e.currentTarget.style.background="#f3eeff")}
             onMouseLeave={e=>(e.currentTarget.style.background="rgba(255,255,255,0.85)")}
           >
-            <span className="text-lg leading-none">{ex.emoji}</span>
+            <span className="text-base leading-none">{ex.emoji}</span>
             <p className="text-xs font-semibold mt-1" style={{color:"#2d1f3d"}}>{ex.label}</p>
             <p className="text-[11px] leading-snug" style={{color:"#8b7a9e"}}>{ex.example}</p>
           </button>
@@ -3031,7 +3031,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
         )}
         </div>
         {showCommands && (
-          <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, zIndex: 50, marginBottom: 6 }}>
+          <div style={{ position: "absolute", bottom: "100%", left: 0, right: 0, zIndex: 50, marginBottom: 6, maxHeight: "60vh", overflowY: "auto" }}>
             <CommandPicker
               onSelect={(cmd) => { setInput(cmd); setShowCommands(false); inputRef.current?.focus(); }}
               onClose={() => setShowCommands(false)}
