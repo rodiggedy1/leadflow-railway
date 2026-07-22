@@ -1813,7 +1813,7 @@ function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 2 }}>{displayName}</p>
                 {row.lastMessagePreview && (
-                  <p style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.lastMessagePreview}</p>
+                  <p title={row.lastMessagePreview} style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "default" }}>{row.lastMessagePreview}</p>
                 )}
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
