@@ -1023,7 +1023,7 @@ function CallDebriefCard({
       <div className="w-full max-w-[520px]">
         {/* Main bubble */}
         <div
-          className="rounded-[17px] px-3 py-2.5 cursor-pointer select-none transition-all duration-150" style={{background:"#fff",border:"1px solid #e2e5ee",boxShadow:"0 5px 12px rgba(40,46,75,.07)"}}
+          className="rounded-2xl px-3 py-2.5 cursor-pointer select-none transition-all duration-150 bg-[#0f172a] border border-slate-700 hover:border-slate-600"
           onClick={() => setExpanded(v => !v)}
         >
           {/* Top row: phone icon + name + grade badge + time + chevron */}

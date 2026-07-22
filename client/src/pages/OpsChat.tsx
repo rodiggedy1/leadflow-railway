@@ -2226,7 +2226,7 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
               { href: "/admin/field-management",  icon: "🔧", color: "#64748b", line1: "Field",    line2: "Mgmt" },
               { href: "/admin/quality",           icon: "▣",  color: "#0ea5e9", line1: "Jobs",     line2: "" },
               { href: "/admin/sms-campaigns",     icon: "📣", color: "#f43f5e", line1: "Campaigns",line2: "" },
-              { href: "/admin/confirmation-calls",icon: "☎",  color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
+              { href: "/admin/confirmation-calls",icon: "☎︎",  color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
               { href: "/admin/payments",          icon: "▤",  color: "#f59e0b", line1: "Payments", line2: "" },
             ]).map((nav) => (
               <a
