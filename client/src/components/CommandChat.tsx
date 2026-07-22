@@ -6206,7 +6206,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto">
+            <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
@@ -7409,12 +7409,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <Popover open={plusOpen} onOpenChange={setPlusOpen}>
                 <PopoverTrigger asChild>
                   <button
-                    className={cn(
-                      "shrink-0 h-9 w-9 rounded-full border-2 flex items-center justify-center transition-all",
-                      plusOpen ? "border-slate-900 bg-slate-900 text-white rotate-45" : "border-slate-300 bg-white text-slate-600 hover:border-slate-500"
-                    )}
+                    style={{ width: 42, height: 42, borderRadius: "50%", border: "1px solid #e0e4ef", background: plusOpen ? "#111827" : "#fff", color: plusOpen ? "#fff" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, lineHeight: 1, flexShrink: 0, cursor: "pointer", transition: "background .15s" }}
                   >
-                    <Plus className="h-4 w-4" />
+                    ＋
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-52 p-1.5" align="start" side="top">
@@ -7600,14 +7597,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
             {/* WhatsApp-style bottom bar: + menu | emoji */}
               {/* PTT mic button — hold to talk, release to send */}
               <button
-                className={cn(
-                  "shrink-0 h-9 w-9 rounded-full border-2 flex items-center justify-center transition-all select-none",
-                  isPttActive
-                    ? "border-red-500 bg-red-500 text-white animate-pulse"
-                    : isTranscribing
-                    ? "border-violet-300 bg-violet-50 text-violet-400 cursor-wait"
-                    : "border-slate-200 bg-white hover:border-violet-400 hover:text-violet-600 text-slate-500"
-                )}
+                style={{ width: 42, height: 42, borderRadius: 14, border: isPttActive ? "1px solid #ef4444" : "1px solid #e0e4ef", background: isPttActive ? "#ef4444" : isTranscribing ? "#f5f3ff" : "#fff", color: isPttActive ? "#fff" : isTranscribing ? "#a78bfa" : "#6e7890", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, lineHeight: 1, flexShrink: 0, cursor: isTranscribing ? "wait" : "pointer", transition: "background .15s", userSelect: "none" }}
                 onMouseDown={(e) => { e.preventDefault(); if (!isPttActiveRef.current && !isTranscribing) { isPttActiveRef.current = true; setIsPttActive(true); startRecording(); } }}
                 onMouseUp={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
                 onMouseLeave={() => { if (isPttActiveRef.current) stopRecordingAndSend(); }}
@@ -7615,56 +7605,20 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 disabled={isTranscribing}
               >
                 {isPttActive ? (
-                  <span className="w-2.5 h-2.5 rounded-full bg-white" />
+                  <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", display: "inline-block" }} />
                 ) : isTranscribing ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Mic className="h-4 w-4" />
+                  <span>🎙</span>
                 )}
               </button>
               {/* Team ETA pill button */}
               <button
                 onClick={() => setTeamEtaOpen(true)}
                 title="Team ETA — live arrival updates"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "7px",
-                  width: "130px",
-                  height: "30px",
-                  padding: "0 10px",
-                  borderRadius: "999px",
-                  cursor: "pointer",
-                  color: "white",
-                  border: "none",
-                  background: "linear-gradient(135deg, #366CFF 0%, #4F5FFF 30%, #6A49FF 65%, #8A3DFF 100%)",
-                  boxShadow: "0 7px 16px rgba(88,90,255,.28), inset 0 1px 0 rgba(255,255,255,.22)",
-                  transition: ".25s",
-                  flexShrink: 0,
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-2px)";
-                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 22px 46px rgba(88,90,255,.40), inset 0 1px 0 rgba(255,255,255,.22)";
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLButtonElement).style.transform = "";
-                  (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 14px 32px rgba(88,90,255,.28), inset 0 1px 0 rgba(255,255,255,.22)";
-                }}
+                style={{ border: 0, background: "linear-gradient(145deg,#7145ff,#8f5cff)", color: "#fff", padding: "10px 14px", borderRadius: 999, fontSize: 11, fontWeight: 800, cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", gap: 6 }}
               >
-                {/* floating van icon */}
-                <span style={{ fontSize: "11px", animation: "etaVanFloat 2.8s ease-in-out infinite", display: "flex", alignItems: "center", justifyContent: "center", width: "17px", height: "17px", flexShrink: 0 }}>🚐</span>
-                {/* text */}
-                <span style={{ flex: 1, textAlign: "left" }}>
-                  <span style={{ display: "block", fontSize: "10.5px", fontWeight: 700, letterSpacing: "-0.03em", lineHeight: 1 }}>Live ETAs</span>
-                  <span style={{ display: "block", marginTop: "2px", fontSize: "7.5px", color: "rgba(255,255,255,.82)" }}>
-                    {movingTeamsCount > 0 ? `${movingTeamsCount} team${movingTeamsCount === 1 ? "" : "s"} moving` : "View team status"}
-                  </span>
-                </span>
-                {/* arrow */}
-<svg viewBox="0 0 24 24" style={{ width: "9px", height: "9px", opacity: 0.72, flexShrink: 0 }}>
-                  <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-                <style>{`@keyframes etaVanFloat { 0%{transform:translateX(0)} 50%{transform:translateX(3px)} 100%{transform:translateX(0)} }`}</style>
+                🚐 Live ETAs
               </button>
               {/* Emoji picker */}
               <div ref={emojiRef} className="relative shrink-0">
@@ -7688,6 +7642,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   </div>
                 )}
               </div>
+              {/* Send button — exact prototype .send */}
+              <button
+                onClick={handleSend}
+                disabled={!composer.trim() && stagedFiles.length === 0}
+                style={{ width: 40, height: 40, borderRadius: "50%", border: 0, background: "linear-gradient(145deg,#6f3cff,#8f6bff)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0, cursor: "pointer", opacity: (!composer.trim() && stagedFiles.length === 0) ? 0.4 : 1, transition: "opacity .15s" }}
+              >
+                ➤
+              </button>
           </div>
           </div>{/* end relative wrapper for @mention dropdown */}
         </div>
