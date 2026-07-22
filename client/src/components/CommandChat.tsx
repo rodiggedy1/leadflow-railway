@@ -810,7 +810,7 @@ function HotLeadCard({
           <span
             onClick={(e) => { e.stopPropagation(); if (!isClaimed && !claimLeadMutation.isPending) claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined }); }}
             style={{marginLeft:"auto",background: isClaimed ? "#eafaf4" : "#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color: isClaimed ? "#0da875" : "#6f3cff",cursor: isClaimed ? "default" : "pointer",opacity: claimLeadMutation.isPending ? 0.6 : 1}}
-          >{isClaimed ? `✓ ${claimedBy}` : estimatedPrice}</span>
+          >{estimatedPrice}</span>
         </div>
       </div>
 
