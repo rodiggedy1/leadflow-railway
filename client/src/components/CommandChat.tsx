@@ -1532,17 +1532,17 @@ const MessageList = memo(function MessageList({
                   const ratingColor = rating >= 4 ? "text-yellow-500" : rating === 3 ? "text-amber-500" : "text-red-500";
                   return (
                     <div key={msg.id} className="flex justify-start my-1 px-1">
-                      <div className="rounded-xl overflow-hidden" style={{ background: "#fff", border: "1px solid #e6e8ef", maxWidth: "480px", boxShadow: "0 1px 4px rgba(42,48,82,0.07)" }}>
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[#f0f2f7]">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
                           <span className="text-[10px] text-slate-400 font-medium">★ Rating Alert · Dispatch</span>
                           <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         <div className="px-3 py-2.5">
                           <p className={"text-sm font-bold leading-snug " + ratingColor}>{ratingLabel} {starsStr}</p>
-                          <p className="text-xs text-slate-600 mt-0.5 leading-snug">
+                          <p className="text-xs text-slate-300 mt-0.5 leading-snug">
                             {customerLine}{jobLine ? " | " + jobLine : ""}
                           </p>
-                          {commentLine && <p className="text-xs text-slate-500 mt-0.5 italic">{commentLine}</p>}
+                          {commentLine && <p className="text-xs text-slate-400 mt-0.5 italic">{commentLine}</p>}
                           {link && (
                             <a href={link} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline mt-1 inline-block">
                               View in Quality Dashboard →
@@ -1568,20 +1568,20 @@ const MessageList = memo(function MessageList({
                   const intentLabel = isCancellation ? "🚨 Cancellation" : "❓ Unclear Reply";
                   return (
                     <div key={msg.id} className="flex justify-start my-1 px-1">
-                      <div className="rounded-xl overflow-hidden" style={{ background: "#fff", border: "1px solid #e6e8ef", maxWidth: "480px", boxShadow: "0 1px 4px rgba(42,48,82,0.07)" }}>
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[#f0f2f7]">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
                           <span className="text-[10px] text-slate-400 font-medium">📱 Customer SMS Reply · Dispatch</span>
                           <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
                         <div className="px-3 py-2.5">
                           <p className={"text-sm font-bold leading-snug " + intentColor}>{intentLabel}</p>
-                          <p className="text-xs text-slate-700 font-medium mt-0.5 leading-snug">{titleLine}</p>
+                          <p className="text-xs text-slate-300 font-medium mt-0.5 leading-snug">{titleLine}</p>
                           {quotedLine && (
-                            <p className="text-xs text-slate-500 mt-1 leading-snug italic border-l-2 border-[#c7b8ff] pl-2">
+                            <p className="text-xs text-slate-400 mt-1 leading-snug italic border-l-2 border-slate-600 pl-2">
                               "{quotedLine}"
                             </p>
                           )}
-                          <p className="text-[10px] text-slate-400 mt-1.5">Review in Confirmation Calls page</p>
+                          <p className="text-[10px] text-slate-500 mt-1.5">Review in Confirmation Calls page</p>
                         </div>
                       </div>
                     </div>
