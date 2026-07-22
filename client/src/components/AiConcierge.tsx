@@ -722,13 +722,17 @@ function CallClientConfirmCardView({ card, onFired, onMissionSaved }: { card: Ca
           <p className="text-xs mt-0.5" style={{color:"#8a8a9a"}}>{card.recipientPhone}</p>
         </div>
       </div>
-      <div className="px-4 py-3">
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <Edit3 className="w-3 h-3" style={{color:"#7447f5"}} />
+          <span className="text-[11px] font-bold uppercase tracking-widest" style={{color:"#7447f5"}}>Script</span>
+        </div>
         <textarea
           value={script}
           onChange={(e) => setScript(e.target.value)}
           disabled={fired || startCall.isPending}
-          rows={4}
-          className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60 scrollbar-none overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039"}}
+          rows={10}
+          className="w-full rounded-xl px-3 py-2.5 text-sm resize-none outline-none transition-colors disabled:opacity-60" style={{background:"rgba(255,255,255,0.8)",border:"1px solid #e5d9ea",color:"#2d3039",minHeight:"200px"}}
         />
       </div>
       {callError && (
