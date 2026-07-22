@@ -205,9 +205,9 @@ interface CardStatusCard {
     customerName: string;
     cardBrand: string | null;
     last4: string | null;
-    status: "on_hold" | "no_preauth" | "no_card";
+    status: "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card";
     amountCents: number;
-  }>;
+  };
 }
 interface CustomerProfileCard {
   name: string;
@@ -1272,6 +1272,8 @@ function CardStatusCardView({ card }: { card: CardStatusCard }) {
   const onHold = card.rows.filter(r => r.status === "on_hold");
   const noPreauth = card.rows.filter(r => r.status === "no_preauth");
   const noCard = card.rows.filter(r => r.status === "no_card");
+  const lfOnHold = card.rows.filter(r => r.status === "lf_on_hold");
+  const lfCard = card.rows.filter(r => r.status === "lf_card");
 
   function formatAmount(cents: number) {
     return `$${(cents / 100).toFixed(2)}`;
@@ -1302,6 +1304,8 @@ function CardStatusCardView({ card }: { card: CardStatusCard }) {
   const statusBadge = (row: CardStatusCard["rows"][0]) => {
     if (row.status === "on_hold") return <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>On Hold · {formatAmount(row.amountCents)}</span>;
     if (row.status === "no_preauth") return <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>No Pre-Auth</span>;
+    if (row.status === "lf_on_hold") return <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>LF Hold · {formatAmount(row.amountCents)}</span>;
+    if (row.status === "lf_card") return <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>LF Card</span>;
     return <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>No Card</span>;
   };
 
@@ -1314,12 +1318,14 @@ function CardStatusCardView({ card }: { card: CardStatusCard }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6b7280", marginBottom: 2 }}>Card Status</p>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8" }}>{card.date} · {card.rows.length} job{card.rows.length !== 1 ? "s" : ""}</p>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {onHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{onHold.length} on hold</span>}
-          {noPreauth.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{noPreauth.length} no pre-auth</span>}
-          {noCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>{noCard.length} no card</span>}
+          <p style={{ fontSize: 12, fontWeight: 600, color: "#c8cde8", marginBottom: 6 }}>{card.date} · {card.rows.length} job{card.rows.length !== 1 ? "s" : ""}</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+            {onHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{onHold.length} on hold</span>}
+            {lfOnHold.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#34d399", background: "#34d39922", padding: "2px 7px", borderRadius: 8 }}>{lfOnHold.length} LF hold</span>}
+            {noPreauth.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{noPreauth.length} no pre-auth</span>}
+            {lfCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#fbbf24", background: "#fbbf2422", padding: "2px 7px", borderRadius: 8 }}>{lfCard.length} LF card</span>}
+            {noCard.length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#f87171", background: "#f8717122", padding: "2px 7px", borderRadius: 8 }}>{noCard.length} no card</span>}
+          </div>
         </div>
       </div>
       {/* Table */}
@@ -3064,7 +3070,7 @@ type ServerResult =
   | { type: "call_client_confirm"; recipientName: string; recipientFirstName: string; recipientPhone: string; script: string; audience: "customer" | "cleaner"; cleanerJobId: number }
   | { type: "call_client_pending"; recipientName: string; recipientPhone: string }
   | { type: "query_result"; answer: string; status: "complete" | "partial" | "not_found" | "ambiguous" | "error" }
-  | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card"; amountCents: number }> }
+  | { type: "card_status"; date: string; rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card"; amountCents: number }> }
   | { type: "rank_teams"; windowDays: number; minRatings: number; rows: Array<{ rank: number; cleanerName: string; avgRating: number; ratedJobs: number; totalJobs: number }>; excluded: number }
   | { type: "list_no_eta"; date: string; rows: Array<{ teamName: string; cleanerName: string; scheduledTime: string; serviceDateTime: string | null; etaStatus: "pending" | "unclear" | "no_answer"; isPastScheduled: boolean; currentJobId: number }> }
   | { type: "confirmation_texts"; date: string; dateLabel: string; rows: Array<{ cleanerJobId: number; customerName: string; customerPhone: string | null; serviceDateTime: string | null; teamName: string | null; alreadySent: boolean; smsConfirmedAt: number | null }> }

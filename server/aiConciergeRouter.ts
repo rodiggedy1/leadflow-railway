@@ -17,7 +17,7 @@ import { router, agentProcedure, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { invokeLLM } from "./_core/llm";
-import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages } from "../drizzle/schema";
+import { cleanerJobs, cleanerProfiles, completedJobs, cardAuthTokens, callLog, fieldMgmtCalls, madisonMissions, confirmationCalls, scheduleAssignments, opsChatMessages, stripeCustomers, paymentAuthorizations } from "../drizzle/schema";
 import { matchConfirmationCallsToJobs } from "./confirmationMatchHelper";
 import { eq, ne, and, inArray, like, or, desc, gte, sql, isNull, lt } from "drizzle-orm";
 import { parseServiceDateTime, formatTimeET, placeEtaCall } from "./fieldMgmtEngine";
@@ -356,7 +356,7 @@ export interface CardStatusResult {
     customerName: string;
     cardBrand: string | null;
     last4: string | null;
-    status: "on_hold" | "no_preauth" | "no_card";
+    status: "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card";
     amountCents: number;
   }>;
 }
@@ -1871,29 +1871,125 @@ async function handleCardStatus(
 
   // Deduplicate by customerName (one row per customer per date)
   const seen = new Set<string>();
-  const rows = jobs
-    .filter(j => {
-      const key = j.customerName ?? "";
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .map(j => ({
-      customerName: j.customerName ?? "Unknown",
-      cardBrand: j.cardBrand ?? null,
-      last4: j.last4 ?? null,
-      status: (
-        j.chargesOnHoldCents > 0 ? "on_hold" :
-        j.hasStripeCard ? "no_preauth" :
-        "no_card"
-      ) as "on_hold" | "no_preauth" | "no_card",
-      amountCents: j.chargesOnHoldCents,
-    }))
-    // Sort: on_hold first, then no_preauth, then no_card
-    .sort((a, b) => {
-      const order = { on_hold: 0, no_preauth: 1, no_card: 2 };
-      return order[a.status] - order[b.status];
-    });
+  const deduped = jobs.filter(j => {
+    const key = j.customerName ?? "";
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Build initial rows from L27 data
+  type RowStatus = "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card";
+  const rows: Array<{ customerName: string; cardBrand: string | null; last4: string | null; status: RowStatus; amountCents: number }> = deduped.map(j => ({
+    customerName: j.customerName ?? "Unknown",
+    cardBrand: j.cardBrand ?? null,
+    last4: j.last4 ?? null,
+    status: (
+      j.chargesOnHoldCents > 0 ? "on_hold" :
+      j.hasStripeCard ? "no_preauth" :
+      "no_card"
+    ) as RowStatus,
+    amountCents: j.chargesOnHoldCents,
+  }));
+
+  // For rows that are no_card or no_preauth, check LeadFlow payments (stripeCustomers + paymentAuthorizations)
+  const needsLfCheck = rows.filter(r => r.status === "no_card" || r.status === "no_preauth");
+  if (needsLfCheck.length > 0) {
+    // Fetch all stripeCustomers and active paymentAuthorizations for bulk matching
+    const [lfCustomers, lfAuths] = await Promise.all([
+      db.select({
+        phone: stripeCustomers.phone,
+        name: stripeCustomers.name,
+        stripePaymentMethodId: stripeCustomers.stripePaymentMethodId,
+        cardBrand: stripeCustomers.cardBrand,
+        cardLast4: stripeCustomers.cardLast4,
+      }).from(stripeCustomers),
+      db.select({
+        customerPhone: paymentAuthorizations.customerPhone,
+        customerName: paymentAuthorizations.customerName,
+        status: paymentAuthorizations.status,
+        amountCents: paymentAuthorizations.amountCents,
+      }).from(paymentAuthorizations)
+        .where(and(
+          eq(paymentAuthorizations.status, "authorized"),
+          isNull(paymentAuthorizations.cancelledAt),
+        )),
+    ]);
+
+    // Build lookup maps: normalized phone → record
+    const lfCustomerByPhone = new Map<string, typeof lfCustomers[0]>();
+    const lfAuthByPhone = new Map<string, typeof lfAuths[0]>();
+    for (const c of lfCustomers) {
+      const norm = normalizePhoneLegacy(c.phone ?? "");
+      if (norm) lfCustomerByPhone.set(norm, c);
+    }
+    for (const a of lfAuths) {
+      const norm = normalizePhoneLegacy(a.customerPhone ?? "");
+      if (norm) lfAuthByPhone.set(norm, a);
+    }
+
+    // Also build name-based lookup maps (lowercase, trimmed) as fallback
+    const lfCustomerByName = new Map<string, typeof lfCustomers[0]>();
+    const lfAuthByName = new Map<string, typeof lfAuths[0]>();
+    for (const c of lfCustomers) {
+      if (c.name) lfCustomerByName.set(c.name.toLowerCase().trim(), c);
+    }
+    for (const a of lfAuths) {
+      if (a.customerName) lfAuthByName.set(a.customerName.toLowerCase().trim(), a);
+    }
+
+    // Get phone for each L27 job row (need to re-fetch since we didn't select it above)
+    const jobPhones = await db.select({
+      customerName: cleanerJobs.customerName,
+      customerPhone: cleanerJobs.customerPhone,
+    }).from(cleanerJobs)
+      .where(and(
+        eq(cleanerJobs.jobDate, startDate),
+        ne(cleanerJobs.bookingStatus, "rescheduled"),
+        ne(cleanerJobs.bookingStatus, "cancelled"),
+      ));
+    const phoneByName = new Map<string, string>();
+    for (const jp of jobPhones) {
+      if (jp.customerName && jp.customerPhone) {
+        phoneByName.set(jp.customerName, jp.customerPhone);
+      }
+    }
+
+    for (const row of rows) {
+      if (row.status !== "no_card" && row.status !== "no_preauth") continue;
+
+      // Step 1: try phone match
+      const rawPhone = phoneByName.get(row.customerName) ?? "";
+      const normPhone = normalizePhoneLegacy(rawPhone);
+      let lfAuth = normPhone ? lfAuthByPhone.get(normPhone) : undefined;
+      let lfCust = normPhone ? lfCustomerByPhone.get(normPhone) : undefined;
+
+      // Step 2: fallback to name match
+      if (!lfAuth && !lfCust) {
+        const nameLower = row.customerName.toLowerCase().trim();
+        lfAuth = lfAuthByName.get(nameLower);
+        lfCust = lfCustomerByName.get(nameLower);
+      }
+
+      // Upgrade status based on LF data
+      if (lfAuth) {
+        row.status = "lf_on_hold";
+        row.amountCents = lfAuth.amountCents;
+        row.cardBrand = null;
+        row.last4 = null;
+      } else if (lfCust?.stripePaymentMethodId) {
+        row.status = "lf_card";
+        row.cardBrand = lfCust.cardBrand ?? null;
+        row.last4 = lfCust.cardLast4 ?? null;
+      }
+    }
+  }
+
+  // Sort: on_hold + lf_on_hold first, then no_preauth + lf_card, then no_card
+  rows.sort((a, b) => {
+    const order: Record<RowStatus, number> = { on_hold: 0, lf_on_hold: 1, no_preauth: 2, lf_card: 3, no_card: 4 };
+    return order[a.status] - order[b.status];
+  });
 
   return { type: "card_status", date: startDate, rows };
 }
