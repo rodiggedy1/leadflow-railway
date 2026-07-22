@@ -954,6 +954,7 @@ function MessageBubble({
   onAddMessage,
   onAddMission,
   onOpenReadiness,
+  onSwitchToCSSession,
 }: {
   msg: Message;
   agentPhotoUrl?: string;
@@ -962,6 +963,7 @@ function MessageBubble({
   onAddMessage: (m: Message) => void;
   onAddMission: (metadata: MissionMetadata) => void;
   onOpenReadiness: (rawDate?: string) => void;
+  onSwitchToCSSession?: (sessionId: number) => void;
 }) {
   if (msg.role === "user") {
     return (
@@ -2995,7 +2997,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
           </div>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={(rawDate) => { setReadinessDate(rawDate); setReadinessOpen(true); }} />
+          <MessageBubble key={msg.id} msg={msg} agentPhotoUrl={agentPhotoUrl} onPickTeam={handlePickTeam} onPickClient={handlePickClient} onAddMessage={(m) => setMessages((prev) => [...prev, m])} onAddMission={addMission} onOpenReadiness={(rawDate) => { setReadinessDate(rawDate); setReadinessOpen(true); }} onSwitchToCSSession={onSwitchToCSSession} />
         ))}
         {isThinking && (
           <div className="flex items-start gap-3">
