@@ -5763,21 +5763,21 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* White card wrapper with grey showing on sides */}
         <div className="bg-white rounded-2xl shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Header */}
-        <div className="px-4 pt-2 pb-2 border-b border-[#1e293b] bg-[#0f172a] shrink-0">
+        <div className="px-4 pt-2 pb-2 border-b border-slate-200 bg-white shrink-0">
           {/* Compact single-row header */}
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white leading-none mr-2 whitespace-nowrap">MIB Command ✦</span>
+                  <span className="text-sm font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command ✦</span>
                   {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => onSwitchToLeadOps?.()}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-[#1e293b] border border-[#334155] rounded-full hover:border-[#4f46e5] hover:bg-[#1e1b4b] transition-colors cursor-pointer shadow-sm"
+                        className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition-colors cursor-pointer shadow-sm"
                       >
-                        <span className="font-bold text-[#a5b4fc]" style={{fontSize:"13px"}}>{todayStats?.total ?? 0}</span>
-                        <span className="text-[11px] font-semibold text-slate-400">Leads</span>
+                        <span className="font-bold text-[#2c70ff]" style={{fontSize:"13px"}}>{todayStats?.total ?? 0}</span>
+                        <span className="text-[11px] font-semibold text-[#8791a8]">Leads</span>
                       </button>
                     </TooltipTrigger>
                     {todayStats?.leadList && todayStats.leadList.length > 0 && (
@@ -5812,9 +5812,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     return (
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <span className="flex items-center gap-1 px-3 py-1.5 bg-[#1e293b] border border-[#334155] rounded-full cursor-default shadow-sm">
-                            <span className="font-bold text-[#a5b4fc]" style={{fontSize:"13px"}}>{todayBookingCount}</span>
-                            <span className="text-[11px] font-semibold text-slate-400">Booked</span>
+                          <span className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full cursor-default shadow-sm">
+                            <span className="font-bold text-[#2c70ff]" style={{fontSize:"13px"}}>{todayBookingCount}</span>
+                            <span className="text-[11px] font-semibold text-[#8791a8]">Booked</span>
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" align="start" className="p-0 overflow-hidden min-w-[180px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -5837,9 +5837,9 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {/* Revenue card */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 px-3 py-1.5 bg-[#1e293b] border border-[#334155] rounded-full cursor-default shadow-sm">
-                        <span className="font-bold text-emerald-400" style={{fontSize:"13px"}}>${todayRevenue.toLocaleString()}</span>
-                        <span className="text-[11px] font-semibold text-slate-400">Today</span>
+                      <span className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full cursor-default shadow-sm">
+                        <span className="font-bold text-emerald-600" style={{fontSize:"13px"}}>${todayRevenue.toLocaleString()}</span>
+                        <span className="text-[11px] font-semibold text-[#8791a8]">Today</span>
                       </span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="p-0 overflow-hidden min-w-[230px] max-w-[290px] bg-[#0f1623] border border-white/10 shadow-xl rounded-xl">
@@ -5870,10 +5870,10 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                   {myAssignedLeads.length > 0 && (
                     <button
                       onClick={() => setShowMyLeads(v => !v)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-[#1e293b] border border-[#334155] rounded-full hover:border-[#4f46e5] hover:bg-[#1e1b4b] transition-colors cursor-pointer shadow-sm"
+                      className="flex items-center gap-1 px-3 py-1.5 bg-white border border-[#e4e7f0] rounded-full hover:border-[#c7b8ff] hover:bg-[#faf8ff] transition-colors cursor-pointer shadow-sm"
                     >
                       <span className="font-bold text-amber-500" style={{fontSize:"13px"}}>{myAssignedLeads.length}</span>
-                      <span className="text-[11px] font-semibold text-slate-400">Mine</span>
+                      <span className="text-[11px] font-semibold text-[#8791a8]">Mine</span>
                     </button>
                   )}
                 </div>
@@ -6198,7 +6198,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         <div className={cn("relative flex-1 min-h-0 flex flex-col", (centerView === "issues" || centerView === "calls") && "hidden")}>
           {/* Combined pill bar — mentions + threads in one compact row */}
           {true && (
-            <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-[#0f172a] border-b border-[#1e293b] overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
+            <div className="shrink-0 flex items-center gap-1.5 px-4 py-1.5 bg-white border-b border-slate-200 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
               {/* Mentions pill — shows count + jump when unread, or just See all when all read */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && (
                 <div className="flex items-center gap-1.5">
@@ -6207,8 +6207,8 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     className={cn(
                       "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition",
                       unreadTagIds.length > 0
-                        ? "bg-[#1c1000] text-amber-400 border border-amber-900 hover:bg-[#2d1a00]"
-                        : "bg-[#1e293b] text-slate-400 border border-[#334155] hover:bg-[#263548]"
+                        ? "bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100"
+                        : "bg-white text-slate-500 border border-slate-200 hover:bg-slate-50"
                     )}
                   >
                     <Bell className="h-3 w-3" />
@@ -6219,18 +6219,18 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                     ) : null}
                   </button>
                   {unreadTagIds.length > 0 && (
-                    <button onClick={markTagsSeen} className="text-slate-600 hover:text-slate-400 transition" title="Dismiss">
+                    <button onClick={markTagsSeen} className="text-slate-300 hover:text-slate-500 transition" title="Dismiss">
                       <X className="h-3 w-3" />
                     </button>
                   )}
-                  <button onClick={() => setShowMentionHistory(true)} className="text-[10px] text-slate-500 hover:text-slate-300 transition font-medium">
+                  <button onClick={() => setShowMentionHistory(true)} className="text-[10px] text-slate-400 hover:text-slate-600 transition font-medium">
                     See all
                   </button>
                 </div>
               )}
               {/* Divider between pills */}
               {(unreadTagIds.length > 0 || allMentions.length > 0) && activeThreadCount > 0 && (
-                <span className="text-[#334155] text-xs">|</span>
+                <span className="text-slate-300 text-xs">|</span>
               )}
               {/* Threads pill */}
               {activeThreadCount > 0 && (
@@ -6249,12 +6249,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               )}
               {/* Lead Replies pill — always visible */}
               {(unreadTagIds.length > 0 || activeThreadCount > 0) && (
-                <span className="text-[#334155] text-xs">|</span>
+                <span className="text-slate-300 text-xs">|</span>
               )}
               <button
                 onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
                 className="relative flex items-center gap-1.5 whitespace-nowrap transition"
-              style={{padding:"7px 10px",fontSize:"12px",color:"#a5b4fc",background:"#1e1b4b",border:"1px solid #4f46e5",borderRadius:"999px"}}
+              style={{padding:"7px 10px",fontSize:"12px",color:"#673fe4",background:"#f5f1ff",border:"1px solid #d8ccff",borderRadius:"999px"}}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 Lead Chats
@@ -6265,14 +6265,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 )}
               </button>
               {/* Email Inbox pill — opens slide-in preview panel */}
-              <span className="text-[#334155] text-xs">|</span>
+              <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setEmailsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (tasksOpen) setTasksOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   emailsOpen
-                    ? "bg-[#1e1b4b] text-[#a5b4fc] border-[#4f46e5]"
-                    : "bg-[#1e293b] text-slate-400 border-[#334155] hover:bg-[#1e1b4b] hover:border-[#4f46e5] hover:text-[#a5b4fc]"
+                    ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
               style={{padding:"7px 10px",fontSize:"12px"}}
               >
@@ -6288,14 +6288,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 )}
               </button>
               {/* Missed Calls pill */}
-              <span className="text-[#334155] text-xs">|</span>
+              <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setMissedCallsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (tasksOpen) setTasksOpen(false); if (emailsOpen) setEmailsOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   missedCallsOpen
-                    ? "bg-[#1e1b4b] text-[#a5b4fc] border-[#4f46e5]"
-                    : "bg-[#1e293b] text-slate-400 border-[#334155] hover:bg-[#1e1b4b] hover:border-[#4f46e5] hover:text-[#a5b4fc]"
+                    ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
               style={{padding:"7px 10px",fontSize:"12px"}}
               >
@@ -6309,16 +6309,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               </button>
 
               {/* CS SMS unanswered pill — 202-888-5362 line */}
-              <span className="text-[#334155] text-xs">|</span>
+              <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailsOpen) setEmailsOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   csSmsOpen
-                    ? "bg-[#1e1b4b] text-[#a5b4fc] border-[#4f46e5]"
+                    ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
                     : csUnansweredUrgent > 0
-                    ? "bg-[#1c0a00] text-red-400 border-red-900 hover:bg-[#2d1000]"
-                    : "bg-[#1e293b] text-slate-400 border-[#334155] hover:bg-[#1e1b4b] hover:border-[#4f46e5] hover:text-[#a5b4fc]"
+                    ? "bg-white text-red-600 border-red-200 hover:bg-red-50"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
                 style={{padding:"7px 10px",fontSize:"12px"}}
                 title={
@@ -6341,14 +6341,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 )}
               </button>
               {/* Tasks pill */}
-              <span className="text-[#334155] text-xs">|</span>
+              <span className="text-slate-300 text-xs">|</span>
               <button
                 onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailsOpen) setEmailsOpen(false); }}
                 className={cn(
                   "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   tasksOpen
-                    ? "bg-[#1e1b4b] text-[#a5b4fc] border-[#4f46e5]"
-                    : "bg-[#1e293b] text-slate-400 border-[#334155] hover:bg-[#1e1b4b] hover:border-[#4f46e5] hover:text-[#a5b4fc]"
+                    ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
+                    : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
                 style={{padding:"7px 10px",fontSize:"12px"}}
                 title="Tasks"
