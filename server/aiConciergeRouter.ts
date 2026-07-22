@@ -28,6 +28,7 @@ import { notifyOwner } from "./_core/notification";
 import { ENV } from "./_core/env";
 import { appendCsOutboundMessage } from "./sms/appendCsOutboundMessage";
 import { parseConciergeRequest, validateAndNormalizePlan } from "./conciergeParser";
+import { buildSystemPrompt } from "./csReplyStream";
 import { resolveQuery } from "./conciergeResolvers";
 import type { QueryPlan } from "./conciergeQuery";
 import { getTodayET, resolveServiceDateRange } from "./conciergeTime";
@@ -752,16 +753,11 @@ async function draftCleanerMessage(
     messages: [
       {
         role: "system",
-        content: `You are drafting a short, professional SMS message from a cleaning company dispatcher to their cleaning staff.
-Keep it brief (1-3 sentences), friendly, and direct.
-Do NOT include greetings like "Hi [Name]" — the message goes to multiple people.
-Do NOT include a sign-off or company name.
-Just write the message body.`,
+        content: buildSystemPrompt() + `\n\n=== STAFF MESSAGE RULES ===\nYou are drafting an SMS from the dispatcher to cleaning STAFF (not a customer).\nKeep it warm, direct, and brief (1-3 sentences).\nDo NOT include greetings like "Hi [Name]" — the message goes to multiple staff members.\nDo NOT include a sign-off or company name.\nJust write the message body.`,
       },
       {
         role: "user",
-        content: `Draft an SMS to send to ${targetDescription} (${recipientNames}).
-The dispatcher wants to: ${messageHint ?? "send a general message to the team"}`,
+        content: `Draft an SMS to send to ${targetDescription} (${recipientNames}).\nThe dispatcher wants to: ${messageHint ?? "send a general message to the team"}`,
       },
     ],
   });
@@ -1197,15 +1193,11 @@ async function draftClientMessage(messageHint: string | null, clientName: string
     messages: [
       {
         role: "system",
-        content: `You are drafting a short, professional SMS from a cleaning company to a client.
-Keep it brief (1-3 sentences), friendly, and direct.
-Address the client by first name.
-Do NOT include a sign-off or company name.
-Just write the message body.`,
+        content: buildSystemPrompt(),
       },
       {
         role: "user",
-        content: `Draft an SMS to client ${firstName}. The dispatcher wants to: ${messageHint ?? "send a general message"}`,
+        content: `Draft an SMS to client ${firstName}. The dispatcher wants to: ${messageHint ?? "send a general message"}. Write the exact message to send — warm, personal, and on-brand. Address them by first name.`,
       },
     ],
   });
