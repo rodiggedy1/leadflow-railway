@@ -2245,43 +2245,50 @@ async function handleUnansweredSms(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
 ): Promise<UnansweredSmsResult> {
   const thresholdMinutes = Math.max(1, parseInt(plan.questionHint ?? "30", 10) || 30);
-  const cutoffMs = Date.now() - thresholdMinutes * 60 * 1000;
-  const rows = await db
+  const thresholdMs = thresholdMinutes * 60 * 1000;
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  // Same source filter as getUnansweredCsCount
+  const sourceFilter = or(
+    eq(conversationSessions.leadSource, "cs-inbound"),
+    eq(conversationSessions.leadSource, "cs-inbound-cleaner"),
+    eq(conversationSessions.leadSource, "cs_initiated"),
+  );
+  const sessions = await db
     .select({
       id: conversationSessions.id,
       leadName: conversationSessions.leadName,
       leadPhone: conversationSessions.leadPhone,
       messageHistory: conversationSessions.messageHistory,
       lastCustomerReplyAt: conversationSessions.lastCustomerReplyAt,
-      lastMessageRole: conversationSessions.lastMessageRole,
-      csResolvedAt: conversationSessions.csResolvedAt,
     })
     .from(conversationSessions)
-    .where(
-      and(
-        eq(conversationSessions.lastMessageRole, "user"),
-        isNull(conversationSessions.csResolvedAt),
-        lt(conversationSessions.lastCustomerReplyAt, cutoffMs),
-      )
-    )
-    .orderBy(conversationSessions.lastCustomerReplyAt);
-  const result: UnansweredSmsResult["rows"] = rows.map((r) => {
-    let lastMessagePreview = "";
+    .where(and(sourceFilter, isNull(conversationSessions.csResolvedAt)));
+  const result: UnansweredSmsResult["rows"] = [];
+  for (const s of sessions) {
     try {
-      const msgs = JSON.parse(r.messageHistory) as Array<{ role: string; content: string }>;
-      const lastCustomer = [...msgs].reverse().find((m) => m.role === "user");
-      lastMessagePreview = lastCustomer?.content?.slice(0, 120) ?? "";
-    } catch {
-      lastMessagePreview = "";
-    }
-    return {
-      sessionId: r.id,
-      leadName: r.leadName ?? null,
-      leadPhone: r.leadPhone,
-      lastMessagePreview,
-      waitMs: Date.now() - (r.lastCustomerReplyAt ?? 0),
-    };
-  });
+      const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
+      const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
+      if (!lastReal || lastReal.role !== "user") continue; // last message is from agent — answered
+      const msgTs = lastReal.ts && lastReal.ts > 1_000_000_000_000 ? lastReal.ts : null;
+      const fallbackTs = s.lastCustomerReplyAt && s.lastCustomerReplyAt > 1_000_000_000_000 ? s.lastCustomerReplyAt : null;
+      const resolvedTs = msgTs ?? fallbackTs;
+      if (!resolvedTs) continue;
+      const age = now - resolvedTs;
+      if (age > THIRTY_DAYS_MS) continue; // skip stale/dead sessions
+      if (age < thresholdMs) continue; // not waiting long enough yet
+      const preview = typeof lastReal.content === "string" ? lastReal.content.slice(0, 120) : "";
+      result.push({
+        sessionId: s.id,
+        leadName: s.leadName ?? null,
+        leadPhone: s.leadPhone,
+        lastMessagePreview: preview,
+        waitMs: age,
+      });
+    } catch { /* skip malformed */ }
+  }
+  // Sort ascending: shortest wait first (most recent at top)
+  result.sort((a, b) => a.waitMs - b.waitMs);
   return { type: "unanswered_sms", thresholdMinutes, rows: result };
 }
 // ── Job Status Stream handler ───────────────────────────────────────────────
