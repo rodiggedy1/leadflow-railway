@@ -7770,7 +7770,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         className="shrink-0 flex flex-col overflow-y-auto transition-[width] duration-200"
         style={{ width: rightCollapsed ? 0 : rightWidth, minWidth: rightCollapsed ? 0 : MIN_RIGHT, overflow: rightCollapsed ? "hidden" : undefined, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <AiConcierge compact />
+        <AiConcierge compact onSwitchToCSSession={onSwitchToCSSession} />
         {/* end right panel */}
       </div>
 

@@ -45,6 +45,7 @@ import {
   Sun,
 } from "lucide-react";
 import ReadinessDrawer from "./ReadinessDrawer";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { trpc } from "@/lib/trpc";
 import { proxyRecordingUrl } from "@/lib/utils";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -1146,7 +1147,7 @@ function MessageBubble({
         )}
         {msg.content.type === "unanswered_sms" && (
           <div>
-            <UnansweredSmsCardView card={msg.content.card} />
+            <UnansweredSmsCardView card={msg.content.card} onSwitchToCSSession={onSwitchToCSSession} />
             <div className="text-xs text-gray-500 mt-2">{msg.ts}</div>
           </div>
         )}
@@ -1758,7 +1759,7 @@ interface UnansweredSmsCard {
     waitMs: number;
   }>;
 }
-function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
+function UnansweredSmsCardView({ card, onSwitchToCSSession }: { card: UnansweredSmsCard; onSwitchToCSSession?: (sessionId: number) => void }) {
   const [resolved, setResolved] = React.useState<Set<number>>(new Set());
   const resolveSession = trpc.leads.resolveSession.useMutation({
     onMutate: ({ sessionId }) => setResolved(prev => new Set(prev).add(sessionId)),
@@ -1823,14 +1824,19 @@ function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
           const { color, bg } = waitColor(row.waitMs);
           const displayName = row.leadName || row.leadPhone;
           return (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined }}>
+            <div key={i} onClick={onSwitchToCSSession ? () => onSwitchToCSSession(row.sessionId) : undefined} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 14px", borderBottom: i < card.rows.length - 1 ? "1px solid #2a2e4744" : undefined, cursor: onSwitchToCSSession ? "pointer" : "default", transition: "background 0.12s" }} onMouseEnter={onSwitchToCSSession ? e => (e.currentTarget.style.background = "#1e2235") : undefined} onMouseLeave={onSwitchToCSSession ? e => (e.currentTarget.style.background = "") : undefined}>
               <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#2a2e47", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
                 <User className="w-3.5 h-3.5" style={{ color: "#6b7280" }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 2 }}>{displayName}</p>
                 {row.lastMessagePreview && (
-                  <p title={row.lastMessagePreview} style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "default" }}>{row.lastMessagePreview}</p>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "default", maxWidth: "100%" }}>{row.lastMessagePreview}</p>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[260px] whitespace-normal break-words text-xs" style={{ background: "#0f1120", border: "1px solid #2a2e47", color: "#c8cde8" }}>{row.lastMessagePreview}</TooltipContent>
+                  </Tooltip>
                 )}
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
@@ -2392,7 +2398,7 @@ type MissionStep = MadisonMission["missionSteps"][number];
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean }) {
+export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchToCSSession }: { agentPhotoUrl?: string; onClose?: () => void; compact?: boolean; onSwitchToCSSession?: (sessionId: number) => void }) {
   const { user } = useAuth();
   // Use the agent's numeric id (from agent cookie session) as the stable userId for
   // mission history. Agents do NOT use Manus OAuth, so user?.openId is always undefined.
