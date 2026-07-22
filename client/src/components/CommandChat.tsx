@@ -6301,7 +6301,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               {activeThreadCount > 0 && (
                 <button
                   onClick={() => setAllThreadsOpen(true)}
-                  className="relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-white text-[#4b5770] border border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff] transition whitespace-nowrap"
+                  className="relative flex items-center gap-1.5 rounded-full border border-[#e3e6ef] bg-white text-[#4b5770] hover:border-[#c7b8ff] hover:bg-[#faf8ff] hover:text-[#6f3cff] transition whitespace-nowrap" style={{padding:"7px 10px",fontSize:"12px"}}
                 >
                   <MessageSquare className="h-3.5 w-3.5" />
                   Threads
@@ -6319,12 +6319,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => setLeadRepliesOpen(!leadRepliesOpen)}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition border whitespace-nowrap",
+                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   leadRepliesOpen
-                    ? "bg-[#f0ebff] border-[#c7b8ff]"
+                    ? "bg-[#faf8ff] border-[#c7b8ff]"
                     : "bg-white border-[#c7b8ff]"
                 )}
-              style={{color:"#6f3cff"}}
+              style={{padding:"7px 10px",fontSize:"12px",color:"#6f3cff"}}
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 Lead Chats
@@ -6339,11 +6339,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => { setEmailsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (tasksOpen) setTasksOpen(false); }}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition border whitespace-nowrap",
+                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   emailsOpen
                     ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
                     : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
+              style={{padding:"7px 10px",fontSize:"12px"}}
               >
                 <Mail className="h-3.5 w-3.5" />
                 Email
@@ -6361,11 +6362,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => { setMissedCallsOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (tasksOpen) setTasksOpen(false); if (emailsOpen) setEmailsOpen(false); }}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition border whitespace-nowrap",
+                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   missedCallsOpen
                     ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
                     : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
+              style={{padding:"7px 10px",fontSize:"12px"}}
               >
                 <PhoneMissed className="h-3.5 w-3.5" />
                 Missed
@@ -6381,13 +6383,14 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => { setCsSmsOpen(v => !v); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailsOpen) setEmailsOpen(false); }}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition border whitespace-nowrap",
+                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   csSmsOpen
                     ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
                     : csUnansweredUrgent > 0
                     ? "bg-white text-red-600 border-red-200 hover:bg-red-50"
                     : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
+                style={{padding:"7px 10px",fontSize:"12px"}}
                 title={
                   csUnansweredUrgent > 0
                     ? `${csUnansweredUrgent} waiting 1h+`
@@ -6412,11 +6415,12 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
               <button
                 onClick={() => { setTasksOpen(v => !v); if (csSmsOpen) setCsSmsOpen(false); if (leadRepliesOpen) setLeadRepliesOpen(false); if (missedCallsOpen) setMissedCallsOpen(false); if (emailsOpen) setEmailsOpen(false); }}
                 className={cn(
-                  "relative flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition border whitespace-nowrap",
+                  "relative flex items-center gap-1.5 rounded-full border transition whitespace-nowrap",
                   tasksOpen
                     ? "bg-[#faf8ff] text-[#6f3cff] border-[#c7b8ff]"
                     : "bg-white text-[#4b5770] border-[#e3e6ef] hover:bg-[#faf8ff] hover:border-[#c7b8ff] hover:text-[#6f3cff]"
                 )}
+                style={{padding:"7px 10px",fontSize:"12px"}}
                 title="Tasks"
               >
                 <ClipboardList className="h-3.5 w-3.5" />
