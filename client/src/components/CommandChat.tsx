@@ -731,10 +731,10 @@ function HotLeadCard({
     <div
       onAnimationEnd={() => setShaking(false)}
       className={cn(
-        "relative rounded-[18px] overflow-hidden transition-all",
+        "relative overflow-hidden",
         !isClaimed && shaking && "animate-lead-shake",
       )}
-      style={{background:"#fff",border:"1px solid #e6e9f2",boxShadow:"0 10px 24px rgba(35,40,73,.08)",marginBottom:"10px"}}
+      style={{background:"#fff",border:"1px solid #e6e9f2",borderRadius:"18px",padding:"13px 13px 11px",marginBottom:"10px",boxShadow:"0 10px 24px rgba(35,40,73,.08)",transition:".18s ease",position:"relative"}}
     >
       {/* Pulsing glow ring for unclaimed */}
       {!isClaimed && !isResolved && (
@@ -762,7 +762,7 @@ function HotLeadCard({
             {pillLabel}
           </span>
           {price && (
-            <span className="text-xl font-bold shrink-0 leading-none" style={{color:"#6f3cff"}}>${price}</span>
+            <span className="shrink-0" style={{marginLeft:"auto",background:"#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color:"#6f3cff"}}>${price}</span>
           )}
         </div>
 
@@ -5579,14 +5579,13 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
                 <div className="space-y-4">
           {/* Madison AI Concierge is now always open in the right panel */}
           {/* ── Search bar ── */}
-          <div className="flex items-center gap-2 px-3 py-2" style={{borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff"}}>
-            <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+          <div style={{display:"flex",gap:"8px",marginBottom:"12px"}}>
             <input
               type="text"
               value={rightSearch}
               onChange={(e) => setRightSearch(e.target.value)}
               placeholder="Search leads, issues, people"
-              className="flex-1 bg-transparent text-xs text-slate-700 placeholder:text-slate-400 outline-none"
+              style={{width:"100%",padding:"11px 14px",borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff",outline:"none",fontSize:"12px"}} className=""
             />
             {rightSearch && (
               <button onClick={() => setRightSearch("")} className="text-slate-400 hover:text-slate-600">
@@ -5596,16 +5595,16 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           </div>
 
           {/* ── Hot leads / Follow-ups tab toggle ── */}
-          <div className="flex gap-[7px]" style={{margin:"10px 0"}}>
+          <div className="flex" style={{borderBottom:"1px solid #e8eaf2",marginBottom:"10px"}}>
             <button
               onClick={() => setRightTab("leads")}
-              className="flex-1 rounded-[999px] px-[10px] py-[7px] text-xs font-semibold transition" style={rightTab === "leads" ? {background:"#fff",border:"1px solid #dfe3ef",color:"#17213a",boxShadow:"0 5px 12px rgba(40,46,75,.07)"} : {background:"transparent",color:"#64708b",border:"none"}}
+              className="flex-1 font-bold transition" style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="leads"?"#6f3cff":"#69748c",borderBottom:rightTab==="leads"?"2px solid #6f3cff":"2px solid transparent"}}
             >
               Hot leads
             </button>
             <button
               onClick={() => setRightTab("followups")}
-              className="flex-1 rounded-[999px] px-[10px] py-[7px] text-xs font-semibold transition" style={rightTab === "followups" ? {background:"#fff",border:"1px solid #dfe3ef",color:"#17213a",boxShadow:"0 5px 12px rgba(40,46,75,.07)"} : {background:"transparent",color:"#64708b",border:"none"}}
+              className="flex-1 font-bold transition" style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="followups"?"#6f3cff":"#69748c",borderBottom:rightTab==="followups"?"2px solid #6f3cff":"2px solid transparent"}}
             >
               Follow-ups
             </button>
