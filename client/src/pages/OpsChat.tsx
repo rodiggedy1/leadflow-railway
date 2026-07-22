@@ -2177,11 +2177,11 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           {/* ── Workspace switcher icons ── */}
           <div className="flex flex-col items-center gap-0 w-full">
             {([
-              { id: "channels"    as const, icon: "◉", color: "#a78bfa", line1: "Command",   line2: "Chat" },
-              { id: "cs"          as const, icon: "♧", color: "#10b981", line1: "Customer",  line2: "Service SMS" },
-              { id: "leadops"     as const, icon: "⌘", color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
+              { id: "channels"    as const, icon: "💬", color: "#a78bfa", line1: "Command",   line2: "Chat" },
+              { id: "cs"          as const, icon: "🎧", color: "#10b981", line1: "Customer",  line2: "Service SMS" },
+              { id: "leadops"     as const, icon: "🎯", color: "#f59e0b", line1: "Lead",      line2: "Mgmt" },
               { id: "leads-inbox" as const, icon: "🚀", color: "#3b82f6", line1: "Lead",      line2: "Chat" },
-              { id: "today"       as const, icon: "⌁", color: "#8b5cf6", line1: "Operations",line2: "" },
+              { id: "today"       as const, icon: "⚡", color: "#8b5cf6", line1: "Operations",line2: "" },
             ]).map((ws) => {
               const isActive = activeTab === ws.id;
               return (
@@ -2224,10 +2224,10 @@ export default function OpsChat({ onMinimize, onClose, initialTab: initialTabPro
           <div className="flex flex-col items-center gap-0 w-full">
             {([
               { href: "/admin/field-management",  icon: "🔧", color: "#64748b", line1: "Field",    line2: "Mgmt" },
-              { href: "/admin/quality",           icon: "▣",  color: "#0ea5e9", line1: "Jobs",     line2: "" },
+              { href: "/admin/quality",           icon: "📋", color: "#0ea5e9", line1: "Jobs",     line2: "" },
               { href: "/admin/sms-campaigns",     icon: "📣", color: "#f43f5e", line1: "Campaigns",line2: "" },
               { href: "/admin/confirmation-calls",icon: "📞", color: "#a78bfa", line1: "Confirm",  line2: "Calls" },
-              { href: "/admin/payments",          icon: "▤",  color: "#f59e0b", line1: "Payments", line2: "" },
+              { href: "/admin/payments",          icon: "💳", color: "#f59e0b", line1: "Payments", line2: "" },
             ]).map((nav) => (
               <a
                 key={nav.href}
