@@ -1830,10 +1830,7 @@ function UnansweredSmsCardView({ card }: { card: UnansweredSmsCard }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 600, color: "#c8cde8", marginBottom: 2 }}>{displayName}</p>
                 {row.lastMessagePreview && (
-                  <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }} className="sms-preview-wrap">
-                    <p style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "default", maxWidth: "100%" }}>{row.lastMessagePreview}</p>
-                    <div className="sms-preview-tooltip" style={{ display: "none", position: "absolute", bottom: "calc(100% + 6px)", left: 0, background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 8, padding: "7px 10px", fontSize: 12, color: "#c8cde8", whiteSpace: "normal", wordBreak: "break-word", maxWidth: 260, zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,0.5)", lineHeight: 1.5, pointerEvents: "none" }}>{row.lastMessagePreview}</div>
-                  </div>
+                  <p title={row.lastMessagePreview} style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "default" }}>{row.lastMessagePreview}</p>
                 )}
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, color, background: bg, padding: "2px 8px", borderRadius: 8, whiteSpace: "nowrap", flexShrink: 0 }}>{fmtWait(row.waitMs)}</span>
