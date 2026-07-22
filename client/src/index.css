@@ -1187,12 +1187,9 @@
   100% { transform: scaleX(0.82); }
 }
 
-/* ── Chat inset scrollbar — thin purple thumb, inset from edge ──────────── */
-.chat-scroll-inset {
-  padding-right: 18px;
-}
+/* ── Chat scrollbar — slim purple pill, clean shape ──────────── */
 .chat-scroll-inset::-webkit-scrollbar {
-  width: 18px;
+  width: 5px;
 }
 .chat-scroll-inset::-webkit-scrollbar-track {
   background: transparent;
@@ -1200,11 +1197,7 @@
 .chat-scroll-inset::-webkit-scrollbar-thumb {
   background: #7a4dff;
   border-radius: 999px;
-  border-left: 12px solid transparent;
-  background-clip: padding-box;
 }
 .chat-scroll-inset::-webkit-scrollbar-thumb:hover {
   background: #6f3cff;
-  border-left: 12px solid transparent;
-  background-clip: padding-box;
 }
