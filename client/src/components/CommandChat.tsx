@@ -5984,7 +5984,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-900 leading-none mr-2">MIB Command</h2>
+                  <span className="text-sm font-bold text-slate-900 leading-none mr-2 whitespace-nowrap">MIB Command ✦</span>
                   {/* Stat cards */}
                   <Tooltip delayDuration={200}>
                     <TooltipTrigger asChild>
