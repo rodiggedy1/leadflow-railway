@@ -1365,7 +1365,7 @@ const MessageList = memo(function MessageList({
 }: MessageListProps) {
   return (
     <>
-        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-4 scrollbar-thin scrollbar-thumb-slate-200" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
+        <div ref={threadScrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-6 py-4 chat-scroll-inset" onScroll={(e) => { const el = e.currentTarget; if (el.scrollHeight - el.scrollTop - el.clientHeight < 250) onScrollToBottom(); }}>
           <div className="flex items-center justify-between mb-4">
             {searchOpen ? (
               <div className="flex items-center gap-1.5 flex-1 min-w-0 animate-in slide-in-from-left-2 duration-200">
