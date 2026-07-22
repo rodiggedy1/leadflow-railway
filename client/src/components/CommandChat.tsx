@@ -1980,23 +1980,20 @@ const MessageList = memo(function MessageList({
                   };
                   const s = STATUS_MAP[statusKey] ?? { label: msg.body, sub: "", emoji: "💬", accent: "#334155", bg: "#f8fafc", border: "#e2e8f0", headerBg: "#334155" };
                   return (
-                    <div key={msg.id} className="flex justify-start">
-                      <div className="max-w-[72%] rounded-2xl overflow-hidden shadow-md" style={{ border: `1px solid ${s.border}`, background: s.bg }}>
-                        {/* Coloured header strip */}
-                        <div className="flex items-center gap-2 px-4 py-2" style={{ background: s.headerBg }}>
-                          <span className="text-lg leading-none">{s.emoji}</span>
-                          <span className="text-[11px] font-bold text-white uppercase tracking-widest">{s.label}</span>
-                          <span className="ml-auto text-[10px] text-white/70">{fmtMsgTime(msg.createdAt)}</span>
+                    <div key={msg.id} className="flex justify-start my-1 px-1">
+                      <div className="rounded-xl overflow-hidden bg-[#0f172a] border border-slate-700" style={{ maxWidth: "480px" }}>
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-slate-700/50">
+                          <span className="text-sm leading-none">{s.emoji}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">{s.label} · Status</span>
+                          <span className="ml-auto text-[10px] text-slate-400">{fmtMsgTime(msg.createdAt)}</span>
                         </div>
-                        {/* Body */}
-                        <div className="px-4 py-3 flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
-                            style={{ background: s.headerBg }}>
+                        <div className="px-3 py-2.5 flex items-center gap-3">
+                          <div className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 bg-slate-700">
                             {(msg.from ?? "?").charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <p className="text-sm font-semibold" style={{ color: s.accent }}>{msg.from}</p>
-                            <p className="text-xs text-slate-500">{s.sub}</p>
+                            <p className="text-sm font-bold text-slate-200">{msg.from}</p>
+                            <p className="text-xs text-slate-400">{s.sub}</p>
                           </div>
                         </div>
                       </div>
