@@ -3865,6 +3865,7 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
   const [leftTab, setLeftTab] = useState<"chat" | "issues">("chat");
   const [rightTab, setRightTab] = useState<"leads" | "followups">("leads");
   const [rightSearch, setRightSearch] = useState("");
+  const [rightFilter, setRightFilter] = useState<"all"|"hot"|"new"|"follow">("all");
   const [centerView, setCenterView] = useState<"chat" | "issues" | "calls">("chat");
   // ── AI Call Command Center state ─────────────────────────────────────────
   const [issueDialogJob, setIssueDialogJob] = useState<{ id: number; date: string } | null>(null);
@@ -5513,40 +5514,43 @@ export default function CommandChat({ channelMsgs, channelLoading, callerName, o
         {/* Single scrollable area */}
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
         <div className="rounded-[28px] overflow-hidden" style={{background:"rgba(255,255,255,.88)",backdropFilter:"blur(18px)",border:"1px solid rgba(255,255,255,.72)",boxShadow:"0 20px 55px rgba(42,48,82,.10)",padding:"18px 14px"}}>
-                <div className="space-y-4">
-          {/* Madison AI Concierge is now always open in the right panel */}
-          {/* ── Search bar ── */}
+                <div>
+          {/* .eyebrow { font-size:11px; letter-spacing:.14em; color:#8b96ae; font-weight:800 } */}
+          <div style={{fontSize:"11px",letterSpacing:".14em",color:"#8b96ae",fontWeight:800}}>✦ LEADS</div>
+          {/* .leads-title { display:flex; justify-content:space-between; align-items:center; margin:4px 2px 12px } */}
+          {/* .leads-title h2 { margin:0; font-family:Georgia,serif; font-size:26px } */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"4px 2px 12px"}}>
+            <h2 style={{margin:0,fontFamily:"Georgia,serif",fontSize:"26px"}}>Hot leads</h2>
+            <span style={{fontSize:"20px"}}>✨</span>
+          </div>
+          {/* .tabs { display:flex; border-bottom:1px solid #e8eaf2; margin-bottom:10px } */}
+          {/* .tab { flex:1; border:0; background:transparent; padding:10px 4px; font-weight:700; color:#69748c; border-bottom:2px solid transparent } */}
+          {/* .tab.active { color:#6f3cff; border-color:#6f3cff } */}
+          <div style={{display:"flex",borderBottom:"1px solid #e8eaf2",marginBottom:"10px"}}>
+            <button onClick={() => setRightTab("leads")} style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="leads"?"#6f3cff":"#69748c",borderBottom:rightTab==="leads"?"2px solid #6f3cff":"2px solid transparent",cursor:"pointer"}}>Hot leads</button>
+            <button onClick={() => setRightTab("followups")} style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="followups"?"#6f3cff":"#69748c",borderBottom:rightTab==="followups"?"2px solid #6f3cff":"2px solid transparent",cursor:"pointer"}}>All leads</button>
+          </div>
+          {/* .filter-row { display:flex; gap:7px; margin:10px 0 } */}
+          {/* .filter { border:0; background:transparent; color:#64708b; font-size:12px; padding:7px 10px; border-radius:999px } */}
+          {/* .filter.active { background:#fff; border:1px solid #dfe3ef; color:#17213a; box-shadow:0 5px 12px rgba(40,46,75,.07) } */}
+          <div style={{display:"flex",gap:"7px",margin:"10px 0",flexWrap:"wrap"}}>
+            {(["all","hot","new","follow"] as const).map((f) => {
+              const active = (rightFilter ?? "all") === f;
+              const labels: Record<string,string> = {all:"All",hot:"Hot",new:"New",follow:"Follow-ups"};
+              return (
+                <button key={f} onClick={() => setRightFilter(f)} style={{border:active?"1px solid #dfe3ef":"0",background:active?"#fff":"transparent",color:active?"#17213a":"#64708b",fontSize:"12px",padding:"7px 10px",borderRadius:"999px",boxShadow:active?"0 5px 12px rgba(40,46,75,.07)":"none",cursor:"pointer",fontWeight:active?700:400}}>
+                  {labels[f]}
+                </button>
+              );
+            })}
+          </div>
+          {/* .search { display:flex; gap:8px; margin-bottom:12px } */}
+          {/* input { width:100%; padding:11px 14px; border-radius:14px; border:1px solid #dfe3ee; background:#fff; outline:none } */}
+          {/* .icon-btn { width:42px; border-radius:14px; border:1px solid #e0e4ef; background:#fff; color:#6e7890 } */}
           <div style={{display:"flex",gap:"8px",marginBottom:"12px"}}>
-            <input
-              type="text"
-              value={rightSearch}
-              onChange={(e) => setRightSearch(e.target.value)}
-              placeholder="Search leads, issues, people"
-              style={{width:"100%",padding:"11px 14px",borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff",outline:"none",fontSize:"12px"}} className=""
-            />
-            {rightSearch && (
-              <button onClick={() => setRightSearch("")} className="text-slate-400 hover:text-slate-600">
-                <X className="h-3 w-3" />
-              </button>
-            )}
+            <input type="text" value={rightSearch} onChange={(e) => setRightSearch(e.target.value)} placeholder="Search leads..." style={{width:"100%",padding:"11px 14px",borderRadius:"14px",border:"1px solid #dfe3ee",background:"#fff",outline:"none"}} />
+            <button style={{width:"42px",borderRadius:"14px",border:"1px solid #e0e4ef",background:"#fff",color:"#6e7890",cursor:"pointer"}}>⌄</button>
           </div>
-
-          {/* ── Hot leads / Follow-ups tab toggle ── */}
-          <div className="flex" style={{borderBottom:"1px solid #e8eaf2",marginBottom:"10px"}}>
-            <button
-              onClick={() => setRightTab("leads")}
-              className="flex-1 font-bold transition" style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="leads"?"#6f3cff":"#69748c",borderBottom:rightTab==="leads"?"2px solid #6f3cff":"2px solid transparent"}}
-            >
-              Hot leads
-            </button>
-            <button
-              onClick={() => setRightTab("followups")}
-              className="flex-1 font-bold transition" style={{flex:1,border:0,background:"transparent",padding:"10px 4px",fontWeight:700,color:rightTab==="followups"?"#6f3cff":"#69748c",borderBottom:rightTab==="followups"?"2px solid #6f3cff":"2px solid transparent"}}
-            >
-              Follow-ups
-            </button>
-          </div>
-
           {/* ── Hot Leads Tray (shown when rightTab === "leads") ── */}
           {rightTab === "leads" && (
           <HotLeadsTray
