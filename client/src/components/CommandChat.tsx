@@ -688,14 +688,38 @@ function HotLeadCard({
 
   // Derive pill badge label and colors for the new design
   const pillLabel = isBooked
-    ? `Booked${sessionStatus?.bookedByAgentName ? ` · ${sessionStatus.bookedByAgentName}` : ""}`
+    ? `✦ Booked${sessionStatus?.bookedByAgentName ? ` · ${sessionStatus.bookedByAgentName}` : ""}`
     : isLost
     ? `Lost${sessionStatus?.lostReason ? ` · ${sessionStatus.lostReason.replace(/_/g, " ")}` : ""}`
     : isCold    ? "Cold · No reply"
     : isVoicemail ? "Voicemail"
-    : isFollowUp  ? "Follow-up set"
-    : isClaimed   ? `Claimed · ${claimedBy}`
-    : "Needs claim";
+    : isFollowUp  ? "🔥 Follow-up"
+    : isClaimed   ? `✦ Claimed · ${claimedBy}`
+    : "🔥 Needs action";
+  // Estimate price from service/size if no explicit price
+  const svcLower = serviceType.toLowerCase();
+  const sizeLower = size.toLowerCase();
+  const estimatedPrice = (() => {
+    if (price) return String(price);
+    // Rough estimates based on service type and size keywords
+    if (svcLower.includes("move") || svcLower.includes("move-out") || svcLower.includes("move out")) {
+      if (sizeLower.includes("3 bed") || sizeLower.includes("3bed")) return "~$299";
+      if (sizeLower.includes("2 bed") || sizeLower.includes("2bed")) return "~$249";
+      return "~$199";
+    }
+    if (svcLower.includes("deep")) {
+      if (sizeLower.includes("3 bed") || sizeLower.includes("3bed")) return "~$249";
+      if (sizeLower.includes("2 bed") || sizeLower.includes("2bed")) return "~$199";
+      if (sizeLower.includes("1 bed") || sizeLower.includes("1bed")) return "~$149";
+      return "~$179";
+    }
+    if (svcLower.includes("standard") || svcLower.includes("recurring")) {
+      if (sizeLower.includes("3 bed") || sizeLower.includes("3bed")) return "~$179";
+      if (sizeLower.includes("2 bed") || sizeLower.includes("2bed")) return "~$149";
+      return "~$129";
+    }
+    return "~$149";
+  })();
 
   const pillColors = isBooked
     ? "bg-blue-50 text-blue-700 border border-blue-200"
@@ -774,13 +798,11 @@ function HotLeadCard({
           {isClaimed && claimedAt && <> · {new Date(claimedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true,timeZone:"America/New_York"})}</>}
           {isBooked && sessionStatus?.bookedAmount && <> · <strong style={{color:"#1d4ed8"}}>${sessionStatus.bookedAmount} booked</strong></>}
         </p>
-        {/* Lead actions — .lead-actions: display:flex; align-items:center; gap:10px; margin-top:10px; color:#6f3cff */}
-        {price && (
-          <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"10px",color:"#6f3cff"}}>
-            <span>💬</span><span>☎</span>
-            <span style={{marginLeft:"auto",background:"#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color:"#6f3cff"}}>${price}</span>
-          </div>
-        )}
+        {/* Lead actions — exact prototype: .lead-actions { display:flex; align-items:center; gap:10px; margin-top:10px; color:#6f3cff } */}
+        <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"10px",color:"#6f3cff"}}>
+          <span>💬</span><span>☎</span>
+          <span style={{marginLeft:"auto",background:"#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color:"#6f3cff"}}>{estimatedPrice}</span>
+        </div>
       </div>
 
     </div>
