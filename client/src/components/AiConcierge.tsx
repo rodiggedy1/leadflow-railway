@@ -2182,7 +2182,7 @@ function MissionCard({
   };
 
   return (
-    <div style={{ background: "rgba(255,253,249,0.84)", border: "1px solid #ebe4dc", borderRadius: 20, overflow: "hidden", boxShadow: "0 6px 18px rgba(73,55,42,0.04), inset 0 1px 0 rgba(255,255,255,0.8)" }}>
+    <div style={{ background: "#ffffff", border: "1px solid #e6e8ef", borderRadius: 15, overflow: "hidden", boxShadow: "0 10px 24px rgba(35,40,73,0.08)" }}>
       {/* Header — always visible, click to toggle */}
       <button
         type="button"
@@ -2787,12 +2787,12 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
 
   return (
     <>
-    <div className="flex flex-col h-full rounded-2xl overflow-hidden shadow-2xl" style={{ minHeight: compact ? 0 : 600, background: "linear-gradient(180deg, #fffdf9 0%, #fbf8f3 100%)", border: "1px solid #ebe4dc" }}>
+    <div className="flex flex-col h-full overflow-hidden" style={{ minHeight: compact ? 0 : 600, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(255,255,255,0.72)", borderRadius: 28, boxShadow: "0 20px 55px rgba(42,48,82,0.10)" }}>
       {/* Header — compact (inline) vs full (slide-in) */}
       {compact ? (
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px 10px", borderBottom: "1px solid #ebe4dc", background: "transparent" }}>
           <div style={{ position: "relative", flexShrink: 0 }}>
-            <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.95)", boxShadow: "0 4px 10px rgba(54,38,25,0.12)" }} />
+            <img src="/madison-avatar.jpg" alt="Madison" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", border: "2px solid #ffffff", boxShadow: "0 0 0 3px #ffffff, 0 0 0 4px #e8e0ff, 0 4px 10px rgba(42,48,82,0.12)" }} />
             <span style={{ position: "absolute", right: 1, bottom: 2, width: 9, height: 9, background: "#32bd75", border: "2px solid #fffdf9", borderRadius: "50%", display: "block" }} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -2841,7 +2841,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
         {(missions.length > 0 || missionsLoading) && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "#a17ccf", letterSpacing: "0.12em" }}>Mission History</p>
+              <p className="text-[10px] font-bold uppercase" style={{ color: "#929bb1", letterSpacing: "0.12em" }}>Mission History</p>
               {missions.length > 0 && (
                 <button
                   onClick={() => clearMissionHistory()}
@@ -2977,7 +2977,7 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact }: { agent
           </div>
         )}
 
-        <div className="relative rounded-2xl overflow-hidden transition-colors" style={{ background: "rgba(255,253,249,0.9)", border: "1px solid #ebe4dc", boxShadow: "0 14px 32px rgba(60,42,29,0.06), inset 0 1px 0 rgba(255,255,255,0.9)" }}>
+        <div className="relative overflow-hidden transition-colors" style={{ background: "#ffffff", border: "1px solid #e2e5ee", borderRadius: 16, boxShadow: "none" }}>
           {/* Text input area */}
           <textarea
             ref={inputRef}
