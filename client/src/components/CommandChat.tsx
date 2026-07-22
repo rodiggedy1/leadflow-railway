@@ -1068,7 +1068,7 @@ function CallDebriefCard({
         </div>
         {/* Expandable debrief details */}
         {hasDetails && expanded && (
-          <div className="mt-1 rounded-xl border border-[#e2e5ee] bg-[#f7f8fc] px-3 py-2.5 animate-in slide-in-from-top-1 duration-150">
+          <div className="mt-1 rounded-xl border border-slate-700 bg-[#0f172a]/80 px-3 py-2.5 animate-in slide-in-from-top-1 duration-150">
             {wentWell && (
               <div className="mb-2">
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600">✔ Went well</span>
@@ -1135,7 +1135,7 @@ function EtaCallResultCard({
   const headerStyle = resultType === "success"
     ? "bg-emerald-900/60 border-b border-emerald-700/50"
     : resultType === "no_answer"
-    ? "bg-[#f7f8fc] border-b border-[#e2e5ee]"
+    ? "bg-slate-800/80 border-b border-slate-700/50"
     : resultType === "dispatcher_needed"
     ? "bg-red-900/60 border-b border-red-700/50"
     : "bg-amber-900/50 border-b border-amber-700/50";
@@ -1174,7 +1174,7 @@ function EtaCallResultCard({
       <div className="w-full max-w-[520px]">
         {/* Main card */}
         <div
-          className="rounded-[17px] overflow-hidden cursor-pointer select-none transition-all duration-150" style={{background:"#fff",border:"1px solid #e2e5ee",boxShadow:"0 5px 12px rgba(40,46,75,.07)"}}
+          className="rounded-2xl overflow-hidden bg-[#0f172a] border border-slate-700 shadow-sm hover:border-slate-600 transition-all duration-150 cursor-pointer select-none"
           onClick={() => hasExpandable && setExpanded(v => !v)}
         >
           {/* Colored header strip */}
@@ -1214,7 +1214,7 @@ function EtaCallResultCard({
 
             {/* Row 3: Cleaner's statement */}
             {cleanerStatement && cleanerStatement !== "(no speech detected)" && cleanerStatement !== "(extraction error)" && (
-              <div className="mb-2.5 bg-[#f5f1ff] rounded-lg px-2.5 py-1.5 border border-[#d8ccff]">
+              <div className="mb-2.5 bg-slate-800/60 rounded-lg px-2.5 py-1.5 border border-slate-700/50">
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-0.5">Cleaner said</p>
                 <p className="text-xs text-slate-300 italic leading-relaxed">"{cleanerStatement}"</p>
               </div>
@@ -1270,7 +1270,7 @@ function EtaCallResultCard({
             {clientSmsBody && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-600 mb-1">📱 SMS sent to client</p>
-                <p className="text-xs text-slate-700 leading-relaxed bg-[#f5f1ff] rounded-lg px-2.5 py-1.5 border border-[#d8ccff]">{clientSmsBody}</p>
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-800/60 rounded-lg px-2.5 py-1.5 border border-slate-700/50">{clientSmsBody}</p>
               </div>
             )}
             {hasTranscript && (
@@ -1751,7 +1751,7 @@ const MessageList = memo(function MessageList({
                   const sevIcon = sevIconMap[ieSeverity] ?? "🟡";
                   return (
                     <div key={msg.id} className="flex justify-start my-2 px-1">
-                      <div className="w-full max-w-[520px] rounded-[17px] overflow-hidden" style={{background:"#fff",border:"1px solid #e2e5ee",boxShadow:"0 5px 12px rgba(40,46,75,.07)"}}>
+                      <div className="w-full max-w-[520px] rounded-2xl overflow-hidden bg-[#0f172a] border border-slate-700 shadow-sm">
                         {/* Header row */}
                         <div className="flex items-center gap-1.5 px-4 pt-3 pb-1">
                           <span className="text-[11px] text-slate-400 font-medium">🔥 Issue Engine · Dispatch</span>
@@ -2778,7 +2778,7 @@ const MessageList = memo(function MessageList({
                   const accentClass = accentMap[tagValue] ?? "text-teal-300";
                   return (
                     <div key={msg.id} className="flex justify-start my-2 px-1">
-                      <div className="w-full max-w-[520px] rounded-[17px] overflow-hidden" style={{background:"#fff",border:"1px solid #e2e5ee",boxShadow:"0 5px 12px rgba(40,46,75,.07)"}}>
+                      <div className="w-full max-w-[520px] rounded-2xl overflow-hidden bg-[#0f172a] border border-slate-700 shadow-sm">
                         <div className="flex items-center gap-1.5 px-4 pt-3 pb-1">
                           <span className="text-[11px] font-medium text-slate-400">🏆 Kudos</span>
                           <span className={cn("text-[11px] font-semibold", accentClass)}>· {tagLabel}</span>
