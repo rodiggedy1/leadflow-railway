@@ -753,121 +753,36 @@ function HotLeadCard({
 
       {/* Card body — clickable to open SMS */}
       <div
-        className={cn("px-3.5 pt-3 pb-2", sessionId && "cursor-pointer")}
+        className={cn(sessionId && "cursor-pointer")}
         onClick={() => { if (sessionId) window.open(`/admin/leads?session=${sessionId}&tab=sms`, "_blank"); }}
       >
-        {/* Top row: pill badge + price */}
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <span className={cn("text-[11px] font-semibold rounded-full px-2.5 py-0.5 shrink-0", pillColors)}>
-            {pillLabel}
-          </span>
-          {price && (
-            <span className="shrink-0" style={{marginLeft:"auto",background:"#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color:"#6f3cff"}}>${price}</span>
-          )}
-        </div>
-
-        {/* Name */}
-        <p className="text-base font-bold text-slate-900 leading-tight">{leadName}</p>
-
-        {/* Phone */}
-        {leadPhone && <p className="text-sm text-slate-400 mt-0.5">{leadPhone}</p>}
-
-        {/* Service details */}
-        {serviceType && <p className="text-sm text-slate-500 mt-1">{serviceType}</p>}
-        {isThumbSms && size && <p className="text-xs text-sky-600 mt-0.5 font-medium">📍 {size}</p>}
-
-        {/* Bottom row: source + wait time */}
-        <div className="flex items-center justify-between mt-2.5">
-          <span className="text-sm text-slate-400">{sourceDisplay ?? ""}</span>
-          {!isResolved && !isClaimed && (
-            <span className="text-sm font-semibold text-slate-600">{waitLabel}</span>
-          )}
-          {isClaimed && claimedAt && (
-            <span className="text-xs text-emerald-600 font-semibold">
-              {new Date(claimedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/New_York" })}
-            </span>
-          )}
-          {isBooked && sessionStatus?.bookedAmount && (
-            <span className="text-xs text-blue-600 font-bold">${sessionStatus.bookedAmount} booked</span>
-          )}
-        </div>
-      </div>
-
-      {/* Action row */}
-      <div className="flex items-center gap-2 px-3.5 pb-3">
-        <a
-          href="https://maidsquotes-b55s3sg4.manus.space/"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open quote generator"
-          className="inline-flex items-center gap-1 text-[10px] text-slate-600 hover:text-slate-900 font-semibold"
-          onClick={e => e.stopPropagation()}
-        >
-          <Calculator className="h-3 w-3" /> Quote
-        </a>
-        {thumbtackUrl && (
-          <a
-            href={thumbtackUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[10px] text-sky-600 hover:text-sky-800 font-semibold"
-            onClick={e => e.stopPropagation()}
-          >
-            <ExternalLink className="h-3 w-3" /> Thumbtack
-          </a>
-        )}
-        {leadPhone && (
-          <a
-            href={`openphone://call?to=${leadPhone}`}
-            title={`Call ${leadName}`}
-            className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-white/70 hover:bg-white text-slate-600 transition-colors shrink-0"
-            onClick={e => e.stopPropagation()}
-          >
-            <Phone className="h-3.5 w-3.5" />
-          </a>
-        )}
-        {sessionId && (
-          <a
-            href={`/admin/leads?session=${sessionId}&tab=sms`}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open SMS conversation"
-            className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-white/70 hover:bg-white text-emerald-700 transition-colors shrink-0"
-            onClick={e => e.stopPropagation()}
-          >
-            <MessageCircle className="h-3.5 w-3.5" />
-          </a>
-        )}
-        <button
-          title="Generate first outreach message"
-          onClick={e => {
-            e.stopPropagation();
-            const parts: string[] = [];
-            if (leadName)    parts.push(`Name: ${leadName}`);
-            if (leadPhone)   parts.push(`Phone: ${leadPhone}`);
-            if (serviceType) parts.push(`Service: ${serviceType}`);
-            if (price)       parts.push(`Estimated price: $${price}`);
-            onOpenFirstMsg?.(parts.join("\n"));
-          }}
-          className="inline-flex items-center justify-center h-7 w-7 rounded-full bg-white/70 hover:bg-white text-violet-700 transition-colors shrink-0"
-        >
-          <Wand2 className="h-3.5 w-3.5" />
-        </button>
-        <div className="flex-1" />
-        {isClaimed ? (
-          <span className="text-[10px] text-emerald-600 font-semibold">✓ Taken</span>
-        ) : (
-          <button
-            onClick={e => { e.stopPropagation(); claimLeadMutation.mutate({ messageId: msg.id, sessionId: sessionId ?? undefined }); }}
-            disabled={claimLeadMutation.isPending}
-            className="h-7 px-4 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
-          >
-            {claimLeadMutation.isPending
-              ? <Loader2 className="h-3 w-3 animate-spin" />
-              : <>⚡ Claim</>}
-          </button>
+        {/* Status pill — exact prototype .lead-status */}
+        <span style={{display:"inline-flex",alignItems:"center",gap:"5px",padding:"5px 8px",borderRadius:"999px",fontSize:"10px",fontWeight:800,...(isBooked?{background:"#eff6ff",color:"#1d4ed8"}:isLost||isCold?{background:"#f1f5f9",color:"#64748b"}:isFollowUp?{background:"#fff6e8",color:"#df7e00"}:isClaimed?{background:"#eafaf4",color:"#0da875"}:{background:"#fff0f2",color:"#ff475f"})}}>
+          {pillLabel}
+        </span>
+        {/* Name — .lead-card h3: margin:8px 0 3px; font-size:16px */}
+        <p style={{margin:"8px 0 3px",fontSize:"16px",fontWeight:700,color:"#11182d"}}>{leadName}</p>
+        {/* Phone — .lead-card p: margin:3px 0; color:#64708b; font-size:12px */}
+        {leadPhone && <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>{leadPhone}</p>}
+        {/* Service — .lead-card p */}
+        {serviceType && <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>{serviceType}</p>}
+        {isThumbSms && size && <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>📍 {size}</p>}
+        {/* Source + wait — .lead-card p */}
+        <p style={{margin:"3px 0",color:"#64708b",fontSize:"12px"}}>
+          {sourceDisplay ?? ""}
+          {!isResolved && !isClaimed && <> · <strong style={{color:"#11182d"}}>{waitLabel}</strong></>}
+          {isClaimed && claimedAt && <> · {new Date(claimedAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true,timeZone:"America/New_York"})}</>}
+          {isBooked && sessionStatus?.bookedAmount && <> · <strong style={{color:"#1d4ed8"}}>${sessionStatus.bookedAmount} booked</strong></>}
+        </p>
+        {/* Lead actions — .lead-actions: display:flex; align-items:center; gap:10px; margin-top:10px; color:#6f3cff */}
+        {price && (
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginTop:"10px",color:"#6f3cff"}}>
+            <span>💬</span><span>☎</span>
+            <span style={{marginLeft:"auto",background:"#f0ebff",padding:"5px 10px",borderRadius:"999px",fontWeight:800,fontSize:"11px",color:"#6f3cff"}}>${price}</span>
+          </div>
         )}
       </div>
+
     </div>
   );
 }
