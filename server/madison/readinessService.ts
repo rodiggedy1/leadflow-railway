@@ -18,6 +18,7 @@ import {
   scheduleAssignments,
   stripeCustomers,
   paymentAuthorizations,
+  readinessAcknowledgements,
 } from "../../drizzle/schema";
 import { matchConfirmationCallsToJobs } from "../confirmationMatchHelper";
 import { eq, and, inArray, isNull, sql } from "drizzle-orm";
@@ -53,6 +54,8 @@ export interface JobRow {
   customerNotes: string | null;
   // Derived
   jobTime: string | null;
+  /** Issue types that have been acknowledged (active, not reversed) */
+  acknowledgedIssues: string[];
 }
 
 export interface ReadinessSummary {
@@ -152,13 +155,40 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
       )
     );
 
-  // Attach derived jobTime
+  // Attach derived jobTime (acknowledgedIssues populated below after ack query)
   const jobs: JobRow[] = rawJobs.map((j: typeof rawJobs[0]) => ({
     ...j,
     jobTime: j.serviceDateTime ? formatTimeET(new Date(j.serviceDateTime)) : null,
+    acknowledgedIssues: [] as string[],
   }));
 
   const jobIds = jobs.map((j) => j.id);
+
+  // ── 1b. Load active acknowledgements for these jobs ───────────────────
+  if (jobIds.length > 0) {
+    const activeAcks = await db
+      .select({
+        jobId: readinessAcknowledgements.jobId,
+        issueType: readinessAcknowledgements.issueType,
+      })
+      .from(readinessAcknowledgements)
+      .where(
+        and(
+          inArray(readinessAcknowledgements.jobId, jobIds.map(String)),
+          isNull(readinessAcknowledgements.reversedAt)
+        )
+      );
+    // Build a map: jobId (number) -> issueType[]
+    const acksByJobId = new Map<number, string[]>();
+    for (const ack of activeAcks) {
+      const jid = Number(ack.jobId);
+      if (!acksByJobId.has(jid)) acksByJobId.set(jid, []);
+      acksByJobId.get(jid)!.push(ack.issueType);
+    }
+    for (const job of jobs) {
+      job.acknowledgedIssues = acksByJobId.get(job.id) ?? [];
+    }
+  }
 
   // ── 2. Fetch schedule assignments for client request check ────────────
   const assignments =

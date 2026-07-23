@@ -1,4 +1,5 @@
-import { bigint, decimal, double, index, int, json, longtext, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { bigint, date, datetime, decimal, double, index, int, json, longtext, mediumtext, mysqlEnum, mysqlTable, text, timestamp, tinyint, uniqueIndex, varchar } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
 
 /**
  * Core user table backing auth flow.
@@ -3726,3 +3727,137 @@ export const invoices = mysqlTable("invoices", {
 ]);
 export type Invoice = typeof invoices.$inferSelect;
 export type InsertInvoice = typeof invoices.$inferInsert;
+
+// ─── Madison Phase 2 — Readiness Acknowledgements & Action Audit ─────────────
+
+/**
+ * madison_conversation_context
+ * One row per agent. Stores the active conversational context for Madison.
+ * Uses optimistic concurrency (version + lastRequestId) to prevent stale writers.
+ */
+export const madisonConversationContext = mysqlTable("madison_conversation_context", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull().unique(),
+  activeDomain: varchar("activeDomain", { length: 64 }),
+  resolvedDateStart: date("resolvedDateStart"),
+  resolvedDateEnd: date("resolvedDateEnd"),
+  lastProjectionId: varchar("lastProjectionId", { length: 64 }),
+  /** JSON string[] of encoded ReadinessItemIds from the last readiness response */
+  lastReadinessItemIds: json("lastReadinessItemIds"),
+  /** JSON string[] — what "those" / "them" refers to in follow-up messages */
+  lastSelectionItemIds: json("lastSelectionItemIds"),
+  /** UUID of the last request that wrote this context — used to reject stale writers */
+  lastRequestId: varchar("lastRequestId", { length: 64 }),
+  /** Server-side monotonic counter. Conditional UPDATE uses version = ? to reject stale writes */
+  version: int("version").notNull().default(1),
+  updatedAt: datetime("updatedAt", { mode: "date", fsp: 3 }).notNull(),
+});
+export type MadisonConversationContext = typeof madisonConversationContext.$inferSelect;
+export type InsertMadisonConversationContext = typeof madisonConversationContext.$inferInsert;
+
+/**
+ * readiness_acknowledgements
+ * Append-only audit trail. One row per acknowledgement event.
+ * An acknowledgement is active when reversedAt IS NULL.
+ * activeMarker is a stored generated column (1 when active, NULL when reversed)
+ * so the unique index enforces at most one active acknowledgement per job+date+issueType.
+ */
+export const readinessAcknowledgements = mysqlTable("readiness_acknowledgements", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  jobId: varchar("jobId", { length: 64 }).notNull(),
+  serviceDate: date("serviceDate").notNull(),
+  issueType: mysqlEnum("issueType", [
+    "UNASSIGNED",
+    "CUSTOMER_UNCONFIRMED",
+    "PAYMENT_NOT_READY",
+    "ACCESS_MISSING",
+    "SCHEDULE_CONFLICT",
+  ]).notNull(),
+  acknowledgedBy: int("acknowledgedBy").notNull(),
+  acknowledgedAt: datetime("acknowledgedAt", { mode: "date", fsp: 3 }).notNull(),
+  reversedAt: datetime("reversedAt", { mode: "date", fsp: 3 }),
+  reversedBy: int("reversedBy"),
+  actionId: varchar("actionId", { length: 64 }).notNull(),
+  /**
+   * Stored generated column: 1 when active (reversedAt IS NULL), NULL when reversed.
+   * MySQL allows multiple NULLs in a unique index, so only one active row can exist
+   * per (jobId, serviceDate, issueType).
+   */
+  activeMarker: tinyint("activeMarker").generatedAlwaysAs(
+    sql`CASE WHEN \`reversedAt\` IS NULL THEN 1 ELSE NULL END`,
+    { mode: "stored" }
+  ),
+}, (t) => [
+  uniqueIndex("uq_active_readiness_ack").on(t.jobId, t.serviceDate, t.issueType, t.activeMarker),
+  index("idx_readiness_ack_lookup").on(t.jobId, t.serviceDate, t.issueType, t.reversedAt),
+  index("idx_readiness_ack_action").on(t.actionId),
+]);
+export type ReadinessAcknowledgement = typeof readinessAcknowledgements.$inferSelect;
+export type InsertReadinessAcknowledgement = typeof readinessAcknowledgements.$inferInsert;
+
+/**
+ * madison_actions
+ * One row per write action initiated by Madison.
+ * Lifecycle: planned -> executing -> completed | failed | verification_failed -> reversed
+ */
+export const madisonActions = mysqlTable("madison_actions", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  conversationAgentId: int("conversationAgentId").notNull(),
+  actionType: varchar("actionType", { length: 64 }).notNull(),
+  riskLevel: varchar("riskLevel", { length: 64 }).notNull(),
+  /** Readable snapshot only — canonical mapping is in madison_action_items */
+  requestedTargets: json("requestedTargets").notNull(),
+  executedTargets: json("executedTargets").notNull(),
+  requestedCount: int("requestedCount").notNull().default(0),
+  acknowledgedCount: int("acknowledgedCount").notNull().default(0),
+  alreadyAcknowledgedCount: int("alreadyAcknowledgedCount").notNull().default(0),
+  invalidCount: int("invalidCount").notNull().default(0),
+  status: mysqlEnum("status", [
+    "planned",
+    "executing",
+    "completed",
+    "failed",
+    "verification_failed",
+    "reversed",
+  ]).notNull(),
+  failureCode: varchar("failureCode", { length: 64 }),
+  failureMessage: text("failureMessage"),
+  executedBy: int("executedBy").notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+  executionStartedAt: datetime("executionStartedAt", { mode: "date", fsp: 3 }),
+  executedAt: datetime("executedAt", { mode: "date", fsp: 3 }),
+  verifiedAt: datetime("verifiedAt", { mode: "date", fsp: 3 }),
+  reversedAt: datetime("reversedAt", { mode: "date", fsp: 3 }),
+  /** Set to executedAt + 24h only when status = completed. NULL otherwise. */
+  undoExpiresAt: datetime("undoExpiresAt", { mode: "date", fsp: 3 }),
+}, (t) => [
+  index("idx_madison_actions_agent").on(t.conversationAgentId, t.createdAt),
+]);
+export type MadisonAction = typeof madisonActions.$inferSelect;
+export type InsertMadisonAction = typeof madisonActions.$inferInsert;
+
+/**
+ * madison_action_items
+ * Canonical relational mapping between an action and its per-target results.
+ * Used for deterministic Undo, verification, retries and debugging.
+ */
+export const madisonActionItems = mysqlTable("madison_action_items", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  actionId: varchar("actionId", { length: 64 }).notNull(),
+  /** Encoded as "jobId:serviceDate:issueType" */
+  readinessItemId: varchar("readinessItemId", { length: 255 }).notNull(),
+  acknowledgementId: bigint("acknowledgementId", { mode: "number" }),
+  result: mysqlEnum("result", [
+    "acknowledged",
+    "already_acknowledged",
+    "invalid",
+    "verification_failed",
+    "reversed",
+  ]).notNull(),
+  createdAt: datetime("createdAt", { mode: "date", fsp: 3 }).notNull(),
+}, (t) => [
+  uniqueIndex("uq_action_item").on(t.actionId, t.readinessItemId),
+  index("idx_action_item_ack").on(t.acknowledgementId),
+]);
+export type MadisonActionItem = typeof madisonActionItems.$inferSelect;
+export type InsertMadisonActionItem = typeof madisonActionItems.$inferInsert;

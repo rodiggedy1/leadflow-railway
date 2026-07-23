@@ -85,6 +85,7 @@ const mockJob = (overrides: Partial<{
   teamName: string | null;
   serviceType: string | null;
   customerNotes: string | null;
+  acknowledgedIssues: string[];
 }> = {}) => ({
   id: 1,
   customerName: "Test Customer",
@@ -94,6 +95,7 @@ const mockJob = (overrides: Partial<{
   teamName: "Team A",
   serviceType: "Standard",
   customerNotes: null,
+  acknowledgedIssues: [] as string[],
   ...overrides,
 });
 

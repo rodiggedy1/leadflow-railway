@@ -41,6 +41,8 @@ export interface JobReadinessRow {
   flags: Array<
     "unassigned" | "unconfirmed" | "no_payment" | "double_booked"
   >;
+  /** Issue types that have been acknowledged (active, not reversed) */
+  acknowledgedIssues: string[];
 }
 
 export interface ReadinessProjection {
@@ -54,6 +56,7 @@ export interface ReadinessProjection {
     unconfirmed: number;
     noPayment: number;
     atRisk: number; // jobs with 2+ flags
+    acknowledged: number; // jobs with at least one acknowledged issue
   };
   // Passed through from canonical service — never recalculated
   overallPct: number;

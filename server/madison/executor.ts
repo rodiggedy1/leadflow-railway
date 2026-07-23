@@ -196,6 +196,7 @@ async function _execute(
         paymentRawStatus,
         isDoubleBooked
       ),
+      acknowledgedIssues: j.acknowledgedIssues,
     };
   });
 
@@ -323,6 +324,7 @@ async function _execute(
     noPayment: cappedJobs.filter((j) => j.flags.includes("no_payment"))
       .length,
     atRisk: cappedJobs.filter((j) => j.flags.length >= 2).length,
+    acknowledged: cappedJobs.filter((j) => j.acknowledgedIssues.length > 0).length,
   };
 
   return {
