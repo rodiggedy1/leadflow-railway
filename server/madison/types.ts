@@ -14,14 +14,16 @@ export const ReadinessPlanSchema = z.object({
   }),
   filters: z
     .object({
-      timeOfDay: z.enum(["morning", "afternoon", "evening"]).optional(),
+      timeOfDay: z.enum(["morning", "afternoon", "evening"]).nullable().optional(),
       startTime: z
         .string()
         .regex(/^\d{2}:\d{2}$/)
+        .nullable()
         .optional(), // "HH:MM" 24h
       endTime: z
         .string()
         .regex(/^\d{2}:\d{2}$/)
+        .nullable()
         .optional(),
       dimension: z
         .enum([
@@ -32,12 +34,14 @@ export const ReadinessPlanSchema = z.object({
           "access",
           "schedule",
         ])
+        .nullable()
         .optional(),
-      onlyNeedsAttention: z.boolean().optional(),
-      minimumFlagCount: z.number().int().min(1).max(5).optional(),
+      onlyNeedsAttention: z.boolean().nullable().optional(),
+      minimumFlagCount: z.number().int().min(1).max(5).nullable().optional(),
     })
+    .nullable()
     .optional(),
-  sort: z.enum(["service_time", "risk"]).optional(),
+  sort: z.enum(["service_time", "risk"]).nullable().optional(),
 });
 
 export type ReadinessPlan = z.infer<typeof ReadinessPlanSchema>;
