@@ -596,6 +596,7 @@ export const invoiceRouter = router({
         billingDate,
         serviceDate: input.serviceDate,
         totalCents,
+        stripeLink: input.stripeLink ?? tmpl.stripeLink ?? null,
         customerEmail,
       };
     }),

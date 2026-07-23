@@ -1881,7 +1881,7 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   });
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   const [serviceDate, setServiceDate] = React.useState(today);
-  const [result, setResult] = React.useState<{ id: number; invoiceNumber: number; pdfUrl: string; customerName: string; serviceDate: string; totalCents: number; stripeLink?: string | null } | null>(null);
+  const [result, setResult] = React.useState<{ id: number; invoiceNumber: number; pdfUrl: string; customerName: string; serviceDate: string; totalCents: number } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [emailSent, setEmailSent] = React.useState(false);
   const [emailError, setEmailError] = React.useState<string | null>(null);
@@ -1893,7 +1893,7 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   const [showPreview, setShowPreview] = React.useState(false);
   const generateMutation = trpc.invoice.generateInvoice.useMutation({
     onSuccess: (data) => {
-      setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName, serviceDate: data.serviceDate, totalCents: data.totalCents, stripeLink: data.stripeLink });
+      setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName, serviceDate: data.serviceDate, totalCents: data.totalCents });
       if (data.customerEmail) setToEmail(data.customerEmail);
       const total = (data.totalCents / 100).toFixed(2);
       const firstName = data.customerName.split(" ")[0];
@@ -1904,14 +1904,12 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
         `Please find your invoice attached for cleaning services on ${data.serviceDate}.`,
         ``,
         `Invoice #${data.invoiceNumber} — Total Due: $${total}`,
-        data.stripeLink ? `
-You can pay securely online here: ${data.stripeLink}` : ``,
+
         ``,
         `Thank you for choosing Maids In Black!`,
         ``,
         `Maids In Black • Support@maidsinblacksupport.com • 202-888-5362 • MaidsInBlack.com`,
-      ].filter((l, i, arr) => !(l === `` && arr[i-1] === ``)).join("
-"));
+      ].filter((l, i, arr) => !(l === `` && arr[i-1] === ``)).join("\n"));
       setError(null);
     },
     onError: (e) => setError(e.message),
