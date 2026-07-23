@@ -1889,6 +1889,7 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   const generateMutation = trpc.invoice.generateInvoice.useMutation({
     onSuccess: (data) => {
       setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
+      if (data.customerEmail) setToEmail(data.customerEmail);
       setError(null);
     },
     onError: (e) => setError(e.message),

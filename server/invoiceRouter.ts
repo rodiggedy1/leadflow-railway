@@ -563,6 +563,18 @@ export const invoiceRouter = router({
         pdfUrl = `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`;
       }
 
+      // Look up customer email from completed_jobs (best-effort, non-fatal)
+      let customerEmail: string | null = null;
+      try {
+        const [jobRow] = await db
+          .select({ email: completedJobs.email })
+          .from(completedJobs)
+          .where(like(completedJobs.name, `%${tmpl.customerName}%`))
+          .orderBy(desc(completedJobs.id))
+          .limit(1);
+        customerEmail = jobRow?.email ?? null;
+      } catch { /* non-fatal */ }
+
       // Save invoice record
       const [ins] = await db.insert(invoices).values({
         invoiceNumber: nextNum,
@@ -584,9 +596,9 @@ export const invoiceRouter = router({
         billingDate,
         serviceDate: input.serviceDate,
         totalCents,
+        customerEmail,
       };
     }),
-
   // ── Invoice list / get ─────────────────────────────────────────────────────
 
   listInvoices: adminAgentProcedure
