@@ -2533,9 +2533,8 @@ export const aiConciergeRouter = router({
       const re = input.resolvedEntity ?? null;
 
       // ── Madison Readiness Domain ──────────────────────────────────────────
-      // Feature-flagged: MADISON_PLANNER_ENABLED=true to activate.
       // No chip context needed for readiness queries — they are date/dimension scoped.
-      if (ENV.madisonPlannerEnabled && !re && isReadinessDomain(input.message)) {
+      if (!re && isReadinessDomain(input.message)) {
         const madisonResult = await handleMadisonReadiness(db, input.message);
         if (madisonResult.handled && madisonResult.response) {
           return {
