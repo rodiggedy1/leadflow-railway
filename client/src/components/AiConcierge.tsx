@@ -1933,7 +1933,7 @@ You can pay securely online here: ${data.stripeLink}` : ``,
   const total = lineItems.reduce((s, i) => s + (Number(i.price) || 0), 0);
   if (result) {
     return (
-      <div style={{ background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 12, padding: "14px 16px", minWidth: 280, maxWidth: 420 }}>
+      <div style={{ background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 12, padding: "14px 16px", width: "100%" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
           <span style={{ fontSize: 18 }}>🧾</span>
           <span style={{ fontWeight: 700, fontSize: 14, color: "#22c55e" }}>Invoice Generated!</span>
