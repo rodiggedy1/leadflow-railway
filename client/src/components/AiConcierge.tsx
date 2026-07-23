@@ -2716,14 +2716,19 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
       });
       const { text } = await transcribeVoice.mutateAsync({ dataBase64, mimeType: "audio/webm" });
       if (!text.trim()) return;
+      // Auto-submit — no need to press Send after voice input
       setInput(text.trim());
-      setTimeout(() => inputRef.current?.focus(), 0);
+      setTimeout(() => {
+        handleSendRef.current?.();
+      }, 0);
     } catch {
       toast.error("Transcription failed");
     } finally {
       setIsTranscribing(false);
     }
   }, [transcribeVoice]);  // eslint-disable-line react-hooks/exhaustive-deps
+  // Stable ref so stopRecordingAndSend can call handleSend without stale closure
+  const handleSendRef = useRef<(() => void) | null>(null);
 
   // ── Prepare Tomorrow flow (real tRPC data) ────────────────────────────────
   const PREPARE_STEPS = [
@@ -3216,14 +3221,15 @@ export default function AiConcierge({ agentPhotoUrl, onClose, compact, onSwitchT
     );
   }, [input, isThinking, chatMutation, focusedCustomer]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
       return;
     }
   };
-
+  // Keep ref in sync so stopRecordingAndSend can auto-submit
+  handleSendRef.current = handleSend;
   return (
     <>
     <div className="flex flex-col h-full overflow-hidden" style={{ minHeight: compact ? 0 : 600, background: "rgba(255,255,255,0.88)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: "1px solid rgba(255,255,255,0.72)", borderRadius: 28, boxShadow: "0 20px 55px rgba(42,48,82,0.10)" }}>
