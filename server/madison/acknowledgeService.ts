@@ -50,10 +50,43 @@ export interface AcknowledgeResult {
   updatedProjection?: Awaited<ReturnType<typeof computeReadinessSummary>>;
 }
 
+// ── Canonical identity helpers ───────────────────────────────────────────────
+
+/**
+ * Normalizes a serviceDate value to YYYY-MM-DD regardless of whether Drizzle
+ * returns it as a string (date() default mode) or a Date object.
+ * Using UTC accessors prevents timezone-offset shifts on the date boundary.
+ */
+export function normalizeServiceDate(value: string | Date): string {
+  if (typeof value === "string") return value.slice(0, 10);
+  return [
+    value.getUTCFullYear(),
+    String(value.getUTCMonth() + 1).padStart(2, "0"),
+    String(value.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+/**
+ * Builds the canonical idempotency key for a readiness acknowledgement.
+ * Used on BOTH sides of the duplicate-check comparison so the two sides
+ * can never drift from each other.
+ */
+export function buildAcknowledgementKey(input: {
+  jobId: string | number;
+  serviceDate: string | Date;
+  issueType: string;
+}): string {
+  return [
+    String(input.jobId),
+    normalizeServiceDate(input.serviceDate),
+    input.issueType,
+  ].join(":");
+}
+
 // ── Encode/decode ReadinessItemId ─────────────────────────────────────────────
 
 export function encodeReadinessItemId(item: ReadinessItemId): string {
-  return `${item.jobId}:${item.serviceDate}:${item.issueType}`;
+  return buildAcknowledgementKey(item);
 }
 
 export function decodeReadinessItemId(encoded: string): ReadinessItemId | null {
@@ -176,7 +209,7 @@ export async function acknowledgeReadinessItems(
   }
 
   const alreadyAckedKeys = new Set(
-    existingAcks.map((a) => `${a.jobId}:${a.serviceDate}:${a.issueType}`)
+    existingAcks.map((a) => buildAcknowledgementKey(a))
   );
 
   const toInsert = validItems.filter(
@@ -221,7 +254,7 @@ export async function acknowledgeReadinessItems(
   }
 
   // Add already-acknowledged items to action_items
-  for (const v of validItems.filter((v) => alreadyAckedKeys.has(v.encoded))) {
+  for (const v of validItems.filter((v) => alreadyAckedKeys.has(buildAcknowledgementKey(v.item)))) {
     actionItemRows.push({
       actionId,
       readinessItemId: v.encoded,

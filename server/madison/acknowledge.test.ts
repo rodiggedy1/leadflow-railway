@@ -17,6 +17,8 @@ import {
   undoAcknowledgement,
   encodeReadinessItemId,
   decodeReadinessItemId,
+  normalizeServiceDate,
+  buildAcknowledgementKey,
   type ReadinessItemId,
   type IssueType,
 } from "./acknowledgeService";
@@ -180,10 +182,100 @@ describe("acknowledgeReadinessItems — already acknowledged (idempotency)", () 
     });
 
     expect(result.alreadyAcknowledgedCount).toBe(1);
+        expect(result.acknowledgedCount).toBe(0);
+  });
+
+  it("skips insert when DB returns serviceDate as a Date object (not a string)", async () => {
+    // Regression: Drizzle date() columns may return a Date object instead of a string.
+    // The idempotency key must normalize both sides so the comparison succeeds.
+    const existingAckWithDateObject = {
+      id: 99,
+      jobId: "4050013",
+      // Drizzle returns the date column as a Date object
+      serviceDate: new Date("2026-07-24T00:00:00.000Z"),
+      issueType: "UNASSIGNED",
+      actionId: "stale-action-id",
+      reversedAt: null,
+    };
+
+    const insertValues = vi.fn().mockResolvedValue([]);
+    const insertFn = vi.fn().mockReturnValue({ values: insertValues });
+
+    let selectCallCount = 0;
+    const db = {
+      select: vi.fn().mockReturnThis(),
+      from: vi.fn().mockReturnThis(),
+      where: vi.fn().mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          // First select: check existing acks — returns row with Date serviceDate
+          return Promise.resolve([existingAckWithDateObject]);
+        }
+        // Subsequent selects: verification query
+        return Promise.resolve([existingAckWithDateObject]);
+      }),
+      insert: insertFn,
+      update: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+    };
+
+    // Incoming item uses string serviceDate "2026-07-24"
+    const incomingEncoded = encodeReadinessItemId({
+      jobId: 4050013,
+      serviceDate: "2026-07-24",
+      issueType: "UNASSIGNED",
+    });
+
+    const result = await acknowledgeReadinessItems(db, {
+      targetIds: [incomingEncoded],
+      executedBy: 1,
+    });
+
+    // The item must be treated as already acknowledged — no new insert
+    expect(result.alreadyAcknowledgedCount).toBe(1);
     expect(result.acknowledgedCount).toBe(0);
+    // Critical: insert must NOT have been called for the readiness_acknowledgements row
+    // (insert IS called once for the madisonActions record — that's expected)
+    // Verify that insertValues was never called with a serviceDate field
+    // (i.e. no readiness_acknowledgements insert was attempted)
+    const allInsertCalls = insertValues.mock.calls;
+    const readinessInsertAttempted = allInsertCalls.some(
+      (call: unknown[]) =>
+        call[0] &&
+        typeof call[0] === "object" &&
+        "issueType" in (call[0] as Record<string, unknown>)
+    );
+    expect(readinessInsertAttempted).toBe(false);
   });
 });
-
+// ── 2b. normalizeServiceDate + buildAcknowledgementKey ───────────────────────
+describe("normalizeServiceDate", () => {
+  it("returns YYYY-MM-DD for a string input", () => {
+    expect(normalizeServiceDate("2026-07-24")).toBe("2026-07-24");
+  });
+  it("slices only the date part when string has time component", () => {
+    expect(normalizeServiceDate("2026-07-24T00:00:00.000Z")).toBe("2026-07-24");
+  });
+  it("returns YYYY-MM-DD for a Date object at UTC midnight", () => {
+    expect(normalizeServiceDate(new Date("2026-07-24T00:00:00.000Z"))).toBe("2026-07-24");
+  });
+  it("uses UTC day, not local day, to avoid timezone shift", () => {
+    // 2026-07-24T00:30:00.000Z is still July 24 UTC
+    expect(normalizeServiceDate(new Date("2026-07-24T00:30:00.000Z"))).toBe("2026-07-24");
+  });
+});
+describe("buildAcknowledgementKey", () => {
+  it("produces identical key for string and Date serviceDate", () => {
+    const fromString = buildAcknowledgementKey({ jobId: 4050013, serviceDate: "2026-07-24", issueType: "UNASSIGNED" });
+    const fromDate   = buildAcknowledgementKey({ jobId: "4050013", serviceDate: new Date("2026-07-24T00:00:00.000Z"), issueType: "UNASSIGNED" });
+    expect(fromString).toBe(fromDate);
+  });
+  it("produces identical key for numeric and string jobId", () => {
+    const fromNumber = buildAcknowledgementKey({ jobId: 42, serviceDate: "2026-07-25", issueType: "UNASSIGNED" });
+    const fromString = buildAcknowledgementKey({ jobId: "42", serviceDate: "2026-07-25", issueType: "UNASSIGNED" });
+    expect(fromNumber).toBe(fromString);
+  });
+});
 // ── 3. undoAcknowledgement ────────────────────────────────────────────────────
 
 describe("undoAcknowledgement", () => {

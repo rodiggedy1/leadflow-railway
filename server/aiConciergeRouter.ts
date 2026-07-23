@@ -3076,13 +3076,16 @@ export const aiConciergeRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
 
+      // === ARRANGE ===
       // Step 1: clear context and run seed query
       const rid1 = crypto.randomUUID().slice(0, 8);
       const seedResult = await handleMadisonReadiness(db, input.seedMessage, rid1, ctx.agent.agentId, { debug: true, clearContext: true });
 
+      // === ACT ===
       // Step 2: run acknowledge against the seeded context
       const rid2 = crypto.randomUUID().slice(0, 8);
       const ackResult = await handleMadisonReadiness(db, input.acknowledgeMessage, rid2, ctx.agent.agentId, { debug: true });
+      const undoActionId = ackResult.undoActionId ?? null;
 
       // === ASSERT ===
       // Verification: did the acknowledge actually write something?
@@ -3098,23 +3101,27 @@ export const aiConciergeRouter = router({
       //   (b) seed found no items (nothing to acknowledge — correct behavior)
       const verificationPassed = persisted || !seedHadItems;
 
-      // === CLEANUP ===
-      // Only clean up after verification passes AND the ack wrote real data.
-      // If verification failed, leave the DB state intact for debugging.
-      // Cleanup is best-effort: failure is surfaced but does not mask the test result.
-      let cleanupResult: "success" | "failed" | "skipped" = "skipped";
-      const undoActionId = ackResult.undoActionId ?? null;
-      if (verificationPassed && persisted && undoActionId) {
+      // === CLEANUP (finally-style) ===
+      // Runs whenever undoActionId exists — i.e. whenever the executor wrote rows.
+      // This ensures stale rows never accumulate between test runs, regardless of
+      // whether verification passed or failed.
+      // Cleanup is narrowly scoped: only reverses rows tied to this action ID.
+      // Cleanup failure is reported independently and does NOT alter the test result.
+      let cleanupAttempted = false;
+      let cleanupSucceeded = false;
+      let cleanupError: string | null = null;
+      if (undoActionId) {
+        cleanupAttempted = true;
         try {
           const { undoAcknowledgement } = await import("./madison/acknowledgeService");
           await undoAcknowledgement(db, {
             actionId: undoActionId,
             reversedBy: ctx.agent.agentId,
           });
-          cleanupResult = "success";
+          cleanupSucceeded = true;
         } catch (cleanupErr) {
+          cleanupError = cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr);
           console.error("[debugChatSequence] Cleanup (undo) failed:", cleanupErr);
-          cleanupResult = "failed";
         }
       }
 
@@ -3140,7 +3147,11 @@ export const aiConciergeRouter = router({
           seedItemCount,
           seedHadItems,
           verificationPassed,
-          cleanupResult,
+          cleanup: {
+            attempted: cleanupAttempted,
+            succeeded: cleanupSucceeded,
+            error: cleanupError,
+          },
         },
       };
     }),

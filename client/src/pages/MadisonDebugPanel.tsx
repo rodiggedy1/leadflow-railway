@@ -105,7 +105,7 @@ interface SequenceTestResult {
   durationMs?: number;
   seed?: { handled: boolean; response: string | null; debug: DebugInfo | null };
   acknowledge?: { handled: boolean; response: string | null; undoActionId: string | null; debug: DebugInfo | null };
-  verification?: { executorSucceeded: boolean; acknowledgedCount: number; needsContext: boolean; persisted: boolean; seedItemCount: number; seedHadItems: boolean; verificationPassed: boolean; cleanupResult: "success" | "failed" | "skipped" };
+  verification?: { executorSucceeded: boolean; acknowledgedCount: number; needsContext: boolean; persisted: boolean; seedItemCount: number; seedHadItems: boolean; verificationPassed: boolean; cleanup: { attempted: boolean; succeeded: boolean; error: string | null } };
   error?: string;
 }
 
@@ -442,10 +442,11 @@ function SequenceTestRow({ test, result, onRerun }: { test: SequenceTestCase; re
                 <div>acknowledgedCount: <strong>{v.acknowledgedCount}</strong></div>
                 <div>persisted: <strong className={v.persisted ? "text-green-600" : v.acknowledgedCount === 0 ? "text-gray-500" : "text-red-600"}>{String(v.persisted)}</strong></div>
                 <div>verificationPassed: <strong className={v.verificationPassed ? "text-green-600" : "text-red-600"}>{String(v.verificationPassed)}</strong></div>
-                <div>cleanup: <strong className={v.cleanupResult === "success" ? "text-green-600" : v.cleanupResult === "failed" ? "text-red-600" : "text-gray-400"}>{v.cleanupResult}</strong></div>
+                <div>cleanup.attempted: <strong className={v.cleanup.attempted ? "text-gray-700" : "text-gray-400"}>{String(v.cleanup.attempted)}</strong></div>
+                <div>cleanup.succeeded: <strong className={v.cleanup.succeeded ? "text-green-600" : v.cleanup.attempted ? "text-red-600" : "text-gray-400"}>{String(v.cleanup.succeeded)}</strong></div>
                 {v.needsContext && !v.seedHadItems && <div className="text-amber-600 mt-1">⚠ Seed returned 0 items — nothing to acknowledge. Pipeline is correct; schedule has no readiness issues for this date.</div>}
                 {v.needsContext && v.seedHadItems && <div className="text-red-600 mt-1">❌ Seed had {v.seedItemCount} item(s) but ack returned needs_context — context was not saved correctly after seed query.</div>}
-                {v.cleanupResult === "failed" && <div className="text-red-600 mt-1">⚠ Cleanup (undo) failed — test data may remain in DB. Check server logs.</div>}
+                {v.cleanup.attempted && !v.cleanup.succeeded && <div className="text-red-600 mt-1">⚠ Cleanup (undo) failed — {v.cleanup.error ?? "unknown error"}. Check server logs.</div>}
               </div>
             </div>
           )}
