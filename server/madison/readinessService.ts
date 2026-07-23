@@ -238,10 +238,15 @@ export async function computeReadinessSummary(db: any, targetDate: string): Prom
 
   // ── DIMENSION 1: Jobs Scheduled ───────────────────────────────────────
   const totalJobs = jobs.length;
-  // A job is unassigned when it has no cleaner name AND no team name.
-  // cleanerProfileId alone is not reliable — jobs can have a stale profile ID
-  // with null name fields after a cleaner is removed from the assignment.
-  const unassignedJobs = jobs.filter((j) => !j.cleanerName && !j.teamName);
+  // A job is unassigned when cleanerName and teamName are both absent or the
+  // literal string "Unassigned" (Launch27 stores this sentinel when no cleaner
+  // is assigned, rather than leaving the field null).
+  const isUnassigned = (j: JobRow) => {
+    const noName = !j.cleanerName || j.cleanerName.trim().toLowerCase() === "unassigned";
+    const noTeam = !j.teamName || j.teamName.trim().toLowerCase() === "unassigned";
+    return noName && noTeam;
+  };
+  const unassignedJobs = jobs.filter(isUnassigned);
 
   // Double-booking: same cleaner at same time
   const timeKeyMap = new Map<string, JobRow[]>();

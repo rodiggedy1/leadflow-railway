@@ -56,8 +56,10 @@ function computeFlags(
   isDoubleBooked: boolean
 ): JobReadinessRow["flags"] {
   const flags: JobReadinessRow["flags"] = [];
-  // Match readinessService: unassigned = no cleanerName AND no teamName
-  if (!job.cleanerName && !job.teamName) flags.push("unassigned");
+  // Match readinessService: unassigned = no name or literal "Unassigned" sentinel
+  const noName = !job.cleanerName || job.cleanerName.trim().toLowerCase() === "unassigned";
+  const noTeam = !job.teamName || job.teamName.trim().toLowerCase() === "unassigned";
+  if (noName && noTeam) flags.push("unassigned");
   if (confirmationStatus === "pending") flags.push("unconfirmed");
   if (paymentRawStatus === "no_card") flags.push("no_payment");
   if (isDoubleBooked) flags.push("double_booked");
@@ -170,10 +172,14 @@ async function _execute(
       jobTime: j.jobTime,
       serviceType: j.serviceType ?? null,
       teamName: j.teamName ?? null,
-      assignment: {
-        status: (j.cleanerName || j.teamName) ? "assigned" : "unassigned",
-        cleanerName: j.cleanerName ?? null,
-      },
+      assignment: (() => {
+        const _noName = !j.cleanerName || j.cleanerName.trim().toLowerCase() === "unassigned";
+        const _noTeam = !j.teamName || j.teamName.trim().toLowerCase() === "unassigned";
+        return {
+          status: (_noName && _noTeam) ? "unassigned" as const : "assigned" as const,
+          cleanerName: _noName ? null : (j.cleanerName ?? null),
+        };
+      })(),
       confirmation: {
         status: confirmationStatus,
         outcomeLabel: null, // populated below if needed
