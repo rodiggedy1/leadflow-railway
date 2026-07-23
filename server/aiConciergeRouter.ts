@@ -3043,20 +3043,22 @@ export const aiConciergeRouter = router({
 
       // ── DIMENSION 3: Payment Methods ─────────────────────────────────────
       const seenCustomers = new Set<string>();
+      type PrepRowStatus = "on_hold" | "no_preauth" | "no_card" | "lf_on_hold" | "lf_card";
       const paymentRows: Array<{
         customerName: string;
         jobTime: string | null;
         serviceType: string | null;
         cardBrand: string | null;
         last4: string | null;
-        status: "on_hold" | "no_preauth" | "no_card";
+        status: PrepRowStatus;
         amountCents: number;
+        customerPhone: string | null;
       }> = [];
       for (const j of jobs) {
         const key = j.customerName ?? "";
         if (seenCustomers.has(key)) continue;
         seenCustomers.add(key);
-        const status: "on_hold" | "no_preauth" | "no_card" =
+        const status: PrepRowStatus =
           (j.chargesOnHoldCents ?? 0) > 0 ? "on_hold" :
           j.hasStripeCard ? "no_preauth" :
           "no_card";
@@ -3068,11 +3070,70 @@ export const aiConciergeRouter = router({
           last4: j.paymentLast4 ?? null,
           status,
           amountCents: j.chargesOnHoldCents ?? 0,
+          customerPhone: j.customerPhone ?? null,
         });
       }
-      const paymentsOnHold = paymentRows.filter(r => r.status === "on_hold").length;
+      // LeadFlow payment fallback — same logic as handleCardStatus
+      const needsLfCheckPrep = paymentRows.filter(r => r.status === "no_card" || r.status === "no_preauth");
+      if (needsLfCheckPrep.length > 0) {
+        const [lfCustomers, lfAuths] = await Promise.all([
+          db.select({
+            phone: stripeCustomers.phone,
+            name: stripeCustomers.name,
+            stripePaymentMethodId: stripeCustomers.stripePaymentMethodId,
+            cardBrand: stripeCustomers.cardBrand,
+            cardLast4: stripeCustomers.cardLast4,
+          }).from(stripeCustomers),
+          db.select({
+            customerPhone: paymentAuthorizations.customerPhone,
+            customerName: paymentAuthorizations.customerName,
+            status: paymentAuthorizations.status,
+            amountCents: paymentAuthorizations.amountCents,
+          }).from(paymentAuthorizations)
+            .where(and(
+              eq(paymentAuthorizations.status, "authorized"),
+              isNull(paymentAuthorizations.cancelledAt),
+            )),
+        ]);
+        const lfCustomerByPhone = new Map<string, typeof lfCustomers[0]>();
+        const lfAuthByPhone = new Map<string, typeof lfAuths[0]>();
+        const lfCustomerByName = new Map<string, typeof lfCustomers[0]>();
+        const lfAuthByName = new Map<string, typeof lfAuths[0]>();
+        for (const c of lfCustomers) {
+          const norm = normalizePhoneLegacy(c.phone ?? "");
+          if (norm) lfCustomerByPhone.set(norm, c);
+          if (c.name) lfCustomerByName.set(c.name.toLowerCase().trim(), c);
+        }
+        for (const a of lfAuths) {
+          const norm = normalizePhoneLegacy(a.customerPhone ?? "");
+          if (norm) lfAuthByPhone.set(norm, a);
+          if (a.customerName) lfAuthByName.set(a.customerName.toLowerCase().trim(), a);
+        }
+        for (const row of paymentRows) {
+          if (row.status !== "no_card" && row.status !== "no_preauth") continue;
+          const normPhone = normalizePhoneLegacy(row.customerPhone ?? "");
+          let lfAuth = normPhone ? lfAuthByPhone.get(normPhone) : undefined;
+          let lfCust = normPhone ? lfCustomerByPhone.get(normPhone) : undefined;
+          if (!lfAuth && !lfCust) {
+            const nameLower = row.customerName.toLowerCase().trim();
+            lfAuth = lfAuthByName.get(nameLower);
+            lfCust = lfCustomerByName.get(nameLower);
+          }
+          if (lfAuth) {
+            row.status = "lf_on_hold";
+            row.amountCents = lfAuth.amountCents;
+            row.cardBrand = null;
+            row.last4 = null;
+          } else if (lfCust?.stripePaymentMethodId) {
+            row.status = "lf_card";
+            row.cardBrand = lfCust.cardBrand ?? null;
+            row.last4 = lfCust.cardLast4 ?? null;
+          }
+        }
+      }
+      const paymentsOnHold = paymentRows.filter(r => r.status === "on_hold" || r.status === "lf_on_hold").length;
       const paymentsTotal = paymentRows.length;
-      const paymentsIssueCount = paymentRows.filter(r => r.status !== "on_hold").length;
+      const paymentsIssueCount = paymentRows.filter(r => r.status !== "on_hold" && r.status !== "lf_on_hold").length;
 
       // ── DIMENSION 4: Customer Confirmations ──────────────────────────────
       const seenBookings = new Set<string>();
