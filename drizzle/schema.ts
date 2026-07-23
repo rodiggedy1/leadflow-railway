@@ -3714,6 +3714,7 @@ export const invoices = mysqlTable("invoices", {
   lineItems: json("lineItems").notNull(),
   totalCents: int("totalCents").notNull(),
   pdfUrl: varchar("pdfUrl", { length: 1000 }),
+  paidAt: timestamp("paidAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (t) => [
   index("idx_invoices_templateId").on(t.templateId),

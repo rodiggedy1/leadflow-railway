@@ -714,4 +714,24 @@ export const invoiceRouter = router({
 
       return { ok: true, toEmail, invoiceNumber: inv.invoiceNumber, customerName: inv.customerName };
     }),
+
+  markAsPaid: adminAgentProcedure
+    .input(z.object({ invoiceId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      await db.update(invoices)
+        .set({ paidAt: new Date() })
+        .where(eq(invoices.id, input.invoiceId));
+      return { ok: true };
+    }),
+
+  unmarkAsPaid: adminAgentProcedure
+    .input(z.object({ invoiceId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      await db.update(invoices)
+        .set({ paidAt: null })
+        .where(eq(invoices.id, input.invoiceId));
+      return { ok: true };
+    }),
 });

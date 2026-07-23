@@ -58,6 +58,7 @@ interface InvoiceRecord {
   lineItems: unknown;
   totalCents: number;
   pdfUrl: string | null;
+  paidAt: Date | null;
   createdAt: Date;
 }
 
@@ -480,7 +481,6 @@ function GenerateDialog({
 }
 
 // ─── Invoice History Row ──────────────────────────────────────────────────────
-
 function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => void }) {
   const utils = trpc.useUtils();
   const [emailSent, setEmailSent] = useState(false);
@@ -501,7 +501,20 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
     },
     onError: (e) => toast.error(e.message),
   });
-
+  const markPaidMut = trpc.invoice.markAsPaid.useMutation({
+    onSuccess: () => {
+      utils.invoice.listInvoices.invalidate();
+      toast.success("Invoice marked as paid");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const unmarkPaidMut = trpc.invoice.unmarkAsPaid.useMutation({
+    onSuccess: () => {
+      utils.invoice.listInvoices.invalidate();
+      toast.success("Invoice unmarked as paid");
+    },
+    onError: (e) => toast.error(e.message),
+  });
   const handleDownload = () => {
     if (!inv.pdfUrl) return;
     if (inv.pdfUrl.startsWith("data:")) {
@@ -513,7 +526,10 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
       window.open(inv.pdfUrl, "_blank");
     }
   };
-
+  // Determine payment status
+  const isPaid = !!inv.paidAt;
+  const createdMs = inv.createdAt instanceof Date ? inv.createdAt.getTime() : new Date(inv.createdAt).getTime();
+  const isOverdue = !isPaid && (Date.now() - createdMs) > 7 * 24 * 60 * 60 * 1000;
   return (
     <tr className="border-b border-gray-100 hover:bg-gray-50 text-sm">
       <td className="py-2 px-3 font-mono text-[#C8573A] font-semibold">#{inv.invoiceNumber}</td>
@@ -521,6 +537,18 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
       <td className="py-2 px-3 text-gray-600">{inv.serviceDate}</td>
       <td className="py-2 px-3 text-gray-600">{inv.billingDate}</td>
       <td className="py-2 px-3 font-semibold text-gray-900">{formatCents(inv.totalCents)}</td>
+      <td className="py-2 px-3">
+        {/* Payment status badge */}
+        {isPaid ? (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+            ✓ Paid
+          </span>
+        ) : isOverdue ? (
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-100 px-2 py-0.5 rounded-full">
+            Overdue
+          </span>
+        ) : null}
+      </td>
       <td className="py-2 px-3">
         <div className="flex items-center gap-1">
           {inv.pdfUrl ? (
@@ -568,6 +596,24 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
               </button>
             )
           )}
+          {/* Mark as Paid / Unmark toggle */}
+          {isPaid ? (
+            <button
+              onClick={() => unmarkPaidMut.mutate({ invoiceId: inv.id })}
+              disabled={unmarkPaidMut.isPending}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-1.5 py-0.5 rounded font-medium disabled:opacity-50"
+            >
+              {unmarkPaidMut.isPending ? "..." : "Unmark"}
+            </button>
+          ) : (
+            <button
+              onClick={() => markPaidMut.mutate({ invoiceId: inv.id })}
+              disabled={markPaidMut.isPending}
+              className="flex items-center gap-1 text-xs text-green-700 hover:text-green-900 border border-green-200 px-1.5 py-0.5 rounded font-medium disabled:opacity-50"
+            >
+              {markPaidMut.isPending ? "..." : "Paid ✓"}
+            </button>
+          )}
           <button
             onClick={() => {
               if (confirm("Delete this invoice?")) {
@@ -575,7 +621,7 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
                 onDelete();
               }
             }}
-            className="ml-2 text-gray-300 hover:text-red-500"
+            className="ml-1 text-gray-300 hover:text-red-500"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -838,6 +884,7 @@ export default function InvoiceManager() {
                       <th className="text-left py-2 px-3">Service Date</th>
                       <th className="text-left py-2 px-3">Billing Date</th>
                       <th className="text-left py-2 px-3">Total</th>
+                      <th className="text-left py-2 px-3">Status</th>
                       <th className="text-left py-2 px-3">Actions</th>
                     </tr>
                   </thead>
