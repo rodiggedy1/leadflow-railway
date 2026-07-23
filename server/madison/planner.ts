@@ -14,6 +14,8 @@ import { MadisonError } from "./types";
 import {
   READINESS_PLAN_ZOD_SCHEMA,
   READINESS_PLAN_JSON_SCHEMA,
+  normalizeFlatPlan,
+  type FlatPlanResponse,
   type ReadinessPlan,
 } from "./schema/readinessPlanSchema";
 
@@ -25,11 +27,14 @@ Your job is to interpret a natural-language question about operational readiness
 
 Today's date in Eastern Time will be provided. Use it to resolve relative date references like "tomorrow", "today", "this week".
 
+The response schema is a FLAT object with ALL fields present. Set fields that do not apply to the selected type to null.
+
 Plan types:
 - type: "query" — for read-only readiness questions (most requests)
 - type: "action" — ONLY when the user explicitly asks to acknowledge, dismiss, or mark items as handled
 
 For type: "query" plans:
+- Set dateScope, filters, sort as needed. Set action, targetReference, serviceDate to null.
 - dateScope.startDate and endDate must be YYYY-MM-DD strings
 - "tomorrow" → next calendar day from today
 - "today" → today's date
@@ -45,9 +50,12 @@ For type: "query" plans:
 - For exact time queries like "8:30 AM jobs" or "9 AM jobs", set exactTime to "08:30" or "09:00" (HH:MM 24-hour format) — do NOT use startTime/endTime for exact time matches
 
 For type: "action" plans (acknowledge_readiness):
-- Set action: "acknowledge_readiness"
-- targetIds: array of encoded item IDs in "jobId:serviceDate:issueType" format (from conversation context)
-- serviceDate: the YYYY-MM-DD date of the items being acknowledged
+- Set action: "acknowledge_readiness". Set dateScope, filters, sort to null.
+- targetReference: declare how to resolve the target items:
+  - { kind: "context_selection" } — use whatever was last shown in the conversation (use this when user says "those", "them", "all of them", etc.)
+  - { kind: "explicit", itemIds: [...] } — only if the user explicitly named specific item IDs
+  - Default to context_selection unless the user explicitly provides item IDs.
+- serviceDate: the YYYY-MM-DD date of the items being acknowledged (null if unknown)
 - Only produce this plan type when the user explicitly asks to acknowledge/dismiss/mark items
 
 Return ONLY valid JSON matching the schema. No explanation.`;
@@ -112,7 +120,18 @@ Produce the ReadinessPlan JSON.`;
     throw new MadisonError("PLAN_FAILED", `LLM returned non-JSON: ${raw.slice(0, 200)}`);
   }
 
-  const result = READINESS_PLAN_ZOD_SCHEMA.safeParse(parsed);
+  // Normalize flat OpenAI transport format → internal discriminated union shape
+  let normalized: unknown;
+  try {
+    normalized = normalizeFlatPlan(parsed as FlatPlanResponse);
+  } catch (normErr) {
+    throw new MadisonError(
+      "PLAN_INVALID",
+      `Plan normalization failed: ${normErr instanceof Error ? normErr.message : String(normErr)}`
+    );
+  }
+
+  const result = READINESS_PLAN_ZOD_SCHEMA.safeParse(normalized);
   if (!result.success) {
     throw new MadisonError(
       "PLAN_INVALID",

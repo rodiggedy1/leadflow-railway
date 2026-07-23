@@ -99,20 +99,37 @@ export async function handleMadisonReadiness(
     `[Madison] plan created: requestId=${rid} type=${plan.type} ` +
     (plan.type === "query"
       ? `dateScope=${JSON.stringify(plan.dateScope)} filters=${JSON.stringify(plan.filters ?? {})} sort=${plan.sort ?? "default"}`
-      : `action=${plan.action} targetIds=${plan.targetIds.length} serviceDate=${plan.serviceDate}`)
+      : `action=${plan.action} targetReference=${JSON.stringify(plan.targetReference)} serviceDate=${plan.serviceDate ?? "null"}`)
   );
 
   // ── Action plan branch ────────────────────────────────────────────────────
   if (plan.type === "action") {
     if (plan.action === "acknowledge_readiness") {
-      // Resolve targetIds: if the plan has none (LLM couldn't extract them),
-      // fall back to the last selection from conversation context.
-      let resolvedTargetIds = plan.targetIds;
-      if (resolvedTargetIds.length === 0 && existingContext) {
-        resolvedTargetIds = existingContext.lastSelectionItemIds;
+      // Resolve targetIds from targetReference.
+      // context_selection: use last shown items from conversation context.
+      // explicit: LLM extracted IDs — validate against context before use.
+      let resolvedTargetIds: string[] = [];
+
+      if (plan.targetReference.kind === "context_selection") {
+        resolvedTargetIds = existingContext?.lastSelectionItemIds ?? [];
         console.log(
-          `[Madison] action: no targetIds from LLM, using context lastSelectionItemIds (${resolvedTargetIds.length} items)`
+          `[Madison] action: context_selection → ${resolvedTargetIds.length} items from context`
         );
+      } else if (plan.targetReference.kind === "explicit") {
+        // Validate explicit IDs against context (reject IDs not in last projection)
+        const contextIds = new Set(existingContext?.lastSelectionItemIds ?? []);
+        if (contextIds.size > 0) {
+          resolvedTargetIds = plan.targetReference.itemIds.filter((id) => contextIds.has(id));
+          const rejected = plan.targetReference.itemIds.length - resolvedTargetIds.length;
+          if (rejected > 0) {
+            console.warn(`[Madison] action: explicit targetReference had ${rejected} IDs not in context — rejected`);
+          }
+        } else {
+          // No context available — use explicit IDs as-is (best effort)
+          resolvedTargetIds = plan.targetReference.itemIds;
+          console.warn(`[Madison] action: no context available, using explicit IDs as-is (${resolvedTargetIds.length} items)`);
+        }
+        console.log(`[Madison] action: explicit → ${resolvedTargetIds.length} validated items`);
       }
 
       if (resolvedTargetIds.length === 0) {

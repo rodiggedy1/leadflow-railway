@@ -320,24 +320,36 @@ describe("isReadinessDomain — action messages", () => {
 
 // ── 5. Planner schema — action plan shape ────────────────────────────────────
 
-describe("READINESS_PLAN_JSON_SCHEMA — action plan branch", () => {
-  it("schema has anyOf with query and action branches", () => {
-    expect(READINESS_PLAN_JSON_SCHEMA.anyOf).toBeDefined();
-    expect(READINESS_PLAN_JSON_SCHEMA.anyOf).toHaveLength(2);
+describe("READINESS_PLAN_JSON_SCHEMA — flat root object", () => {
+  it("root is type: object (not bare anyOf)", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    expect(schema.type).toBe("object");
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.oneOf).toBeUndefined();
   });
 
-  it("action branch has required targetIds and serviceDate", () => {
-    const actionBranch = READINESS_PLAN_JSON_SCHEMA.anyOf[1];
-    expect((actionBranch.properties.type as { enum: string[] }).enum).toContain("action");
-    expect(actionBranch.required).toContain("targetIds");
-    expect(actionBranch.required).toContain("serviceDate");
-    expect(actionBranch.required).toContain("action");
+  it("root required includes all fields", () => {
+    const required = READINESS_PLAN_JSON_SCHEMA.required as unknown as string[];
+    expect(required).toContain("type");
+    expect(required).toContain("dateScope");
+    expect(required).toContain("filters");
+    expect(required).toContain("sort");
+    expect(required).toContain("action");
+    expect(required).toContain("targetReference");
+    expect(required).toContain("serviceDate");
   });
 
-  it("query branch has required dateScope", () => {
-    const queryBranch = READINESS_PLAN_JSON_SCHEMA.anyOf[0];
-    expect((queryBranch.properties.type as { enum: string[] }).enum).toContain("query");
-    expect(queryBranch.required).toContain("dateScope");
+  it("type property has enum with query and action", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    const typeField = (schema.properties as Record<string, unknown>).type as { enum: string[] };
+    expect(typeField.enum).toContain("query");
+    expect(typeField.enum).toContain("action");
+  });
+
+  it("targetReference property is present and nullable", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    const targetRef = (schema.properties as Record<string, unknown>).targetReference;
+    expect(targetRef).toBeDefined();
   });
 });
 

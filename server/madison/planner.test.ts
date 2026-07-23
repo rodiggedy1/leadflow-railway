@@ -1,22 +1,25 @@
 /**
  * planner.test.ts
  *
- * Tests for createReadinessPlan().
+ * Tests for createReadinessPlan() and the OpenAI JSON schema.
  *
  * Goals:
- *   1. Verify the OpenAI JSON schema is structurally valid (strict mode rules).
- *   2. Verify createReadinessPlan() parses a well-formed LLM response correctly.
- *   3. Verify createReadinessPlan() throws PLAN_FAILED on LLM error.
- *   4. Verify createReadinessPlan() throws PLAN_INVALID on malformed LLM JSON.
- *   5. Verify the schema rejects a response that omits a required field.
- *   6. Verify action plan variant parses correctly.
- *
- * If any of these fail after a schema edit, the schema is broken and must be fixed
- * before deploying — this is the CI guard against the PLAN_FAILED regression.
+ *   1. Assert root schema is type: "object" — no bare anyOf at root (OpenAI strict mode).
+ *   2. Assert every property is in required (strict mode).
+ *   3. Assert normalizeFlatPlan() converts flat responses to the internal union shape.
+ *   4. Assert createReadinessPlan() parses well-formed LLM responses correctly.
+ *   5. Assert createReadinessPlan() throws PLAN_FAILED on LLM error.
+ *   6. Assert createReadinessPlan() throws PLAN_INVALID on malformed JSON.
+ *   7. Planner integration tests: query and action plan paths.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { READINESS_PLAN_JSON_SCHEMA, READINESS_PLAN_ZOD_SCHEMA } from "./schema/readinessPlanSchema";
+import {
+  READINESS_PLAN_JSON_SCHEMA,
+  READINESS_PLAN_ZOD_SCHEMA,
+  normalizeFlatPlan,
+  type FlatPlanResponse,
+} from "./schema/readinessPlanSchema";
 import { MadisonError } from "./types";
 
 // ── Mock invokeLLM so tests never make real API calls ─────────────────────────
@@ -25,28 +28,85 @@ vi.mock("../_core/llm", () => ({
   invokeLLM: vi.fn(),
 }));
 
-// Import after mock is set up
 import { invokeLLM } from "../_core/llm";
 import { createReadinessPlan } from "./planner";
 
 const mockInvokeLLM = vi.mocked(invokeLLM);
 
-// ── Helper: build a fake LLM response ────────────────────────────────────────
-
 function makeLLMResponse(content: string) {
+  return { choices: [{ message: { content } }] };
+}
+
+// ── Helper: flat plan builder ─────────────────────────────────────────────────
+
+function makeQueryFlat(overrides: Partial<FlatPlanResponse> = {}): FlatPlanResponse {
   return {
-    choices: [{ message: { content } }],
+    type: "query",
+    dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
+    filters: {
+      timeOfDay: null, startTime: null, endTime: null, exactTime: null,
+      dimension: "all", onlyNeedsAttention: null, minimumFlagCount: null,
+    },
+    sort: "service_time",
+    action: null,
+    targetReference: null,
+    serviceDate: null,
+    ...overrides,
   };
 }
 
-// ── Schema structural validation ──────────────────────────────────────────────
+function makeActionFlat(overrides: Partial<FlatPlanResponse> = {}): FlatPlanResponse {
+  return {
+    type: "action",
+    dateScope: null,
+    filters: null,
+    sort: null,
+    action: "acknowledge_readiness",
+    targetReference: { kind: "context_selection" },
+    serviceDate: "2026-07-24",
+    ...overrides,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. OpenAI JSON schema structural validation
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe("READINESS_PLAN_JSON_SCHEMA — OpenAI strict mode compliance", () => {
+  it("root schema is type: object (not bare anyOf)", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    expect(schema.type).toBe("object");
+    expect(schema.anyOf).toBeUndefined();
+    expect(schema.oneOf).toBeUndefined();
+  });
+
+  it("root schema has additionalProperties: false", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    expect(schema.additionalProperties).toBe(false);
+  });
+
+  it("every root property is listed in required", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    const props = Object.keys(schema.properties as Record<string, unknown>);
+    const required = schema.required as string[];
+    const missing = props.filter((k) => !required.includes(k));
+    expect(missing).toHaveLength(0);
+  });
+
+  it("required array contains all expected fields", () => {
+    const required = READINESS_PLAN_JSON_SCHEMA.required as unknown as string[];
+    expect(required).toContain("type");
+    expect(required).toContain("dateScope");
+    expect(required).toContain("filters");
+    expect(required).toContain("sort");
+    expect(required).toContain("action");
+    expect(required).toContain("targetReference");
+    expect(required).toContain("serviceDate");
+  });
+
   /**
-   * Recursively validates that every object in the JSON schema satisfies
-   * OpenAI strict mode requirements:
-   *   - additionalProperties: false
-   *   - required lists every key in properties
+   * Recursively validates that every object in the schema satisfies
+   * OpenAI strict mode requirements.
    */
   function validateStrictObject(schema: Record<string, unknown>, path: string): string[] {
     const errors: string[] = [];
@@ -55,27 +115,20 @@ describe("READINESS_PLAN_JSON_SCHEMA — OpenAI strict mode compliance", () => {
       if (schema.additionalProperties !== false) {
         errors.push(`${path}: missing additionalProperties: false`);
       }
-
       const props = schema.properties as Record<string, unknown> | undefined;
       const required = schema.required as string[] | undefined;
-
       if (props) {
         const propKeys = Object.keys(props);
         if (!required) {
-          errors.push(`${path}: missing required array (must list all keys: ${propKeys.join(", ")})`);
+          errors.push(`${path}: missing required array`);
         } else {
-          const missingFromRequired = propKeys.filter((k) => !required.includes(k));
-          if (missingFromRequired.length > 0) {
-            errors.push(
-              `${path}: required array is missing keys: ${missingFromRequired.join(", ")}`
-            );
+          const missing = propKeys.filter((k) => !required.includes(k));
+          if (missing.length > 0) {
+            errors.push(`${path}: required missing keys: ${missing.join(", ")}`);
           }
         }
-
-        // Recurse into each property
         for (const [key, value] of Object.entries(props)) {
           const child = value as Record<string, unknown>;
-          // Handle anyOf — recurse into each branch
           if (child.anyOf) {
             for (const branch of child.anyOf as Record<string, unknown>[]) {
               errors.push(...validateStrictObject(branch, `${path}.${key}[anyOf]`));
@@ -87,162 +140,226 @@ describe("READINESS_PLAN_JSON_SCHEMA — OpenAI strict mode compliance", () => {
       }
     }
 
-    // Recurse into anyOf branches at the current level
     if (schema.anyOf) {
       for (let i = 0; i < (schema.anyOf as unknown[]).length; i++) {
-        errors.push(...validateStrictObject((schema.anyOf as Record<string, unknown>[])[i], `${path}[anyOf[${i}]]`));
+        errors.push(
+          ...validateStrictObject(
+            (schema.anyOf as Record<string, unknown>[])[i],
+            `${path}[anyOf[${i}]]`
+          )
+        );
       }
     }
 
     return errors;
   }
 
-  it("satisfies all OpenAI strict mode requirements", () => {
+  it("satisfies all OpenAI strict mode requirements recursively", () => {
     const errors = validateStrictObject(
       READINESS_PLAN_JSON_SCHEMA as unknown as Record<string, unknown>,
       "root"
     );
     if (errors.length > 0) {
       throw new Error(
-        `JSON schema violates OpenAI strict mode:\n${errors.map((e) => `  - ${e}`).join("\n")}\n\n` +
-        `Fix server/madison/schema/readinessPlanSchema.ts`
+        `JSON schema violates OpenAI strict mode:\n${errors.map((e) => `  - ${e}`).join("\n")}`
       );
     }
   });
 
-  it("has type field in query variant required array", () => {
-    const queryVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[0] as { required: string[] };
-    expect(queryVariant.required).toContain("type");
-    expect(queryVariant.required).toContain("dateScope");
-    expect(queryVariant.required).toContain("filters");
-    expect(queryVariant.required).toContain("sort");
-  });
-
-  it("has required array in query variant dateScope", () => {
-    const queryVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[0] as { properties: { dateScope: { required: string[] } } };
-    const dateScope = queryVariant.properties.dateScope;
-    expect(dateScope.required).toContain("type");
-    expect(dateScope.required).toContain("startDate");
-    expect(dateScope.required).toContain("endDate");
-  });
-
-  it("has type field in action variant required array", () => {
-    const actionVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[1] as { required: string[] };
-    expect(actionVariant.required).toContain("type");
-    expect(actionVariant.required).toContain("action");
-    expect(actionVariant.required).toContain("targetIds");
-    expect(actionVariant.required).toContain("serviceDate");
+  it("filters object includes exactTime in required", () => {
+    const schema = READINESS_PLAN_JSON_SCHEMA as Record<string, unknown>;
+    const filtersAnyOf = (schema.properties as Record<string, unknown>).filters as {
+      anyOf: Array<{ required?: string[] }>;
+    };
+    const filtersObj = filtersAnyOf.anyOf[0];
+    expect(filtersObj.required).toContain("exactTime");
   });
 });
 
-// ── createReadinessPlan() integration tests ───────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. normalizeFlatPlan()
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("normalizeFlatPlan()", () => {
+  it("converts flat query response to internal query shape", () => {
+    const flat = makeQueryFlat();
+    const normalized = normalizeFlatPlan(flat) as Record<string, unknown>;
+    expect(normalized.type).toBe("query");
+    expect(normalized.dateScope).toBeDefined();
+    expect(normalized.action).toBeUndefined();
+    expect(normalized.targetReference).toBeUndefined();
+  });
+
+  it("converts flat action response to internal action shape", () => {
+    const flat = makeActionFlat();
+    const normalized = normalizeFlatPlan(flat) as Record<string, unknown>;
+    expect(normalized.type).toBe("action");
+    expect(normalized.action).toBe("acknowledge_readiness");
+    expect((normalized.targetReference as Record<string, unknown>).kind).toBe("context_selection");
+    expect(normalized.dateScope).toBeUndefined();
+  });
+
+  it("converts explicit targetReference correctly", () => {
+    const flat = makeActionFlat({
+      targetReference: { kind: "explicit", itemIds: ["abc:2026-07-24:UNASSIGNED"] },
+    });
+    const normalized = normalizeFlatPlan(flat) as Record<string, unknown>;
+    const ref = normalized.targetReference as Record<string, unknown>;
+    expect(ref.kind).toBe("explicit");
+    expect(ref.itemIds).toHaveLength(1);
+  });
+
+  it("throws on contradictory type=query with action set", () => {
+    const flat = makeQueryFlat({ action: "acknowledge_readiness" });
+    expect(() => normalizeFlatPlan(flat)).toThrow("Contradictory");
+  });
+
+  it("throws on contradictory type=action with dateScope set", () => {
+    const flat = makeActionFlat({
+      dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
+    });
+    expect(() => normalizeFlatPlan(flat)).toThrow("Contradictory");
+  });
+
+  it("throws on action plan missing targetReference", () => {
+    const flat = makeActionFlat({ targetReference: null });
+    expect(() => normalizeFlatPlan(flat)).toThrow("targetReference");
+  });
+
+  it("throws on unknown plan type", () => {
+    expect(() => normalizeFlatPlan({ type: "unknown" } as unknown as FlatPlanResponse)).toThrow(
+      "Unknown plan type"
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. createReadinessPlan() — integration tests (mocked LLM)
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe("createReadinessPlan()", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("parses a well-formed tomorrow readiness response (query)", async () => {
-    const validPlan = {
-      type: "query",
-      dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
-      filters: { timeOfDay: null, startTime: null, endTime: null, exactTime: null, dimension: "all", onlyNeedsAttention: null, minimumFlagCount: null },
-      sort: "service_time",
-    };
-    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(validPlan)));
+  it("'What is needed tomorrow?' → query plan parses successfully", async () => {
+    const flat = makeQueryFlat({
+      filters: {
+        timeOfDay: null, startTime: null, endTime: null, exactTime: null,
+        dimension: "all", onlyNeedsAttention: true, minimumFlagCount: null,
+      },
+      sort: "risk",
+    });
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
 
-    const result = await createReadinessPlan("are we ready for tomorrow");
-
+    const result = await createReadinessPlan("What is needed tomorrow?");
     expect(result.type).toBe("query");
     if (result.type === "query") {
       expect(result.dateScope.startDate).toBe("2026-07-24");
-      expect(result.dateScope.type).toBe("service_date");
-      expect(result.sort).toBe("service_time");
+      expect(result.filters?.onlyNeedsAttention).toBe(true);
     }
   });
 
-  it("parses a response with null filters gracefully (query)", async () => {
-    const planWithNullFilters = {
-      type: "query",
-      dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
-      filters: null,
-      sort: null,
-    };
-    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(planWithNullFilters)));
+  it("'Which jobs have no cleaner tomorrow?' → query plan parses successfully", async () => {
+    const flat = makeQueryFlat({
+      filters: {
+        timeOfDay: null, startTime: null, endTime: null, exactTime: null,
+        dimension: "assignment", onlyNeedsAttention: true, minimumFlagCount: null,
+      },
+      sort: "risk",
+    });
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
 
-    const result = await createReadinessPlan("are we ready for tomorrow");
-
+    const result = await createReadinessPlan("Which jobs have no cleaner tomorrow?");
     expect(result.type).toBe("query");
     if (result.type === "query") {
-      expect(result.dateScope.startDate).toBe("2026-07-24");
-      expect(result.filters).toBeNull();
-      expect(result.sort).toBeNull();
+      expect(result.filters?.dimension).toBe("assignment");
     }
   });
 
-  it("parses a well-formed action plan (acknowledge_readiness)", async () => {
-    const actionPlan = {
-      type: "action",
-      action: "acknowledge_readiness",
-      targetIds: ["123:2026-07-24:UNASSIGNED", "456:2026-07-24:CUSTOMER_UNCONFIRMED"],
-      serviceDate: "2026-07-24",
-    };
-    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(actionPlan)));
+  it("'Acknowledge those.' → action plan parses successfully", async () => {
+    const flat = makeActionFlat();
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
 
-    const result = await createReadinessPlan("acknowledge those unassigned jobs");
-
+    const result = await createReadinessPlan("Acknowledge those.");
     expect(result.type).toBe("action");
     if (result.type === "action") {
       expect(result.action).toBe("acknowledge_readiness");
-      expect(result.targetIds).toHaveLength(2);
-      expect(result.serviceDate).toBe("2026-07-24");
+      expect(result.targetReference.kind).toBe("context_selection");
+    }
+  });
+
+  it("parses action plan with explicit targetReference", async () => {
+    const flat = makeActionFlat({
+      targetReference: { kind: "explicit", itemIds: ["123:2026-07-24:UNASSIGNED"] },
+    });
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
+
+    const result = await createReadinessPlan("acknowledge job 123");
+    expect(result.type).toBe("action");
+    if (result.type === "action") {
+      expect(result.targetReference.kind).toBe("explicit");
+      if (result.targetReference.kind === "explicit") {
+        expect(result.targetReference.itemIds).toContain("123:2026-07-24:UNASSIGNED");
+      }
+    }
+  });
+
+  it("parses null filters gracefully (query)", async () => {
+    const flat = makeQueryFlat({ filters: null });
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
+
+    const result = await createReadinessPlan("are we ready for tomorrow");
+    expect(result.type).toBe("query");
+    if (result.type === "query") {
+      expect(result.filters).toBeNull();
     }
   });
 
   it("throws PLAN_FAILED when invokeLLM rejects", async () => {
-    const openAiError = new Error(
-      'LLM invoke failed: 400 Bad Request – {"error":{"message":"Invalid schema","type":"invalid_request_error","code":null}}'
-    );
-    mockInvokeLLM.mockRejectedValueOnce(openAiError);
-
+    mockInvokeLLM.mockRejectedValueOnce(new Error("LLM unavailable"));
     await expect(createReadinessPlan("are we ready for tomorrow")).rejects.toMatchObject({
       code: "PLAN_FAILED",
     });
   });
 
   it("throws PLAN_FAILED when LLM returns non-JSON", async () => {
-    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse("Sorry, I cannot help with that."));
-
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse("Sorry, I cannot help."));
     await expect(createReadinessPlan("are we ready for tomorrow")).rejects.toMatchObject({
       code: "PLAN_FAILED",
     });
   });
 
   it("throws PLAN_INVALID when LLM returns JSON missing required type field", async () => {
-    const badPlan = { dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" }, sort: "service_time" }; // missing type
-    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(badPlan)));
-
+    const bad = { dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" } };
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(bad)));
     await expect(createReadinessPlan("are we ready for tomorrow")).rejects.toMatchObject({
       code: "PLAN_INVALID",
     });
   });
 
   it("throws PLAN_INVALID when dateScope has wrong date format", async () => {
-    const badPlan = {
-      type: "query",
+    const flat = makeQueryFlat({
       dateScope: { type: "service_date", startDate: "July 24 2026", endDate: "July 24 2026" },
-      filters: null,
-      sort: null,
-    };
-    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(badPlan)));
+    });
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
+    await expect(createReadinessPlan("are we ready for tomorrow")).rejects.toMatchObject({
+      code: "PLAN_INVALID",
+    });
+  });
 
+  it("throws PLAN_INVALID on contradictory response (type=query with action set)", async () => {
+    const flat = makeQueryFlat({ action: "acknowledge_readiness" });
+    mockInvokeLLM.mockResolvedValueOnce(makeLLMResponse(JSON.stringify(flat)));
     await expect(createReadinessPlan("are we ready for tomorrow")).rejects.toMatchObject({
       code: "PLAN_INVALID",
     });
   });
 });
 
-// ── Zod schema validates correctly ───────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. Zod schema validates correctly
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe("READINESS_PLAN_ZOD_SCHEMA", () => {
   it("accepts a complete valid query plan", () => {
@@ -250,13 +367,8 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
       type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
       filters: {
-        timeOfDay: "morning",
-        startTime: null,
-        endTime: null,
-        exactTime: null,
-        dimension: "all",
-        onlyNeedsAttention: true,
-        minimumFlagCount: null,
+        timeOfDay: "morning", startTime: null, endTime: null, exactTime: null,
+        dimension: "all", onlyNeedsAttention: true, minimumFlagCount: null,
       },
       sort: "risk",
     });
@@ -298,13 +410,8 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
       type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-23", endDate: "2026-07-23" },
       filters: {
-        timeOfDay: null,
-        startTime: null,
-        endTime: null,
-        exactTime: "08:30",
-        dimension: null,
-        onlyNeedsAttention: null,
-        minimumFlagCount: null,
+        timeOfDay: null, startTime: null, endTime: null, exactTime: "08:30",
+        dimension: null, onlyNeedsAttention: null, minimumFlagCount: null,
       },
       sort: "service_time",
     });
@@ -316,24 +423,29 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
       type: "query",
       dateScope: { type: "service_date", startDate: "2026-07-23", endDate: "2026-07-23" },
       filters: {
-        timeOfDay: null,
-        startTime: null,
-        endTime: null,
-        exactTime: "8:30 AM",
-        dimension: null,
-        onlyNeedsAttention: null,
-        minimumFlagCount: null,
+        timeOfDay: null, startTime: null, endTime: null, exactTime: "8:30 AM",
+        dimension: null, onlyNeedsAttention: null, minimumFlagCount: null,
       },
       sort: "service_time",
     });
     expect(result.success).toBe(false);
   });
 
-  it("accepts a valid action plan", () => {
+  it("accepts a valid action plan with context_selection", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
       type: "action",
       action: "acknowledge_readiness",
-      targetIds: ["123:2026-07-24:UNASSIGNED"],
+      targetReference: { kind: "context_selection" },
+      serviceDate: "2026-07-24",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a valid action plan with explicit targetReference", () => {
+    const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
+      type: "action",
+      action: "acknowledge_readiness",
+      targetReference: { kind: "explicit", itemIds: ["123:2026-07-24:UNASSIGNED"] },
       serviceDate: "2026-07-24",
     });
     expect(result.success).toBe(true);
@@ -343,7 +455,7 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
     const result = READINESS_PLAN_ZOD_SCHEMA.safeParse({
       type: "action",
       action: "delete_jobs",
-      targetIds: ["123:2026-07-24:UNASSIGNED"],
+      targetReference: { kind: "context_selection" },
       serviceDate: "2026-07-24",
     });
     expect(result.success).toBe(false);
@@ -355,17 +467,5 @@ describe("READINESS_PLAN_ZOD_SCHEMA", () => {
       dateScope: { type: "service_date", startDate: "2026-07-24", endDate: "2026-07-24" },
     });
     expect(result.success).toBe(false);
-  });
-});
-
-// ── JSON schema includes exactTime in filters.required ────────────────────────
-
-describe("READINESS_PLAN_JSON_SCHEMA — exactTime field", () => {
-  it("includes exactTime in query variant filters required array", () => {
-    const queryVariant = READINESS_PLAN_JSON_SCHEMA.anyOf[0] as {
-      properties: { filters: { anyOf: Array<{ required?: string[] }> } };
-    };
-    const filtersSchema = queryVariant.properties.filters.anyOf[0];
-    expect(filtersSchema.required).toContain("exactTime");
   });
 });
