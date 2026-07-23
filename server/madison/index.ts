@@ -21,7 +21,7 @@
  */
 
 import { randomBytes } from "crypto";
-import { isReadinessDomain } from "./gate";
+import { isReadinessDomain, evaluateReadinessGate, GateDiagnostics } from "./gate";
 import { createReadinessPlan } from "./planner";
 import { executePlan } from "./executor";
 import { projectResponse } from "./responder";
@@ -36,12 +36,26 @@ import { MadisonError } from "./types";
 
 export { isReadinessDomain } from "./gate";
 
+export interface MadisonDebugInfo {
+  requestId: string;
+  gate: GateDiagnostics;
+  plannerType: "query" | "action" | null;
+  plannerFailed: boolean;
+  plannerError?: string;
+  executorInvoked: boolean;
+  executorError?: string;
+  responseType: "query_result" | "action_result" | "fallback" | null;
+  durationMs: number;
+}
+
 export interface MadisonResult {
   handled: boolean;
   response?: string;
   fallbackReason?: string;
   /** actionId for Undo — only present when an acknowledge_readiness action completed */
   undoActionId?: string;
+  /** Only present when debug: true is passed */
+  debug?: MadisonDebugInfo;
 }
 
 /**
@@ -58,14 +72,29 @@ export async function handleMadisonReadiness(
   db: any,
   message: string,
   requestId?: string,
-  agentId?: number
+  agentId?: number,
+  options?: { debug?: boolean }
 ): Promise<MadisonResult> {
   const rid = requestId ?? randomBytes(4).toString("hex");
   const effectiveAgentId = agentId ?? 0;
+  const debugMode = options?.debug ?? false;
+  const startedAt = Date.now();
+
+  // Always evaluate gate diagnostics (cheap, used for debug and double-check)
+  const gateDiag = evaluateReadinessGate(message);
 
   // Double-check gate (caller should check first, but be defensive)
-  if (!isReadinessDomain(message)) {
-    return { handled: false, fallbackReason: "not_readiness_domain" };
+  if (!gateDiag.gateMatched) {
+    const debug: MadisonDebugInfo | undefined = debugMode ? {
+      requestId: rid,
+      gate: gateDiag,
+      plannerType: null,
+      plannerFailed: false,
+      executorInvoked: false,
+      responseType: "fallback",
+      durationMs: Date.now() - startedAt,
+    } : undefined;
+    return { handled: false, fallbackReason: "not_readiness_domain", debug };
   }
 
   // ── Load existing context (best-effort, non-blocking) ─────────────────────
@@ -91,7 +120,17 @@ export async function handleMadisonReadiness(
       fallbackReason: reason,
       error: errMsg,
     });
-    return { handled: false, fallbackReason: reason };
+    const debug: MadisonDebugInfo | undefined = debugMode ? {
+      requestId: rid,
+      gate: gateDiag,
+      plannerType: null,
+      plannerFailed: true,
+      plannerError: errMsg,
+      executorInvoked: false,
+      responseType: "fallback",
+      durationMs: Date.now() - startedAt,
+    } : undefined;
+    return { handled: false, fallbackReason: reason, debug };
   }
 
   const planCreatedAt = Date.now();
@@ -133,10 +172,16 @@ export async function handleMadisonReadiness(
       }
 
       if (resolvedTargetIds.length === 0) {
-        return {
-          handled: false,
-          fallbackReason: "NO_TARGET_IDS",
-        };
+        const debug: MadisonDebugInfo | undefined = debugMode ? {
+          requestId: rid,
+          gate: gateDiag,
+          plannerType: "action",
+          plannerFailed: false,
+          executorInvoked: false,
+          responseType: "fallback",
+          durationMs: Date.now() - startedAt,
+        } : undefined;
+        return { handled: false, fallbackReason: "NO_TARGET_IDS", debug };
       }
 
       let ackResult;
@@ -158,7 +203,17 @@ export async function handleMadisonReadiness(
           fallbackReason: "ACK_EXECUTION_ERROR",
           error: errMsg,
         });
-        return { handled: false, fallbackReason: "ACK_EXECUTION_ERROR" };
+        const debug: MadisonDebugInfo | undefined = debugMode ? {
+          requestId: rid,
+          gate: gateDiag,
+          plannerType: "action",
+          plannerFailed: false,
+          executorInvoked: true,
+          executorError: errMsg,
+          responseType: "fallback",
+          durationMs: Date.now() - startedAt,
+        } : undefined;
+        return { handled: false, fallbackReason: "ACK_EXECUTION_ERROR", debug };
       }
 
       const executionEndedAt = Date.now();
@@ -241,15 +296,34 @@ export async function handleMadisonReadiness(
         executionEndedAt,
       });
 
+      const debugAction: MadisonDebugInfo | undefined = debugMode ? {
+        requestId: rid,
+        gate: gateDiag,
+        plannerType: "action",
+        plannerFailed: false,
+        executorInvoked: true,
+        responseType: "action_result",
+        durationMs: Date.now() - startedAt,
+      } : undefined;
       return {
         handled: true,
         response: responseText,
         undoActionId: ackResult.status === "completed" ? ackResult.actionId : undefined,
+        debug: debugAction,
       };
     }
 
     // Unknown action type — fall through
-    return { handled: false, fallbackReason: "UNKNOWN_ACTION" };
+    const debugUnknown: MadisonDebugInfo | undefined = debugMode ? {
+      requestId: rid,
+      gate: gateDiag,
+      plannerType: "action",
+      plannerFailed: false,
+      executorInvoked: false,
+      responseType: "fallback",
+      durationMs: Date.now() - startedAt,
+    } : undefined;
+    return { handled: false, fallbackReason: "UNKNOWN_ACTION", debug: debugUnknown };
   }
 
   // ── Query plan branch ─────────────────────────────────────────────────────
@@ -270,7 +344,17 @@ export async function handleMadisonReadiness(
       fallbackReason: reason,
       error: errMsg,
     });
-    return { handled: false, fallbackReason: reason };
+    const debug: MadisonDebugInfo | undefined = debugMode ? {
+      requestId: rid,
+      gate: gateDiag,
+      plannerType: "query",
+      plannerFailed: false,
+      executorInvoked: true,
+      executorError: errMsg,
+      responseType: "fallback",
+      durationMs: Date.now() - startedAt,
+    } : undefined;
+    return { handled: false, fallbackReason: reason, debug };
   }
 
   const executionEndedAt = Date.now();
@@ -309,8 +393,18 @@ export async function handleMadisonReadiness(
     executionEndedAt,
   });
 
+  const debugFinal: MadisonDebugInfo | undefined = debugMode ? {
+    requestId: rid,
+    gate: gateDiag,
+    plannerType: "query",
+    plannerFailed: false,
+    executorInvoked: true,
+    responseType: "query_result",
+    durationMs: Date.now() - startedAt,
+  } : undefined;
   return {
     handled: true,
     response: responseText,
+    debug: debugFinal,
   };
 }

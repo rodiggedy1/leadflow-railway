@@ -3034,4 +3034,25 @@ export const aiConciergeRouter = router({
         });
       }
     }),
+
+  /**
+   * debugChat — wraps the exact same Madison orchestration pipeline as `chat`
+   * but returns full diagnostics. Used by the permanent regression suite.
+   * Requires agent session auth (same as chat).
+   */
+  debugChat: agentProcedure
+    .input(z.object({ message: z.string().min(1).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const rid = crypto.randomUUID().slice(0, 8);
+      const result = await handleMadisonReadiness(db, input.message, rid, ctx.agent.agentId, { debug: true });
+      return {
+        handled: result.handled,
+        response: result.response ?? null,
+        fallbackReason: result.fallbackReason ?? null,
+        undoActionId: result.undoActionId ?? null,
+        debug: result.debug ?? null,
+      };
+    }),
 });
