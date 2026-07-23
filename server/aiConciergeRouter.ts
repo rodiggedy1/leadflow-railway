@@ -2297,23 +2297,29 @@ async function handleUnansweredSms(
   const result: UnansweredSmsResult["rows"] = [];
   for (const s of sessions) {
     try {
+      // Parse message history to find last user message
+      let historyLastUserTs: number | null = null;
+      let historyLastUserContent = "";
+      let historyLastRole: string | null = null;
+      try {
+        const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
+        const lastReal = [...history].reverse().find(m => m.role === "user" || m.role === "assistant");
+        historyLastRole = lastReal?.role ?? null;
+        const lastUser = [...history].reverse().find(m => m.role === "user");
+        if (lastUser?.ts && lastUser.ts > 0) historyLastUserTs = lastUser.ts;
+        historyLastUserContent = typeof lastUser?.content === "string" ? lastUser.content.slice(0, 120) : "";
+      } catch { /* ignore */ }
       // Skip if the last message was from staff (already answered)
-      if (s.lastMessageRole && s.lastMessageRole !== "user") continue;
-      // Use lastCustomerMessageTs as the authoritative timestamp
-      const resolvedTs = s.lastCustomerMessageTs ?? null;
+      const effectiveLastRole = s.lastMessageRole || historyLastRole;
+      if (effectiveLastRole && effectiveLastRole !== "user") continue;
+      // Use lastCustomerMessageTs, fall back to history timestamp
+      const resolvedTs = s.lastCustomerMessageTs ?? historyLastUserTs;
       if (!resolvedTs) continue;
       const age = now - resolvedTs;
       if (age > THIRTY_DAYS_MS) continue; // skip stale/dead sessions
       if (age < thresholdMs) continue; // not waiting long enough yet
-      // Get preview from lastMessageText or fall back to messageHistory
-      let preview = s.lastMessageText ?? "";
-      if (!preview) {
-        try {
-          const history: Array<{ role: string; ts?: number; content?: string }> = JSON.parse(s.messageHistory ?? "[]");
-          const lastUser = [...history].reverse().find(m => m.role === "user");
-          preview = typeof lastUser?.content === "string" ? lastUser.content.slice(0, 120) : "";
-        } catch { /* ignore */ }
-      }
+      // Get preview
+      const preview = s.lastMessageText || historyLastUserContent;
       result.push({
         sessionId: s.id,
         leadName: s.leadName ?? null,
