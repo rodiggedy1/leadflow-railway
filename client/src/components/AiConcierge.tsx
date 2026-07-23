@@ -1867,40 +1867,105 @@ function UnansweredSmsCardView({ card, onSwitchToCSSession }: { card: Unanswered
 }
 // ─── Generate Invoice card ──────────────────────────────────────────────────
 interface GenerateInvoiceCard {
-  customerName: string;
-  found: boolean;
-  invoiceNumber?: number;
-  pdfUrl?: string;
-  message: string;
+  templates: Array<{ id: number; customerName: string; serviceAddress: string; stripeLink: string; lineItems: unknown }>;
+  customerHint?: string;
 }
 function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
-  return (
-    <div style={{ background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 12, padding: "14px 16px", minWidth: 260, maxWidth: 420 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <span style={{ fontSize: 18 }}>🧾</span>
-        <span style={{ fontWeight: 700, fontSize: 14, color: "#c8cde8" }}>Invoice Generator</span>
-      </div>
-      {card.found ? (
-        <div>
-          <p style={{ fontSize: 13, color: "#22c55e", marginBottom: 8 }}>{card.message}</p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>Invoice #{card.invoiceNumber}</span>
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>·</span>
-            <span style={{ fontSize: 12, color: "#9ca3af" }}>{card.customerName}</span>
-          </div>
-          {card.pdfUrl && (
-            <a
-              href={card.pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: "inline-block", marginTop: 10, padding: "6px 14px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
-            >
-              Download PDF
-            </a>
-          )}
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<number | null>(() => {
+    if (card.customerHint && card.templates.length > 0) {
+      const hint = card.customerHint.toLowerCase();
+      const match = card.templates.find(t => t.customerName.toLowerCase().includes(hint));
+      return match?.id ?? card.templates[0]?.id ?? null;
+    }
+    return card.templates[0]?.id ?? null;
+  });
+  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const [serviceDate, setServiceDate] = React.useState(today);
+  const [result, setResult] = React.useState<{ invoiceNumber: number; pdfUrl: string; customerName: string } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const generateMutation = trpc.invoice.generateInvoice.useMutation({
+    onSuccess: (data) => {
+      setResult({ invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
+      setError(null);
+    },
+    onError: (e) => setError(e.message),
+  });
+  const selectedTemplate = card.templates.find(t => t.id === selectedTemplateId);
+  const lineItems = (selectedTemplate?.lineItems as Array<{ price: number }> | null) ?? [];
+  const total = lineItems.reduce((s, i) => s + (Number(i.price) || 0), 0);
+  if (result) {
+    return (
+      <div style={{ background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 12, padding: "14px 16px", minWidth: 280, maxWidth: 420 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 18 }}>🧾</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#22c55e" }}>Invoice Generated!</span>
         </div>
+        <p style={{ fontSize: 13, color: "#c8cde8", marginBottom: 4 }}>Invoice #{result.invoiceNumber} · {result.customerName}</p>
+        <a
+          href={result.pdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "inline-block", marginTop: 8, padding: "7px 16px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
+        >
+          Download PDF
+        </a>
+      </div>
+    );
+  }
+  return (
+    <div style={{ background: "#0f1120", border: "1px solid #2a2e47", borderRadius: 12, padding: "14px 16px", minWidth: 280, maxWidth: 440 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 18 }}>🧾</span>
+        <span style={{ fontWeight: 700, fontSize: 14, color: "#c8cde8" }}>Create Invoice</span>
+      </div>
+      {card.templates.length === 0 ? (
+        <p style={{ fontSize: 13, color: "#f97316", margin: 0 }}>No templates found. <a href="/admin/invoices" style={{ color: "#f97316", textDecoration: "underline" }}>Create one first.</a></p>
       ) : (
-        <p style={{ fontSize: 13, color: "#f97316", margin: 0 }}>{card.message}</p>
+        <>
+          <div style={{ marginBottom: 10 }}>
+            <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>CUSTOMER</label>
+            <select
+              value={selectedTemplateId ?? ""}
+              onChange={e => setSelectedTemplateId(Number(e.target.value))}
+              style={{ width: "100%", background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 13, padding: "6px 8px", outline: "none" }}
+            >
+              {card.templates.map(t => (
+                <option key={t.id} value={t.id}>{t.customerName}</option>
+              ))}
+            </select>
+          </div>
+          {selectedTemplate && (
+            <div style={{ marginBottom: 10, fontSize: 11, color: "#6b7280" }}>
+              {selectedTemplate.serviceAddress}
+            </div>
+          )}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>SERVICE DATE</label>
+            <input
+              type="text"
+              value={serviceDate}
+              onChange={e => setServiceDate(e.target.value)}
+              placeholder="e.g. June 29, 2026"
+              style={{ width: "100%", background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 13, padding: "6px 8px", outline: "none", boxSizing: "border-box" }}
+            />
+          </div>
+          {total > 0 && (
+            <div style={{ marginBottom: 12, fontSize: 12, color: "#9ca3af" }}>
+              Total: <span style={{ color: "#c8cde8", fontWeight: 700 }}>${total.toFixed(2)}</span>
+            </div>
+          )}
+          {error && <p style={{ fontSize: 12, color: "#ef4444", marginBottom: 8 }}>{error}</p>}
+          <button
+            onClick={() => {
+              if (!selectedTemplateId || !serviceDate.trim()) return;
+              generateMutation.mutate({ templateId: selectedTemplateId, serviceDate: serviceDate.trim() });
+            }}
+            disabled={generateMutation.isPending || !selectedTemplateId || !serviceDate.trim()}
+            style={{ width: "100%", padding: "8px 0", background: generateMutation.isPending ? "#6b7280" : "#f97316", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: generateMutation.isPending ? "not-allowed" : "pointer", transition: "background 0.15s" }}
+          >
+            {generateMutation.isPending ? "Generating..." : "Generate PDF"}
+          </button>
+        </>
       )}
     </div>
   );
@@ -3243,7 +3308,7 @@ type ServerResult =
   | { type: "confirmation_results"; date: string; dateLabel: string; rows: Array<{ clientName: string | null; calledPhone: string | null; smsFollowupSent: number | null; smsConfirmedAt: number | null; smsReply: string | null; aiOutcome: string | null; aiOutcomeLabel: string | null; manualOutcome: string | null; manualOutcomeLabel: string | null; firedAt: number | null }>; totalSent: number; totalConfirmed: number; totalPending: number }
   | { type: "job_status_stream"; alerts: Array<{ alertType: string; jobId: number; title: string; body: string; source: string; ts: number; resolvedAt?: number | null }>; cleanerStatuses: Array<{ id: number; cleanerName: string; status: string; label: string; emoji: string; customerName: string | null; etaLabel: string | null; issueNote: string | null; cleanerJobId: number | null; ts: number }> }
   | { type: "unanswered_sms"; thresholdMinutes: number; rows: Array<{ sessionId: number; leadName: string | null; leadPhone: string; lastMessagePreview: string; waitMs: number }> }
-  | { type: "generate_invoice"; customerName: string; found: boolean; invoiceNumber?: number; pdfUrl?: string; message: string };
+  | { type: "generate_invoice"; templates: Array<{ id: number; customerName: string; serviceAddress: string; stripeLink: string; lineItems: unknown }>; customerHint?: string };
 
 function buildAiMessage(result: ServerResult): Message | null {
   const ts = nowTime();
@@ -3460,7 +3525,7 @@ function buildAiMessage(result: ServerResult): Message | null {
     return {
       id: uid(),
       role: "ai",
-      content: { type: "generate_invoice", card: { customerName: result.customerName, found: result.found, invoiceNumber: result.invoiceNumber, pdfUrl: result.pdfUrl, message: result.message } },
+      content: { type: "generate_invoice", card: { templates: result.templates, customerHint: result.customerHint } },
       ts,
     };
   }

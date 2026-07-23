@@ -2245,86 +2245,32 @@ export interface UnansweredSmsResult {
 /** Returned when the concierge generates an invoice PDF for a customer */
 export interface GenerateInvoiceResult {
   type: "generate_invoice";
-  /** Customer name used to find the template */
-  customerName: string;
-  /** True when a template was found and PDF generated */
-  found: boolean;
-  /** Invoice number (only when found=true) */
-  invoiceNumber?: number;
-  /** PDF download URL (only when found=true) */
-  pdfUrl?: string;
-  /** Human-readable message */
-  message: string;
+  /** All available templates for the picker */
+  templates: Array<{ id: number; customerName: string; serviceAddress: string; stripeLink: string; lineItems: unknown }>;
+  /** Pre-selected customer name hint from the user's message */
+  customerHint?: string;
 }
 
 async function handleGenerateInvoice(
   plan: QueryPlan,
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
 ): Promise<GenerateInvoiceResult> {
-  const customerName = plan.clientName ?? plan.entities.customerName;
-  if (!customerName) {
-    return { type: "generate_invoice", customerName: "Unknown", found: false, message: "Please specify a customer name to generate an invoice for." };
-  }
-  // Find a template matching the customer name (case-insensitive partial match)
-  const templates = await db
-    .select()
+  const customerHint = plan.clientName ?? plan.entities.customerName;
+  // Load all templates so the UI can show a picker
+  const allTemplates = await db
+    .select({
+      id: invoiceTemplates.id,
+      customerName: invoiceTemplates.customerName,
+      serviceAddress: invoiceTemplates.serviceAddress,
+      stripeLink: invoiceTemplates.stripeLink,
+      lineItems: invoiceTemplates.lineItems,
+    })
     .from(invoiceTemplates)
-    .where(like(invoiceTemplates.customerName, `%${customerName}%`))
-    .limit(1);
-  if (templates.length === 0) {
-    return { type: "generate_invoice", customerName, found: false, message: `No invoice template found for "${customerName}". Please create a template first at /admin/invoices.` };
-  }
-  const tmpl = templates[0];
-  // Determine service date
-  const serviceDate = plan.questionHint ?? new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  const billingDate = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  // Get next invoice number (same as invoiceRouter.generateInvoice)
-  const [maxRow] = await db.select({ maxNum: sql<number>`MAX(invoiceNumber)` }).from(invoices);
-  const invoiceNumber = (maxRow?.maxNum ?? 0) + 1;
-  // Parse line items (tmpl.lineItems is json() — already an object)
-  const lineItems = (tmpl.lineItems as Array<{ date: string; description: string; price: number }>) ?? [];
-  const totalCents = Math.round(lineItems.reduce((s, i) => s + (Number(i.price) || 0), 0) * 100);
-  // Generate PDF
-  const pdfBytes = await generateInvoicePdf({
-    invoiceNumber,
-    customerName: tmpl.customerName,
-    billTo: tmpl.billTo,
-    serviceAddress: tmpl.serviceAddress,
-    stripeLink: tmpl.stripeLink ?? "",
-    lineItems,
-    totalCents,
-    serviceDate,
-    billingDate,
-  });
-  // Upload to S3 (with fallback to base64 if storage not configured)
-  const { storagePut } = await import("./storage");
-  const fileKey = `invoices/${invoiceNumber}-${tmpl.customerName.replace(/\s+/g, "_")}-${Date.now()}.pdf`;
-  let pdfUrl = "";
-  try {
-    const { url } = await storagePut(fileKey, Buffer.from(pdfBytes), "application/pdf");
-    pdfUrl = url;
-  } catch {
-    pdfUrl = `data:application/pdf;base64,${Buffer.from(pdfBytes).toString("base64")}`;
-  }
-  // Save invoice record
-  await db.insert(invoices).values({
-    invoiceNumber,
-    templateId: tmpl.id,
-    customerName: tmpl.customerName,
-    serviceDate,
-    billingDate,
-    stripeLink: tmpl.stripeLink ?? "",
-    lineItems,
-    totalCents,
-    pdfUrl,
-  });
+    .orderBy(invoiceTemplates.customerName);
   return {
     type: "generate_invoice",
-    customerName: tmpl.customerName,
-    found: true,
-    invoiceNumber,
-    pdfUrl,
-    message: `Invoice #${invoiceNumber} for ${tmpl.customerName} generated successfully.`,
+    templates: allTemplates,
+    customerHint: customerHint ?? undefined,
   };
 }
 
