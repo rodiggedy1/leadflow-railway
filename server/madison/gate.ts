@@ -11,10 +11,8 @@
 const READINESS_PATTERNS: RegExp[] = [
   // Explicit readiness vocabulary
   /\breadiness\b/i,
-  /\bread(y|iness)\s+(for|check)\b/i,
-  /\bget\s+ready\b/i,
-  /\bprepare\s+(for|tomorrow)\b/i,
-  /\bprepared\b/i,
+  /\breadiness\s+(check|report|summary)\b/i,
+  /\bprepare\s+(for\s+)?tomorrow\b/i,
 
   // Tomorrow / date + attention / issues / problems
   /\btomorrow[''s]*\s+(jobs?|schedule|briefing|summary|status|issues?|problems?|attention)\b/i,
@@ -36,9 +34,10 @@ const READINESS_PATTERNS: RegExp[] = [
   /\b(payment|card)\s+(issues?|problems?|status)\b/i,
   /\b(assign|assigned|assignment)\s+(issues?|problems?|status)\b/i,
 
-  // "Are we ready" patterns
-  /\bare\s+(we|they)\s+ready\b/i,
-  /\bare\s+there\s+(any\s+)?(issues?|problems?|access\s+issues?)\b/i,
+  // "Are we ready" patterns — require tomorrow/today context to avoid false positives
+  /\bare\s+(we|they)\s+ready\s+(for\s+)?tomorrow\b/i,
+  /\bare\s+there\s+(any\s+)?(issues?|problems?|access\s+issues?)\s+(tomorrow|today|for\s+tomorrow)\b/i,
+  /\bare\s+there\s+(any\s+)?(issues?|problems?)\s+(with\s+)?(tomorrow|today)[''s]*\s+(jobs?|schedule)\b/i,
 ];
 
 export function isReadinessDomain(message: string): boolean {
