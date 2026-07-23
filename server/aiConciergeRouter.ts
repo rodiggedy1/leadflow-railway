@@ -2534,6 +2534,7 @@ export const aiConciergeRouter = router({
 
       // ── Madison Readiness Domain ──────────────────────────────────────────
       // No chip context needed for readiness queries — they are date/dimension scoped.
+      console.log(`[Madison] gate check: re=${JSON.stringify(re)} msg=${JSON.stringify(input.message)} gateMatch=${isReadinessDomain(input.message)}`);
       if (!re && isReadinessDomain(input.message)) {
         const madisonResult = await handleMadisonReadiness(db, input.message);
         if (madisonResult.handled && madisonResult.response) {
