@@ -2541,7 +2541,7 @@ export const aiConciergeRouter = router({
           return {
             type: "query_result" as const,
             answer: madisonResult.response,
-            status: "success" as const,
+            status: "complete" as const,
           };
         }
         // Execution failed — fall through to legacy concierge once
