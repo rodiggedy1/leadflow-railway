@@ -105,7 +105,7 @@ interface SequenceTestResult {
   durationMs?: number;
   seed?: { handled: boolean; response: string | null; debug: DebugInfo | null };
   acknowledge?: { handled: boolean; response: string | null; undoActionId: string | null; debug: DebugInfo | null };
-  verification?: { executorSucceeded: boolean; acknowledgedCount: number; needsContext: boolean; persisted: boolean; seedItemCount: number; seedHadItems: boolean };
+  verification?: { executorSucceeded: boolean; acknowledgedCount: number; needsContext: boolean; persisted: boolean; seedItemCount: number; seedHadItems: boolean; verificationPassed: boolean; cleanupResult: "success" | "failed" | "skipped" };
   error?: string;
 }
 
@@ -251,12 +251,8 @@ function getSequenceOutcome(result: SequenceTestResult): "pass" | "fail" {
   if (!result.seed || !result.acknowledge || !result.verification) return "fail";
   if (!result.seed.handled) return "fail";
   const v = result.verification;
-  // PASS if executor succeeded (items were acknowledged)
-  if (v.executorSucceeded) return "pass";
-  // PASS if no items existed to acknowledge (seed returned 0 items → needs_context is correct behavior)
-  if (v.needsContext && !v.seedHadItems) return "pass";
-  // FAIL if seed had items but ack still returned needs_context or failed
-  return "fail";
+  // Use the server-computed verificationPassed flag (Arrange→Act→Assert→Cleanup)
+  return v.verificationPassed ? "pass" : "fail";
 }
 
 function getTestOutcome(result: TestResult): "pass" | "fail" {
@@ -445,8 +441,11 @@ function SequenceTestRow({ test, result, onRerun }: { test: SequenceTestCase; re
                 <div>executorSucceeded: <strong className={v.executorSucceeded ? "text-green-600" : "text-red-600"}>{String(v.executorSucceeded)}</strong></div>
                 <div>acknowledgedCount: <strong>{v.acknowledgedCount}</strong></div>
                 <div>persisted: <strong className={v.persisted ? "text-green-600" : v.acknowledgedCount === 0 ? "text-gray-500" : "text-red-600"}>{String(v.persisted)}</strong></div>
+                <div>verificationPassed: <strong className={v.verificationPassed ? "text-green-600" : "text-red-600"}>{String(v.verificationPassed)}</strong></div>
+                <div>cleanup: <strong className={v.cleanupResult === "success" ? "text-green-600" : v.cleanupResult === "failed" ? "text-red-600" : "text-gray-400"}>{v.cleanupResult}</strong></div>
                 {v.needsContext && !v.seedHadItems && <div className="text-amber-600 mt-1">⚠ Seed returned 0 items — nothing to acknowledge. Pipeline is correct; schedule has no readiness issues for this date.</div>}
                 {v.needsContext && v.seedHadItems && <div className="text-red-600 mt-1">❌ Seed had {v.seedItemCount} item(s) but ack returned needs_context — context was not saved correctly after seed query.</div>}
+                {v.cleanupResult === "failed" && <div className="text-red-600 mt-1">⚠ Cleanup (undo) failed — test data may remain in DB. Check server logs.</div>}
               </div>
             </div>
           )}

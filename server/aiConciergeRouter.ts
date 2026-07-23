@@ -3084,6 +3084,7 @@ export const aiConciergeRouter = router({
       const rid2 = crypto.randomUUID().slice(0, 8);
       const ackResult = await handleMadisonReadiness(db, input.acknowledgeMessage, rid2, ctx.agent.agentId, { debug: true });
 
+      // === ASSERT ===
       // Verification: did the acknowledge actually write something?
       const acknowledgedCount = ackResult.debug?.acknowledgedCount ?? 0;
       const executorSucceeded = ackResult.debug?.responseType === "action_result";
@@ -3092,6 +3093,30 @@ export const aiConciergeRouter = router({
       // seedHadItems: true if the seed query found readiness items to acknowledge
       const seedItemCount = seedResult.debug?.seedItemCount ?? 0;
       const seedHadItems = seedItemCount > 0;
+      // Verification passes when:
+      //   (a) executor succeeded and items were persisted, OR
+      //   (b) seed found no items (nothing to acknowledge — correct behavior)
+      const verificationPassed = persisted || !seedHadItems;
+
+      // === CLEANUP ===
+      // Only clean up after verification passes AND the ack wrote real data.
+      // If verification failed, leave the DB state intact for debugging.
+      // Cleanup is best-effort: failure is surfaced but does not mask the test result.
+      let cleanupResult: "success" | "failed" | "skipped" = "skipped";
+      const undoActionId = ackResult.undoActionId ?? null;
+      if (verificationPassed && persisted && undoActionId) {
+        try {
+          const { undoAcknowledgement } = await import("./madison/acknowledgeService");
+          await undoAcknowledgement(db, {
+            actionId: undoActionId,
+            reversedBy: ctx.agent.agentId,
+          });
+          cleanupResult = "success";
+        } catch (cleanupErr) {
+          console.error("[debugChatSequence] Cleanup (undo) failed:", cleanupErr);
+          cleanupResult = "failed";
+        }
+      }
 
       return {
         seed: {
@@ -3104,7 +3129,7 @@ export const aiConciergeRouter = router({
           handled: ackResult.handled,
           response: ackResult.response ?? null,
           fallbackReason: ackResult.fallbackReason ?? null,
-          undoActionId: ackResult.undoActionId ?? null,
+          undoActionId,
           debug: ackResult.debug ?? null,
         },
         verification: {
@@ -3114,6 +3139,8 @@ export const aiConciergeRouter = router({
           persisted,
           seedItemCount,
           seedHadItems,
+          verificationPassed,
+          cleanupResult,
         },
       };
     }),
