@@ -682,7 +682,7 @@ export const invoiceRouter = router({
       }
 
       const totalDollars = (inv.totalCents / 100).toFixed(2);
-      const subject = input.subject ?? `Your Invoice #${inv.invoiceNumber} from Maids In Black — $${totalDollars}`;
+      const subject = input.subject ?? `Your Invoice #${inv.invoiceNumber} from Maids In Black - $${totalDollars}`;
       let bodyHtml: string;
       if (input.bodyText) {
         // Convert plain-text body to HTML paragraphs
