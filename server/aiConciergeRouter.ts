@@ -3089,6 +3089,9 @@ export const aiConciergeRouter = router({
       const executorSucceeded = ackResult.debug?.responseType === "action_result";
       const needsContext = ackResult.debug?.responseType === "needs_context";
       const persisted = executorSucceeded && acknowledgedCount > 0;
+      // seedHadItems: true if the seed query found readiness items to acknowledge
+      const seedItemCount = seedResult.debug?.seedItemCount ?? 0;
+      const seedHadItems = seedItemCount > 0;
 
       return {
         seed: {
@@ -3109,6 +3112,8 @@ export const aiConciergeRouter = router({
           acknowledgedCount,
           needsContext,
           persisted,
+          seedItemCount,
+          seedHadItems,
         },
       };
     }),

@@ -49,6 +49,8 @@ export interface MadisonDebugInfo {
   needsContextReason?: "NO_TARGET_IDS";
   /** Only set when responseType = action_result and executor succeeded */
   acknowledgedCount?: number;
+  /** Only set when responseType = query_result — number of readiness items found */
+  seedItemCount?: number;
   durationMs: number;
 }
 
@@ -423,6 +425,7 @@ export async function handleMadisonReadiness(
     plannerFailed: false,
     executorInvoked: true,
     responseType: "query_result",
+    seedItemCount: projection?.totalIssues ?? 0,
     durationMs: Date.now() - startedAt,
   } : undefined;
   return {

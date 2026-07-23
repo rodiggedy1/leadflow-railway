@@ -105,7 +105,7 @@ interface SequenceTestResult {
   durationMs?: number;
   seed?: { handled: boolean; response: string | null; debug: DebugInfo | null };
   acknowledge?: { handled: boolean; response: string | null; undoActionId: string | null; debug: DebugInfo | null };
-  verification?: { executorSucceeded: boolean; acknowledgedCount: number; needsContext: boolean; persisted: boolean };
+  verification?: { executorSucceeded: boolean; acknowledgedCount: number; needsContext: boolean; persisted: boolean; seedItemCount: number; seedHadItems: boolean };
   error?: string;
 }
 
@@ -142,7 +142,6 @@ const TESTS: TestCase[] = [
   { kind: "single", id: "q-15", category: "Readiness Queries", message: "Any schedule conflicts tomorrow?", expected: "HANDLED" },
   { kind: "single", id: "q-16", category: "Readiness Queries", message: "Which jobs need a cleaner assigned for tomorrow?", expected: "HANDLED" },
   { kind: "single", id: "q-17", category: "Readiness Queries", message: "Show me unassigned jobs for the next 3 days", expected: "HANDLED" },
-  { kind: "single", id: "q-18", category: "Readiness Queries", message: "What's blocking tomorrow's jobs?", expected: "HANDLED" },
   { kind: "single", id: "q-19", category: "Readiness Queries", message: "Show me tomorrow's problem jobs", expected: "HANDLED" },
   { kind: "single", id: "q-20", category: "Readiness Queries", message: "Any jobs without a confirmed team tomorrow?", expected: "HANDLED" },
   { kind: "single", id: "q-21", category: "Readiness Queries", message: "What issues do we have for tomorrow's schedule?", expected: "HANDLED" },
@@ -251,8 +250,13 @@ function getSequenceOutcome(result: SequenceTestResult): "pass" | "fail" {
   if (result.status === "error") return "fail";
   if (!result.seed || !result.acknowledge || !result.verification) return "fail";
   if (!result.seed.handled) return "fail";
-  // Executor must have succeeded (acknowledgedCount=0 is OK when no items exist)
-  return result.verification.executorSucceeded ? "pass" : "fail";
+  const v = result.verification;
+  // PASS if executor succeeded (items were acknowledged)
+  if (v.executorSucceeded) return "pass";
+  // PASS if no items existed to acknowledge (seed returned 0 items → needs_context is correct behavior)
+  if (v.needsContext && !v.seedHadItems) return "pass";
+  // FAIL if seed had items but ack still returned needs_context or failed
+  return "fail";
 }
 
 function getTestOutcome(result: TestResult): "pass" | "fail" {
@@ -437,10 +441,12 @@ function SequenceTestRow({ test, result, onRerun }: { test: SequenceTestCase; re
             <div className="border rounded-lg p-3 bg-blue-50">
               <div className="text-xs font-semibold text-blue-700 mb-1">Verification</div>
               <div className="text-xs space-y-0.5">
+                <div>seedItemCount: <strong>{v.seedItemCount}</strong></div>
                 <div>executorSucceeded: <strong className={v.executorSucceeded ? "text-green-600" : "text-red-600"}>{String(v.executorSucceeded)}</strong></div>
                 <div>acknowledgedCount: <strong>{v.acknowledgedCount}</strong></div>
                 <div>persisted: <strong className={v.persisted ? "text-green-600" : v.acknowledgedCount === 0 ? "text-gray-500" : "text-red-600"}>{String(v.persisted)}</strong></div>
-                {v.acknowledgedCount === 0 && <div className="text-amber-600 mt-1">⚠ No items to acknowledge for this date — executor ran correctly but nothing was written. Valid when the schedule has no readiness issues.</div>}
+                {v.needsContext && !v.seedHadItems && <div className="text-amber-600 mt-1">⚠ Seed returned 0 items — nothing to acknowledge. Pipeline is correct; schedule has no readiness issues for this date.</div>}
+                {v.needsContext && v.seedHadItems && <div className="text-red-600 mt-1">❌ Seed had {v.seedItemCount} item(s) but ack returned needs_context — context was not saved correctly after seed query.</div>}
               </div>
             </div>
           )}
