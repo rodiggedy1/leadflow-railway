@@ -1885,6 +1885,7 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
   const [error, setError] = React.useState<string | null>(null);
   const [emailSent, setEmailSent] = React.useState(false);
   const [emailError, setEmailError] = React.useState<string | null>(null);
+  const [toEmail, setToEmail] = React.useState("");
   const generateMutation = trpc.invoice.generateInvoice.useMutation({
     onSuccess: (data) => {
       setResult({ id: data.id, invoiceNumber: data.invoiceNumber, pdfUrl: data.pdfUrl, customerName: data.customerName });
@@ -1907,28 +1908,41 @@ function GenerateInvoiceCardView({ card }: { card: GenerateInvoiceCard }) {
           <span style={{ fontWeight: 700, fontSize: 14, color: "#22c55e" }}>Invoice Generated!</span>
         </div>
         <p style={{ fontSize: 13, color: "#c8cde8", marginBottom: 4 }}>Invoice #{result.invoiceNumber} · {result.customerName}</p>
-        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-          <a
-            href={result.pdfUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: "inline-block", padding: "7px 16px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
-          >
-            Download PDF
-          </a>
-          {emailSent ? (
-            <span style={{ padding: "7px 12px", background: "#16a34a", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700 }}>✓ Email Sent</span>
-          ) : (
-            <button
-              onClick={() => sendEmailMutation.mutate({ invoiceId: result.id })}
-              disabled={sendEmailMutation.isPending}
-              style={{ padding: "7px 16px", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer" }}
-            >
-              {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
-            </button>
-          )}
-        </div>
-        {emailError && <p style={{ fontSize: 11, color: "#ef4444", marginTop: 6 }}>{emailError}</p>}
+        <a
+          href={result.pdfUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: "inline-block", marginTop: 8, padding: "7px 16px", background: "#f97316", color: "#fff", borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: "none" }}
+        >
+          Download PDF
+        </a>
+        {emailSent ? (
+          <p style={{ fontSize: 12, color: "#22c55e", marginTop: 10, fontWeight: 700 }}>✓ Email sent to {toEmail}</p>
+        ) : (
+          <div style={{ marginTop: 12 }}>
+            <label style={{ fontSize: 11, color: "#6b7280", display: "block", marginBottom: 4 }}>SEND TO EMAIL</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="email"
+                value={toEmail}
+                onChange={e => setToEmail(e.target.value)}
+                placeholder="customer@email.com"
+                style={{ flex: 1, background: "#1a1d2e", border: "1px solid #2a2e47", borderRadius: 6, color: "#c8cde8", fontSize: 12, padding: "6px 8px", outline: "none" }}
+              />
+              <button
+                onClick={() => {
+                  if (!toEmail.trim()) return;
+                  sendEmailMutation.mutate({ invoiceId: result.id, toEmail: toEmail.trim() });
+                }}
+                disabled={sendEmailMutation.isPending || !toEmail.trim()}
+                style={{ padding: "6px 14px", background: sendEmailMutation.isPending ? "#6b7280" : "#6366f1", color: "#fff", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: sendEmailMutation.isPending ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}
+              >
+                {sendEmailMutation.isPending ? "Sending..." : "Send"}
+              </button>
+            </div>
+            {emailError && <p style={{ fontSize: 11, color: "#ef4444", marginTop: 4 }}>{emailError}</p>}
+          </div>
+        )}
       </div>
     );
   }

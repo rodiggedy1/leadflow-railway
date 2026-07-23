@@ -484,6 +484,8 @@ function GenerateDialog({
 function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => void }) {
   const utils = trpc.useUtils();
   const [emailSent, setEmailSent] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+  const [showEmailInput, setShowEmailInput] = useState(false);
   const deleteMut = trpc.invoice.deleteInvoice.useMutation({
     onSuccess: () => {
       utils.invoice.listInvoices.invalidate();
@@ -495,6 +497,7 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
     onSuccess: (data) => {
       toast.success(`Invoice #${data.invoiceNumber} sent to ${data.toEmail}`);
       setEmailSent(true);
+      setShowEmailInput(false);
     },
     onError: (e) => toast.error(e.message),
   });
@@ -533,13 +536,35 @@ function InvoiceRow({ inv, onDelete }: { inv: InvoiceRecord; onDelete: () => voi
           {inv.pdfUrl && (
             emailSent ? (
               <span className="text-xs text-green-600 font-medium">✓ Sent</span>
+            ) : showEmailInput ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  placeholder="email@example.com"
+                  className="text-xs border border-gray-300 rounded px-1.5 py-0.5 w-36 focus:outline-none focus:border-indigo-400"
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && emailInput.trim()) sendEmailMut.mutate({ invoiceId: inv.id, toEmail: emailInput.trim() });
+                    if (e.key === "Escape") setShowEmailInput(false);
+                  }}
+                  autoFocus
+                />
+                <button
+                  onClick={() => { if (emailInput.trim()) sendEmailMut.mutate({ invoiceId: inv.id, toEmail: emailInput.trim() }); }}
+                  disabled={sendEmailMut.isPending || !emailInput.trim()}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                >
+                  {sendEmailMut.isPending ? "..." : "Send"}
+                </button>
+                <button onClick={() => setShowEmailInput(false)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+              </div>
             ) : (
               <button
-                onClick={() => sendEmailMut.mutate({ invoiceId: inv.id })}
-                disabled={sendEmailMut.isPending}
-                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium disabled:opacity-50"
+                onClick={() => setShowEmailInput(true)}
+                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
               >
-                {sendEmailMut.isPending ? "Sending..." : "Email"}
+                Email
               </button>
             )
           )}
